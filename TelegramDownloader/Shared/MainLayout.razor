@@ -1,0 +1,98 @@
+﻿@inherits LayoutComponentBase
+@using TelegramDownloader.Data
+@using TelegramDownloader.Models
+@using TelegramDownloader.Shared
+@inject ITelegramService ts
+@inject NavigationManager NavManager
+@inject IJSRuntime JS
+
+<PageTitle>TelegramFileManager</PageTitle>
+
+<style>
+    .modalshow {
+        display: block
+    }
+
+    .modalhide {
+        display: none
+    }
+</style>
+
+<Preload LoadingText="Loading..." />
+
+<div class="page">
+    <div class="sidebar">
+        <NavMenu />
+    </div>
+
+    <main>
+        <div class="top-row px-4">
+            <button class="btn" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasRight" aria-controls="offcanvasRight"><i class="bi bi-three-dots"></i></button>
+        </div>
+        <TelegramDownloader.Pages.Modals.ToastNotify></TelegramDownloader.Pages.Modals.ToastNotify>
+        
+        <article class="content px-4">
+            <div id="modalFileUploadVue">
+                <TelegramDownloader.Pages.Modals.FileUploadModalTemplate></TelegramDownloader.Pages.Modals.FileUploadModalTemplate>
+                <TelegramDownloader.Pages.Modals.AudioPlayerModal></TelegramDownloader.Pages.Modals.AudioPlayerModal>
+            </div>
+            @Body
+        </article>
+
+        
+
+        <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasRight" aria-labelledby="offcanvasRightLabel">
+            
+            <div class="offcanvas-header">
+                <h5 id="offcanvasRightLabel">Menu</h5>
+                <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+            </div>
+            <div class="offcanvas-body">
+                <div class="list-group list-group-flush">
+                    <a href="/config" class="list-group-item list-group-item-action"><i class="bi bi-gear"></i> Configuration</a>
+                    
+                    <a href="/downloads" class="list-group-item list-group-item-action"><i class="bi bi-cloud-download"></i> Tasks</a>
+                    <a href="/loglist" class="list-group-item list-group-item-action"><i class="bi bi-file-earmark-text"></i> Logs</a>
+                    <a href="#" @onclick="() => Logout()" class="list-group-item list-group-item-action list-group-item-warning"><i class="bi bi-box-arrow-right"></i> LogOut</a>
+                </div>
+            </div>
+        </div>
+        
+    </main>
+</div>
+
+
+@code {
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                if (!ts.checkUserLogin()) NavManager.NavigateTo("/", true);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+            }
+
+        }
+
+    }
+
+
+    private void Notificar()
+    {
+        NotificationModel nm = new NotificationModel();
+        nm.sendEvent(new Notification("<h1>Body message</h1>", "Title", NotificationTypes.Info));
+    }
+
+
+    private async void Logout()
+    {
+        await ts.logOff();
+        NavManager.NavigateTo("/");
+        StateHasChanged();
+    }
+}

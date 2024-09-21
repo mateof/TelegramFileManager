@@ -1,0 +1,147 @@
+﻿@layout EmptyLayout
+@page "/"
+
+@using TelegramDownloader.Data
+@using TelegramDownloader.Models
+@inject ITelegramService ts
+@inject NavigationManager NavManager
+@inject IJSRuntime JSRuntime;
+
+<style>
+    .form-signin {
+        width: 100%;
+        max-width: 330px;
+        padding: 15px;
+        margin: auto;
+    }
+
+    .buttons {
+        padding-top: inherit;
+    }
+</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/intl-tel-input@23.0.12/build/css/intlTelInput.css">
+
+<PageTitle>Login</PageTitle>
+
+@if(Model.type != null) {
+<div class="container form-signin">
+    <div class="text-center">
+        <img src="https://static.vecteezy.com/system/resources/previews/023/986/534/large_2x/telegram-logo-telegram-logo-transparent-telegram-icon-transparent-free-free-png.png" alt="Telegram logo" style="max-width: -webkit-fill-available;" />
+        <EditForm class="form-signin mb-4" Model="Model" OnSubmit="Submit" FormName="LoginModel">
+            @switch (Model.type)
+            {
+                case "phone":
+                    <div class="form-group">
+                        <label for="phone">Teléfono</label>
+                        <InputText class="form-control" id="phone" type="text" @bind-Value="Model!.value" aria-describedby="phone" maxlength="12" data-mask="+00.000.00.00.00" placeholder="Teléfono" />
+                    </div>
+                    break;
+                case "vc":
+                    <div class="form-group">
+                        <label for="code">Código</label>
+                        <InputText class="form-control" id="code" maxlength="5" type="text" @bind-Value="Model!.value" />
+                    </div>
+                    break;
+                case "pass":
+                    <div class="form-group">
+                        <label for="pass">Contraseña</label>
+                        <InputText class="form-control" id="pass" type="password" @bind-Value="Model!.value" />
+                    </div>
+                    break;
+                case "ok":
+                    <span> Authenticado </span>
+                    break;
+            }
+            <div class="form-group buttons">
+
+                @if (Model.type == "ok")
+                {
+                    <button class="btn btn-info" @onclick="Salir" type="button">Desconectar</button>
+                }
+                else
+                {
+                    <button class="btn btn-info" type="submit">Send</button>
+                        @if(Model.type != null && Model.type != "phone")
+                        {
+                            <button class="btn btn-warning" @onclick="Cancel">Cancel</button>
+                        }
+                }
+            </div>
+        </EditForm>
+    </div>
+    </div>
+} else
+{
+    <div class="container form-signin">
+        <h3>Checking user data</h3>
+        <div class="text-center">
+            <img src="https://static.vecteezy.com/system/resources/previews/023/986/534/large_2x/telegram-logo-telegram-logo-transparent-telegram-icon-transparent-free-free-png.png" alt="Telegram logo" style="max-width: -webkit-fill-available;" />
+        </div>
+    </div>
+}
+
+
+@*
+
+<SurveyPrompt Title="How is Blazor working for you?" /> *@
+
+@code {
+    // [SupplyParameterFromForm]
+    public LoginModel? Model { get; set; } = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Model ??= new();
+        Model.type = await ts.checkAuth(Model.value);
+        StateHasChanged();
+        isLogin();
+
+    }
+
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (Model.type != null && Model.type == "phone")
+            await JSRuntime.InvokeVoidAsync("loadCountries");
+
+    }
+
+
+
+    private async void Submit()
+    {
+        if (Model.type == "phone")
+        {
+            var phone = await JSRuntime.InvokeAsync<string>("getNumber");
+            Model.type = await ts.checkAuth(phone, Model.type == "phone") ?? "phone";
+        } else
+        {
+            Model.type = await ts.checkAuth(Model.value, Model.type == "phone");
+        }
+
+        Model.value = "";
+        StateHasChanged();
+        isLogin();
+        // Logger.LogInformation("Id = {Id}", Model?.Id);
+    }
+
+    private void isLogin()
+    {
+        if (Model.type == "ok") NavManager.NavigateTo("/fetchdata");
+    }
+
+    private async void Salir()
+    {
+        await ts.logOff();
+        Model.value = "";
+        Model.type = "phone";
+        StateHasChanged();
+        // Logger.LogInformation("Id = {Id}", Model?.Id);
+    }
+
+    private async void Cancel()
+    {
+        await ts.logOff();
+        NavManager.NavigateTo("/", true);
+    }
+}

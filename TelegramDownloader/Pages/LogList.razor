@@ -1,0 +1,53 @@
+﻿@page "/loglist"
+@using TelegramDownloader.Services
+@inject NavigationManager NavigationManager
+
+<h3>Log List</h3>
+
+<div class="table-responsive">
+<table class="table">
+    <thead>
+        <tr>
+            <th scope="col">Name</th>
+            <th scope="col">Create</th>
+            <th scope="col">Update</th>
+            <th scope="col">Size</th>
+            <th scope="col">Action</th>
+        </tr>
+    </thead>
+    <tbody class="table-group-divider">
+        @foreach(FileInfo log in logs)
+        {
+            <tr scope="row">
+                <td>@log.Name</td>
+                <td>@log.CreationTime.ToLocalTime().ToLongDateString() @log.CreationTime.ToLocalTime().ToLongTimeString()</td>
+                <td>@log.LastWriteTime.ToLocalTime().ToLongDateString() @log.LastWriteTime.ToLocalTime().ToLongTimeString()</td>
+                <td>@HelperService.SizeSuffix(log.Length)</td>
+                <td>
+                    <div class="btn-group btn-group-sm" role="group" aria-label="Small button group">
+                        <a type="button" class="btn btn-outline-dark" href="@($"/api/log/Download?fileName={log.Name}&show=1")" target="blank"><i class="bi bi-eye"></i></a>
+                        <button class="btn btn-outline-warning" @onclick="@(e => getFileLog(log))"><i class="bi bi-download"></i></button>
+                    </div>
+                </td>
+            </tr>
+        }
+    </tbody>
+</table>
+</div>
+
+@code {
+    private List<FileInfo> logs { get; set; } = new List<FileInfo>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        foreach (string fileName in Directory.GetFiles(Path.Combine(Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location), "logs")))
+        {
+            logs.Add(new FileInfo(fileName));
+        }
+    }
+
+    public async Task getFileLog(FileInfo f)
+    {
+        NavigationManager.NavigateTo($"/api/log/Download?fileName={f.Name}", true);
+    }
+}

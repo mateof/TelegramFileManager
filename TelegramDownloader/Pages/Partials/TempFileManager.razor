@@ -1,0 +1,126 @@
+﻿@page "/tempfm/{id}"
+@inject HttpClient httpClient;
+@using Syncfusion.Blazor.ImageEditor
+@using Syncfusion.Blazor.Inputs
+@using TelegramDownloader.Pages.Modals
+@inject IJSRuntime JS
+
+
+<h3>FileManager</h3>
+
+<ul class="nav nav-tabs">
+    <li class="nav-item">
+        <a class="nav-link" aria-current="page" href="@($"/fm/{id}")">Remote</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" href="@($"/localfm/{id}")">Local</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link active" href="@($"/tempfm/{id}")">Temp</a>
+    </li>
+</ul>
+
+<SfFileManager ID="tempfm"  TValue="FileManagerDirectoryContent">
+    <FileManagerAjaxSettings  Url=@($"/api/temp/FileOperations/{id}")
+                             DownloadUrl=@($"/api/temp/Download/{id}" )
+                             GetImageUrl=@($"/api/temp/GetImage/{id}")>
+    </FileManagerAjaxSettings>
+    <FileManagerEvents TValue="FileManagerDirectoryContent" ToolbarItemClicked="toolBarClicked" OnFileOpen="fileOpen" ItemsUploaded="ItemsUploadedAsync"></FileManagerEvents>
+
+    <FileManagerUploadSettings MaxFileSize="@(long.MaxValue)"  AutoUpload="false"></FileManagerUploadSettings>
+    <FileManagerToolbarSettings ToolbarItems="@Items"></FileManagerToolbarSettings>
+
+</SfFileManager>
+
+<TelegramDownloader.Pages.Modals.FileUploadModal @ref="Modal"></TelegramDownloader.Pages.Modals.FileUploadModal>
+
+
+@code {
+    [Parameter]
+    public string id { get; set; }
+    private Modals.FileUploadModal Modal { get; set; }
+
+    public List<ToolBarItemModel> Items = new List<ToolBarItemModel>(){
+        new ToolBarItemModel() { Name = "NewFolder" },
+        new ToolBarItemModel() { Name = "Cut" },
+        new ToolBarItemModel() { Name = "Copy" },
+        new ToolBarItemModel() { Name = "Paste" },
+        new ToolBarItemModel() { Name = "Delete" },
+        new ToolBarItemModel() { Name = "Download" },
+        new ToolBarItemModel() { Name = "Upload" },
+        new ToolBarItemModel() { Name = "Rename" },
+        new ToolBarItemModel() { Name = "SortBy" },
+        new ToolBarItemModel() { Name = "Refresh" },
+        new ToolBarItemModel() { Name = "DownloadServer", Text="Download To Server", TooltipText="download To server", PrefixIcon="e-icons e-download" },
+        new ToolBarItemModel() { Name = "UploadServer", Text="UploadToServer", TooltipText="Upload File", PrefixIcon="e-icons e-upload" },
+        new ToolBarItemModel() { Name = "Selection" },
+        new ToolBarItemModel() { Name = "View" },
+        new ToolBarItemModel() { Name = "Details" },
+    };
+
+    public void fileOpen(FileOpenEventArgs<FileManagerDirectoryContent> args)
+    {
+        // Modal.id = id;
+        // Modal.filePath = Path.Combine(args.FileDetails.FilterPath, args.FileDetails.Name).Replace("\\","/") + "/";
+        // Modal.Open();
+        // if (args.FileDetails.IsFile)
+        // {
+        //     Console.WriteLine(args);
+        // }
+
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // await JS.InvokeAsync<IJSObjectReference>("import",
+            //     "/js/drop.js");
+        }
+    }
+
+    public async Task toolBarClicked(ToolbarClickEventArgs<FileManagerDirectoryContent> args)
+    {
+        if (args.Item.Text == "UploadToServer")
+        {
+            Modal.id = id;
+            Modal.filePath = args.FileDetails.FirstOrDefault().IsFile ? args.FileDetails.FirstOrDefault().FilterPath.Replace("\\", "/") : args.FileDetails.FirstOrDefault().FilterPath.Replace("\\", "/") + args.FileDetails.FirstOrDefault().Name + "/";
+            Modal.url = "/api/temp/Upload";
+            Modal.Open();
+        }
+
+        
+
+        Console.WriteLine("");
+    }
+
+    public async Task<string> ItemsUploadedAsync(ItemsUploadedEventArgs<FileManagerDirectoryContent> args)
+    {
+        // foreach (UploadFiles file in args.Files)
+        // {
+        //     var requestContent = new MultipartFormDataContent();
+        //     using(var stream = file.File.OpenReadStream(long.MaxValue))
+        //     {
+        //         requestContent.Add(new StreamContent(file.File.OpenReadStream()), file.File.Name, file.File.Name);
+
+        //         var request = new HttpRequestMessage(HttpMethod.Post, @"/api/Temp/Upload/{id}");
+        //         // var parameters = new Dictionary<string, string> { { "param1", "1" }, { "param2", "2" } };
+
+        //         request.Options.Set(new HttpRequestOptionsKey<string>("path"), args.Path);
+        //         request.Options.Set(new HttpRequestOptionsKey<string>("data"), "");
+        //         request.Options.Set(new HttpRequestOptionsKey<string>("action"), "upload");
+        //         // request.Options.Set(new HttpRequestOptionsKey<string>("id"), id);
+
+        //         request.Content = requestContent;
+
+        //         await httpClient.SendAsync(request);
+        //     }
+        // }
+
+        // Modal.id = id;
+        // Modal.filePath = args.Path;
+        // Modal.Open();
+        return "";
+    }
+
+}

@@ -1,0 +1,357 @@
+﻿@page "/fm/{id}"
+@using System.Web
+@using Microsoft.AspNetCore.Mvc
+@using Syncfusion.Blazor.Inputs
+@using System.Net.Mime
+@using TL
+@using TelegramDownloader.Data
+@using TelegramDownloader.Data.db
+@using TelegramDownloader.Models
+@using TelegramDownloader.Pages.Partials
+@inject IFileService fs
+@inject ITelegramService ts
+@inject ILogger<FileManager> Logger
+@inject IJSRuntime JSRuntime;
+@inject NavigationManager MyNavigationManager;
+
+<style>
+    .e-filemanager .e-splitter {
+        height: 75vh !important;
+    }
+
+    .e-filemanager {
+        height: 80vh !important;
+    }
+</style>
+
+<h3>File Manager <span class="badge bg-secondary">@chatName</span></h3>
+
+<button class="btn" @onclick="exportData"><i class="bi bi-cloud-download"></i> Export</button>
+<button class="btn" @onclick="importData"><i class="bi bi-cloud-upload"></i> Import</button>
+
+<ul class="nav nav-tabs">
+    <li class="nav-item">
+        <a class="nav-link active" aria-current="page" href="@($"/fm/{id}")">Remote</a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link" href="@($"/localfm/{id}")">Local</a>
+    </li>
+</ul>
+
+        <SfFileManager ID="remotefm" TValue="FileManagerDirectoryContent" ShowThumbnail="false" SelectedItemsChanged="itemsChanged" AllowDragAndDrop="false" EnablePersistence="false">
+
+
+    <FileManagerEvents TValue="FileManagerDirectoryContent" 
+        ToolbarItemClicked="toolBarClicked"
+        ItemsMoving="ItemsMovingAsync" 
+        ItemRenaming="ItemRenamingAsync" 
+        Searching="SearchingAsync" 
+        OnFileOpen="FileOpen" 
+        FileSelection="FileSelectionAsync" 
+        FileSelected="FileSelectedAsync"
+        OnRead="OnReadAsync" 
+        FolderCreating="FolderCreatingAsync" 
+        BeforeDownload="BeforeDownload"
+        ItemsDeleting="ItemsDeletingAsync"
+        ItemsUploaded="ItemsUploadedAsync"></FileManagerEvents>
+            <FileManagerUploadSettings MaxFileSize="@(long.MaxValue)" AutoUpload="true"></FileManagerUploadSettings>
+            <FileManagerToolbarSettings ToolbarItems="@Items"></FileManagerToolbarSettings>
+        </SfFileManager>
+<TelegramDownloader.Pages.Modals.DowloadFromTelegram @ref="Modal"></TelegramDownloader.Pages.Modals.DowloadFromTelegram>
+<TelegramDownloader.Pages.Modals.ImportDataModal id="@id" @ref="ImportModal"></TelegramDownloader.Pages.Modals.ImportDataModal>
+
+
+
+
+@code {
+    private Modals.DowloadFromTelegram Modal { get; set; }
+    private Modals.ImportDataModal ImportModal { get; set; }
+    [Parameter]
+    public string id { get; set; }
+    public string chatName { get; set; }
+    public static string[] selectedItems = new string[] {""};
+    public static bool downloadToServer = true;
+    LocalFileManager lfm { get; set; }
+
+    SfFileManager<FileManagerDirectoryContent> fm { get; set; }
+    NotificationModel nm = new NotificationModel();
+
+
+    public List<ToolBarItemModel> Items = new List<ToolBarItemModel>(){
+        new ToolBarItemModel() { Name = "NewFolder" },
+        new ToolBarItemModel() { Name = "Cut" },
+        new ToolBarItemModel() { Name = "Copy" },
+        new ToolBarItemModel() { Name = "Paste" },
+        new ToolBarItemModel() { Name = "Delete" },
+        new ToolBarItemModel() { Name = "Download" },
+        new ToolBarItemModel() { Name = "Upload" },
+        new ToolBarItemModel() { Name = "Rename" },
+        new ToolBarItemModel() { Name = "SortBy" },
+        new ToolBarItemModel() { Name = "Refresh" },
+        new ToolBarItemModel() { Name = "DownloadServer", Text="Download To Server", TooltipText="download To server", PrefixIcon="e-icons e-download" },
+        new ToolBarItemModel() { Name = "ShowApp", Text="Show in APP", TooltipText="Show in Telegram APP", PrefixIcon="bi bi-telegram" },
+        new ToolBarItemModel() { Name = "Selection" },
+        new ToolBarItemModel() { Name = "View" },
+        new ToolBarItemModel() { Name = "Details" },
+    };
+
+    // protected override async Task OnParametersSetAsync()
+    // {
+    //     await OnInitializedAsync();
+    //     StateHasChanged();
+    // }
+
+    private void LoadFiles(InputFileChangeEventArgs e)
+    {
+
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await fs.CreateDatabase(id);
+            chatName = ts.getChatName(Convert.ToInt64(id));
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Error on CreateDatabase");
+            nm.sendMessage("Error", "Error on CreateDatabase", NotificationTypes.Error);
+        }
+
+
+        // tfm.id = id;
+        // Items.Where(x => x.Name == "Custom").FirstOrDefault().Click = (ClickEventArgs args) =>
+        // {
+
+        // };
+    }
+
+    public void exportData()
+    {
+        MyNavigationManager.NavigateTo("/api/file/export/" + id, true);
+    }
+    public async Task importData()
+    {
+        await ImportModal.Open();
+    }
+
+
+    public async Task ItemRenamingAsync(ItemRenameEventArgs<FileManagerDirectoryContent> args)
+    {
+        args.Response = await fs.RenameFileOrFolder(id, args.File, args.NewName);
+        // args.Response = await FileManagerService.Rename(args.Path, args.File.Name, args.NewName, false, args.ShowFileExtension, args.File);
+    }
+
+    public async Task FileOpen(FileOpenEventArgs<FileManagerDirectoryContent> args)
+    {
+        if (args != null && args.FileDetails != null && args.FileDetails.IsFile && new List<string> { ".mp3",".ogg", ".flac", ".aac", ".wav" }.Contains(args.FileDetails.Type.ToLower()))
+    {
+            await playAudio(args);
+            // string localdir = "/" + FileService.STATICRELATIVELOCALDIR.Replace("\\", "/");
+            // string path = Path.Combine(localdir, args.FileDetails.FilterPath.Substring(1).Replace("\\", "/"), args.FileDetails.Name);
+            // await JSRuntime.InvokeVoidAsync("open", path, "_blank");
+        }
+    }
+
+    private async Task playAudio(FileOpenEventArgs<FileManagerDirectoryContent> args)
+    {
+        var file = await fs.getItemById(id, args.FileDetails.Id);
+        string path = MyNavigationManager.BaseUri + "api/file/getfile/" + args.FileDetails.Name + $"?idChannel={id}&idFile={file.MessageId}";
+        // string path = new System.Uri((Path.Combine(localdir, args.FileDetails.FilterPath.Substring(1).Replace("\\", "/"), args.FileDetails.Name)).Replace("\\", "/")).AbsoluteUri;
+        await JSRuntime.InvokeVoidAsync("openAudioPlayerModal", path, FileService.getMimeType(args.FileDetails.Name.Split(".").Last()));
+    }
+
+    public async Task SearchingAsync(SearchEventArgs<FileManagerDirectoryContent> args)
+    {
+        try
+        {
+            args.Response = await fs.SearchAsync(id, args.Path, args.SearchText);
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Error on SearchingAsync");
+            nm.sendMessage("Error", "Error on SearchingAsync", NotificationTypes.Error);
+        }
+        
+    }
+
+    public async Task ItemsDeletingAsync(ItemsDeleteEventArgs<FileManagerDirectoryContent> args)
+    {
+        try
+        {
+            args.Response = await fs.itemDeleteAsync(id, args);
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Error on itemDeleteAsync");
+            nm.sendMessage("Error", "Error on ItemsDeletingAsync", NotificationTypes.Error);
+        }
+
+    }
+
+    public async Task ItemsMovingAsync(ItemsMoveEventArgs<FileManagerDirectoryContent> args)
+    {
+        try
+        {
+            args.Response = await fs.CopyItems(id, args);
+        } catch(Exception e)
+        {
+            Logger.LogError(e, "Error on move item");
+            nm.sendMessage("Error", "Error on ItemsMovingAsync", NotificationTypes.Error);
+            args.Response = new FileManagerResponse<FileManagerDirectoryContent>();
+        }
+
+    }
+
+    public void onCustomClick(ClickEventArgs args)
+    {
+        Console.WriteLine("");
+    } 
+
+    public async Task toolBarClicked(ToolbarClickEventArgs<FileManagerDirectoryContent> args)
+    {
+        if (args.Item.Text == "Download To Server")
+        {
+            Modal.id = id;
+            Modal.filePath = args.FileDetails.FirstOrDefault().IsFile ? args.FileDetails.FirstOrDefault().FilterPath.Replace("\\", "/") : args.FileDetails.FirstOrDefault().FilterPath.Replace("\\", "/") + args.FileDetails.FirstOrDefault().Name + "/";
+            Modal.fileList = args.FileDetails;
+            Modal.Open();
+        }
+        if (args.Item.Text == "Show in APP")
+        {
+            var item = await fs.getItemById(id, args.FileDetails.FirstOrDefault().Id);
+            if (item.IsFile)
+                await JSRuntime.InvokeVoidAsync("open", $"tg://privatepost?channel={id}&post={item.MessageId ?? item.ListMessageId.FirstOrDefault()}", "_blank");
+        }
+        Console.WriteLine("");
+    }
+
+    public async Task itemsChanged(string[] items)
+    {
+        if (items.Count() != 1) {
+            Items.Where(x => x.Name == "ShowApp").FirstOrDefault().Visible = false;
+        } else
+        {
+            Items.Where(x => x.Name == "ShowApp").FirstOrDefault().Visible = true;
+        }
+        Console.WriteLine("");
+    }
+
+    public async Task FileSelectionAsync(FileSelectionEventArgs<FileManagerDirectoryContent> args)
+    {
+        Console.WriteLine("");
+    }
+
+    public async Task FileSelectedAsync(FileSelectEventArgs<FileManagerDirectoryContent> args)
+    {
+
+        Console.WriteLine("");
+    }
+
+    public async Task<string> ItemsUploadedAsync(ItemsUploadedEventArgs<FileManagerDirectoryContent> args)
+    {
+        try
+        {
+            foreach (UploadFiles file in args.Files)
+                await fs.UploadFile(id, args.Path, file);
+        } catch(Exception e)
+        {
+            Logger.LogError(e, "Error on ItemsUploadedAsync items");
+            nm.sendMessage("Error", "Error on ItemsUploadedAsync", NotificationTypes.Error);
+        }
+
+        return "";
+    }
+
+    public async Task BeforeDownload(BeforeDownloadEventArgs<FileManagerDirectoryContent> args)
+    {
+        // foreach (string name in args.DownloadData.Names)
+        // {
+
+        // }
+        try
+        {
+            if (downloadToServer)
+            {
+                await fs.downloadFile(id, args.DownloadData.Path, args.DownloadData.Names.ToList(), null);
+            }
+            else
+            {
+                MemoryStream ms = new MemoryStream();
+                ms = await fs.getImage(id, args.DownloadData.Path, args.DownloadData.Names[0], ms);
+                ms.Position = 0;
+                args.FileStream = ms;
+                args.DownloadFileName = args.DownloadData.Names[0];
+            }
+        } catch(Exception e)
+        {
+            Logger.LogError(e, "Error on BeforeDownload");
+            nm.sendMessage("Error", "Error on BeforeDownload", NotificationTypes.Error);
+        }
+
+
+    }
+
+    public async Task FolderCreatingAsync(FolderCreateEventArgs<FileManagerDirectoryContent> args)
+    {
+        try
+        {
+            FileManagerResponse<FileManagerDirectoryContent> response = new FileManagerResponse<FileManagerDirectoryContent>();
+            response.Files = await fs.createFolder(id, args); // await FileManagerService.Create(args.Path, args.FolderName, args.ParentFolder);
+            await Task.Yield();
+            args.Response = response;
+        } catch(Exception e)
+        {
+            Logger.LogError(e, "Error on FolderCreatingAsync");
+            nm.sendMessage("Error", "Error on FolderCreatingAsync", NotificationTypes.Error);
+        }
+        
+    }
+
+    public async Task BeforeImageLoadAsync(BeforeImageLoadEventArgs<FileManagerDirectoryContent> args)
+    {
+        try
+        {
+            using HttpClient Http = new HttpClient();
+            var str = await Http.GetStreamAsync($"https://localhost:7205/api/file/GetImage?path={HttpUtility.UrlEncode(args.ImageUrl)}");
+            args.FileStream = str;
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Error on BeforeImageLoadAsync");
+            nm.sendMessage("Error", "Error on BeforeImageLoadAsync", NotificationTypes.Error);
+        }
+        
+        // var i = 1;
+        // var result = await FileManagerService.GetImage(args.ImageUrl, false, args.FileDetails);
+        // result.FileStream.Position = 0;
+        // MemoryStream ms = new MemoryStream();
+        // await fs.getImage(args.ImageUrl, ms);
+
+
+        //     // var result = Task.Run(async () => await fs.getImage(args.ImageUrl, ms));
+        //     // result.Wait();
+        //     // ms.CopyTo(file);
+        // args.FileStream = ms;
+        
+        
+    }
+
+    private async Task OnReadAsync(ReadEventArgs<FileManagerDirectoryContent> args)
+    {
+        try
+        {
+            string path = args.Path;
+            List<FileManagerDirectoryContent> fileDetails = args.Folder;
+
+            args.Response = await fs.GetFilesPath(id, path, fileDetails);
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Error on OnReadAsync");
+            nm.sendMessage("Error", "Error on OnReadAsync", NotificationTypes.Error);
+        }
+        
+    }
+}

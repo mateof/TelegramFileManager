@@ -1,0 +1,62 @@
+﻿@using System.Collections.ObjectModel
+@using TelegramDownloader.Data
+@using TelegramDownloader.Models
+@using Syncfusion.Blazor
+@using Syncfusion.Blazor.Navigations
+
+@inject IFileService fs
+
+
+    <div class="form-floating mb-3">
+        <SfDropDownTree class="form-control" id="@idTree" type="text" aria-label="Folder" AllowFiltering="true" LoadOnDemand="true" TValue="string" TItem="FolderModel" Placeholder="Select a Folder" @bind-Value="@selectedNode">
+            <DropDownTreeField TItem="FolderModel" ID="Id" Text="FolderName" Child="Folders" DataSource="@MyFolder" Expanded="Expanded"></DropDownTreeField>
+        </SfDropDownTree>
+        <label for="mtree">Folder</label>
+    </div>
+
+
+@code {
+
+    [Inject] protected PreloadService PreloadService { get; set; } = default!;
+
+    [Parameter]
+    public string id { get; set; }
+    [Parameter]
+    public string idTree { get; set; } = "mtree";
+    [Parameter]
+    public List<string> selectedNode { get; set; }
+    [Parameter]
+    public string folderType { get; set; } = "local";
+
+    private List<FolderModel> MyFolder { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        PreloadService.Show(SpinnerColor.Light, "Loading data...");
+        await getFolders();
+        PreloadService.Hide();
+    }
+
+
+    public async Task getFolders()
+    {
+        // if (MyFolder != null) return MyFolder;
+        if (folderType == "local")
+            MyFolder = new List<FolderModel>(FileService.getFolderNodes(FileService.TEMPDIR).ToList());
+        if (folderType == "temp")
+            MyFolder = new List<FolderModel>(FileService.getFolderNodes(FileService.TEMPDIR).ToList());
+        if (folderType == "telegram")
+            if (MyFolder != null)
+            {
+                MyFolder.Clear();
+                MyFolder.AddRange((await fs.getTelegramFolders(id)).ToList());
+            }else
+            {
+                MyFolder = new List<FolderModel>((await fs.getTelegramFolders(id)).ToList());
+            }
+
+        await Task.Delay(1000);
+
+        
+    }
+}

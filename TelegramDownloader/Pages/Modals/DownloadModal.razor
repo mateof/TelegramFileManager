@@ -1,0 +1,116 @@
+﻿@using TL
+@using TelegramDownloader.Data
+@using TelegramDownloader.Models
+@using TelegramDownloader.Services
+@using TelegramDownloader.Shared
+
+
+@inject ITelegramService ts
+
+<div class="modal @ModalClass" tabindex="-1" role="dialog" style="display:@ModalDisplay">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Select Folder</h5>
+                <button type="button" class="close" data-dismiss="modal" @onclick="() => Close()" aria-label="Close" style="border-color: transparent;background-color: transparent;">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                @if (ShowBackdrop)
+                {
+                    <EditForm class="form-signin mb-4" Model="model" OnSubmit="Submit" FormName="downloadModelForm">
+                        <div class="form-floating mb-3">
+                            <input class="form-control" type="text" id="filename" value="@filename" aria-label="file name" disabled readonly>
+                            <label for="filename">File Name</label>
+                        </div>
+
+                        <div class="form-floating mb-3">
+                            <input class="form-control" type="text" id="filename" value="@size" aria-label="size" disabled readonly>
+                            <label for="filename">Size</label>
+                        </div>
+                        <div>
+                            <TelegramDownloader.Shared.Ddtree idTree="dmtree" 
+                                @ref="ddtree"></TelegramDownloader.Shared.Ddtree>
+                        </div>
+                        
+                        
+
+                        <div class="form-floating mb-3">
+                            <InputText type="text" class="form-control" id="floatingInput" @bind-Value="model!.newName" />
+                            <label for="floatingInput">New Name</label>
+                        </div>
+                    </EditForm>
+                }
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" @onclick="() => Submit()">Save</button>
+                <button type="button" class="btn btn-secondary" data-dismiss="modal" @onclick="() => Close()">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+
+
+@code {
+    public NewDownloadModel? model { get; set; }
+    public Ddtree ddtree { get; set; }
+
+    public string filename = "";
+    public string size = "";
+    public Guid Guid = Guid.NewGuid();
+    public string ModalDisplay = "none;";
+    public string ModalClass = "";
+    public bool ShowBackdrop = false;
+    public ChatMessages mc;
+
+
+    protected override async Task OnInitializedAsync()
+    {
+        model ??= new();
+
+    }
+
+    public void Open(ChatMessages cm)
+    {
+        mc = cm;
+        if (cm.message.media is MessageMediaDocument { document: Document document })
+        {
+            filename = document.Filename; // use document original filename, or build a name from document ID & MIME type:
+            filename ??= $"{document.id}.{document.mime_type[(document.mime_type.IndexOf('/') + 1)..]}";
+            model.newName = filename;
+            size = HelperService.SizeSuffix(document.size);
+        }
+        ModalDisplay = "block;";
+        ModalClass = "Show";
+        ShowBackdrop = true;
+        StateHasChanged();
+    }
+
+    public void Close()
+    {
+        ModalDisplay = "none";
+        ModalClass = "";
+        ShowBackdrop = false;
+        StateHasChanged();
+    }
+
+    private async void Submit()
+    {
+        ts.DownloadFile(mc, model?.newName == "" ? null : model.newName, ddtree.selectedNode == null ? null : ddtree.selectedNode.FirstOrDefault());
+        Close();
+        // Model.type = await ts.checkAuth(Model.value, Model.type == "phone");
+        // Model.value = "";
+        // StateHasChanged();
+        // isLogin();
+        // Logger.LogInformation("Id = {Id}", Model?.Id);
+    }
+}
+
+@if (ShowBackdrop)
+{
+    <div class="modal-backdrop fade show"></div>
+}

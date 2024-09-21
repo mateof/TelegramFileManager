@@ -1,0 +1,26 @@
+﻿
+
+<div class="modal" :class="{ modalshow: showAudioModal,  modalhide: !showAudioModal}" id="modalPlayer" tabindex="-1" aria-labelledby="Audio Player" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h1 class="modal-title fs-5" id="mplayer">Music Player</h1>
+                <button type="button" class="btn-close" v-on:click="closeModalPlayer()" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body bodyplayer">
+                <div id="winamp-container"></div>
+                    <audio id="audiomusic" controls style="width: 100%;">
+
+                    <source id="audioSource" src="" type="audio/mpeg">
+                        
+                        Your browser does not support the audio element.
+                    </audio>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+
+}

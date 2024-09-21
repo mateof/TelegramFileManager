@@ -1,0 +1,53 @@
+# You can override the included template(s) by including variable overrides
+# SAST customization: https://docs.gitlab.com/ee/user/application_security/sast/#customizing-the-sast-settings
+# Secret Detection customization: https://docs.gitlab.com/ee/user/application_security/secret_detection/#customizing-settings
+# Dependency Scanning customization: https://docs.gitlab.com/ee/user/application_security/dependency_scanning/#customizing-the-dependency-scanning-settings
+# Container Scanning customization: https://docs.gitlab.com/ee/user/application_security/container_scanning/#customizing-the-container-scanning-settings
+# Note that environment variables can be set in several places
+# See https://docs.gitlab.com/ee/ci/variables/#cicd-variable-precedence
+stages:
+- build
+build:
+    image: docker:24.0.5
+    stage: build
+    # This will run a Docker daemon in a container (Docker-In-Docker), which will
+    # be available at thedockerhost:2375. If you make e.g. port 5000 public in Docker
+    # (`docker run -p 5000:5000 yourimage`) it will be exposed at thedockerhost:5000.
+    services:
+    - name: docker:24.0.5-dind
+      command: ["--insecure-registry=192.168.0.22:10031"]
+
+    variables:
+      # When using dind service, you must instruct docker to talk with the
+      # daemon started inside of the service. The daemon is available with
+      # a network connection instead of the default /var/run/docker.sock socket.
+      #
+      # The 'docker' hostname is the alias of the service container as described at
+      # https://docs.gitlab.com/ee/ci/docker/using_docker_images.html#accessing-the-services
+      #
+      # If you're using GitLab Runner 12.7 or earlier with the Kubernetes executor and Kubernetes 1.6 or earlier,
+      # the variable must be set to tcp://localhost:2375 because of how the
+      # Kubernetes executor connects services to the job container
+      # DOCKER_HOST: tcp://localhost:2375
+      #
+      DOCKER_HOST: tcp://docker:2375
+      #
+      # This instructs Docker not to start over TLS.
+      DOCKER_TLS_CERTDIR: ""
+
+    # before_script:
+    #   - df
+    #   - cat /etc/resolv.conf
+    #   - cat /etc/hosts
+    #   - docker info
+      # - docker login 192.168.0.25:10001
+    script:
+      # - docker login 192.168.0.25:10001
+      - docker build -t 192.168.0.22:10031/telegramdownloader:$CI_COMMIT_SHORT_SHA ./TelegramDownloader
+      # RETAG IMAGE LATEST WITH DIGEST FROM PREVIOUS IMAGE 
+
+      - IMAGE_ID=$(docker images | grep 192.168.0.22:10031/telegramdownloader | awk '{print $3}')
+      - docker tag $IMAGE_ID 192.168.0.22:10031/telegramdownloader:latest
+
+      - docker push 192.168.0.22:10031/telegramdownloader:$CI_COMMIT_SHORT_SHA
+      - docker push 192.168.0.22:10031/telegramdownloader:latest

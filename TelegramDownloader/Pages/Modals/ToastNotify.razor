@@ -1,0 +1,75 @@
+﻿@using TelegramDownloader.Models
+@inject ILogger<ToastNotify> Logger
+
+<div aria-live="polite" aria-atomic="true" class="position-relative">
+    <!-- Position it: -->
+    <!-- - `.toast-container` for spacing between toasts -->
+    <!-- - `.position-absolute`, `top-0` & `end-0` to position the toasts in the upper right corner -->
+    <!-- - `.p-3` to prevent the toasts from sticking to the edge of the container  -->
+    <div class="toast-container position-absolute top-0 end-0 p-3">
+    
+@foreach (var n in nl)
+{
+            <div class="toast show" id="@DateTime.Now.Millisecond" data-bs-animation="true" data-bs-autohide="true" data-bs-delay="5000" style="position: relative; z-index:999" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header" style="background-color:@getBackground(n.type)">
+                    <i class="bi bi-bell-fill">&nbsp;</i>
+            <strong class="me-auto">@n.header</strong>
+            <small class="text-muted">just now</small>
+            <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+        </div>
+        <div class="toast-body">
+                    @((MarkupString)n.text)
+        </div>
+    </div>
+}
+</div>
+</div>
+
+@code {
+    public List<Notification> nl { get; set; } = new List<Notification>();
+    Mutex mut = new Mutex();
+
+    protected override async Task OnInitializedAsync()
+    {
+        //if (GeneralConfigStatic.config.ShouldNotify)
+        NotificationModel.EventNotification += eventNotification;
+    }
+
+    private string getBackground(NotificationTypes type)
+    {
+        switch(type)
+        {
+            case NotificationTypes.Success:
+                return "#6bf3a6ab";
+            case NotificationTypes.Error:
+                return "#fe1640d9";
+            case NotificationTypes.Warn:
+                return "#fec316d9";
+            default:
+                return "#16b7fed9";
+        }
+
+    }
+
+    async void eventNotification(object sender, Notification e)
+    {
+        if (GeneralConfigStatic.config.ShouldNotify || e.isForced)
+        {
+            // Logger.LogInformation("Message received");
+            mut.WaitOne();
+            nl.Add(e);
+            mut.ReleaseMutex();
+            Task.Delay(5000).ContinueWith(async (task) =>
+            {
+                mut.WaitOne();
+                nl.Remove(e);
+                mut.ReleaseMutex();
+                await InvokeAsync(StateHasChanged);
+
+            });
+
+            await InvokeAsync(StateHasChanged);
+        }
+        
+    }
+}

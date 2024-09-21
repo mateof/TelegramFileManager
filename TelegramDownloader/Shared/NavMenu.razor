@@ -1,0 +1,234 @@
+﻿@using TelegramDownloader.Data
+@using TL
+@using TelegramDownloader.Models
+@inject NavigationManager uriHelper;
+@inject ITelegramService ts
+@inject IJSRuntime JS
+
+<style>
+    .ellipsis {
+        text-overflow: ellipsis;
+    }
+
+    .navclass{
+        color: white
+    }
+
+    .groupbtnactionclass {
+        color: antiquewhite;
+        --bs-btn-border-color: #0d6efd00;
+        --bs-btn-hover-bg: #00f2ff4a;
+        --bs-btn-active-bg: #7b9ccd75;
+    }
+    .groupbtnclass {
+        width: 90%;
+        padding-left: 10%;
+        padding-bottom: 5%;
+    }
+</style>
+
+<div class="top-row ps-3 navbar navbar-dark">
+    <div class="container-fluid">
+        <a class="navbar-brand" href="/fetchdata"><img src="/favicon.ico" style="height: 2em;" /> TelegramFileManager</a>
+        <button title="Navigation menu" class="navbar-toggler" @onclick="ToggleNavMenu">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+    </div>
+</div>
+
+<div class="@NavMenuCssClass">
+    <nav class="flex-column menu">
+        @if (showSearch)
+        {
+            <div class="nav-item px-3">
+                <div class="input-group mb-3">
+                    <span class="input-group-text" id="searchChatLabel"><i class="bi bi-search"></i></span>
+                    <input type="text" id="searchChats" class="form-control navbar-collapse" @onchange="searchChat" placeholder="Search" aria-label="Search" aria-describedby="Search">
+                </div>
+            </div>
+        }
+        <div class="">
+            <div class="btn-group btn-group-sm groupbtnclass" role="group" aria-label="Small button group">
+                <button type="button" class="btn btn-outline-primary groupbtnactionclass" @onclick="ToggleSearch"><i class="bi bi-search"></i></button>
+                <button type="button" class="btn btn-outline-primary groupbtnactionclass" @onclick="showPlayer"><i class="bi bi-boombox"></i></button>
+                <button class="btn groupbtnactionclass" type="button" data-bs-toggle="offcanvas" @onclick="ToggleNavMenu" data-bs-target="#offcanvasRight" aria-controls="offcanvasRight"><i class="bi bi-three-dots"></i></button>
+            </div>
+            <nav>
+                <div class="nav nav-tabs" id="nav-tab" role="tablist">
+                    <button class="nav-link navclass active" id="nav-mine-tab" data-bs-toggle="tab" data-bs-target="#nav-mine" type="button" role="tab" aria-controls="nav-mine" aria-selected="true">Mine</button>
+                    <button class="nav-link navclass" id="nav-fav-tab" data-bs-toggle="tab" data-bs-target="#nav-fav" type="button" role="tab" aria-controls="nav-fav" aria-selected="false">Fav</button>
+                    <button class="nav-link navclass" id="nav-all-tab" data-bs-toggle="tab" data-bs-target="#nav-all" type="button" role="tab" aria-controls="nav-all" aria-selected="false">All</button>
+                </div>
+            </nav>
+        </div>
+        
+        <div class="tab-content" id="nav-tabContent">
+            <div class="tab-pane fade show active" id="nav-mine" role="tabpanel" aria-labelledby="nav-mine-tab">
+                @foreach (ChatViewBase cb in mineChats)
+                {
+                    <div class="row">
+                        <div class="col-1" style="align-content: space-around; padding-left: 5%; ">
+                            <span style="color:white; cursor: pointer;" class="bi bi-star" @onclick="@setStar"></span>
+                        </div>
+                        <div class="col-9">
+                            
+                            <div class="nav-item" style="padding:inherit;" @onclick="ToggleNavMenu">
+                                <NavLink class="nav-link ellipsis" href="@($"/fetchdata/{cb.chat.ID}")" Match="NavLinkMatch.All">
+                                    <span aria-hidden="true">
+                                        
+
+                                    </span>
+                                    <span class="text-truncate">@cb.chat.Title</span>
+                                </NavLink>
+
+                            </div>
+                        </div>
+                        <div class="col-2" style="position: relative; padding-top: 5%; padding-left: 0;">
+                            <div class="dropdown">
+                                <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <span style="color:white" class="bi bi-folder"></span>
+                                </button>
+                                <ul class="dropdown-menu">
+                                    <li><a class="dropdown-item" @onclick="@(async () => await goTo($"/fm/{cb.chat.ID}"))">File Manager</a></li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+            <div class="tab-pane fade" id="nav-fav" role="tabpanel" aria-labelledby="nav-fav-tab">...</div>
+            <div class="tab-pane fade" id="nav-all" role="tabpanel" aria-labelledby="nav-all-tab">
+                @foreach (ChatViewBase cb in sChats)
+                {
+                    <div class="row">
+                        <div class="col-1" style="align-content: space-around; padding-left: 5%; ">
+                            <span style="color:white; cursor: pointer;" class="bi bi-star" @onclick="@setStar"></span>
+                        </div>
+                        <div class="col-9">
+                            <div class="nav-item" style="padding:inherit;" @onclick="ToggleNavMenu">
+                                <NavLink class="nav-link ellipsis" href="@($"/fetchdata/{cb.chat.ID}")" Match="NavLinkMatch.All">
+                                    <span aria-hidden="true">
+                                       @*  @if (cb.chat.Photo != null)
+                                        {
+                                            <img src="data:image/jpg;base64, @cb.img64" alt="photo" style="width:1vw;" />
+                                        } *@
+
+                                    </span>
+                                    <span class="text-truncate">@cb.chat.Title</span>
+                                </NavLink>
+
+                            </div>
+                        </div>
+                        <div class="col-2" style="position: relative; padding-top: 5%; padding-left: 0;">
+                            <div class="dropdown">
+                                <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <span style="color:white" class="bi bi-folder"></span>
+                                </button>
+                                <ul class="dropdown-menu">
+                                    <li><a class="dropdown-item" @onclick="@(async () => await goTo($"/fm/{cb.chat.ID}"))">File Manager</a></li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+        
+
+    </nav>
+</div>
+
+@code {
+    private List<ChatViewBase> sChats = new List<ChatViewBase>();
+    private List<ChatViewBase> allChats = new List<ChatViewBase>();
+    private List<ChatViewBase> mineChats = new List<ChatViewBase>();
+    private string searchString = "";
+    private bool collapseNavMenu = true;
+    private bool showSearch = false;
+
+    private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
+
+    private void ToggleNavMenu()
+    {
+        collapseNavMenu = !collapseNavMenu;
+    }
+    private async Task ToggleSearch()
+    {
+        showSearch = !showSearch;
+        // if (showSearch)
+        // {
+        //     await JS.InvokeVoidAsync("focusElement", "searchChats");
+        // }
+    }
+
+
+    public async Task goTo(string route)
+    {
+        uriHelper.NavigateTo(route, forceLoad: true);
+    }
+
+    public void searchChat(Microsoft.AspNetCore.Components.ChangeEventArgs e)
+    {
+        searchString = e.Value?.ToString() ?? "";
+        filterChats();
+        StateHasChanged();
+    }
+
+    public async Task setStar()
+    {
+        Console.WriteLine("start set");
+    }
+
+    private async Task showPlayer()
+    {
+        await JS.InvokeVoidAsync("openAudioModal", "");
+        ToggleNavMenu();
+    }
+
+    private void filterChats()
+    {
+        if (!string.IsNullOrEmpty(searchString))
+        {
+            sChats = allChats.Where(x => x.chat.Title.ToLower().Contains(searchString.ToLower())).ToList();
+        }
+        else
+        {
+            sChats = allChats.ToList();
+        }
+        filterMyChats(searchString);
+
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        allChats = await ts.getAllSavedChats();
+        filterChats();
+        StateHasChanged();
+    }
+
+    private void filterMyChats(string? searchString = null)
+    {
+        mineChats = new List<ChatViewBase>();
+        foreach(var chat in allChats)
+        {
+            if (chat.chat is Channel chat1)
+            {
+                if (chat1.flags.HasFlag(Channel.Flags.creator))
+                {
+                    if (!string.IsNullOrEmpty(searchString))
+                    {
+                        if (chat1.Title.ToLower().Contains(searchString.ToLower()))
+                        {
+                            mineChats.Add(chat);
+                        }
+                    }
+                    else
+                    {
+                        mineChats.Add(chat);
+                    }
+                    
+                }
+            }
+        }
+    }
+}

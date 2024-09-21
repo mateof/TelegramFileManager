@@ -1,0 +1,148 @@
+﻿@using TelegramDownloader.Data
+@using TelegramDownloader.Models
+@inject ILogger<FileManager> Logger
+@inject IFileService fs
+
+<div class="modal @ModalClass" tabindex="-1" role="dialog" style="display:@ModalDisplay">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Import Data Channel</h5>
+                <button type="button" class="close" data-dismiss="modal" @onclick="() => Close()" aria-label="Close" style="border-color: transparent;background-color: transparent;">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p>
+                    <label>
+                        Upload file to import:
+                        <InputFile OnChange="LoadFiles" />
+                    </label>
+                </p>
+
+                @if (isLoading)
+                {
+                    <p>Progress: @string.Format("{0:P0}", progressPercent)</p>
+                }
+                else
+                {
+                    <ul>
+                        @foreach (var file in loadedFiles)
+                        {
+                            <li>
+                                <ul>
+                                    <li>Name: @file.Name</li>
+                                    <li>Last modified: @file.LastModified.ToString()</li>
+                                    <li>Size (bytes): @file.Size</li>
+                                    <li>Content type: @file.ContentType</li>
+                                </ul>
+                            </li>
+                        }
+                    </ul>
+                }
+
+                @if(npe != null)
+                {
+                    <p>@npe.CompletedItems of @npe.TotalItems</p>
+                    <div class="progress">
+                        <div class="progress-bar" role="progressbar" style="width: @npe.Percent%;" aria-valuenow="@npe.Percent" aria-valuemin="0" aria-valuemax="100">@npe.Percent%</div>
+                    </div>
+                }
+
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal" @onclick="() => Close()">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public string id { get; set; }
+    NotificationProgressEvent npe { get; set; }
+    private string ModalDisplay = "none;";
+    private string ModalClass = "";
+    private List<IBrowserFile> loadedFiles = new();
+    private long maxFileSize = 1024 * 1024 * 500;
+    private int maxAllowedFiles = 1;
+    private bool isLoading;
+    private decimal progressPercent;
+
+    public async Task Open()
+    {
+        ModalDisplay = "block;";
+        ModalClass = "Show";
+        StateHasChanged();
+    }
+
+    public void Close()
+    {
+        ModalDisplay = "none";
+        ModalClass = "";
+        StateHasChanged();
+    }
+
+    private async Task LoadFiles(InputFileChangeEventArgs e)
+    {
+        isLoading = true;
+        loadedFiles.Clear();
+        progressPercent = 0;
+
+        foreach (var file in e.GetMultipleFiles(maxAllowedFiles))
+        {
+            try
+            {
+                var trustedFileName = file.Name;
+                // string fileName = $"importfile_{id}.json";
+                var path = System.IO.Path.Combine(FileService.TEMPDIR, trustedFileName);
+                if (File.Exists(path))
+                    File.Delete(path);
+
+                await using FileStream writeStream = new(path, FileMode.Create);
+                using var readStream = file.OpenReadStream(maxFileSize);
+                var bytesRead = 0;
+                var totalRead = 0;
+                var buffer = new byte[1024 * 10];
+
+                while ((bytesRead = await readStream.ReadAsync(buffer)) != 0)
+                {
+                    totalRead += bytesRead;
+                    await writeStream.WriteAsync(buffer, 0, bytesRead);
+                    progressPercent = Decimal.Divide(totalRead, file.Size);
+                    StateHasChanged();
+                }
+
+                loadedFiles.Add(file);
+
+                Logger.LogInformation(
+                    "Unsafe Filename: {UnsafeFilename} File saved: {Filename}",
+                    file.Name, trustedFileName);
+
+                readStream.Dispose();
+                readStream.Close();
+                writeStream.Dispose();
+                writeStream.Close();
+                GenericNotificationProgressModel gnp = new GenericNotificationProgressModel();
+                gnp.EventNotification += eventChanged;
+                await fs.importData(id, path, gnp);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError("File: {FileName} Error: {Error}",
+                    file.Name, ex.Message);
+            }
+        }
+
+        isLoading = false;
+    }
+
+    async void eventChanged(object sender, NotificationProgressEvent e)
+    {
+        npe = e;
+        await InvokeAsync(StateHasChanged);
+
+    }
+
+
+}
