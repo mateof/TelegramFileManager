@@ -1,0 +1,31 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.9.34728.123
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "TelegramDownloader", "TelegramDownloader.csproj", "{9CC17AFD-8CC2-4E00-8517-6C16CDCF67D1}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Test", "..\Test\Test.csproj", "{57E29E5B-FB3B-4403-9459-454FF2DD7AEE}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{9CC17AFD-8CC2-4E00-8517-6C16CDCF67D1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9CC17AFD-8CC2-4E00-8517-6C16CDCF67D1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9CC17AFD-8CC2-4E00-8517-6C16CDCF67D1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9CC17AFD-8CC2-4E00-8517-6C16CDCF67D1}.Release|Any CPU.Build.0 = Release|Any CPU
+		{57E29E5B-FB3B-4403-9459-454FF2DD7AEE}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{57E29E5B-FB3B-4403-9459-454FF2DD7AEE}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{57E29E5B-FB3B-4403-9459-454FF2DD7AEE}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{57E29E5B-FB3B-4403-9459-454FF2DD7AEE}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {DA6A31EB-705D-45FF-8C41-9754769A17A7}
+	EndGlobalSection
+EndGlobal

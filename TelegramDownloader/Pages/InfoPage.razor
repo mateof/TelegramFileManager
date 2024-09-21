@@ -1,0 +1,104 @@
+﻿@page "/fetchdata"
+@using TL
+@using TelegramDownloader.Data
+@using TelegramDownloader.Models
+@using TelegramDownloader.Services
+@inject ITelegramService ts
+@inject IFileService fs
+
+@if(user != null)
+{
+    <h3></h3>
+
+    <div class="p-3 pb-md-4 mx-auto text-center">
+        <h1 class="display-4 fw-normal text-body-emphasis"><img src="/favicon.ico" style="height: 1em;" /> Telegram File Manager</h1>
+        <p class="fs-5 text-body-secondary">Thanks for use this application @(user.first_name).</p>
+    </div>
+
+    <main>
+        <div class="row row-cols-1 row-cols-md-3 mb-3 text-center">
+            <div class="col">
+                <div class="card mb-4 rounded-3 shadow-sm">
+                    <div class="card-header py-3">
+                        <h4 class="my-0 fw-normal">Free</h4>
+                    </div>
+                    <div class="card-body">
+                        <h1 class="card-title pricing-card-title"><small class="text-body-secondary fw-light">This is </small>Free</h1>
+                        <ul class="list-unstyled mt-3 mb-4">
+                            <li>This tool is free to use.</li>
+                        </ul>
+                        <button type="button" class="w-100 btn btn-lg btn-outline-primary"><i class="bi bi-github"></i> Github</button>
+                    </div>
+                </div>
+            </div>
+            <div class="col">
+                <div class="card mb-4 rounded-3 shadow-sm">
+                    <div class="card-header py-3">
+                        <h4 class="my-0 fw-normal">Temp Folder</h4>
+                    </div>
+                    <div class="card-body">
+                        <h1 class="card-title pricing-card-title">@dirSize?.SizeWithSuffix</h1>
+                        <ul class="list-unstyled mt-3 mb-4">
+                            <li>Elements: @dirSize?.TotalElements</li>
+                            
+                        </ul>
+                        <button type="button" class="w-100 btn btn-lg btn-primary" @onclick="cleanTempFolder"><i class="bi bi-trash"></i> Clean</button>
+                    </div>
+                </div>
+            </div>
+            <div class="col">
+                <div class="card mb-4 rounded-3 shadow-sm border-primary">
+                    <div class="card-header py-3 text-bg-primary border-primary">
+                        <h4 class="my-0 fw-normal">Premium</h4>
+                    </div>
+                    <div class="card-body">
+                        @if(TelegramService.isPremium)
+                        {
+                            <h1 class="card-title pricing-card-title">
+                                <i class="bi bi-shield-check"></i>
+                            </h1>
+                            <ul class="list-unstyled mt-3 mb-4">
+                                <li>You are a premium Telegram user</li>
+                            </ul>
+                        } else
+                        {
+                                <h1 class="card-title pricing-card-title">
+                                    <i class="bi bi-x"></i>
+                                </h1>
+                                <ul class="list-unstyled mt-3 mb-4">
+                                    <li>You are not a premium Telegram user</li>
+                                </ul>
+                            }
+
+
+
+                        <a type="button" href="https://telegram.org/blog/700-million-and-premium" target="_blank" class="w-100 btn btn-lg btn-primary">More Info</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+}
+
+
+@code {
+    private User user { get; set; }
+    private DirectorySizeModel? dirSize { get; set; }
+    protected override async Task OnInitializedAsync()
+    {
+        user = await ts.GetUser();
+        await calculateTempDirSize();
+    }
+
+    private async Task calculateTempDirSize()
+    {
+        dirSize = await HelperService.GetDirecctorySizeAsync(FileService.TEMPORARYPDIR);
+    }
+
+    private async Task cleanTempFolder()
+    {
+        fs.cleanTempFolder();
+        await calculateTempDirSize();
+    }
+}

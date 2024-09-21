@@ -1,0 +1,6 @@
+// this is a example. Rename file to config.json and complete it
+{
+  "api_id": "",
+  "hash_id": "",
+  "mongo_connection_string": ""
+}

@@ -1,0 +1,61 @@
+﻿@inherits LayoutComponentBase
+@using TelegramDownloader.Data
+@using TelegramDownloader.Models
+@using TelegramDownloader.Shared
+@inject ITelegramService ts
+@inject NavigationManager NavManager
+
+<PageTitle>TelegramFileManager</PageTitle>
+
+@code {
+    protected override void OnInitialized()
+    {
+        if (!ts.checkUserLogin()) NavManager.NavigateTo("/");
+    }
+}
+
+<div class="page">
+    <div class="sidebar">
+        <NavMenuConfig />
+
+    </div>
+
+    <main>
+        <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasRight" aria-labelledby="offcanvasRightLabel">
+
+            <div class="offcanvas-header">
+                <h5 id="offcanvasRightLabel">Menu</h5>
+                <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+            </div>
+            <div class="offcanvas-body">
+                <div class="list-group list-group-flush">
+                    <a href="/config" class="list-group-item list-group-item-action"><i class="bi bi-gear"></i> Configuration</a>
+
+                    <a href="/downloads" class="list-group-item list-group-item-action"><i class="bi bi-cloud-download"></i> Tasks</a>
+                    <a href="/loglist" class="list-group-item list-group-item-action"><i class="bi bi-file-earmark-text"></i> Logs</a>
+                    <a href="#" @onclick="() => Logout()" class="list-group-item list-group-item-action list-group-item-warning"><i class="bi bi-box-arrow-right"></i> LogOut</a>
+                </div>
+            </div>
+        </div>
+        <TelegramDownloader.Pages.Modals.ToastNotify></TelegramDownloader.Pages.Modals.ToastNotify>
+        <article class="content px-4">
+            @Body
+        </article>
+    </main>
+</div>
+
+@code {
+
+    private void Notificar()
+    {
+        NotificationModel nm = new NotificationModel();
+        nm.sendEvent(new Notification("<h1>Body message</h1>", "Title", NotificationTypes.Info));
+    }
+
+    private async void Logout()
+    {
+        await ts.logOff();
+        NavManager.NavigateTo("/");
+        StateHasChanged();
+    }
+}

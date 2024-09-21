@@ -1,0 +1,75 @@
+﻿using TelegramDownloader.Models;
+using TelegramDownloader.Pages;
+
+namespace TelegramDownloader.Services
+{
+    public class HelperService
+    {
+        public static readonly string[] SizeSuffixes =
+                  { "bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB" };
+
+        public  static string SizeSuffix(Int64 value, int decimalPlaces = 1)
+        {
+            if (value < 0) { return "-" + SizeSuffix(-value, decimalPlaces); }
+
+            int i = 0;
+            decimal dValue = (decimal)value;
+            while (Math.Round(dValue, decimalPlaces) >= 1000)
+            {
+                dValue /= 1024;
+                i++;
+            }
+
+            return string.Format("{0:n" + decimalPlaces + "} {1}", dValue, SizeSuffixes[i]);
+        }
+
+        public static async Task<DirectorySizeModel> GetDirecctorySizeAsync(string path)
+        {
+            DirectoryInfo dirInfo = new DirectoryInfo(path);
+            return await Task.Run(
+                () =>
+                    {
+                        var TotalElements = dirInfo.GetFiles("*.*", SearchOption.AllDirectories);
+                        var TotalSize = TotalElements.Sum(file => file.Length);
+                        return new DirectorySizeModel()
+                        {
+                            SizeBytes = TotalSize,
+                            SizeWithSuffix = SizeSuffix(TotalSize),
+                            TotalElements = TotalElements.Count()
+                        };
+                    }
+                );
+        }
+    }
+
+    public class WaitingTime
+    {
+        /// <summary>
+        /// waiting time in milliseconds
+        /// </summary>
+        private int waitingTime = 2000;
+        private DateTime initialTime;
+        public WaitingTime() 
+        {
+            initialTime = DateTime.Now;
+            waitingTime = GeneralConfigStatic.config.TimeSleepBetweenTransactions;
+        }
+        public WaitingTime(int wt) 
+        {
+            waitingTime = wt;
+            initialTime = DateTime.Now;
+        }
+
+        public async Task Sleep()
+        {
+            var totalTime = (DateTime.Now - initialTime).TotalMilliseconds;
+            if (totalTime <= waitingTime)
+            {
+                var waitTime = waitingTime - totalTime;
+                TimeSpan delay = TimeSpan.FromMilliseconds(waitTime);
+                await Task.Delay(delay);
+            }
+        }
+
+    }
+}
