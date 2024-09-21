@@ -2,7 +2,7 @@
 
 
 ## Getting started
-
+[Wiki](https://github.com/mateof/TelegramFileManager/wiki)
 
 
 ### Compile
