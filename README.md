@@ -27,10 +27,6 @@ With telegramFileManager you can have your own unlimited cloud and manage it thr
 - [Blazor Bootstrap](https://demos.blazorbootstrap.com/)
 
 
-# Editing this README
-
-## Suggestions for a good README
-
 ## Name
 
 ## Description
