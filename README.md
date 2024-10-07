@@ -10,6 +10,7 @@ With telegramFileManager you can have your own unlimited cloud and manage it thr
 ## Installation
 - Install [MongoDB](https://www.mongodb.com/try/download/community)
 - Install [.Net SDK](https://dotnet.microsoft.com/en-us/download)
+- Install [.Net Runtime Run server apps](https://dotnet.microsoft.com/en-us/download/dotnet/6.0/runtime?cid=getdotnetcore&os=windows&arch=x64)
 ## Compile
 
 > dotnet publish -c Release --output ./MyTargetFolder .\TelegramDownloader.csproj
