@@ -14,7 +14,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Build and Push the Docker image
-      run: 
+      run: |
         docker login --username mateof --password ${{ secrets.GHCR }} ghcr.io
-        docker build ./TelegramDownloader --file Dockerfile --tag ghcr/mateof/TelegramFileManager:${{ steps.meta.outputs.tags }}
+        docker build ./TelegramDownloader -f Dockerfile --tag ghcr/mateof/TelegramFileManager:${{ steps.meta.outputs.tags }}
         docker push ghcr/mateof/TelegramFileManager:${{ steps.meta.outputs.tags }}
