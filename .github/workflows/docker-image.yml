@@ -17,4 +17,4 @@ jobs:
       run: |
         docker login --username mateof --password ${{ secrets.GHCR }} ghcr.io
         docker build ./TelegramDownloader -f Dockerfile --tag ghcr.io/mateof/telegramfilemanager:latest
-        docker push ghcr/mateof/TelegramFileManager:latest
+        docker push ghcr/mateof/telegramfilemanager:latest
