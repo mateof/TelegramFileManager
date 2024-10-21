@@ -1,0 +1,20 @@
+name: Docker Image CI
+
+on:
+  push:
+    branches: [ "main" ]
+    tags: [ 'v*.*.*' ]
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: Build and Push the Docker image
+      run: 
+        docker login --username mateof --password ${{ secrets.GHCR }} ghcr.io
+        docker build ./TelegramDownloader --file Dockerfile --tag ghcr/mateof/TelegramFileManager:${{ steps.meta.outputs.tags }}
+        docker push ghcr/mateof/TelegramFileManager:${{ steps.meta.outputs.tags }}
