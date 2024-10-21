@@ -1,5 +1,6 @@
 # TelegramFileManager
 With telegramFileManager you can have your own unlimited cloud and manage it through a file system in a simple way.
+You will be able to store files of unlimited size.
 
 ![image](https://github.com/user-attachments/assets/d0853d9b-f6e1-4fbb-aa35-b71c81a1c17a)
 ![image](https://github.com/user-attachments/assets/6f825a2e-f134-40c1-a708-3a6cc754372b)
