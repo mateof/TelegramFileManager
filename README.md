@@ -28,11 +28,13 @@ services:
           memory: 6G
     container_name: telegramfilemanager
     environment:
-      connectionString: "mongodb://<username/>:<password/>@localhost:27017"
+      connectionString: "mongodb://<username/>:<password/>@mongodb_container:27017"
       api_id: ""
       hash_id: ""
       DOTNET_HOSTBUILDER__RELOADCONFIGONCHANGE: false
     restart: unless-stopped
+    depends_on:
+      - mongodb_container
     ports:
       - "8015:80"
       - "8016:443"
@@ -59,7 +61,7 @@ services:
         - ME_CONFIG_MONGODB_SERVER=mongodb
         - ME_CONFIG_MONGODB_PORT=27017
         - ME_CONFIG_MONGODB_ENABLE_ADMIN=true
-        - ME_CONFIG_MONGODB_AUTH_DATABASE=
+        - ME_CONFIG_MONGODB_AUTH_DATABASE=admin
         - ME_CONFIG_MONGODB_AUTH_USERNAME=
         - ME_CONFIG_MONGODB_AUTH_PASSWORD=
         - ME_CONFIG_BASICAUTH_USERNAME=
@@ -84,6 +86,7 @@ services:
 
 - [Syncfusion](https://www.syncfusion.com/blazor-components)
 - [Blazor Bootstrap](https://demos.blazorbootstrap.com/)
+- [WTelegramClient](https://github.com/wiz0u/WTelegramClient)
 
 
 ## Name
