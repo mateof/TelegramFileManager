@@ -20,7 +20,7 @@ jobs:
             run: |
                 cd ${{github.workspace}}
                 dotnet publish TelegramDownloader/TelegramDownloader.csproj -r win-x64 -c Release -o bin/win-x64
-                zip -r TelegramFileManager-win-x64.zip bin/win-x64 -j
+                zip -r TelegramFileManager-win-x64.zip bin/win-x64
                 gh release upload ${{github.event.release.tag_name}} TelegramFileManager-win-x64.zip
             env:
               GITHUB_TOKEN: ${{ github.TOKENBuild }}
@@ -30,7 +30,7 @@ jobs:
             run: |
                 cd ${{github.workspace}}
                 dotnet publish TelegramDownloader/TelegramDownloader.csproj -r win-x86 -c Release -o bin/win-x86
-                zip -r TelegramFileManager-win-x86.zip bin/win-x86 -j
+                zip -r TelegramFileManager-win-x86.zip bin/win-x86
                 gh release upload ${{github.event.release.tag_name}} TelegramFileManager-win-x86.zip
             env:
               GITHUB_TOKEN: ${{ github.TOKENBuild }}
@@ -40,7 +40,7 @@ jobs:
             run: |
                 cd ${{github.workspace}}
                 dotnet publish TelegramDownloader/TelegramDownloader.csproj -r win-arm64 -c Release -o bin/win-arm64
-                zip -r TelegramFileManager-win-arm64.zip bin/win-arm64 -j
+                zip -r TelegramFileManager-win-arm64.zip bin/win-arm64
                 gh release upload ${{github.event.release.tag_name}} TelegramFileManager-win-arm64.zip
             env:
               GITHUB_TOKEN: ${{ github.TOKENBuild }}
@@ -50,7 +50,7 @@ jobs:
             run: |
                 cd ${{github.workspace}}
                 dotnet publish TelegramDownloader/TelegramDownloader.csproj -r linux-x64 -c Release -o bin/linux-x64
-                zip -r TelegramFileManager-linux-x64.zip bin/linux-x64 -j
+                zip -r TelegramFileManager-linux-x64.zip bin/linux-x64
                 gh release upload ${{github.event.release.tag_name}} TelegramFileManager-linux-x64.zip
             env:
               GITHUB_TOKEN: ${{ github.TOKENBuild }}
@@ -60,7 +60,7 @@ jobs:
             run: |
                 cd ${{github.workspace}}
                 dotnet publish TelegramDownloader/TelegramDownloader.csproj -r linux-arm -c Release -o bin/linux-arm
-                zip -r TelegramFileManager-linux-arm.zip bin/linux-arm -j
+                zip -r TelegramFileManager-linux-arm.zip bin/linux-arm
                 gh release upload ${{github.event.release.tag_name}} TelegramFileManager-linux-arm.zip
             env:
               GITHUB_TOKEN: ${{ github.TOKENBuild }}
@@ -70,7 +70,7 @@ jobs:
             run: |
                 cd ${{github.workspace}}
                 dotnet publish TelegramDownloader/TelegramDownloader.csproj -r osx-x64 -c Release -o bin/osx-x64
-                zip -r TelegramFileManager-osx-x64.zip bin/osx-x64 -j
+                zip -r TelegramFileManager-osx-x64.zip bin/osx-x64
                 gh release upload ${{github.event.release.tag_name}} TelegramFileManager-osx-x64.zip
             env:
               GITHUB_TOKEN: ${{ github.TOKENBuild }}
