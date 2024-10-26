@@ -23,7 +23,7 @@ jobs:
                 zip -r TelegramFileManager-win-x64.zip bin/win-x64
                 gh release upload ${{github.event.release.tag_name}} TelegramFileManager-win-x64.zip
             env:
-              GH_TOKEN: ${{ github.TOKENBuild }}
+              GH_TOKEN: ${{ secrets.TOKENBuild }}
             shell: bash
 
           - name: '📦 Package windows x86'
@@ -33,7 +33,7 @@ jobs:
                 zip -r TelegramFileManager-win-x86.zip bin/win-x86
                 gh release upload ${{github.event.release.tag_name}} TelegramFileManager-win-x86.zip
             env:
-              GH_TOKEN: ${{ github.TOKENBuild }}
+              GH_TOKEN: ${{ secrets.TOKENBuild }}
             shell: bash
 
           - name: '📦 Package windows arm'
@@ -43,7 +43,7 @@ jobs:
                 zip -r TelegramFileManager-win-arm64.zip bin/win-arm64
                 gh release upload ${{github.event.release.tag_name}} TelegramFileManager-win-arm64.zip
             env:
-              GH_TOKEN: ${{ github.TOKENBuild }}
+              GH_TOKEN: ${{ secrets.TOKENBuild }}
             shell: bash
 
           - name: '📦 Package linux x64'
@@ -53,7 +53,7 @@ jobs:
                 zip -r TelegramFileManager-linux-x64.zip bin/linux-x64
                 gh release upload ${{github.event.release.tag_name}} TelegramFileManager-linux-x64.zip
             env:
-              GH_TOKEN: ${{ github.TOKENBuild }}
+              GH_TOKEN: ${{ secrets.TOKENBuild }}
             shell: bash
 
           - name: '📦 Package linux arm'
@@ -63,7 +63,7 @@ jobs:
                 zip -r TelegramFileManager-linux-arm.zip bin/linux-arm
                 gh release upload ${{github.event.release.tag_name}} TelegramFileManager-linux-arm.zip
             env:
-              GH_TOKEN: ${{ github.TOKENBuild }}
+              GH_TOKEN: ${{ secrets.TOKENBuild }}
             shell: bash
 
           - name: '📦 Package mac OS x64' 
@@ -73,5 +73,5 @@ jobs:
                 zip -r TelegramFileManager-osx-x64.zip bin/osx-x64
                 gh release upload ${{github.event.release.tag_name}} TelegramFileManager-osx-x64.zip
             env:
-              GH_TOKEN: ${{ github.TOKENBuild }}
+              GH_TOKEN: ${{ secrets.TOKENBuild }}
             shell: bash
