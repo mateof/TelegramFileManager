@@ -1,0 +1,81 @@
+name: Publish utility on release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+    build:
+        name: Build binaries
+        runs-on: ubuntu-latest
+        steps:
+
+          - name: '📄 Checkout'
+            uses: actions/checkout@v4
+          - name: Setup .NET
+            uses: actions/setup-dotnet@v4
+            with:
+              dotnet-version: 8.0.x
+
+          - name: '📦 Package windows x64'
+            run: |
+                cd ${{github.workspace}}
+                dotnet publish TelegramDownloader/TelegramDownloader.csproj -r win-x64 -c Release -o bin/win-x64
+                zip -r TelegramFileManager-win-x64.zip bin/win-x64 -j
+                gh release upload ${{github.event.release.tag_name}} TelegramFileManager-win-x64.zip
+            env:
+              GITHUB_TOKEN: ${{ github.TOKENBuild }}
+            shell: bash
+
+          - name: '📦 Package windows x86'
+            run: |
+                cd ${{github.workspace}}
+                dotnet publish TelegramDownloader/TelegramDownloader.csproj -r win-x86 -c Release -o bin/win-x86
+                zip -r TelegramFileManager-win-x86.zip bin/win-x86 -j
+                gh release upload ${{github.event.release.tag_name}} TelegramFileManager-win-x86.zip
+            env:
+              GITHUB_TOKEN: ${{ github.TOKENBuild }}
+            shell: bash
+
+          - name: '📦 Package windows arm'
+            run: |
+                cd ${{github.workspace}}
+                dotnet publish TelegramDownloader/TelegramDownloader.csproj -r win-arm64 -c Release -o bin/win-arm64
+                zip -r TelegramFileManager-win-arm64.zip bin/win-arm64 -j
+                gh release upload ${{github.event.release.tag_name}} TelegramFileManager-win-arm64.zip
+            env:
+              GITHUB_TOKEN: ${{ github.TOKENBuild }}
+            shell: bash
+
+          - name: '📦 Package linux x64'
+            run: |
+                cd ${{github.workspace}}
+                dotnet publish TelegramDownloader/TelegramDownloader.csproj -r linux-x64 -c Release -o bin/linux-x64
+                zip -r TelegramFileManager-linux-x64.zip bin/linux-x64 -j
+                gh release upload ${{github.event.release.tag_name}} TelegramFileManager-linux-x64.zip
+            env:
+              GITHUB_TOKEN: ${{ github.TOKENBuild }}
+            shell: bash
+
+          - name: '📦 Package linux arm'
+            run: |
+                cd ${{github.workspace}}
+                dotnet publish TelegramDownloader/TelegramDownloader.csproj -r linux-arm -c Release -o bin/linux-arm
+                zip -r TelegramFileManager-linux-arm.zip bin/linux-arm -j
+                gh release upload ${{github.event.release.tag_name}} TelegramFileManager-linux-arm.zip
+            env:
+              GITHUB_TOKEN: ${{ github.TOKENBuild }}
+            shell: bash
+
+          - name: '📦 Package mac OS x64' 
+            run: |
+                cd ${{github.workspace}}
+                dotnet publish TelegramDownloader/TelegramDownloader.csproj -r osx-x64 -c Release -o bin/osx-x64
+                zip -r TelegramFileManager-osx-x64.zip bin/osx-x64 -j
+                gh release upload ${{github.event.release.tag_name}} TelegramFileManager-osx-x64.zip
+            env:
+              GITHUB_TOKEN: ${{ github.TOKENBuild }}
+            shell: bash
