@@ -15,10 +15,6 @@ jobs:
 
           - name: '📄 Checkout'
             uses: actions/checkout@v4
-          - name: Setup .NET
-            uses: actions/setup-dotnet@v4
-            with:
-              dotnet-version: 6.0.x
 
           - name: '📦 Package windows x64'
             run: |
