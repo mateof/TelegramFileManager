@@ -1,0 +1,27 @@
+name: Docker Image CI
+
+on:
+  push:
+    tags: [ 'v*.*.*' ]
+
+jobs:
+
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+    - name: 'Login to GitHub Container Registry'
+      uses: docker/login-action@v3
+      with:
+        registry: ghcr.io
+        username: ${{github.actor}}
+        password: ${{secrets.GHCR}}
+    - name: Build and Push the Docker image
+      run: |
+        docker build ./TelegramDownloader -f ./TelegramDownloader/Dockerfile --tag ghcr.io/mateof/telegramfilemanager:latest
+        IMAGE_ID=$(docker images | grep ghcr.io/mateof/telegramfilemanager | awk '{print $3}')
+        docker tag $IMAGE_ID ghcr.io/mateof/telegramfilemanager:${{github.ref_name}}
+        docker push ghcr.io/mateof/telegramfilemanager:latest
+        docker push ghcr.io/mateof/telegramfilemanager:${{github.ref_name}}
