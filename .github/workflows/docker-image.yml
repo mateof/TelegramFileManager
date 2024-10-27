@@ -21,5 +21,8 @@ jobs:
     - name: Build and Push the Docker image
       run: |
         date_ref=$(date +%s)
-        docker build ./TelegramDownloader -f ./TelegramDownloader/Dockerfile --tag ghcr.io/mateof/telegramfilemanager:$date_ref
-        docker push ghcr.io/mateof/telegramfilemanager:$date_ref
+        docker build ./TelegramDownloader -f ./TelegramDownloader/Dockerfile --tag ghcr.io/mateof/telegramfilemanager:dev_$date_ref
+        IMAGE_ID=$(docker images | grep ghcr.io/mateof/telegramfilemanager | awk '{print $3}')
+        docker tag $IMAGE_ID ghcr.io/mateof/telegramfilemanager:dev_latest
+        docker push ghcr.io/mateof/telegramfilemanager:dev_$date_ref
+        docker push ghcr.io/mateof/telegramfilemanager:dev_latest
