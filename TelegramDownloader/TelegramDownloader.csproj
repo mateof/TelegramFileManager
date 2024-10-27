@@ -11,13 +11,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Blazor.Bootstrap" Version="3.0.0" />
+    <PackageReference Include="Blazor.Bootstrap" Version="3.1.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Log4Net.AspNetCore" Version="8.0.0" />
-    <PackageReference Include="MongoDB.Driver" Version="2.29.0" />
-    <PackageReference Include="Syncfusion.Blazor" Version="27.1.48" />
+    <PackageReference Include="MongoDB.Driver" Version="3.0.0" />
+    <PackageReference Include="Syncfusion.Blazor" Version="27.1.56" />
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.21.0" />
-    <PackageReference Include="Syncfusion.EJ2.AspNet.Core" Version="27.1.48" />
-    <PackageReference Include="WTelegramClient" Version="4.1.10" />
+    <PackageReference Include="Syncfusion.EJ2.AspNet.Core" Version="27.1.56" />
+    <PackageReference Include="WTelegramClient" Version="4.2.2-dev.5" />
   </ItemGroup>
 
   <ItemGroup>
