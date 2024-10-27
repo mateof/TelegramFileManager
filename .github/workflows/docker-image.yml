@@ -3,7 +3,6 @@ name: Docker Image CI
 on:
   push:
     branches: [ "main" ]
-    tags: [ 'v*.*.*' ]
 
 jobs:
 
@@ -21,8 +20,6 @@ jobs:
         password: ${{secrets.GHCR}}
     - name: Build and Push the Docker image
       run: |
-        docker build ./TelegramDownloader -f ./TelegramDownloader/Dockerfile --tag ghcr.io/mateof/telegramfilemanager:latest
-        IMAGE_ID=$(docker images | grep ghcr.io/mateof/telegramfilemanager | awk '{print $3}')
-        docker tag $IMAGE_ID ghcr.io/mateof/telegramfilemanager:${{github.ref_name}}
-        docker push ghcr.io/mateof/telegramfilemanager:latest
-        docker push ghcr.io/mateof/telegramfilemanager:${{github.ref_name}}
+        date_ref=$(date +%s)
+        docker build ./TelegramDownloader -f ./TelegramDownloader/Dockerfile --tag ghcr.io/mateof/telegramfilemanager:$date_ref
+        docker push ghcr.io/mateof/telegramfilemanager:$date_ref
