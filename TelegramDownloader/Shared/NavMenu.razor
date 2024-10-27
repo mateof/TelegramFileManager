@@ -50,6 +50,7 @@
         <div class="">
             <div class="btn-group btn-group-sm groupbtnclass" role="group" aria-label="Small button group">
                 <button type="button" class="btn btn-outline-primary groupbtnactionclass" @onclick="ToggleSearch"><i class="bi bi-search"></i></button>
+                <button type="button" class="btn btn-outline-primary groupbtnactionclass" title="Refresh channels" @onclick="RefreshChannels"><i class="bi bi-arrow-clockwise"></i></button>
                 <button type="button" class="btn btn-outline-primary groupbtnactionclass" @onclick="showPlayer"><i class="bi bi-boombox"></i></button>
                 <button class="btn groupbtnactionclass" type="button" data-bs-toggle="offcanvas" @onclick="ToggleNavMenu" data-bs-target="#offcanvasRight" aria-controls="offcanvasRight"><i class="bi bi-three-dots"></i></button>
             </div>
@@ -139,6 +140,8 @@
 </div>
 
 @code {
+    [Inject] protected PreloadService PreloadService { get; set; } = default!;
+
     private List<ChatViewBase> sChats = new List<ChatViewBase>();
     private List<ChatViewBase> allChats = new List<ChatViewBase>();
     private List<ChatViewBase> mineChats = new List<ChatViewBase>();
@@ -159,6 +162,14 @@
         // {
         //     await JS.InvokeVoidAsync("focusElement", "searchChats");
         // }
+    }
+
+    private async Task RefreshChannels()
+    {
+        PreloadService.Show(SpinnerColor.Light, "Loading data...");
+        allChats = await ts.getAllChats();
+        await OnInitializedAsync();
+        PreloadService.Hide();
     }
 
 
