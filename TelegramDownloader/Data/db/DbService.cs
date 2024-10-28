@@ -173,10 +173,14 @@ namespace TelegramDownloader.Data.db
             return result;
         }
 
-        public async Task<List<BsonFileManagerModel>> getAllFolders(string dbName, string collectionName = "directory")
+        public async Task<List<BsonFileManagerModel>> getAllFolders(string dbName, string? parentId = null, string collectionName = "directory")
         {
-            var result = await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Where(x => !x.IsFile))).ToListAsync();
-            return result;
+            return await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Where(x => !x.IsFile))).ToListAsync();
+            //if (parentId  == null)
+            //{
+            //    return await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Where(x => !x.IsFile && (x.FilterPath == "" || x.FilterPath == "/") ))).ToListAsync();
+            //}
+            //return await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Where(x => !x.IsFile && x.ParentId == parentId))).ToListAsync();
         }
 
         public async Task<List<BsonFileManagerModel>> getAllFilesInDirectoryById(string dbName, string idFolder, string collectionName = "directory")

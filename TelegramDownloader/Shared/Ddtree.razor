@@ -8,9 +8,19 @@
 
 
     <div class="form-floating mb-3">
+    @if (localFolderTypes.Contains(folderType))
+    {
         <SfDropDownTree class="form-control" id="@idTree" type="text" aria-label="Folder" AllowFiltering="true" LoadOnDemand="true" TValue="string" TItem="FolderModel" Placeholder="Select a Folder" @bind-Value="@selectedNode">
-            <DropDownTreeField TItem="FolderModel" ID="Id" Text="FolderName" Child="Folders" DataSource="@MyFolder" Expanded="Expanded"></DropDownTreeField>
+            <DropDownTreeField TItem="FolderModel" ID="Id" Text="FolderName" Child="Folders" DataSource="@LocalFolders" Expanded="Expanded"></DropDownTreeField>
         </SfDropDownTree>
+        
+    } else
+    {
+        <SfDropDownTree class="form-control" TItem="BsonFileManagerModel" id="@idTree" type="text" aria-label="Folder" AllowFiltering="false" LoadOnDemand="true" TValue="string" Placeholder="Select a Folder" @bind-Value="@selectedNode">
+            <DropDownTreeField TItem="BsonFileManagerModel" ID="Id" Text="Name" ParentID="ParentId" DataSource="@MyFolder" HasChildren="HasChild"></DropDownTreeField>
+        </SfDropDownTree>
+    }
+    
         <label for="mtree">Folder</label>
     </div>
 
@@ -28,7 +38,9 @@
     [Parameter]
     public string folderType { get; set; } = "local";
 
-    private List<FolderModel> MyFolder { get; set; }
+    private List<string> localFolderTypes = new List<string> {"local", "temp"};
+    private List<BsonFileManagerModel> MyFolder { get; set; }
+    private List<FolderModel> LocalFolders { get; set; }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -37,14 +49,21 @@
         PreloadService.Hide();
     }
 
+    void ValueChanged(DdtChangeEventArgs<string> args)
+    {
+        // EmployeeData currentData = Data?.Find((item) => item.Id == args.NodeData.Id);
+        // Name = currentData?.Name;
+        // Role = currentData?.Job;
+        // this.Visibility = true;
+    }
+
 
     public async Task getFolders()
     {
         // if (MyFolder != null) return MyFolder;
-        if (folderType == "local")
-            MyFolder = new List<FolderModel>(FileService.getFolderNodes(FileService.TEMPDIR).ToList());
-        if (folderType == "temp")
-            MyFolder = new List<FolderModel>(FileService.getFolderNodes(FileService.TEMPDIR).ToList());
+
+        if (localFolderTypes.Contains(folderType))
+            LocalFolders = new List<FolderModel>(FileService.getFolderNodes(FileService.TEMPDIR).ToList());
         if (folderType == "telegram")
             if (MyFolder != null)
             {
@@ -52,7 +71,7 @@
                 MyFolder.AddRange((await fs.getTelegramFolders(id)).ToList());
             }else
             {
-                MyFolder = new List<FolderModel>((await fs.getTelegramFolders(id)).ToList());
+                MyFolder = new List<BsonFileManagerModel>((await fs.getTelegramFolders(id)).ToList());
             }
 
         await Task.Delay(1000);

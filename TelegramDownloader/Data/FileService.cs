@@ -1264,8 +1264,8 @@ namespace TelegramDownloader.Data
             if (Directory.Exists(path))
             {
                 FolderModel folder = new FolderModel();
-                folder.FolderName = path.Split('\\').Last();
-                folder.Id = path.Split('\\').Last();
+                folder.FolderName = Path.GetFileName(path);
+                folder.Id = folder.FolderName;
                 folder.Expanded = true;
                 folder.Folders = getSubforlders(path);
                 node.Add(folder);
@@ -1293,27 +1293,40 @@ namespace TelegramDownloader.Data
             foreach (string item in Directory.GetDirectories(path))
             {
                 FolderModel n = new FolderModel();
-                n.FolderName = item.Split('\\').Last();
+                n.FolderName = Path.GetFileName(item);
                 n.Id = item;
                 n.Folders = getSubforlders(item);
-                // n.Expanded = false;
+                n.Expanded = false;
                 node.Add(n);
             }
             return node.Count() > 0 ? node : null;
         }
 
-        public async Task<List<FolderModel>> getTelegramFolders(string dbName)
+        public async Task<List<BsonFileManagerModel>> getTelegramFolders(string dbName, string? parentId = null)
         {
             List<FolderModel> node = new List<FolderModel>();
-            List<BsonFileManagerModel> listFolders = await _db.getAllFolders(dbName);
-            var root = listFolders.Where(x => string.IsNullOrEmpty(x.ParentId)).FirstOrDefault();
-            FolderModel folder = new FolderModel();
-            folder.FolderName = root.Name;
-            folder.Id = "/";
-            folder.Expanded = true;
-            folder.Folders = await getTelegramSubfolders(root.Id, listFolders.Where(x => !string.IsNullOrEmpty(x.ParentId)).ToList(), folder.Id);
-            node.Add(folder);
-            return node;
+            var result = await _db.getAllFolders(dbName, parentId);
+            foreach (var folder in result)
+            {
+                if (String.IsNullOrEmpty(folder.FilterPath))
+                {
+                    folder.ParentId = null;
+                    folder.Id = "/";
+                } else
+                {
+                    folder.ParentId = folder.FilterPath;
+                    folder.Id = folder.FilterPath + folder.Name + "/";
+                }
+            }
+            return result;
+            //var root = listFolders.Where(x => string.IsNullOrEmpty(x.ParentId)).FirstOrDefault();
+            //FolderModel folder = new FolderModel();
+            //folder.FolderName = root.Name;
+            //folder.Id = "/";
+            //folder.Expanded = true;
+            //folder.Folders = await getTelegramSubfolders(root.Id, listFolders.Where(x => !string.IsNullOrEmpty(x.ParentId)).ToList(), folder.Id);
+            //node.Add(folder);
+            //return node;
 
         }
 

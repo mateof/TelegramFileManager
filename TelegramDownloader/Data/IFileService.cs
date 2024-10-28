@@ -19,7 +19,7 @@ namespace TelegramDownloader.Data
         Task<FileManagerResponse<FileManagerDirectoryContent>> GetFilesPath(string dbName, string path, List<FileManagerDirectoryContent> fileDetails = null);
         Task<MemoryStream> getImage(string dbName, string path, string fileName, MemoryStream ms = null);
         Task<BsonFileManagerModel> getItemById(string dbName, string id);
-        Task<List<FolderModel>> getTelegramFolders(string dbName);
+        Task<List<BsonFileManagerModel>> getTelegramFolders(string dbName, string? parentId = null);
         Task<List<ExpandoObject>> GetTelegramFoldersExpando(string id, string parentId);
         Task importData(string dbName, string path, GenericNotificationProgressModel gnp);
         Task<FileManagerResponse<FileManagerDirectoryContent>> itemDeleteAsync(string dbName, ItemsDeleteEventArgs<FileManagerDirectoryContent> args);
