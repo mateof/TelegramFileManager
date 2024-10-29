@@ -47,6 +47,7 @@
             <th>Channel</th>
             <th>Progress</th>
             <th>Size</th>
+            <th>Actions</th>
         </tr>
     </thead>
     <tbody>
@@ -61,6 +62,7 @@
                     </div>
                 </td>
                 <td>@dm._transmittedString of @dm._sizeString</td>
+                <td><button class="btn btn-danger" @onclick="() => cancel(dm)" data-bs-toggle="tooltip" data-bs-placement="top" title="Cancel task"><i class="bi bi-x"></i></button></td>
             </tr>
         }
     </tbody>
@@ -79,7 +81,7 @@
             <th>Action</th>
             <th>Progress</th>
             <th>Size</th>
-        @*     <th>Actions</th> *@
+            <th>Actions</th>
         </tr>
     </thead>
     <tbody>
@@ -95,7 +97,7 @@
                     </div>
                 </td>
                 <td>@um._transmittedString of @um._sizeString</td>
-               @*  <td><button class="btn btn-danger" @onclick="() => cancel(um)" data-bs-toggle="tooltip" data-bs-placement="top" title="Cancel task"><i class="bi bi-x"></i></button></td> *@
+                <td><button class="btn btn-danger" @onclick="() => cancel(um)" data-bs-toggle="tooltip" data-bs-placement="top" title="Cancel task"><i class="bi bi-x"></i></button></td>
             </tr>
         }
     </tbody>
@@ -134,8 +136,15 @@
 
     private async Task cancel(UploadModel um)
     {
-        um.thread.Interrupt();
+        // um.thread.Interrupt();
         um.state = StateTask.Canceled;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task cancel(DownloadModel dm)
+    {
+        //um.thread.Interrupt();
+        dm.state = StateTask.Canceled;
         await InvokeAsync(StateHasChanged);
     }
 

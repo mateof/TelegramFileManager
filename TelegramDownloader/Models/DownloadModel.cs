@@ -56,8 +56,10 @@ namespace TelegramDownloader.Models
         public IPeerInfo channel { get; set; }
         public int progress { get; set; }
 
-        public async void ProgressCallback(long transmitted, long totalSize)
+        public void ProgressCallback(long transmitted, long totalSize)
         {
+            if (state == StateTask.Canceled)
+                throw new Exception($"Canceled {name}");
             _transmitted = transmitted;
             _sizeString = HelperService.SizeSuffix(totalSize);
             _transmittedString = HelperService.SizeSuffix(transmitted);
@@ -91,8 +93,10 @@ namespace TelegramDownloader.Models
         public int progress { get; set; }
         public Thread thread { get; set; }
 
-        public virtual async void ProgressCallback(long transmitted, long totalSize)
+        public virtual void ProgressCallback(long transmitted, long totalSize)
         {
+            if (state == StateTask.Canceled)
+                throw new Exception($"Canceled {name}");
             _transmitted = transmitted;
             _sizeString = HelperService.SizeSuffix(totalSize);
             _transmittedString = HelperService.SizeSuffix(transmitted);
@@ -119,7 +123,7 @@ namespace TelegramDownloader.Models
         {
             action = "Splitting";
         }
-        public override async void ProgressCallback(long transmitted, long totalSize)
+        public override void ProgressCallback(long transmitted, long totalSize)
         {
             _transmitted = transmitted;
             _sizeString = HelperService.SizeSuffix(totalSize);

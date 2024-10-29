@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.StaticFiles;
+using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using Newtonsoft.Json;
 using Syncfusion.Blazor.FileManager;
@@ -614,7 +615,11 @@ namespace TelegramDownloader.Data
             NotificationModel nm = new NotificationModel();
             try
             {
-
+                foreach(FileManagerDirectoryContent file in  files)
+                {
+                    _logger.LogInformation($"Download files to {targetPath} :: {file.Name}");
+                }
+                
                 nm.sendEvent(new Notification("Download Start", "Download", NotificationTypes.Info));
                 string currentTargetPath = targetPath == null ? "/" : targetPath;
                 // if (targetPath == null) targetPath = "/"; //path.Replace("\\", "/");
