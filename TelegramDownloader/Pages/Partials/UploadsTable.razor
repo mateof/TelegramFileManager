@@ -1,0 +1,124 @@
+﻿@using TelegramDownloader.Data
+@using TelegramDownloader.Models
+@using TelegramDownloader.Services
+
+@inject TransactionInfoService tis
+
+<Grid @ref="grid"
+      TItem="UploadModel"
+      Class="table table-hover table-bordered table-striped"
+      DataProvider="UploadsDataProvider"
+      AllowFiltering="false"
+      AllowPaging="true"
+      AllowSorting="false"
+      Responsive="true">
+
+    <GridColumn TItem="UploadModel" HeaderText="ID" PropertyName="id" SortString="id" SortKeySelector="item => item.id" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
+        @context.id
+    </GridColumn>
+    <GridColumn TItem="UploadModel" HeaderText="File" PropertyName="name" SortString="name" SortKeySelector="item => item.name" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
+        @context.name
+    </GridColumn>
+    <GridColumn TItem="UploadModel" HeaderText="State" PropertyName="state" SortString="state" SortKeySelector="item => item.state" FilterTextboxWidth="80">
+        @context.state
+    </GridColumn>
+    <GridColumn TItem="UploadModel" HeaderText="Action" PropertyName="action" SortString="action" SortKeySelector="item => item.action" FilterTextboxWidth="80">
+        @context.action
+    </GridColumn>
+    <GridColumn TItem="UploadModel" HeaderText="Progress" PropertyName="progress" SortString="progress" SortKeySelector="item => item.progress" FilterTextboxWidth="100">
+        <div class="progress">
+            <div class="progress-bar" role="progressbar" style="width: @context.progress%;" aria-valuenow="@context.progress" aria-valuemin="0" aria-valuemax="100">@context.progress%</div>
+        </div>
+    </GridColumn>
+    <GridColumn TItem="UploadModel" HeaderText="Size" PropertyName="Email" SortString="Email" SortKeySelector="item => item._transmittedString" FilterTextboxWidth="120">
+        @context._transmittedString of @context._sizeString
+    </GridColumn>
+    <GridColumn TItem="UploadModel" HeaderText="Actions">
+        @if (context.state == StateTask.Working)
+        {
+            <td><button class="btn btn-danger" @onclick="() => cancel(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Cancel task"><i class="bi bi-x"></i></button></td>
+        }
+
+        @if (context.state == StateTask.Canceled || context.state == StateTask.Error)
+        {
+            <td>
+                <div class="btn-group" role="group">
+                    <button class="btn btn-info" @onclick="() => retry(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="retry task"><i class="bi bi-arrow-clockwise"></i></button>
+                    <button class="btn btn-danger" @onclick="() => deleteUpload(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="delete task"><i class="bi bi-trash"></i></button>
+                </div>
+            </td>
+        }
+    </GridColumn>
+
+</Grid>
+
+@code {
+    public static List<UploadModel> lum = new List<UploadModel>();
+    BlazorBootstrap.Grid<UploadModel> grid = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        checkNewEventsHandler();
+        TransactionInfoService.EventChanged += eventChangedNew;
+    }
+
+    private async Task cancel(UploadModel um)
+    {
+        // um.thread.Interrupt();
+        um.state = StateTask.Canceled;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task retry(UploadModel um)
+    {
+        // um.thread.Interrupt();
+        // um.re
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task deleteUpload(UploadModel um)
+    {
+        tis.deleteUploadInList(um);
+    }
+
+    private async Task<GridDataProviderResult<UploadModel>> UploadsDataProvider(GridDataProviderRequest<UploadModel> request)
+    {
+        await getUploadModels(request.PageNumber - 1, request.PageSize, lum.Count() == 0);
+        int totalUploads = tis.getTotalUploads();
+        return await Task.FromResult(new GridDataProviderResult<UploadModel> { Data = lum ?? new List<UploadModel>(), TotalCount = totalUploads });//request.ApplyTo(uploads));
+    }
+
+    private async Task getUploadModels(int pageNumber, int pageSize, bool mustCallEnventHandler = false)
+    {
+        lum = tis.GetUploadModels(pageNumber, pageSize);
+        if (mustCallEnventHandler)
+            checkNewEventsHandler();
+        // await InvokeAsync(StateHasChanged);
+    }
+
+    private void checkNewEventsHandler()
+    {
+        if (lum != null)
+            foreach (UploadModel um in lum)
+            {
+                if (um.progress != 100)
+                    um.EventChanged += eventChangedUpload;
+                else
+                    um.EventChanged -= eventChangedUpload;
+            }
+
+    }
+
+    void eventChangedUpload(object sender, UploadEventArgs e)
+    {
+        grid.RefreshDataAsync();
+        // grid.SelectedItemsChanged = new UploadModel();
+        // getUploadModels();
+    }
+
+    void eventChangedNew(object sender, System.EventArgs e)
+    {
+        checkNewEventsHandler();
+        grid.RefreshDataAsync();
+    }
+}

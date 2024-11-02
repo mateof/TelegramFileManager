@@ -6,119 +6,39 @@
 
 @inject TransactionInfoService tis
 
-<h3>Pending Folders</h3>
-<button class="btn btn-success" @onclick="clearTasks" data-bs-toggle="tooltip" data-bs-placement="top" title="Clear completed and error"><i class="bi bi-trash"></i> Clear</button>
-<div class="table-responsive">
-<table class="table">
-    <thead>
-        <tr>
-            <th>From</th>
-            <th>To</th>
-            <th>State</th>
-            <th>Total</th>
-            <th>Completed</th>
-        </tr>
-    </thead>
-    <tbody>
-        @foreach (InfoDownloadTaksModel pt in lpt)
-        {
-            <tr>
-                <td>@pt.fromPath</td>
-                <td>@pt.toPath</td>
-                <td>@pt.state</td>
-                <td>
-                    @pt.total
-                </td>
-                <td>@pt.executed</td>
-            </tr>
-        }
-    </tbody>
+<Tabs>
+    <Tab Title="Pending Tasks" IsActive="true">
+        <Content>
+            <button class="btn btn-success" @onclick="clearTasks" data-bs-toggle="tooltip" data-bs-placement="top" title="Clear completed and error"><i class="bi bi-trash"></i> Clear</button>
+            <TelegramDownloader.Pages.Partials.TasksTable></TelegramDownloader.Pages.Partials.TasksTable>
+        </Content>
+    </Tab>
+    <Tab Title="Downloads">
+        <Content>
+            <button class="btn btn-success" @onclick="clearDownloads" data-bs-toggle="tooltip" data-bs-placement="top" title="Clear completed and error"><i class="bi bi-trash"></i> Clear</button>
+            <TelegramDownloader.Pages.Partials.DownloadsTable></TelegramDownloader.Pages.Partials.DownloadsTable>
+        </Content>
+    </Tab>
+    <Tab Title="Uploads">
+        <Content>
+            <button class="btn btn-success" @onclick="clearUploads" data-bs-toggle="tooltip" data-bs-placement="top" title="Clear completed and error"><i class="bi bi-trash"></i> Clear</button>
+            <TelegramDownloader.Pages.Partials.UploadsTable></TelegramDownloader.Pages.Partials.UploadsTable>
+        </Content>
+    </Tab>
+</Tabs>
 
-</table>
-</div>
-
-<h3>Downloads</h3>
-<button class="btn btn-success" @onclick="clearDownloads" data-bs-toggle="tooltip" data-bs-placement="top" title="Clear completed and error"><i class="bi bi-trash"></i> Clear</button>
-<div class="table-responsive">
-<table class="table">
-    <thead>
-        <tr>
-            <th>File</th>
-            <th>Channel</th>
-            <th>Progress</th>
-            <th>Size</th>
-            <th>Actions</th>
-        </tr>
-    </thead>
-    <tbody>
-        @foreach (DownloadModel dm in ldm)
-        {
-            <tr>
-                <td>@dm.name</td>
-                <td>@dm.channel</td>
-                <td>
-                    <div class="progress">
-                        <div class="progress-bar" role="progressbar" style="width: @dm.progress%;" aria-valuenow="@dm.progress" aria-valuemin="0" aria-valuemax="100">@dm.progress%</div>
-                    </div>
-                </td>
-                <td>@dm._transmittedString of @dm._sizeString</td>
-                <td><button class="btn btn-danger" @onclick="() => cancel(dm)" data-bs-toggle="tooltip" data-bs-placement="top" title="Cancel task"><i class="bi bi-x"></i></button></td>
-            </tr>
-        }
-    </tbody>
-
-</table>
-</div>
-
-<h3>Uploads</h3>
-<button class="btn btn-success" @onclick="clearUploads" data-bs-toggle="tooltip" data-bs-placement="top" title="Clear completed and error"><i class="bi bi-trash"></i> Clear</button>
-<div class="table-responsive">
-<table class="table">
-    <thead>
-        <tr>
-            <th>File</th>
-            <th>State</th>
-            <th>Action</th>
-            <th>Progress</th>
-            <th>Size</th>
-            <th>Actions</th>
-        </tr>
-    </thead>
-    <tbody>
-        @foreach (UploadModel um in lum)
-        {
-            <tr>
-                <td>@um.name</td>
-                <td>@um.state</td>
-                <td>@um.action</td>
-                <td>
-                    <div class="progress">
-                        <div class="progress-bar" role="progressbar" style="width: @um.progress%;" aria-valuenow="@um.progress" aria-valuemin="0" aria-valuemax="100">@um.progress%</div>
-                    </div>
-                </td>
-                <td>@um._transmittedString of @um._sizeString</td>
-                <td><button class="btn btn-danger" @onclick="() => cancel(um)" data-bs-toggle="tooltip" data-bs-placement="top" title="Cancel task"><i class="bi bi-x"></i></button></td>
-            </tr>
-        }
-    </tbody>
-
-</table>
-</div>
 
 @code {
     public static List<DownloadModel> ldm = new List<DownloadModel>();
     public static List<UploadModel> lum = new List<UploadModel>();
     public static List<InfoDownloadTaksModel> lpt = new List<InfoDownloadTaksModel>();
+    BlazorBootstrap.Grid<UploadModel> grid = default!;
 
     protected override async Task OnInitializedAsync()
     {
-        await getDownloadModels();
-        await getUploadModels();
-        await getPendingTasksModels();
-        checkNewEventsHandler();
-        TransactionInfoService.EventChanged += eventChangedNew;
     }
 
+    
     void clearUploads()
     {
         TransactionInfoService.clearUploadCompleted();
@@ -134,81 +54,6 @@
         TransactionInfoService.clearTasksCompleted();
     }
 
-    private async Task cancel(UploadModel um)
-    {
-        // um.thread.Interrupt();
-        um.state = StateTask.Canceled;
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private async Task cancel(DownloadModel dm)
-    {
-        //um.thread.Interrupt();
-        dm.state = StateTask.Canceled;
-        await InvokeAsync(StateHasChanged);
-    }
-
-
-    private void checkNewEventsHandler()
-    {
-        foreach (DownloadModel dm in ldm)
-        {
-            if (dm.progress != 100)
-                dm.EventChanged += eventChanged;
-            else
-                dm.EventChanged -= eventChanged;
-        }
-
-        foreach (UploadModel um in lum)
-        {
-            if (um.progress != 100)
-                um.EventChanged += eventChangedUpload;
-            else
-                um.EventChanged -= eventChangedUpload;
-        }
-
-        foreach (InfoDownloadTaksModel pt in lpt)
-        {
-            pt.EventChanged -= eventChangedPendingTask;
-            pt.EventChanged += eventChangedPendingTask;
-        }
-    }
-
-    private async Task getDownloadModels(DownloadEventArgs e = null)
-    {
-        ldm = e == null ? tis.GetDownloadModels() : e.models;
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private async Task getUploadModels(UploadEventArgs e = null)
-    {
-        lum = e == null ? tis.GetUploadModels() : e.models;
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private async Task getPendingTasksModels(InfoTaskEventArgs e = null)
-    {
-        lpt = e == null ? tis.getInfoDownloadTaksModel() : e.models;
-        await InvokeAsync(StateHasChanged);
-    }
-
-    void eventChanged(object sender, DownloadEventArgs e)
-    {
-        getDownloadModels(e);
-    }
-
-    void eventChangedUpload(object sender, UploadEventArgs e)
-    {
-        getUploadModels(e);
-    }
-
-    void eventChangedPendingTask(object sender, InfoTaskEventArgs e)
-    {
-        getPendingTasksModels(e);
-    }
-
-    void eventChangedNew(object sender, System.EventArgs e)
-    {
-        checkNewEventsHandler();
-    }
+    
+    
 }

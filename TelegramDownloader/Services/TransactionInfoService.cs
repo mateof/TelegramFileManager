@@ -1,4 +1,6 @@
 ﻿using TelegramDownloader.Models;
+using TelegramDownloader.Pages.Modals;
+using TL;
 
 namespace TelegramDownloader.Services
 {
@@ -11,35 +13,69 @@ namespace TelegramDownloader.Services
 
         public void addToDownloadList(DownloadModel downloadModel)
         {
-            downloadModels.Add(downloadModel);
+            downloadModels.Insert(0, downloadModel);
             EventChanged?.Invoke(this, new EventArgs());
         }
 
         public void addToUploadList(UploadModel uploadModel)
         {
-            uploadModels.Add(uploadModel);
+            uploadModels.Insert(0, uploadModel);
+            EventChanged?.Invoke(this, new EventArgs());
+        }
+
+        public void deleteUploadInList(UploadModel uploadModel)
+        {
+            uploadModels.Remove(uploadModel);
             EventChanged?.Invoke(this, new EventArgs());
         }
 
         public void addToInfoDownloadTaskList(InfoDownloadTaksModel infoDownloadModel)
         {
-            infoDownloadTaksModel.Add(infoDownloadModel);
+            infoDownloadTaksModel.Insert(0, infoDownloadModel);
             EventChanged?.Invoke(this, new EventArgs());
         }
 
-        public List<DownloadModel> GetDownloadModels()
+
+        public List<DownloadModel> GetDownloadModels(int pageNumber, int pageSize)
         {
-            return downloadModels;
+            if (downloadModels.Count() == 0 || downloadModels.Count() < (pageNumber) * pageSize)
+                return downloadModels;
+            return downloadModels.Skip(pageNumber * pageSize).Take(pageSize).ToList(); //.GetRange(pageNumber * pageSize, pageSize);
         }
 
-        public List<UploadModel> GetUploadModels()
+        public int getTotalDownloads()
         {
-            return uploadModels;
+            return downloadModels.Count();
         }
 
-        public List<InfoDownloadTaksModel> getInfoDownloadTaksModel()
+        public List<UploadModel> GetUploadModels(int pageNumber, int pageSize)
         {
-            return infoDownloadTaksModel;
+            if (uploadModels.Count() == 0 || uploadModels.Count() < (pageNumber) * pageSize)
+                return uploadModels;
+            return uploadModels.Skip(pageNumber * pageSize).Take(pageSize).ToList(); //.GetRange(pageNumber * pageSize, pageSize);
+        }
+
+        public int getTotalUploads()
+        {
+            return uploadModels.Count();
+        }
+
+        public void deleteDownloadInList(DownloadModel downloadModel)
+        {
+            downloadModels.Remove(downloadModel);
+            EventChanged?.Invoke(this, new EventArgs());
+        }
+
+        public List<InfoDownloadTaksModel> getInfoDownloadTaksModel(int pageNumber, int pageSize)
+        {
+            if (infoDownloadTaksModel.Count() == 0 || infoDownloadTaksModel.Count() < (pageNumber) * pageSize)
+                return infoDownloadTaksModel;
+            return infoDownloadTaksModel.Skip(pageNumber * pageSize).Take(pageSize).ToList();
+        }
+
+        public int getTotalTasks()
+        {
+            return infoDownloadTaksModel.Count();
         }
 
         public static void clearUploadCompleted()

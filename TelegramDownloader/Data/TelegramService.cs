@@ -282,9 +282,10 @@ namespace TelegramDownloader.Data
 
         }
 
-        public async Task<Stream> DownloadFileAndReturn(ChatMessages message, Stream ms = null, string fileName = null, string folder = null)
+        public async Task<Stream> DownloadFileAndReturn(ChatMessages message, Stream ms = null, string fileName = null, string folder = null, DownloadModel model = null)
         {
-            DownloadModel model = new DownloadModel();
+            if (model == null)
+                model = new DownloadModel();
             model.m = message;
             model.channel = message.user;
 
