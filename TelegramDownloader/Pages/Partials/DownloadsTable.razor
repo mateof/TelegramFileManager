@@ -1,0 +1,118 @@
+﻿@using TelegramDownloader.Data
+@using TelegramDownloader.Models
+@using TelegramDownloader.Services
+
+@inject TransactionInfoService tis
+
+<Grid @ref="grid"
+      TItem="DownloadModel"
+      Class="table table-hover table-bordered table-striped"
+      DataProvider="UploadsDataProvider"
+      AllowFiltering="false"
+      AllowPaging="true"
+      AllowSorting="false"
+      Responsive="true">
+
+    <GridColumn TItem="DownloadModel" HeaderText="ID" PropertyName="id" SortString="id" SortKeySelector="item => item.id" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
+        @context.id
+    </GridColumn>
+    <GridColumn TItem="DownloadModel" HeaderText="File" PropertyName="name" SortString="name" SortKeySelector="item => item.name" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
+        @context.name
+    </GridColumn>
+    <GridColumn TItem="DownloadModel" HeaderText="Channel" PropertyName="channel" SortString="channel" SortKeySelector="item => item.state" FilterTextboxWidth="80">
+        @context.channel
+    </GridColumn>
+    <GridColumn TItem="DownloadModel" HeaderText="Progress" PropertyName="progress" SortString="progress" SortKeySelector="item => item.progress" FilterTextboxWidth="100">
+        <div class="progress">
+            <div class="progress-bar" role="progressbar" style="width: @context.progress%;" aria-valuenow="@context.progress" aria-valuemin="0" aria-valuemax="100">@context.progress%</div>
+        </div>
+    </GridColumn>
+    <GridColumn TItem="DownloadModel" HeaderText="Size" PropertyName="Email" SortString="Email" SortKeySelector="item => item._transmittedString" FilterTextboxWidth="120">
+        @context._transmittedString of @context._sizeString
+    </GridColumn>
+    <GridColumn TItem="DownloadModel" HeaderText="Actions">
+        @if (context.state == StateTask.Working)
+        {
+            <td><button class="btn btn-danger" @onclick="() => cancel(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Cancel task"><i class="bi bi-x"></i></button></td>
+        }
+
+        @if (context.state == StateTask.Canceled || context.state == StateTask.Error)
+        {
+            <td>
+                <div class="btn-group" role="group">
+                    <button class="btn btn-info" @onclick="() => retry(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="retry task"><i class="bi bi-arrow-clockwise"></i></button>
+                    <button class="btn btn-danger" @onclick="() => deleteDownload(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="delete task"><i class="bi bi-trash"></i></button>
+                </div>
+            </td>
+        }
+    </GridColumn>
+
+</Grid>
+
+@code {
+    public static List<DownloadModel> ldm = new List<DownloadModel>();
+    BlazorBootstrap.Grid<DownloadModel> grid = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        checkNewEventsHandler();
+        TransactionInfoService.EventChanged += eventChangedNew;
+    }
+
+    private async Task<GridDataProviderResult<DownloadModel>> UploadsDataProvider(GridDataProviderRequest<DownloadModel> request)
+    {
+        await getDownloadModels(request.PageNumber - 1, request.PageSize, ldm.Count() == 0);
+        int totalUploads = tis.getTotalDownloads();
+        return await Task.FromResult(new GridDataProviderResult<DownloadModel> { Data = ldm ?? new List<DownloadModel>(), TotalCount = totalUploads });//request.ApplyTo(uploads));
+    }
+
+    private async Task cancel(DownloadModel dm)
+    {
+        //um.thread.Interrupt();
+        dm.state = StateTask.Canceled;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task retry(DownloadModel dm)
+    {
+        //um.thread.Interrupt();
+        dm.RetryCallback();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task deleteDownload(DownloadModel um)
+    {
+        tis.deleteDownloadInList(um);
+    }
+
+
+    private void checkNewEventsHandler()
+    {
+        foreach (DownloadModel dm in ldm)
+        {
+            if (dm.progress != 100)
+                dm.EventChanged += eventChanged;
+            else
+                dm.EventChanged -= eventChanged;
+        }
+
+    }
+
+    private async Task getDownloadModels(int pageNumber, int pageSize, bool mustCallEnventHandler = false)
+    {
+        ldm = tis.GetDownloadModels(pageNumber, pageSize);
+        if (mustCallEnventHandler)
+            checkNewEventsHandler();
+    }
+
+    void eventChanged(object sender, DownloadEventArgs e)
+    {
+        grid.RefreshDataAsync();
+    }
+
+    void eventChangedNew(object sender, System.EventArgs e)
+    {
+        checkNewEventsHandler();
+        grid.RefreshDataAsync();
+    }
+}

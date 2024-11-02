@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using Newtonsoft.Json;
+using SharpCompress.Common;
 using Syncfusion.Blazor.FileManager;
 using Syncfusion.Blazor.Inputs;
 
@@ -702,10 +703,17 @@ namespace TelegramDownloader.Data
             return ms;
         }
 
+        public static void functionCalll(string dbName, int messageId, string destPath)
+        {
+
+        }
         private async Task downloadFromTelegram(string dbName, int messageId, string destPath)
         {
             Message m = await _ts.getMessageFile(dbName, messageId);
             ChatMessages cm = new ChatMessages();
+            DownloadModel model = new DownloadModel();
+            model.callbacks = new Callbacks();
+            model.callbacks.callback = async () => await downloadFromTelegram(dbName, messageId, destPath);
             cm.message = m;
 
             cm.user = null;
@@ -715,7 +723,7 @@ namespace TelegramDownloader.Data
                 cm.isDocument = true;
             }
             using (FileStream fs = new FileStream(destPath, FileMode.Create))
-                await _ts.DownloadFileAndReturn(cm, ms: fs);
+                await _ts.DownloadFileAndReturn(cm, ms: fs,model: model);
         }
 
         public async Task downloadFileToServer(string dbName, string path, string destPath)
@@ -909,6 +917,44 @@ namespace TelegramDownloader.Data
 
             try
             {
+                if (dm == null)
+                {
+                    
+                    idt = new InfoDownloadTaksModel();
+                    idt.id = Guid.NewGuid().ToString();
+                    idt.total = 0;
+                    idt.totalSize = 0;
+                    idt.isUpload = true;
+                    idt.toPath = currentPath;
+                    idt.executed = 0;
+                    idt.executedSize = 0;
+                    idt.isUpload = true;
+                    idt.files = files;
+                    idt.callbacks = new Callbacks();
+                    idt.callbacks.callback = async () => await UploadFileFromServer(dbName, currentPath, files, dm);
+                    foreach (var file in files)
+                    {
+                        var filePath = file.IsFile ? file.FilterPath.Replace("\\", "/") + file.Name : file.FilterPath.Replace("\\", "/") + file.Name + "/";
+                        string currentFilePath = System.IO.Path.Combine(LOCALDIR, filePath[0] == '/' ? filePath.Substring(1) : filePath).Replace("\\", "/");
+                        
+                        var fileInfo = new System.IO.FileInfo(currentFilePath);
+                        if (!file.IsFile)
+                        {
+                            var allFiles = new DirectoryInfo(currentFilePath).GetFiles("*.*", SearchOption.AllDirectories).Where(x => !x.Attributes.HasFlag(FileAttributes.Hidden));
+                            idt.total = allFiles.Count();
+                            idt.totalSize += allFiles.Sum(x => x.Length);
+                        } else
+                        {
+                            idt.total++;
+                            idt.totalSize += fileInfo.Length;
+                        }
+
+                    }
+                    TransactionInfoService ti = new TransactionInfoService();
+                    ti.addToInfoDownloadTaskList(idt);
+
+
+                }
                 nm.sendEvent(new Notification($"Uploading files from folder {currentPath} to Telegram", "Telegram Upload", NotificationTypes.Info));
                 foreach (var file in files)
                 {
@@ -918,24 +964,24 @@ namespace TelegramDownloader.Data
                     string currentFilePath = System.IO.Path.Combine(LOCALDIR, filePath[0] == '/' ? filePath.Substring(1) : filePath).Replace("\\", "/");
                     var fileInfo = new System.IO.FileInfo(currentFilePath);
 
-                    if (!file.IsFile)
-                        if (dm == null)
-                        {
-                            idt = new InfoDownloadTaksModel();
-                            idt.id = Guid.NewGuid().ToString();
-                            var allFiles = new DirectoryInfo(currentFilePath).GetFiles("*.*", SearchOption.AllDirectories).Where(x => !x.Attributes.HasFlag(FileAttributes.Hidden));
-                            idt.total = allFiles.Count();
-                            idt.totalSize = allFiles.Sum(x => x.Length);
-                            idt.fromPath = currentFilePath;
-                            idt.toPath = Path.Combine(currentPath, file.Name);
-                            idt.executed = 0;
-                            idt.executedSize = 0;
-                            idt.isUpload = true;
-                            idt.file = file;
-                            idt.thread = Thread.CurrentThread;
-                            TransactionInfoService ti = new TransactionInfoService();
-                            ti.addToInfoDownloadTaskList(idt);
-                        }
+                    //if (!file.IsFile)
+                        //if (dm == null)
+                        //{
+                        //    idt = new InfoDownloadTaksModel();
+                        //    idt.id = Guid.NewGuid().ToString();
+                        //    var allFiles = new DirectoryInfo(currentFilePath).GetFiles("*.*", SearchOption.AllDirectories).Where(x => !x.Attributes.HasFlag(FileAttributes.Hidden));
+                        //    idt.total = allFiles.Count();
+                        //    idt.totalSize = allFiles.Sum(x => x.Length);
+                        //    idt.fromPath = currentFilePath;
+                        //    idt.toPath = Path.Combine(currentPath, file.Name);
+                        //    idt.executed = 0;
+                        //    idt.executedSize = 0;
+                        //    idt.isUpload = true;
+                        //    idt.file = file;
+                        //    idt.thread = Thread.CurrentThread;
+                        //    TransactionInfoService ti = new TransactionInfoService();
+                        //    ti.addToInfoDownloadTaskList(idt);
+                        //}
 
                     BsonFileManagerModel model = new BsonFileManagerModel();
                     if (file.IsFile)
@@ -961,8 +1007,10 @@ namespace TelegramDownloader.Data
                                 int attempts = 3;
                                 int waitForNextAttempt = 1000;
                                 UploadModel um = new UploadModel();
+                                // add upload to task list
+                                idt.addUpload(um);
                                 um.thread = Thread.CurrentThread;
-                                while (attempts != 0)
+                                while (attempts != 0 || um.state == StateTask.Canceled)
                                     try
                                     {
                                         wt = new WaitingTime();
@@ -981,8 +1029,13 @@ namespace TelegramDownloader.Data
                                         _logger.LogError(e, "Exception sending file to Telegram");
                                         attempts--;
                                         // waitForNextAttempt *= 2;
-                                        if (attempts == 0)
+                                        if (attempts == 0 || um.state == StateTask.Canceled)
                                         {
+                                            if (um.state == StateTask.Canceled)
+                                            {
+                                                um.SendNotification();
+                                                return;
+                                            }
                                             um.state = StateTask.Error;
                                             throw e;
                                         }
@@ -1001,7 +1054,9 @@ namespace TelegramDownloader.Data
                             int attempts = 3;
                             int waitForNextAttempt = 60000;
                             UploadModel um = new UploadModel();
-                            while (attempts != 0)
+                            // add upload to task list
+                            idt.addUpload(um);
+                            while (attempts != 0 || um.state == StateTask.Canceled)
                                 try
                                 {
 
@@ -1042,8 +1097,14 @@ namespace TelegramDownloader.Data
                                     _logger.LogError(e, "Exception sending file to Telegram");
                                     attempts--;
                                     // waitForNextAttempt *= 2;
-                                    if (attempts == 0)
+                                    if (attempts == 0 || um.state == StateTask.Canceled)
                                     {
+                                        if (um.state == StateTask.Canceled)
+                                        {
+                                            um.SendNotification();
+                                            return;
+                                        }
+                                           
                                         um.state = StateTask.Error;
                                         throw e;
                                     }

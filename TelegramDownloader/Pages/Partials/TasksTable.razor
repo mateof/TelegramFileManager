@@ -1,0 +1,114 @@
+﻿@using TelegramDownloader.Data
+@using TelegramDownloader.Models
+@using TelegramDownloader.Services
+
+@inject TransactionInfoService tis
+
+<Grid @ref="grid"
+      TItem="InfoDownloadTaksModel"
+      Class="table table-hover table-bordered table-striped"
+      DataProvider="TasksDataProvider"
+      AllowFiltering="false"
+      AllowPaging="true"
+      AllowSorting="false"
+      Responsive="true">
+
+    <GridColumn TItem="InfoDownloadTaksModel" HeaderText="ID" PropertyName="id" SortString="id" SortKeySelector="item => item.id" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
+        @context.id
+    </GridColumn>
+    <GridColumn TItem="InfoDownloadTaksModel" HeaderText="To" PropertyName="toPath" SortString="toPath" SortKeySelector="item => item.toPath" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
+        @context.toPath
+    </GridColumn>
+    <GridColumn TItem="InfoDownloadTaksModel" HeaderText="State" PropertyName="state" SortString="state" SortKeySelector="item => item.state" FilterTextboxWidth="80">
+        @context.state
+    </GridColumn>
+    <GridColumn TItem="InfoDownloadTaksModel" HeaderText="Total" PropertyName="total" SortString="total" SortKeySelector="item => item.total" FilterTextboxWidth="80">
+        @context.total
+    </GridColumn>
+    <GridColumn TItem="InfoDownloadTaksModel" HeaderText="Completed" PropertyName="executed" SortString="executed" SortKeySelector="item => item.executed" FilterTextboxWidth="80">
+        @context.executed
+    </GridColumn>
+    <GridColumn TItem="InfoDownloadTaksModel" HeaderText="Progress" PropertyName="progress" FilterTextboxWidth="100">
+        <div class="progress">
+            <div class="progress-bar" role="progressbar" style="width: @context.progress%;" aria-valuenow="@context.progress" aria-valuemin="0" aria-valuemax="100">@context.progress%</div>
+        </div>
+    </GridColumn>
+    <GridColumn TItem="InfoDownloadTaksModel" HeaderText="Actions">
+        @if (context.state == StateTask.Working)
+        {
+            <td><button class="btn btn-danger" @onclick="() => cancel(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Cancel task"><i class="bi bi-x"></i></button></td>
+        }
+
+        @if (context.state == StateTask.Canceled || context.state == StateTask.Error)
+        {
+            <td>
+                <div class="btn-group" role="group">
+                    <button class="btn btn-info" @onclick="() => retry(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="retry task"><i class="bi bi-arrow-clockwise"></i></button>
+                </div>
+            </td>
+        }
+    </GridColumn>
+
+</Grid>
+
+@code {
+
+    BlazorBootstrap.Grid<InfoDownloadTaksModel> grid = default!;
+    public static List<InfoDownloadTaksModel> lpt = new List<InfoDownloadTaksModel>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        checkNewEventsHandler();
+        TransactionInfoService.EventChanged += eventChangedNew;
+    }
+
+    private async Task<GridDataProviderResult<InfoDownloadTaksModel>> TasksDataProvider(GridDataProviderRequest<InfoDownloadTaksModel> request)
+    {
+        await getPendingTasksModels(request.PageNumber - 1, request.PageSize, lpt.Count() == 0);
+        int totalUploads = tis.getTotalTasks();
+        return await Task.FromResult(new GridDataProviderResult<InfoDownloadTaksModel> { Data = lpt ?? new List<InfoDownloadTaksModel>(), TotalCount = totalUploads });//request.ApplyTo(uploads));
+    }
+
+    private async Task getPendingTasksModels(int pageNumber, int pageSize, bool mustCallEnventHandler = false)
+    {
+        lpt = tis.getInfoDownloadTaksModel(pageNumber, pageSize);
+        if (mustCallEnventHandler)
+            checkNewEventsHandler();
+    }
+
+    private void checkNewEventsHandler()
+    {
+        foreach (InfoDownloadTaksModel pt in lpt)
+        {
+            pt.EventChanged -= eventChangedPendingTask;
+            pt.EventChanged += eventChangedPendingTask;
+        }
+    }
+
+    void eventChangedPendingTask(object sender, InfoTaskEventArgs e)
+    {
+        grid.RefreshDataAsync();
+    }
+
+    void eventChangedNew(object sender, System.EventArgs e)
+    {
+        checkNewEventsHandler();
+        grid.RefreshDataAsync();
+    }
+
+    private async Task cancel(InfoDownloadTaksModel idt)
+    {
+        //um.thread.Interrupt();
+        idt.state = StateTask.Canceled;
+        idt.cancelTask();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task retry(InfoDownloadTaksModel idt)
+    {
+        //um.thread.Interrupt();
+        idt.RetryCallback();
+        await InvokeAsync(StateHasChanged);
+    }
+
+}
