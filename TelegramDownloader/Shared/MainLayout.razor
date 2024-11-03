@@ -20,14 +20,15 @@
 
 <Preload LoadingText="Loading..." />
 
+
 <div class="page">
     <div class="sidebar">
-        <NavMenu />
+        <NavMenu OnClickCallback="openOffCanvasMenu" />
     </div>
 
     <main>
         <div class="top-row px-4">
-            <button class="btn" type="button" data-bs-toggle="offcanvas" data-bs-target="#offcanvasRight" aria-controls="offcanvasRight"><i class="bi bi-three-dots"></i></button>
+            <button class="btn" type="button" @onclick="openOffCanvasMenu"><i class="bi bi-three-dots"></i></button>
         </div>
         <TelegramDownloader.Pages.Modals.ToastNotify></TelegramDownloader.Pages.Modals.ToastNotify>
         
@@ -39,30 +40,26 @@
             @Body
         </article>
 
-        
-
-        <div class="offcanvas offcanvas-end" tabindex="-1" id="offcanvasRight" aria-labelledby="offcanvasRightLabel">
-            
-            <div class="offcanvas-header">
-                <h5 id="offcanvasRightLabel">Menu</h5>
-                <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
-            </div>
-            <div class="offcanvas-body">
+        <Offcanvas @ref="offcanvas"
+                   title="Menu">
+            <BodyTemplate>
                 <div class="list-group list-group-flush">
-                    <a href="/config" class="list-group-item list-group-item-action"><i class="bi bi-gear"></i> Configuration</a>
-                    
-                    <a href="/downloads" class="list-group-item list-group-item-action"><i class="bi bi-cloud-download"></i> Tasks</a>
-                    <a href="/loglist" class="list-group-item list-group-item-action"><i class="bi bi-file-earmark-text"></i> Logs</a>
-                    <a href="#" @onclick="() => Logout()" class="list-group-item list-group-item-action list-group-item-warning"><i class="bi bi-box-arrow-right"></i> LogOut</a>
+                    <button @onclick=' () => Navigateto("/config")' class="list-group-item list-group-item-action"><i class="bi bi-gear"></i> Configuration</button>
+                    <button @onclick=' () => Navigateto("/downloads")' class="list-group-item list-group-item-action"><i class="bi bi-cloud-download"></i> Tasks</button>
+                    <button @onclick=' () => Navigateto("/loglist")' class="list-group-item list-group-item-action"><i class="bi bi-file-earmark-text"></i> Logs</button>
+                    <a href="#" @onclick=" () => Logout()" class="list-group-item list-group-item-action list-group-item-warning"><i class="bi bi-box-arrow-right"></i> LogOut</a>
                 </div>
-            </div>
-        </div>
+            </BodyTemplate>
+        </Offcanvas>
+        
         
     </main>
 </div>
 
 
 @code {
+
+    private Offcanvas offcanvas = default!;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -81,11 +78,22 @@
 
     }
 
+    private async Task openOffCanvasMenu()
+    {
+        await offcanvas.ShowAsync(); 
+    }
+
 
     private void Notificar()
     {
         NotificationModel nm = new NotificationModel();
         nm.sendEvent(new Notification("<h1>Body message</h1>", "Title", NotificationTypes.Info));
+    }
+
+    private async Task Navigateto(string relativeUri)
+    {
+        await offcanvas.HideAsync();
+        NavManager.NavigateTo(relativeUri);
     }
 
 

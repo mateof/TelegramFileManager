@@ -52,7 +52,7 @@
                 <button type="button" class="btn btn-outline-primary groupbtnactionclass" @onclick="ToggleSearch"><i class="bi bi-search"></i></button>
                 <button type="button" class="btn btn-outline-primary groupbtnactionclass" title="Refresh channels" @onclick="RefreshChannels"><i class="bi bi-arrow-clockwise"></i></button>
                 <button type="button" class="btn btn-outline-primary groupbtnactionclass" @onclick="showPlayer"><i class="bi bi-boombox"></i></button>
-                <button class="btn groupbtnactionclass" type="button" data-bs-toggle="offcanvas" @onclick="ToggleNavMenu" data-bs-target="#offcanvasRight" aria-controls="offcanvasRight"><i class="bi bi-three-dots"></i></button>
+                <button class="btn groupbtnactionclass" type="button" @onclick="HandleThreeDots"><i class="bi bi-three-dots"></i></button>
             </div>
             <nav>
                 <div class="nav nav-tabs" id="nav-tab" role="tablist">
@@ -142,6 +142,8 @@
 @code {
     [Inject] protected PreloadService PreloadService { get; set; } = default!;
 
+    [Parameter] public EventCallback OnClickCallback { get; set; }
+
     private List<ChatViewBase> sChats = new List<ChatViewBase>();
     private List<ChatViewBase> allChats = new List<ChatViewBase>();
     private List<ChatViewBase> mineChats = new List<ChatViewBase>();
@@ -163,6 +165,17 @@
         //     await JS.InvokeVoidAsync("focusElement", "searchChats");
         // }
     }
+
+    private async Task HandleThreeDots()
+    {
+        ToggleNavMenu();
+        if (OnClickCallback.HasDelegate)
+        {
+            await OnClickCallback.InvokeAsync(null);
+        }
+        
+    }
+
 
     private async Task RefreshChannels()
     {
