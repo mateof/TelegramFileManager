@@ -46,6 +46,7 @@ namespace TelegramDownloader.Models
         public bool isSplit { get; set; } = false;
         public List<int>? ListMessageId { get; set; }
         public bool isEncrypted { get; set; } = false;
+        public string MD5Hash { get; set; }
 
         public BsonFileManagerModel()
         {
