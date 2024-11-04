@@ -4,50 +4,85 @@
 
 <h3>Log List</h3>
 
-<div class="table-responsive">
-<table class="table">
-    <thead>
-        <tr>
-            <th scope="col">Name</th>
-            <th scope="col">Create</th>
-            <th scope="col">Update</th>
-            <th scope="col">Size</th>
-            <th scope="col">Action</th>
-        </tr>
-    </thead>
-    <tbody class="table-group-divider">
-        @foreach(FileInfo log in logs)
-        {
-            <tr scope="row">
-                <td>@log.Name</td>
-                <td>@log.CreationTime.ToLocalTime().ToLongDateString() @log.CreationTime.ToLocalTime().ToLongTimeString()</td>
-                <td>@log.LastWriteTime.ToLocalTime().ToLongDateString() @log.LastWriteTime.ToLocalTime().ToLongTimeString()</td>
-                <td>@HelperService.SizeSuffix(log.Length)</td>
-                <td>
-                    <div class="btn-group btn-group-sm" role="group" aria-label="Small button group">
-                        <a type="button" class="btn btn-outline-dark" href="@($"/api/log/Download?fileName={log.Name}&show=1")" target="blank"><i class="bi bi-eye"></i></a>
-                        <button class="btn btn-outline-warning" @onclick="@(e => getFileLog(log))"><i class="bi bi-download"></i></button>
-                    </div>
-                </td>
-            </tr>
-        }
-    </tbody>
-</table>
-</div>
+<Grid @ref="grid"
+      TItem="FileInfo"
+      Class="table table-hover table-bordered table-striped"
+      DataProvider="DataProvider"
+      AllowFiltering="false"
+      AllowPaging="true"
+      AllowSorting="false"
+      Responsive="true">
+
+    <GridColumn TItem="FileInfo" HeaderText="Name" PropertyName="Name" SortString="Name" SortKeySelector="item => item.Name" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
+        @context.Name
+    </GridColumn>
+    <GridColumn TItem="FileInfo" HeaderText="Created" PropertyName="CreationTime" SortString="CreationTime" SortKeySelector="item => item.CreationTime" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
+        @context.CreationTime.ToLocalTime().ToLongDateString() @context.CreationTime.ToLocalTime().ToLongTimeString()
+    </GridColumn>
+    <GridColumn TItem="FileInfo" HeaderText="Updated" PropertyName="LastWriteTime" SortString="LastWriteTime" SortKeySelector="item => item.LastWriteTime" FilterTextboxWidth="80">
+        @context.LastWriteTime.ToLocalTime().ToLongDateString() @context.LastWriteTime.ToLocalTime().ToLongTimeString()
+    </GridColumn>
+    <GridColumn TItem="FileInfo" HeaderText="Size" PropertyName="Length" SortString="Length" SortKeySelector="item => item.Length" FilterTextboxWidth="80">
+        @HelperService.SizeSuffix(context.Length)
+    </GridColumn>
+    <GridColumn TItem="FileInfo" HeaderText="Actions">
+        <div class="btn-group btn-group-sm" role="group" aria-label="Small button group">
+            <a type="button" class="btn btn-outline-dark" href="@($"/api/log/Download?fileName={context.Name}&show=1")" target="blank"><i class="bi bi-eye"></i></a>
+            <button class="btn btn-outline-warning" @onclick="@(e => getFileLog(context))"><i class="bi bi-download"></i></button>
+        </div>
+    </GridColumn>
+
+</Grid>
+
 
 @code {
-    private List<FileInfo> logs { get; set; } = new List<FileInfo>();
+
+    BlazorBootstrap.Grid<FileInfo> grid = default!;
 
     protected override async Task OnInitializedAsync()
     {
-        foreach (string fileName in Directory.GetFiles(Path.Combine(Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location), "logs")))
-        {
-            logs.Add(new FileInfo(fileName));
-        }
+    }
+
+    private async Task<GridDataProviderResult<FileInfo>> DataProvider(GridDataProviderRequest<FileInfo> request)
+    {
+        FilesAndCount fac = getLogs(request.PageNumber - 1, request.PageSize);
+        return await Task.FromResult(new GridDataProviderResult<FileInfo> { Data = fac.files, TotalCount = fac.totalFiles });//request.ApplyTo(uploads));
     }
 
     public async Task getFileLog(FileInfo f)
     {
         NavigationManager.NavigateTo($"/api/log/Download?fileName={f.Name}", true);
+    }
+
+    private FilesAndCount getLogs(int pageNumber, int pageSize)
+    {
+        FilesAndCount fac = new FilesAndCount();
+        List<string> totalLogs = Directory.GetFiles(Path.Combine(Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location), "logs")).ToList();
+        totalLogs.Reverse();
+        fac.totalFiles = totalLogs.Count();
+
+        if (fac.totalFiles == 0 || fac.totalFiles < (pageNumber) * pageSize)
+        {
+            fac.files = PathToFileInfoList(totalLogs);
+            return fac;
+        }
+        fac.files = PathToFileInfoList(totalLogs.Skip(pageNumber * pageSize).Take(pageSize).ToList());
+        return fac;
+    }
+
+    private List<FileInfo> PathToFileInfoList(List<string> pathList)
+    {
+        List<FileInfo> fileInfoList = new List<FileInfo>();
+        foreach(string path in pathList)
+        {
+            fileInfoList.Add(new FileInfo(path));
+        }
+        return fileInfoList;
+    }
+
+    class FilesAndCount
+    {
+        public List<FileInfo> files { get; set; }
+        public int totalFiles { get; set; }
     }
 }

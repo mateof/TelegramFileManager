@@ -1147,12 +1147,12 @@ namespace TelegramDownloader.Data
 
 
                     GC.Collect();
-                    if (file == idt?.file)
-                    {
-                        idt.state = StateTask.Completed;
-                        idt.change();
-                    }
+                }
 
+                if (dm == null)
+                {
+                    idt.state = StateTask.Completed;
+                    idt.change();
                 }
 
                 nm.sendEvent(new Notification($"Upload files completed in {currentPath}", "Telegram Upload", NotificationTypes.Success));
