@@ -10,6 +10,7 @@ using Syncfusion.Blazor.Inputs;
 using Syncfusion.EJ2.FileManager.PhysicalFileProvider;
 using Syncfusion.EJ2.Linq;
 using System.Dynamic;
+using System.Security.Cryptography;
 using System.Text.Json;
 using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
@@ -992,6 +993,9 @@ namespace TelegramDownloader.Data
                             continue;
                         };
                         model.Size = fileInfo.Length;
+                        _logger.LogInformation($"Calculating MD5 of file {currentFilePath}");
+                        model.MD5Hash = GetMd5HashFromFile(currentFilePath);
+                        _logger.LogInformation($"Calculated MD5 of file {currentFilePath}: {model.MD5Hash}");
                         Message m = null;
                         long max = (long)MaxSize * (long)TelegramService.splitSizeGB;
                         if (fileInfo.Length > max)
@@ -1503,6 +1507,18 @@ namespace TelegramDownloader.Data
             await stream.CopyToAsync(memoryStream);
             memoryStream.Position = 0;
             return memoryStream;
+        }
+
+        private static string GetMd5HashFromFile(string filePath)
+        {
+            using (var md5 = MD5.Create())
+            {
+                using (var stream = File.OpenRead(filePath))
+                {
+                    byte[] hash = md5.ComputeHash(stream);
+                    return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
+                }
+            }
         }
 
         private async Task<List<Stream>> splitFileAsync(Stream s, int size)
