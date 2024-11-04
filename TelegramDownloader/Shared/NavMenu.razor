@@ -10,7 +10,7 @@
         text-overflow: ellipsis;
     }
 
-    .navclass{
+    .navclass {
         color: white
     }
 
@@ -20,6 +20,7 @@
         --bs-btn-hover-bg: #00f2ff4a;
         --bs-btn-active-bg: #7b9ccd75;
     }
+
     .groupbtnclass {
         width: 90%;
         padding-left: 10%;
@@ -62,7 +63,7 @@
                 </div>
             </nav>
         </div>
-        
+
         <div class="tab-content" id="nav-tabContent">
             <div class="tab-pane fade show active" id="nav-mine" role="tabpanel" aria-labelledby="nav-mine-tab">
                 @foreach (ChatViewBase cb in mineChats)
@@ -72,11 +73,11 @@
                             <span style="color:white; cursor: pointer;" class="bi bi-star" @onclick="@setStar"></span>
                         </div>
                         <div class="col-9">
-                            
+
                             <div class="nav-item" style="padding:inherit;" @onclick="ToggleNavMenu">
                                 <NavLink class="nav-link ellipsis" href="@($"/fetchdata/{cb.chat.ID}")" Match="NavLinkMatch.All">
                                     <span aria-hidden="true">
-                                        
+
 
                                     </span>
                                     <span class="text-truncate">@cb.chat.Title</span>
@@ -85,14 +86,9 @@
                             </div>
                         </div>
                         <div class="col-2" style="position: relative; padding-top: 5%; padding-left: 0;">
-                            <div class="dropdown">
-                                <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false">
-                                    <span style="color:white" class="bi bi-folder"></span>
-                                </button>
-                                <ul class="dropdown-menu">
-                                    <li><a class="dropdown-item" @onclick="@(async () => await goTo($"/fm/{cb.chat.ID}"))">File Manager</a></li>
-                                </ul>
-                            </div>
+                            <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false" @onclick="@(async () => await goTo($"/fm/{cb.chat.ID}"))">
+                                <span style="color:white" class="bi bi-folder"></span>
+                            </button>
                         </div>
                     </div>
                 }
@@ -109,10 +105,10 @@
                             <div class="nav-item" style="padding:inherit;" @onclick="ToggleNavMenu">
                                 <NavLink class="nav-link ellipsis" href="@($"/fetchdata/{cb.chat.ID}")" Match="NavLinkMatch.All">
                                     <span aria-hidden="true">
-                                       @*  @if (cb.chat.Photo != null)
-                                        {
-                                            <img src="data:image/jpg;base64, @cb.img64" alt="photo" style="width:1vw;" />
-                                        } *@
+                                        @*  @if (cb.chat.Photo != null)
+                                    {
+                                    <img src="data:image/jpg;base64, @cb.img64" alt="photo" style="width:1vw;" />
+                                    } *@
 
                                     </span>
                                     <span class="text-truncate">@cb.chat.Title</span>
@@ -121,20 +117,17 @@
                             </div>
                         </div>
                         <div class="col-2" style="position: relative; padding-top: 5%; padding-left: 0;">
-                            <div class="dropdown">
-                                <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false">
-                                    <span style="color:white" class="bi bi-folder"></span>
-                                </button>
-                                <ul class="dropdown-menu">
-                                    <li><a class="dropdown-item" @onclick="@(async () => await goTo($"/fm/{cb.chat.ID}"))">File Manager</a></li>
-                                </ul>
-                            </div>
+
+                            <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false" @onclick="@(async () => await goTo($"/fm/{cb.chat.ID}"))">
+                                <span style="color:white" class="bi bi-folder"></span>
+                            </button>
+
                         </div>
                     </div>
                 }
             </div>
         </div>
-        
+
 
     </nav>
 </div>
@@ -173,7 +166,7 @@
         {
             await OnClickCallback.InvokeAsync(null);
         }
-        
+
     }
 
 
@@ -233,7 +226,7 @@
     private void filterMyChats(string? searchString = null)
     {
         mineChats = new List<ChatViewBase>();
-        foreach(var chat in allChats)
+        foreach (var chat in allChats)
         {
             if (chat.chat is Channel chat1)
             {
@@ -250,7 +243,7 @@
                     {
                         mineChats.Add(chat);
                     }
-                    
+
                 }
             }
         }
