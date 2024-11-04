@@ -629,7 +629,6 @@ namespace TelegramDownloader.Data
                 {
 
                     BsonFileManagerModel file = _db.getFileByPathSync(dbName, itemFile.FilterPath.Replace("\\", "/") + itemFile.Name);
-                    // string currentFilePath = System.IO.Path.Combine(Directory.GetCurrentDirectory(), RELATIVETEMPDIR, currentTargetPath[0] == '/' ? currentTargetPath.Substring(1) : currentTargetPath);
                     string currentFilePath = currentTargetPath[0] == '/' ? currentTargetPath.Substring(1) : currentTargetPath;
                     if (!itemFile.IsFile)
                     {
