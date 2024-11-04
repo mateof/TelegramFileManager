@@ -31,17 +31,16 @@
         <a class="nav-link active" href="@($"/localfm/{id}")">Local</a>
     </li>
 </ul>
-<SfFileManager ID="localfm" TValue="FileManagerDirectoryContent">
+<SfFileManager @ref="FileManager" ID="localfm" TValue="FileManagerDirectoryContent">
     <FileManagerAjaxSettings Url=@($"/api/file/FileOperations")
                              UploadUrl="/api/file/Upload"
                              DownloadUrl="/api/file/Download"
                              GetImageUrl="/api/file/GetImage">
     </FileManagerAjaxSettings>
-    <FileManagerEvents TValue="FileManagerDirectoryContent" OnFileOpen="fileOpen" ToolbarItemClicked="toolBarClicked"></FileManagerEvents>
     <FileManagerUploadSettings MaxFileSize="@(long.MaxValue)" AutoUpload="true"></FileManagerUploadSettings>
     <FileManagerToolbarSettings ToolbarItems="@Items"></FileManagerToolbarSettings>
     <FileManagerContextMenuSettings File="@ContextItems"></FileManagerContextMenuSettings>
-    <FileManagerEvents TValue="FileManagerDirectoryContent" ToolbarItemClicked="toolBarClicked" OnFileOpen="fileOpen" MenuOpened="MenuOpened" OnMenuClick="OnMenuClick"></FileManagerEvents>
+    <FileManagerEvents TValue="FileManagerDirectoryContent" FileSelection="FileSelection" ToolbarItemClicked="toolBarClicked" OnFileOpen="fileOpen" MenuOpened="MenuOpened" OnMenuClick="OnMenuClick"></FileManagerEvents>
 
 </SfFileManager>
 
@@ -54,10 +53,11 @@
     [Parameter]
     public string id { get; set; }
 
+    SfFileManager<FileManagerDirectoryContent>? FileManager;
+
     private MediaUrlModal mediaUrlModal { get; set; } = default!;
 
     private string chatName { get; set; }
-    public static string[] selectedItems = new string[] { "" };
 
     NotificationModel nm = new NotificationModel();
     public string[] ContextItems = new string[] { "Open", "Delete", "Download", "Rename", "Details", "Copy Media Url" };
@@ -79,6 +79,7 @@
         new ToolBarItemModel() { Name = "Refresh" },
         new ToolBarItemModel() { Name = "Upload File",  Text="Upload To Server", TooltipText="Upload To server", PrefixIcon="e-icons e-fe-upload" },
         new ToolBarItemModel() { Name = "UploadTelegram", Text="Upload Telegram", TooltipText="Upload File", PrefixIcon="bi bi-telegram" },
+        new ToolBarItemModel() { Name = "UrlMedia", Text="Url Media", TooltipText="Url Media", PrefixIcon="bi bi-collection-play-fill", Visible=false },
         new ToolBarItemModel() { Name = "Selection" },
         new ToolBarItemModel() { Name = "View" },
         new ToolBarItemModel() { Name = "Details" },
@@ -97,6 +98,21 @@
             nm.sendMessage("Error", "Error on CreateDatabase", NotificationTypes.Error);
         }
 
+    }
+
+    public void FileSelection(FileSelectionEventArgs<FileManagerDirectoryContent> args)
+    {
+        List<FileManagerDirectoryContent> selectedList = FileManager.GetSelectedFiles();
+        if ((selectedList.Count() + (args.Action == "UnSelect" ? -1 : 1)) == 1)
+        {
+            if (args.FileDetails.IsFile)
+            {
+                Items.Where(x => x.Name == "UrlMedia").FirstOrDefault().Visible = true;
+                return;
+            }
+
+        }
+        Items.Where(x => x.Name == "UrlMedia").FirstOrDefault().Visible = false;
     }
 
     public async Task fileOpen(FileOpenEventArgs<FileManagerDirectoryContent> args)
@@ -155,16 +171,18 @@
         {
             if (args.Item.Text == "Copy Media Url")
             {
-
-                string localdir = MyNavigationManager.BaseUri + FileService.STATICRELATIVELOCALDIR.Replace("\\", "/");
-                string path = new System.Uri((Path.Combine(localdir, args.FileDetails[0].FilterPath.Substring(1).Replace("\\", "/"), args.FileDetails[0].Name)).Replace("\\", "/")).AbsoluteUri;
-                mediaUrlModal.url = path;
-                await mediaUrlModal.OnShowModalClick();
-                // await JSRuntime.InvokeVoidAsync("copyToClipboard", path);
-                // nm.sendMessage("Copy to Clipboard", "Copied", force: true);
+                await ShowMediaURLModal(args.FileDetails[0].FilterPath, args.FileDetails[0].Name);
             }
 
         }
+    }
+
+    private async Task ShowMediaURLModal(string FilterPath, string Name)
+    {
+        string localdir = MyNavigationManager.BaseUri + FileService.STATICRELATIVELOCALDIR.Replace("\\", "/");
+        string path = new System.Uri((Path.Combine(localdir, FilterPath.Substring(1).Replace("\\", "/"), Name)).Replace("\\", "/")).AbsoluteUri;
+        mediaUrlModal.url = path;
+        await mediaUrlModal.OnShowModalClick();
     }
 
 
@@ -184,6 +202,11 @@
             ModalUpSer.url = "/api/file/Upload";
             ModalUpSer.filePath = args.FileDetails.FirstOrDefault().IsFile ? args.FileDetails.FirstOrDefault().FilterPath.Replace("\\", "/") + args.FileDetails.FirstOrDefault().Name : args.FileDetails.FirstOrDefault().FilterPath.Replace("\\", "/") + args.FileDetails.FirstOrDefault().Name + "/";
             ModalUpSer.Open();
+        }
+
+        if (args.Item.Text == "Url Media" && args.FileDetails.Count() > 0)
+        {
+            await ShowMediaURLModal(args.FileDetails[0].FilterPath, args.FileDetails[0].Name);
         }
     }
 }
