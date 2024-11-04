@@ -1,0 +1,41 @@
+﻿@inject IJSRuntime JS
+
+<Modal @ref="modal" Title="Media URL">
+    <BodyTemplate>
+        <div class=" input-group mb-3">
+            <span class=" input-group-text">URL</span>
+            <input type="text" class=" form-control" disabled aria-label="url" value="@url">
+            <button class=" input-group-text btn btn-secondary" @onclick="CopyToClipboard">Copy</button>
+        </div>
+    </BodyTemplate>
+    <FooterTemplate>
+        @* <Button Color="ButtonColor.Secondary" @onclick="OnHideModalClick">Close</Button> *@
+        <Button Color="ButtonColor.Primary" @onclick="OnOpenClick">Open URL</Button>
+    </FooterTemplate>
+</Modal>
+
+
+@code {
+    [Parameter] public string url { get; set; }
+    private Modal modal = default!;
+
+    public async Task OnShowModalClick()
+    {
+        await modal.ShowAsync();
+    }
+
+    private async Task CopyToClipboard()
+    {
+        await JS.InvokeVoidAsync("copyToClipboard", url);
+    }
+
+    private async Task OnOpenClick()
+    {
+        await JS.InvokeVoidAsync("open", url, "_blank");
+    }
+
+    public async Task OnHideModalClick()
+    {
+        await modal.HideAsync();
+    }
+}

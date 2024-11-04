@@ -2,6 +2,7 @@
 @using TelegramDownloader.Data
 @using TelegramDownloader.Models
 @using TelegramDownloader.Pages.Modals
+@using TelegramDownloader.Pages.Modals.InfoModals
 @inject HttpClient httpClient;
 @inject IJSRuntime JSRuntime;
 @inject NavigationManager MyNavigationManager;
@@ -46,11 +47,14 @@
 
 <TelegramDownloader.Pages.Modals.UploadToTelegramModal @ref="Modal"></TelegramDownloader.Pages.Modals.UploadToTelegramModal>
 <TelegramDownloader.Pages.Modals.FileUploadModal @ref="ModalUpSer"></TelegramDownloader.Pages.Modals.FileUploadModal>
+<TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal @ref="mediaUrlModal"></TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal>
 
 
 @code {
     [Parameter]
     public string id { get; set; }
+
+    private MediaUrlModal mediaUrlModal { get; set; } = default!;
 
     private string chatName { get; set; }
     public static string[] selectedItems = new string[] { "" };
@@ -60,7 +64,7 @@
 
     private Modals.UploadToTelegramModal Modal { get; set; }
     private Modals.FileUploadModal ModalUpSer { get; set; }
-    
+
 
     public List<ToolBarItemModel> Items = new List<ToolBarItemModel>(){
         new ToolBarItemModel() { Name = "NewFolder" },
@@ -151,15 +155,18 @@
         {
             if (args.Item.Text == "Copy Media Url")
             {
-                
+
                 string localdir = MyNavigationManager.BaseUri + FileService.STATICRELATIVELOCALDIR.Replace("\\", "/");
                 string path = new System.Uri((Path.Combine(localdir, args.FileDetails[0].FilterPath.Substring(1).Replace("\\", "/"), args.FileDetails[0].Name)).Replace("\\", "/")).AbsoluteUri;
-                await JSRuntime.InvokeVoidAsync("copyToClipboard", path);
-                nm.sendMessage("Copy to Clipboard", "Copied", force: true);
+                mediaUrlModal.url = path;
+                await mediaUrlModal.OnShowModalClick();
+                // await JSRuntime.InvokeVoidAsync("copyToClipboard", path);
+                // nm.sendMessage("Copy to Clipboard", "Copied", force: true);
             }
 
         }
     }
+
 
     public async Task toolBarClicked(ToolbarClickEventArgs<FileManagerDirectoryContent> args)
     {
