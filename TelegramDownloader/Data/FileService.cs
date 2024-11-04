@@ -12,6 +12,7 @@ using Syncfusion.EJ2.Linq;
 using System.Dynamic;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Xml.Linq;
 using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
 using TelegramDownloader.Services;
@@ -1509,13 +1510,17 @@ namespace TelegramDownloader.Data
             return memoryStream;
         }
 
-        private static string GetMd5HashFromFile(string filePath)
+        private string GetMd5HashFromFile(string filePath)
         {
+            Md5Model _md5 = new Md5Model();
             using (var md5 = MD5.Create())
             {
                 using (var stream = File.OpenRead(filePath))
                 {
+                    _tis.addToUploadList(_md5);
+                    _md5.Init(stream.Length, Path.GetFileName(filePath));
                     byte[] hash = md5.ComputeHash(stream);
+                    _md5.Finish();
                     return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
                 }
             }

@@ -6,6 +6,7 @@ using TelegramDownloader.Services;
 using TL;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using BlazorBootstrap;
 
 namespace TelegramDownloader.Models
 {
@@ -212,6 +213,27 @@ namespace TelegramDownloader.Models
                 nm.sendEvent(new Notification($"Split {name} completed", "Split Completed", NotificationTypes.Success));
             }
 
+        }
+    }
+
+    public class Md5Model : UploadModel
+    {
+        public Md5Model() : base()
+        {
+            action = "MD5 Calc";
+        }
+        public void Init(long size, string filename)
+        {
+            _sizeString = HelperService.SizeSuffix(size);
+            name = filename;
+            base.InvokeEvent(new UploadEventArgs());
+        }
+
+        public void Finish()
+        {
+            state = StateTask.Completed;
+            progress = 100;
+            base.InvokeEvent(new UploadEventArgs());
         }
     }
 
