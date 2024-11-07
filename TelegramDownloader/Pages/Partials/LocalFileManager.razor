@@ -40,7 +40,10 @@
     <FileManagerUploadSettings MaxFileSize="@(long.MaxValue)" AutoUpload="true"></FileManagerUploadSettings>
     <FileManagerToolbarSettings ToolbarItems="@Items"></FileManagerToolbarSettings>
     <FileManagerContextMenuSettings File="@ContextItems"></FileManagerContextMenuSettings>
-    <FileManagerEvents TValue="FileManagerDirectoryContent" FileSelection="FileSelection" ToolbarItemClicked="toolBarClicked" OnFileOpen="fileOpen" MenuOpened="MenuOpened" OnMenuClick="OnMenuClick"></FileManagerEvents>
+    <FileManagerEvents 
+        
+
+        TValue="FileManagerDirectoryContent" FileSelection="FileSelection" ToolbarItemClicked="toolBarClicked" OnFileOpen="fileOpen" MenuOpened="MenuOpened" OnMenuClick="OnMenuClick"></FileManagerEvents>
 
 </SfFileManager>
 
@@ -50,8 +53,10 @@
 
 
 @code {
+    const string param = "path";
     [Parameter]
     public string id { get; set; }
+    [Inject] NavigationManager NavigationManager { get; set; } = null!;
 
     SfFileManager<FileManagerDirectoryContent>? FileManager;
 
@@ -99,6 +104,70 @@
         }
 
     }
+
+    // Uncomment for url navigate
+    // protected override async Task OnAfterRenderAsync(bool firstRender)
+    // {
+    //     if (firstRender)
+    //     {
+    //         var paramValue = getParamFromUrl("path", NavigationManager.Uri);
+
+    //         if (!string.IsNullOrEmpty(paramValue))
+    //         {
+    //             FileManager.Path = paramValue;
+    //             // FileManager.RefreshFilesAsync();
+    //         }
+    //         NavigationManager.LocationChanged += OnLocationChanged;
+    //     }
+    // }
+
+    // private void OnLocationChanged(object sender, LocationChangedEventArgs e)
+    // {
+    //     var route = getParamFromUrl(param, e.Location);
+    //     if (route != FileManager.Path)
+    //     {
+    //         var paramValue = getParamFromUrl(param, NavigationManager.Uri);
+
+    //         if (!string.IsNullOrEmpty(paramValue))
+    //         {
+    //             FileManager.Path = Uri.EscapeUriString(paramValue);
+    //             //FileManager.RefreshFilesAsync();
+    //         }
+    //     }
+    // }
+
+    // private string getParamFromUrl(string param, string url)
+    // {
+    //     var uri = NavigationManager.ToAbsoluteUri(url);
+    //     var queryParams = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+    //     if (queryParams.TryGetValue(param, out var paramValue))
+    //     {
+    //         return paramValue;
+    //     }
+    //     return "";
+    // }
+
+    // public async Task fileLoad(ReadEventArgs<FileManagerDirectoryContent> args)
+    // {
+    //     try
+    //     {
+    //         var paramValue = getParamFromUrl(param, NavigationManager.Uri);
+
+
+    //         if (string.IsNullOrEmpty(paramValue) || FileManager.Path != Uri.EscapeUriString(paramValue))
+    //         {
+    //             var url = NavigationManager.Uri.Split('?')[0]; // Obtener la URL base sin parámetros
+    //             NavigationManager.NavigateTo($"{url}?path={FileManager.Path}", forceLoad: false, replace: false);
+    //         }
+    //     }
+    //     catch (Exception ex)
+    //     {
+
+    //     }
+
+
+    // }
+
 
     public void FileSelection(FileSelectionEventArgs<FileManagerDirectoryContent> args)
     {

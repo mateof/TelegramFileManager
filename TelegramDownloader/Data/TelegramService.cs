@@ -296,8 +296,9 @@ namespace TelegramDownloader.Data
                 model._size = document.size;
                 var filename = fileName ?? document.Filename; // use document original filename, or build a name from document ID & MIME type:
                 filename ??= $"{document.id}.{document.mime_type[(document.mime_type.IndexOf('/') + 1)..]}";
-                model.name = filename;
-                _tis.addToDownloadList(model);
+                if (model.name == null)
+                    model.name = filename;
+                // _tis.addToDownloadList(model);
                 Console.WriteLine("Downloading " + filename);
                 // using var fileStream = File.Create(filename);
                 MemoryStream dest = new MemoryStream();

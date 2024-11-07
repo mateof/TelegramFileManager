@@ -98,7 +98,7 @@ namespace TelegramDownloader.Models
     public class DownloadModel
     {
         public event EventHandler<DownloadEventArgs> EventChanged;
-        public Guid id = Guid.NewGuid();
+        public string id = Guid.NewGuid().ToString();
         public string action { get; set; } = "Download";
         public StateTask state { get; set; } = StateTask.Working;
         public string idTask { get; set; }
@@ -115,22 +115,51 @@ namespace TelegramDownloader.Models
         public IPeerInfo channel { get; set; }
         public int progress { get; set; }
 
+        public DownloadModel(string? name = null)
+        {
+            if (!string.IsNullOrEmpty(name))
+                id = Guid.NewGuid().ToString() + ":" + name;
+        }
+
         public void ProgressCallback(long transmitted, long totalSize)
         {
             if (state == StateTask.Canceled)
                 throw new Exception($"Canceled {name}");
+            if (state == StateTask.Paused)
+            {
+                TransactionInfoService tis = new TransactionInfoService();
+                state = StateTask.Working;
+                tis.deleteDownloadInList(this);
+                throw new Exception($"Paused {name}");
+            }
             _transmitted = transmitted;
             _sizeString = HelperService.SizeSuffix(totalSize);
             _transmittedString = HelperService.SizeSuffix(transmitted);
             progress = Convert.ToInt32(transmitted * 100 / totalSize);
-            EventChanged?.Invoke(this, new DownloadEventArgs(TransactionInfoService.downloadModels));
+            EventChanged?.Invoke(this, new DownloadEventArgs());
             if (transmitted == totalSize)
             {
                 state = StateTask.Completed;
                 NotificationModel nm = new NotificationModel();
                 nm.sendEvent(new Notification($"Download {name} completed", "Download Completed", NotificationTypes.Success));
+                TransactionInfoService tis = new TransactionInfoService();
+                tis.CheckPendingDownloads();
             }
 
+        }
+
+        public void Cancel()
+        {
+            state = StateTask.Canceled;
+            TransactionInfoService tis = new TransactionInfoService();
+            tis.CheckPendingDownloads();
+            EventChanged?.Invoke(this, new DownloadEventArgs());
+        }
+
+        public void Pause()
+        {
+            state = StateTask.Paused;
+            EventChanged?.Invoke(this, new DownloadEventArgs());
         }
 
         public void RetryCallback()
@@ -245,11 +274,11 @@ namespace TelegramDownloader.Models
 
     public class DownloadEventArgs : EventArgs
     {
-        public List<DownloadModel> models { get; set; }
-        public DownloadEventArgs(List<DownloadModel> downloadModel)
-        {
-            models = downloadModel;
-        }
+        //public List<DownloadModel> models { get; set; }
+        //public DownloadEventArgs(List<DownloadModel> downloadModel)
+        //{
+        //    models = downloadModel;
+        //}
         
     }
 
@@ -308,6 +337,8 @@ namespace TelegramDownloader.Models
         Error,
         [Description("Canceled")]
         Canceled,
+        [Description("Paused")]
+        Paused,
         [Description("Completed")]
         Completed,
         [Description("Working")]

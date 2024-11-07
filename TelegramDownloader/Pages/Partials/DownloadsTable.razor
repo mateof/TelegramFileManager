@@ -16,18 +16,18 @@
     <GridColumn TItem="DownloadModel" HeaderText="ID" PropertyName="id" SortString="id" SortKeySelector="item => item.id" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
         @context.id
     </GridColumn>
-    <GridColumn TItem="DownloadModel" HeaderText="File" PropertyName="name" SortString="name" SortKeySelector="item => item.name" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
+    <GridColumn TItem="DownloadModel" HeaderText="File" PropertyName="name"  HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
         @context.name
     </GridColumn>
-    <GridColumn TItem="DownloadModel" HeaderText="Channel" PropertyName="channel" SortString="channel" SortKeySelector="item => item.state" FilterTextboxWidth="80">
+    <GridColumn TItem="DownloadModel" HeaderText="Channel" PropertyName="channel"  FilterTextboxWidth="80">
         @context.channel
     </GridColumn>
-    <GridColumn TItem="DownloadModel" HeaderText="Progress" PropertyName="progress" SortString="progress" SortKeySelector="item => item.progress" FilterTextboxWidth="100">
+    <GridColumn TItem="DownloadModel" HeaderText="Progress" PropertyName="progress"  FilterTextboxWidth="100">
         <div class="progress">
             <div class="progress-bar" role="progressbar" style="width: @context.progress%;" aria-valuenow="@context.progress" aria-valuemin="0" aria-valuemax="100">@context.progress%</div>
         </div>
     </GridColumn>
-    <GridColumn TItem="DownloadModel" HeaderText="Size" PropertyName="Email" SortString="Email" SortKeySelector="item => item._transmittedString" FilterTextboxWidth="120">
+    <GridColumn TItem="DownloadModel" HeaderText="Size" FilterTextboxWidth="120">
         @context._transmittedString of @context._sizeString
     </GridColumn>
     <GridColumn TItem="DownloadModel" HeaderText="Actions">
@@ -69,7 +69,7 @@
     private async Task cancel(DownloadModel dm)
     {
         //um.thread.Interrupt();
-        dm.state = StateTask.Canceled;
+        dm.Cancel();
         await InvokeAsync(StateHasChanged);
     }
 
