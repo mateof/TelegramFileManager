@@ -138,9 +138,14 @@ window.openFileUploadModal = (id, path, url) => {
     fileModal.showModal = true;
 }
 
-window.openAudioPlayerModal = (file, type = "audio/mpeg") => {
+window.openAudioPlayerModal = (file, type = "audio/mpeg", title = "") => {
     // https://stackoverflow.com/questions/10792163/change-audio-src-with-javascript
+    if (type === null) {
+        type = "audio/mpeg";
+    }
     fileModal.showAudioModal = true;
+    var audioTitle = document.getElementById('audioTitle');
+    audioTitle.innerHTML = title;
     var source = document.getElementById('audioSource');
     source.src = file;
     source.type = type;

@@ -113,6 +113,7 @@ namespace TelegramDownloader.Models
         public string _transmittedString { get; set; }
 
         public IPeerInfo channel { get; set; }
+        public string channelName { get; set; }
         public int progress { get; set; }
 
         public DownloadModel(string? name = null)

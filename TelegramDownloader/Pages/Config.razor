@@ -27,7 +27,7 @@
             <div class="input-group mb-3">
                 <span class="input-group-text"><i class="bi bi-download"></i></span>
                 <div class="form-floating">
-                    <InputNumber type="number" @bind-Value="Model!.MaxSimultaneousDownloads" class="form-control" id="MaxSimultaneousDownloads" placeholder="Sleep Time (ms)" />
+                    <NumberInput TValue="int" @bind-Value="Model!.MaxSimultaneousDownloads" Min="1" Max="3" EnableMinMax="true" class="form-control" id="MaxSimultaneousDownloads" placeholder="Sleep Time (ms)" />
                     <label for="MaxSimultaneousDownloads">Max. Simultaneous Downloads</label>
                 </div>
 

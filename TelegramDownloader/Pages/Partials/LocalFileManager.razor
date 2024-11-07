@@ -199,7 +199,7 @@
     {
         string localdir = MyNavigationManager.BaseUri + FileService.STATICRELATIVELOCALDIR.Replace("\\", "/");
         string path = new System.Uri((Path.Combine(localdir, args.FileDetails.FilterPath.Substring(1).Replace("\\", "/"), args.FileDetails.Name)).Replace("\\", "/")).AbsoluteUri;
-        await JSRuntime.InvokeVoidAsync("openAudioPlayerModal", path);
+        await JSRuntime.InvokeVoidAsync("openAudioPlayerModal", path, null, args.FileDetails.Name);
     }
 
     public void MenuOpened(MenuOpenEventArgs<FileManagerDirectoryContent> args)

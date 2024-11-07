@@ -66,3 +66,14 @@ a, .btn-link {
 .sidebar {
     background-image: linear-gradient(112deg, rgb(5 5 5) 0%, #4e3a53 70%) !important;
 }
+
+.audio-title {
+    width: 100%;
+    height: 3em;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 10px;
+    box-sizing: border-box;
+    white-space: nowrap;
+    scrollbar-width: thin;
+}

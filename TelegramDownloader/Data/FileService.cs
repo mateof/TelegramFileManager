@@ -719,6 +719,7 @@ namespace TelegramDownloader.Data
             }
             model._transmitted = 0;
             model.callbacks = new Callbacks();
+            model.channelName = _ts.getChatName(Convert.ToInt64(dbName));
             model.callbacks.callback = async () => await DownloadFileNow(dbName, messageId, destPath, model);
             _tis.addToPendingDownloadList(model);
         }

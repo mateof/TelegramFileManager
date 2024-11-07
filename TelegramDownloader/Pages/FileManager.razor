@@ -159,7 +159,7 @@
         var file = await fs.getItemById(id, args.FileDetails.Id);
         string path = MyNavigationManager.BaseUri + "api/file/getfile/" + args.FileDetails.Name + $"?idChannel={id}&idFile={file.MessageId}";
         // string path = new System.Uri((Path.Combine(localdir, args.FileDetails.FilterPath.Substring(1).Replace("\\", "/"), args.FileDetails.Name)).Replace("\\", "/")).AbsoluteUri;
-        await JSRuntime.InvokeVoidAsync("openAudioPlayerModal", path, FileService.getMimeType(args.FileDetails.Name.Split(".").Last()));
+        await JSRuntime.InvokeVoidAsync("openAudioPlayerModal", path, FileService.getMimeType(args.FileDetails.Name.Split(".").Last()), args.FileDetails.Name);
     }
 
     public async Task SearchingAsync(SearchEventArgs<FileManagerDirectoryContent> args)

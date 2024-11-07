@@ -14,6 +14,7 @@ using System.Net.Http.Headers;
 using TelegramDownloader.Data;
 using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
+using TelegramDownloader.Services;
 using TL;
 
 // For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
@@ -30,8 +31,9 @@ namespace TelegramDownloader.Controllers
         IDbService _db { get; set; }
         ITelegramService _ts { get; set; }
         IFileService _fs { get; set; }
+        TransactionInfoService _tis { get; set; }
 
-        public FileController(IDbService db, ITelegramService ts, IFileService fs)
+        public FileController(IDbService db, ITelegramService ts, IFileService fs, TransactionInfoService tis)
         {
             this.basePath = Environment.CurrentDirectory;
             if (!System.IO.Directory.Exists(Path.Combine(basePath, root)))
@@ -41,6 +43,7 @@ namespace TelegramDownloader.Controllers
             _fs = fs; ;
             _ts = ts;
             _db = db;
+            _tis = tis;
             
             this.operation = new PhysicalFileProvider();
             this.operation.RootFolder(Path.Combine(basePath, root));
@@ -232,13 +235,15 @@ namespace TelegramDownloader.Controllers
             var file = _fs.ExistFileIntempFolder($"{idChannel}-{idFile}-{id}");
             if ( file == null )
             {
-                HttpResponseMessage fullResponse = new HttpResponseMessage(HttpStatusCode.OK); // Request.CreateResponse(HttpStatusCode.OK);
+                // HttpResponseMessage fullResponse = new HttpResponseMessage(HttpStatusCode.OK); // Request.CreateResponse(HttpStatusCode.OK);
                 Message idM = await _ts.getMessageFile(idChannel, Convert.ToInt32(idFile));
                 ChatMessages cm = new ChatMessages();
                 cm.message = idM;
                 file = new FileStream(System.IO.Path.Combine(FileService.TEMPDIR, "_temp", $"{idChannel}-{idFile}-{id}"), FileMode.Create, FileAccess.ReadWrite);
-
-                await _ts.DownloadFileAndReturn(cm, file);
+                DownloadModel dm = new DownloadModel();
+                dm.channelName = _ts.getChatName(Convert.ToInt64(idChannel));
+                _tis.addToDownloadList(dm);
+                await _ts.DownloadFileAndReturn(cm, file, model: dm);
                 file.Position = 0; 
             }
 
