@@ -85,7 +85,7 @@
 
                             </div>
                         </div>
-                        <div class="col-2" style="position: relative; padding-top: 5%; padding-left: 0;">
+                        <div class="col-2" style="position: relative; padding-top: 2%; padding-left: 0;">
                             <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false" @onclick="@(async () => await goTo($"/fm/{cb.chat.ID}"))">
                                 <span style="color:white" class="bi bi-folder"></span>
                             </button>
@@ -116,7 +116,7 @@
 
                             </div>
                         </div>
-                        <div class="col-2" style="position: relative; padding-top: 5%; padding-left: 0;">
+                        <div class="col-2" style="position: relative; padding-top: 2%; padding-left: 0;">
 
                             <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false" @onclick="@(async () => await goTo($"/fm/{cb.chat.ID}"))">
                                 <span style="color:white" class="bi bi-folder"></span>
@@ -181,7 +181,7 @@
 
     public async Task goTo(string route)
     {
-        uriHelper.NavigateTo(route, forceLoad: true);
+        uriHelper.NavigateTo(route, forceLoad: true, replace: false);
     }
 
     public void searchChat(Microsoft.AspNetCore.Components.ChangeEventArgs e)

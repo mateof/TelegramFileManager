@@ -581,7 +581,7 @@ namespace TelegramDownloader.Data
                             foreach (int messageId in file.ListMessageId)
                             {
                                 string filePathPart = System.IO.Path.Combine(currentFilePath, $"({i})" + fileName);
-                                await downloadFromTelegram(dbName, messageId, filePathPart);
+                                await downloadFromTelegram(dbName, messageId, filePathPart, file);
                                 splitPaths.Add(filePathPart);
                                 i++;
                             }
@@ -593,7 +593,7 @@ namespace TelegramDownloader.Data
                         }
                         else
                         {
-                            await downloadFromTelegram(dbName, (int)file.MessageId, System.IO.Path.Combine(currentFilePath, fileName));
+                            await downloadFromTelegram(dbName, (int)file.MessageId, System.IO.Path.Combine(currentFilePath, fileName), file);
                         }
                         await wt.Sleep();
                     }
@@ -709,13 +709,24 @@ namespace TelegramDownloader.Data
         {
 
         }
-        private async Task downloadFromTelegram(string dbName, int messageId, string destPath)
+        private async Task downloadFromTelegram(string dbName, int messageId, string destPath, BsonFileManagerModel file = null)
         {
-            Message m = await _ts.getMessageFile(dbName, messageId);
-            ChatMessages cm = new ChatMessages();
             DownloadModel model = new DownloadModel();
+            if (file != null)
+            {
+                model.name = file.Name;
+                model._size = file.Size;
+            }
+            model._transmitted = 0;
             model.callbacks = new Callbacks();
-            model.callbacks.callback = async () => await downloadFromTelegram(dbName, messageId, destPath);
+            model.callbacks.callback = async () => await DownloadFileNow(dbName, messageId, destPath, model);
+            _tis.addToPendingDownloadList(model);
+        }
+
+        public async Task DownloadFileNow(string dbName, int messageId, string destPath, DownloadModel model)
+        {
+            TL.Message m = await _ts.getMessageFile(dbName, messageId);
+            ChatMessages cm = new ChatMessages();
             cm.message = m;
 
             cm.user = null;
@@ -725,7 +736,7 @@ namespace TelegramDownloader.Data
                 cm.isDocument = true;
             }
             using (FileStream fs = new FileStream(destPath, FileMode.Create))
-                await _ts.DownloadFileAndReturn(cm, ms: fs,model: model);
+                await _ts.DownloadFileAndReturn(cm, ms: fs, model: model);
         }
 
         public async Task downloadFileToServer(string dbName, string path, string destPath)
@@ -735,7 +746,7 @@ namespace TelegramDownloader.Data
                 BsonFileManagerModel file = _db.getFileByPathSync(dbName, path);
                 if (file == null)
                     throw new Exception($"{path} does not exist");
-                Message m = await _ts.getMessageFile(dbName, (int)file.MessageId);
+                TL.Message m = await _ts.getMessageFile(dbName, (int)file.MessageId);
                 ChatMessages cm = new ChatMessages();
                 cm.message = m;
 

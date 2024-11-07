@@ -60,6 +60,7 @@ namespace TelegramDownloader.Models
         public bool ShouldNotify { get; set; } = false;
         public int TimeSleepBetweenTransactions { get; set; } = 2000;
         public int SplitSize { get; set; } = 0;
+        public int MaxSimultaneousDownloads = 1;
         public bool ShouldShowLogInTerminal { get; set; } = false;
         
     }

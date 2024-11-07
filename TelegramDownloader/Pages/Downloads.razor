@@ -9,19 +9,37 @@
 <Tabs>
     <Tab Title="Pending Tasks" IsActive="true">
         <Content>
-            <button class="btn btn-success" @onclick="clearTasks" data-bs-toggle="tooltip" data-bs-placement="top" title="Clear completed and error"><i class="bi bi-trash"></i> Clear</button>
+            <div style="padding: 1em">
+                <button class="btn btn-success" @onclick="clearTasks" data-bs-toggle="tooltip" data-bs-placement="top" title="Clear completed and error"><i class="bi bi-trash"></i> Clear</button>
+            </div>
+            
             <TelegramDownloader.Pages.Partials.TasksTable></TelegramDownloader.Pages.Partials.TasksTable>
         </Content>
     </Tab>
     <Tab Title="Downloads">
         <Content>
-            <button class="btn btn-success" @onclick="clearDownloads" data-bs-toggle="tooltip" data-bs-placement="top" title="Clear completed and error"><i class="bi bi-trash"></i> Clear</button>
+            <div style="padding: 1em">
+                <div class="btn-group" role="group" aria-label="Basic outlined example">
+                    <button class="btn btn-success" @onclick="clearDownloads" data-bs-toggle="tooltip" data-bs-placement="top" title="Clear completed and error"><i class="bi bi-trash"></i> Clear</button>
+                    @if (TransactionInfoService.isPauseDownloads)
+                    {
+                        <button type="button" @onclick="() => tis.PlayDownloads()" class="btn btn-outline-primary"><i class="bi bi-play"></i></button>
+                    } else
+                    {
+                        <button type="button" @onclick="() => tis.PauseDownloads()" class="btn btn-outline-primary"><i class="bi bi-pause"></i></button>
+                    }
+                    <button type="button" @onclick="() => tis.StopDownloads()" class="btn btn-outline-primary"><i class="bi bi-stop"></i></button>
+                </div>
+                
+            </div>
             <TelegramDownloader.Pages.Partials.DownloadsTable></TelegramDownloader.Pages.Partials.DownloadsTable>
         </Content>
     </Tab>
     <Tab Title="Uploads">
         <Content>
-            <button class="btn btn-success" @onclick="clearUploads" data-bs-toggle="tooltip" data-bs-placement="top" title="Clear completed and error"><i class="bi bi-trash"></i> Clear</button>
+            <div style="padding: 1em">
+                <button class="btn btn-success" @onclick="clearUploads" data-bs-toggle="tooltip" data-bs-placement="top" title="Clear completed and error"><i class="bi bi-trash"></i> Clear</button>
+            </div>
             <TelegramDownloader.Pages.Partials.UploadsTable></TelegramDownloader.Pages.Partials.UploadsTable>
         </Content>
     </Tab>
@@ -29,29 +47,25 @@
 
 
 @code {
-    public static List<DownloadModel> ldm = new List<DownloadModel>();
-    public static List<UploadModel> lum = new List<UploadModel>();
-    public static List<InfoDownloadTaksModel> lpt = new List<InfoDownloadTaksModel>();
-    BlazorBootstrap.Grid<UploadModel> grid = default!;
-
+    TransactionInfoService ts = new TransactionInfoService();
     protected override async Task OnInitializedAsync()
     {
     }
 
     
-    void clearUploads()
+    async Task clearUploads()
     {
-        TransactionInfoService.clearUploadCompleted();
+        ts.clearUploadCompleted();
     }
 
-    void clearDownloads()
+    async Task clearDownloads()
     {
-        TransactionInfoService.clearDownloadCompleted();
+        ts.clearDownloadCompleted();
     }
 
-    void clearTasks()
+    async Task clearTasks()
     {
-        TransactionInfoService.clearTasksCompleted();
+        ts.clearTasksCompleted();
     }
 
     

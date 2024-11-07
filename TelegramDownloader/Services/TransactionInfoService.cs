@@ -6,14 +6,80 @@ namespace TelegramDownloader.Services
 {
     public class TransactionInfoService
     {
+        public static bool isPauseDownloads = false;
         public static event EventHandler<EventArgs> EventChanged;
         public static List<DownloadModel> downloadModels = new List<DownloadModel>();
+        public static List<DownloadModel> pendingDownloadModels = new List<DownloadModel>();
         public static List<UploadModel> uploadModels = new List<UploadModel>();
         public static List<InfoDownloadTaksModel> infoDownloadTaksModel = new List<InfoDownloadTaksModel>();
 
+        private static Mutex PendingDownloadMutex = new Mutex();
+
         public void addToDownloadList(DownloadModel downloadModel)
         {
+            PendingDownloadMutex.WaitOne(10000);
             downloadModels.Insert(0, downloadModel);
+            PendingDownloadMutex.ReleaseMutex();
+            EventChanged?.Invoke(this, new EventArgs());
+        }
+
+        public void addToPendingDownloadList(DownloadModel downloadModel, bool atFirst = false, bool chekDownloads = true)
+        {
+            PendingDownloadMutex.WaitOne(10000);
+            if (atFirst)
+                pendingDownloadModels.Insert(0, downloadModel);
+            else
+                pendingDownloadModels.Add(downloadModel);
+            PendingDownloadMutex.ReleaseMutex();
+            if (chekDownloads)
+                CheckPendingDownloads();
+        }
+
+        public void PauseDownloads()
+        {
+            PendingDownloadMutex.WaitOne(10000);
+            isPauseDownloads = true;
+            foreach (DownloadModel dm in downloadModels.Where(x => x.state == StateTask.Working).ToList())
+            {
+                pendingDownloadModels.Insert(0, dm);
+                dm.Pause();
+            }
+            PendingDownloadMutex.ReleaseMutex();
+        }
+
+        public void PlayDownloads()
+        {
+            PendingDownloadMutex.WaitOne(10000);
+            isPauseDownloads = false;
+            PendingDownloadMutex.ReleaseMutex();
+            CheckPendingDownloads();
+        }
+
+        public void StopDownloads()
+        {
+            PendingDownloadMutex.WaitOne(10000);
+            isPauseDownloads = true;
+            foreach (DownloadModel dm in downloadModels.Where(x => x.state == StateTask.Working).ToList())
+            {
+                dm.Pause();
+            }
+            pendingDownloadModels.Clear();
+            PendingDownloadMutex.ReleaseMutex();
+        }
+
+        public async Task CheckPendingDownloads()
+        {
+            PendingDownloadMutex.WaitOne();
+            while (downloadModels.Where(x => x.state ==  StateTask.Working).Count() < GeneralConfigStatic.config.MaxSimultaneousDownloads
+                && pendingDownloadModels.Count() > 0
+                && !isPauseDownloads)
+            {
+                DownloadModel dm = pendingDownloadModels.FirstOrDefault();
+                pendingDownloadModels.Remove(dm);
+                downloadModels.Insert(0, dm);
+                dm.RetryCallback();
+            }
+            PendingDownloadMutex.ReleaseMutex();
             EventChanged?.Invoke(this, new EventArgs());
         }
 
@@ -62,7 +128,9 @@ namespace TelegramDownloader.Services
 
         public void deleteDownloadInList(DownloadModel downloadModel)
         {
-            downloadModels.Remove(downloadModel);
+            PendingDownloadMutex.WaitOne();
+                downloadModels.Remove(downloadModel);
+            PendingDownloadMutex.ReleaseMutex();
             EventChanged?.Invoke(this, new EventArgs());
         }
 
@@ -78,19 +146,24 @@ namespace TelegramDownloader.Services
             return infoDownloadTaksModel.Count();
         }
 
-        public static void clearUploadCompleted()
+        public void clearUploadCompleted()
         {
             uploadModels.RemoveAll(x => x.state != StateTask.Working);
+            EventChanged?.Invoke(this, new EventArgs());
         }
 
-        public static void clearDownloadCompleted()
+        public void clearDownloadCompleted()
         {
+            PendingDownloadMutex.WaitOne();
             downloadModels.RemoveAll(x => x.state != StateTask.Working);
+            PendingDownloadMutex.ReleaseMutex();
+            EventChanged?.Invoke(this, new EventArgs());
         }
 
-        public static void clearTasksCompleted()
+        public void clearTasksCompleted()
         {
             infoDownloadTaksModel.RemoveAll(x => x.state != StateTask.Working);
+            EventChanged?.Invoke(this, new EventArgs());
         }
 
 
