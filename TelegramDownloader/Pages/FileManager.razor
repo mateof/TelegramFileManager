@@ -56,6 +56,7 @@
         ItemsUploaded="ItemsUploadedAsync"></FileManagerEvents>
             <FileManagerUploadSettings MaxFileSize="@(long.MaxValue)" AutoUpload="true"></FileManagerUploadSettings>
             <FileManagerToolbarSettings ToolbarItems="@Items"></FileManagerToolbarSettings>
+            <FileManagerSearchSettings FilterDelay="1200"></FileManagerSearchSettings>
         </SfFileManager>
 <TelegramDownloader.Pages.Modals.DowloadFromTelegram @ref="Modal"></TelegramDownloader.Pages.Modals.DowloadFromTelegram>
 <TelegramDownloader.Pages.Modals.ImportDataModal id="@id" @ref="ImportModal"></TelegramDownloader.Pages.Modals.ImportDataModal>
@@ -88,7 +89,7 @@
         new ToolBarItemModel() { Name = "Rename" },
         new ToolBarItemModel() { Name = "SortBy" },
         new ToolBarItemModel() { Name = "Refresh" },
-        new ToolBarItemModel() { Name = "DownloadServer", Text="Download To Server", TooltipText="download To server", PrefixIcon="e-icons e-download" },
+        new ToolBarItemModel() { Name = "DownloadServer", Text="Download To Local", TooltipText="Download To local", PrefixIcon="e-icons e-download" },
         new ToolBarItemModel() { Name = "ShowApp", Text="Show in APP", TooltipText="Show in Telegram APP", PrefixIcon="bi bi-telegram" },
         new ToolBarItemModel() { Name = "Selection" },
         new ToolBarItemModel() { Name = "View" },
@@ -211,7 +212,7 @@
 
     public async Task toolBarClicked(ToolbarClickEventArgs<FileManagerDirectoryContent> args)
     {
-        if (args.Item.Text == "Download To Server")
+        if (args.Item.Text == "Download To Local")
         {
             Modal.id = id;
             Modal.filePath = args.FileDetails.FirstOrDefault().IsFile ? args.FileDetails.FirstOrDefault().FilterPath.Replace("\\", "/") : args.FileDetails.FirstOrDefault().FilterPath.Replace("\\", "/") + args.FileDetails.FirstOrDefault().Name + "/";
