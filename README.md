@@ -9,6 +9,12 @@ You will be able to store files of unlimited size.
 [Wiki](https://github.com/mateof/TelegramFileManager/wiki)
 
 ## Installation
+### Previous steps
+1. Obtain App_Hash and App_Id in [API development tools](https://my.telegram.org/apps). [How to](https://core.telegram.org/api/obtaining_api_id)
+2. Rename file `Configuration/config.example.json` as `Configuration/config.json` and modify it:
+  - "mongo_connection_string": "mongodb://\<username>:\<password>@\<server>:\<port>".
+  - Complete Api_hash and Api_id.
+
 ### PC
 - Install [MongoDB](https://www.mongodb.com/try/download/community)
 - Install [.Net SDK](https://dotnet.microsoft.com/en-us/download)
@@ -76,11 +82,16 @@ services:
 > dotnet publish -c Release --output ./MyTargetFolder .\TelegramDownloader.csproj
 
 ## Usage
-1. Obtain App_Hash and App_Id in [API development tools](https://my.telegram.org/apps). [How to](https://core.telegram.org/api/obtaining_api_id)
-2. Rename file `Configuration/config.example.json` as `Configuration/config.json` and modify it:
-  - "mongo_connection_string": "mongodb://\<username>:\<password>@\<server>:\<port>".
-  - Complete Api_hash and Api_id.
 
+- Create a private or public channel on Telegram.
+- The new channel will appear on the left side panel.
+- Click on the folder icon and you will access the file manager.
+- Go to the tab called `local`.
+- Select the files or folders you want to upload to Telegram.
+- Click on the `Upload Telegram` option in the menu.
+- You can see the upload progress by clicking on the three dots located in the upper right position, which will display the right side panel. Then click on the `Tasks` option.
+- When the upload tasks are finished, you will be able to see the uploaded files in the file manager, in the `Remote` tab.
+- When you want, you can download the files again to a location on your local computer, selecting the files or folders and clicking the `Download to Local` button.
 
 ## Mentions
 
