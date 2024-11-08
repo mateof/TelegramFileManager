@@ -14,7 +14,8 @@ namespace TelegramDownloader.Models
     public class InfoDownloadTaksModel
     {
         public event EventHandler<InfoTaskEventArgs> EventChanged;
-        public StateTask state { get; set; } = StateTask.Working;
+        public StateTask state { get; set; } = StateTask.Pending;
+        public DateTime creationDate { get; set; } = DateTime.Now;
         public string id {  get; set; }
         public bool isUpload {  get; set; }
         public List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files { get; set; }
@@ -23,6 +24,7 @@ namespace TelegramDownloader.Models
         public string toPath { get; set; }
         public int total { get; set; }
         public int executed { get; set; }
+        public int currentUpload { get; set; } = 0;
         public long totalSize { get; set; }
         public long executedSize { get; set; }
         public Thread thread { get; set; }
@@ -39,6 +41,15 @@ namespace TelegramDownloader.Models
             executed += 1;
             progress = Convert.ToInt32(executed * 100 / total);
             executedSize += size;
+            EventChanged?.Invoke(this, new InfoTaskEventArgs());
+
+        }
+
+        public async void markAsCompleted()
+        {
+            state = StateTask.Completed;
+            TransactionInfoService tis = new TransactionInfoService();
+            tis.CheckPendingUploadInfoTasks();
             EventChanged?.Invoke(this, new InfoTaskEventArgs());
 
         }
@@ -67,26 +78,37 @@ namespace TelegramDownloader.Models
             currentDownloads.Add(dm);
         }
 
+        public void Retry()
+        {
+            state = StateTask.Pending;
+            currentUpload = 0;
+            TransactionInfoService tis = new TransactionInfoService();
+            tis.CheckPendingUploadInfoTasks();
+        }
+
         public void RetryCallback()
         {
+            state = StateTask.Working;
+            currentUpload = 0;
             callbacks.callback.Invoke();
         }
 
         public void cancelTask()
         {
+            state = StateTask.Canceled;
             if (state == StateTask.Canceled)
             {
-                foreach(DownloadModel dm in currentDownloads)
+                foreach(DownloadModel dm in currentDownloads.Where(x => x.state == StateTask.Working))
                 {
-                    dm.state = StateTask.Canceled;
+                    dm.Cancel();
                 }
-                foreach(UploadModel um in currentUploads)
+                foreach(UploadModel um in currentUploads.Where(x => x.state == StateTask.Working))
                 {
-                    um.state = StateTask.Canceled;
+                    um.Cancel();
                 }
             }
-                
-
+            TransactionInfoService tis = new TransactionInfoService();
+            tis.CheckPendingUploadInfoTasks();
         }
 
         private void deleteNotWorkingTasks()
@@ -217,6 +239,12 @@ namespace TelegramDownloader.Models
             EventChanged?.Invoke(this, new UploadEventArgs());
         }
 
+        public void Cancel()
+        {
+            state = StateTask.Canceled;
+            EventChanged?.Invoke(this, new UploadEventArgs());
+        }
+
         public void InvokeEvent(UploadEventArgs uploadEventArgs)
         {
             EventChanged?.Invoke(this, uploadEventArgs);
@@ -336,6 +364,8 @@ namespace TelegramDownloader.Models
     {
         [Description("Error")]
         Error,
+        [Description("pending")]
+        Pending,
         [Description("Canceled")]
         Canceled,
         [Description("Paused")]

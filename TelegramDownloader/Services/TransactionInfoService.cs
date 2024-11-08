@@ -14,6 +14,7 @@ namespace TelegramDownloader.Services
         public static List<InfoDownloadTaksModel> infoDownloadTaksModel = new List<InfoDownloadTaksModel>();
 
         private static Mutex PendingDownloadMutex = new Mutex();
+        private static Mutex PendingUploadInfoTaskMutex = new Mutex();
 
         public void addToDownloadList(DownloadModel downloadModel)
         {
@@ -83,6 +84,20 @@ namespace TelegramDownloader.Services
             EventChanged?.Invoke(this, new EventArgs());
         }
 
+        public async Task CheckPendingUploadInfoTasks()
+        {
+            PendingUploadInfoTaskMutex.WaitOne();
+            while (infoDownloadTaksModel.Where(x => x.state == StateTask.Working).Count() < 1
+                && infoDownloadTaksModel.Where(x => x.state == StateTask.Pending).Count() > 0)
+            {
+                InfoDownloadTaksModel idt = infoDownloadTaksModel.Where(x => x.state == StateTask.Pending).OrderBy(x => x.creationDate).FirstOrDefault();
+                idt.state = StateTask.Working;
+                idt.RetryCallback();
+            }
+            PendingUploadInfoTaskMutex.ReleaseMutex();
+            EventChanged?.Invoke(this, new EventArgs());
+        }
+
         public void addToUploadList(UploadModel uploadModel)
         {
             uploadModels.Insert(0, uploadModel);
@@ -97,8 +112,10 @@ namespace TelegramDownloader.Services
 
         public void addToInfoDownloadTaskList(InfoDownloadTaksModel infoDownloadModel)
         {
-            infoDownloadTaksModel.Insert(0, infoDownloadModel);
-            EventChanged?.Invoke(this, new EventArgs());
+            PendingUploadInfoTaskMutex.WaitOne();
+            infoDownloadTaksModel.Add(infoDownloadModel);
+            PendingUploadInfoTaskMutex.ReleaseMutex();
+            CheckPendingUploadInfoTasks();
         }
 
 
@@ -134,11 +151,19 @@ namespace TelegramDownloader.Services
             EventChanged?.Invoke(this, new EventArgs());
         }
 
+        public void deleteInfoDownloadTaskFromList(InfoDownloadTaksModel idt)
+        {
+            PendingUploadInfoTaskMutex.WaitOne();
+            infoDownloadTaksModel.Remove(idt);
+            PendingUploadInfoTaskMutex.ReleaseMutex();
+            EventChanged?.Invoke(this, new EventArgs());
+        }
+
         public List<InfoDownloadTaksModel> getInfoDownloadTaksModel(int pageNumber, int pageSize)
         {
             if (infoDownloadTaksModel.Count() == 0 || infoDownloadTaksModel.Count() < (pageNumber) * pageSize)
-                return infoDownloadTaksModel;
-            return infoDownloadTaksModel.Skip(pageNumber * pageSize).Take(pageSize).ToList();
+                return infoDownloadTaksModel.OrderBy(x => x.creationDate).ToList();
+            return infoDownloadTaksModel.OrderBy(x => x.creationDate).Skip(pageNumber * pageSize).Take(pageSize).ToList();
         }
 
         public int getTotalTasks()

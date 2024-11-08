@@ -44,6 +44,15 @@
             <td>
                 <div class="btn-group" role="group">
                     <button class="btn btn-info" @onclick="() => retry(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="retry task"><i class="bi bi-arrow-clockwise"></i></button>
+                    <button class="btn btn-danger" @onclick="() => delete(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="retry task"><i class="bi bi-trash"></i></button>
+                </div>
+            </td>
+        }
+        @if(context.state == StateTask.Completed)
+        {
+            <td>
+                <div class="btn-group" role="group">
+                    <button class="btn btn-danger" @onclick="() => delete(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="retry task"><i class="bi bi-trash"></i></button>
                 </div>
             </td>
         }
@@ -98,16 +107,19 @@
 
     private async Task cancel(InfoDownloadTaksModel idt)
     {
-        //um.thread.Interrupt();
-        idt.state = StateTask.Canceled;
         idt.cancelTask();
         await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task delete(InfoDownloadTaksModel idt)
+    {
+        tis.deleteInfoDownloadTaskFromList(idt);
     }
 
     private async Task retry(InfoDownloadTaksModel idt)
     {
         //um.thread.Interrupt();
-        idt.RetryCallback();
+        idt.Retry();
         await InvokeAsync(StateHasChanged);
     }
 

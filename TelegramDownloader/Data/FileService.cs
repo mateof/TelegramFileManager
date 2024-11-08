@@ -921,6 +921,45 @@ namespace TelegramDownloader.Data
         //    }
         //}
 
+        public async Task AddUploadFileFromServer(string dbName, string currentPath, List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files, InfoDownloadTaksModel idt = null) // ItemsUploadedEventArgs<FileManagerDirectoryContent> args)
+        {
+            idt = new InfoDownloadTaksModel();
+            idt.id = Guid.NewGuid().ToString();
+            idt.total = 0;
+            idt.totalSize = 0;
+            idt.isUpload = true;
+            idt.toPath = currentPath;
+            idt.executed = 0;
+            idt.executedSize = 0;
+            idt.isUpload = true;
+            idt.files = files;
+            
+            foreach (var file in files)
+            {
+                var filePath = file.IsFile ? file.FilterPath.Replace("\\", "/") + file.Name : file.FilterPath.Replace("\\", "/") + file.Name + "/";
+                string currentFilePath = System.IO.Path.Combine(LOCALDIR, filePath[0] == '/' ? filePath.Substring(1) : filePath).Replace("\\", "/");
+
+                var fileInfo = new System.IO.FileInfo(currentFilePath);
+                if (!file.IsFile)
+                {
+                    var allFiles = new DirectoryInfo(currentFilePath).GetFiles("*.*", SearchOption.AllDirectories).Where(x => !x.Attributes.HasFlag(FileAttributes.Hidden));
+                    idt.total = allFiles.Count();
+                    idt.totalSize += allFiles.Sum(x => x.Length);
+                }
+                else
+                {
+                    idt.total++;
+                    idt.totalSize += fileInfo.Length;
+                }
+
+            }
+            idt.callbacks = new Callbacks();
+            idt.callbacks.callback = async () => await UploadFileFromServer(dbName, currentPath, files, idt);
+            TransactionInfoService ti = new TransactionInfoService();
+            ti.addToInfoDownloadTaskList(idt);
+            ti.CheckPendingUploadInfoTasks();
+        }
+
 
         public async Task UploadFileFromServer(string dbName, string currentPath, List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files, InfoDownloadTaksModel dm = null) // ItemsUploadedEventArgs<FileManagerDirectoryContent> args)
         {
@@ -931,47 +970,48 @@ namespace TelegramDownloader.Data
 
             try
             {
-                if (dm == null)
-                {
+                //if (dm == null)
+                //{
                     
-                    idt = new InfoDownloadTaksModel();
-                    idt.id = Guid.NewGuid().ToString();
-                    idt.total = 0;
-                    idt.totalSize = 0;
-                    idt.isUpload = true;
-                    idt.toPath = currentPath;
-                    idt.executed = 0;
-                    idt.executedSize = 0;
-                    idt.isUpload = true;
-                    idt.files = files;
-                    idt.callbacks = new Callbacks();
-                    idt.callbacks.callback = async () => await UploadFileFromServer(dbName, currentPath, files, dm);
-                    foreach (var file in files)
-                    {
-                        var filePath = file.IsFile ? file.FilterPath.Replace("\\", "/") + file.Name : file.FilterPath.Replace("\\", "/") + file.Name + "/";
-                        string currentFilePath = System.IO.Path.Combine(LOCALDIR, filePath[0] == '/' ? filePath.Substring(1) : filePath).Replace("\\", "/");
+                //    idt = new InfoDownloadTaksModel();
+                //    idt.id = Guid.NewGuid().ToString();
+                //    idt.total = 0;
+                //    idt.totalSize = 0;
+                //    idt.isUpload = true;
+                //    idt.toPath = currentPath;
+                //    idt.executed = 0;
+                //    idt.executedSize = 0;
+                //    idt.isUpload = true;
+                //    idt.files = files;
+                //    idt.callbacks = new Callbacks();
+                //    idt.callbacks.callback = async () => await UploadFileFromServer(dbName, currentPath, files);
+                //    foreach (var file in files)
+                //    {
+                //        var filePath = file.IsFile ? file.FilterPath.Replace("\\", "/") + file.Name : file.FilterPath.Replace("\\", "/") + file.Name + "/";
+                //        string currentFilePath = System.IO.Path.Combine(LOCALDIR, filePath[0] == '/' ? filePath.Substring(1) : filePath).Replace("\\", "/");
                         
-                        var fileInfo = new System.IO.FileInfo(currentFilePath);
-                        if (!file.IsFile)
-                        {
-                            var allFiles = new DirectoryInfo(currentFilePath).GetFiles("*.*", SearchOption.AllDirectories).Where(x => !x.Attributes.HasFlag(FileAttributes.Hidden));
-                            idt.total = allFiles.Count();
-                            idt.totalSize += allFiles.Sum(x => x.Length);
-                        } else
-                        {
-                            idt.total++;
-                            idt.totalSize += fileInfo.Length;
-                        }
+                //        var fileInfo = new System.IO.FileInfo(currentFilePath);
+                //        if (!file.IsFile)
+                //        {
+                //            var allFiles = new DirectoryInfo(currentFilePath).GetFiles("*.*", SearchOption.AllDirectories).Where(x => !x.Attributes.HasFlag(FileAttributes.Hidden));
+                //            idt.total = allFiles.Count();
+                //            idt.totalSize += allFiles.Sum(x => x.Length);
+                //        } else
+                //        {
+                //            idt.total++;
+                //            idt.totalSize += fileInfo.Length;
+                //        }
 
-                    }
-                    TransactionInfoService ti = new TransactionInfoService();
-                    ti.addToInfoDownloadTaskList(idt);
+                //    }
+                //    TransactionInfoService ti = new TransactionInfoService();
+                //    ti.addToInfoDownloadTaskList(idt);
 
 
-                }
+                //}
                 nm.sendEvent(new Notification($"Uploading files from folder {currentPath} to Telegram", "Telegram Upload", NotificationTypes.Info));
                 foreach (var file in files)
                 {
+
                     WaitingTime wt = new WaitingTime();
                     var folderPath = System.IO.Path.Combine(LOCALDIR, file.IsFile ? file.FilterPath.Replace("\\", "/").Substring(1) : file.FilterPath.Replace("\\", "/").Substring(1));
                     var filePath = file.IsFile ? file.FilterPath.Replace("\\", "/") + file.Name : file.FilterPath.Replace("\\", "/") + file.Name + "/";
@@ -1000,6 +1040,12 @@ namespace TelegramDownloader.Data
                     BsonFileManagerModel model = new BsonFileManagerModel();
                     if (file.IsFile)
                     {
+                        if (idt.executed > idt.currentUpload)
+                        {
+                            idt.currentUpload++;
+                            continue;
+                        }
+                        idt.currentUpload++;
                         if (file.Size == 0 || (await _db.getFileByPath(dbName, System.IO.Path.Combine(currentPath, file.Name))) != null)
                         {
                             if (idt != null) idt.AddOne(file.Size);
@@ -1162,10 +1208,9 @@ namespace TelegramDownloader.Data
                     GC.Collect();
                 }
 
-                if (dm == null)
+                if (idt.files == files)
                 {
-                    idt.state = StateTask.Completed;
-                    idt.change();
+                    idt.markAsCompleted();
                 }
 
                 nm.sendEvent(new Notification($"Upload files completed in {currentPath}", "Telegram Upload", NotificationTypes.Success));

@@ -79,10 +79,9 @@
     private async Task Submit()
     {
         // ts.
-        fs.UploadFileFromServer(id, ddtree.selectedNode == null ? null : ddtree.selectedNode.FirstOrDefault(), fileList);
+        fs.AddUploadFileFromServer(id, ddtree.selectedNode == null ? null : ddtree.selectedNode.FirstOrDefault(), fileList);
         Close();
         // ts.DownloadFile(mc, model?.newName == "" ? null : model.newName, ddtree.selectedNode == null ? null : ddtree.selectedNode.FirstOrDefault());
-        Close();
         // Model.type = await ts.checkAuth(Model.value, Model.type == "phone");
         // Model.value = "";
         // StateHasChanged();

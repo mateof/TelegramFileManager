@@ -28,5 +28,6 @@ namespace TelegramDownloader.Data
         Task<FileManagerResponse<FileManagerDirectoryContent>> SearchAsync(string dbName, string path, string searchText);
         Task UploadFile(string dbName, string currentPath, UploadFiles file);
         Task UploadFileFromServer(string dbName, string currentPath, List<FileManagerDirectoryContent> files, InfoDownloadTaksModel dm = null);
+        Task AddUploadFileFromServer(string dbName, string currentPath, List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files, InfoDownloadTaksModel idt = null);
     }
 }
