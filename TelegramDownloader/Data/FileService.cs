@@ -943,7 +943,7 @@ namespace TelegramDownloader.Data
                 if (!file.IsFile)
                 {
                     var allFiles = new DirectoryInfo(currentFilePath).GetFiles("*.*", SearchOption.AllDirectories).Where(x => !x.Attributes.HasFlag(FileAttributes.Hidden));
-                    idt.total = allFiles.Count();
+                    idt.total += allFiles.Count();
                     idt.totalSize += allFiles.Sum(x => x.Length);
                 }
                 else
