@@ -27,6 +27,16 @@ namespace TelegramDownloader.Models
 
         }
 
+        public static void AddFavouriteChannel(long id)
+        {
+            config.FavouriteChannels.Add(id);
+        }
+
+        public static void DeleteFavouriteChannel(long id)
+        {
+            config.FavouriteChannels.Remove(id);
+        }
+
         public static void loadDbConfig()
         {
             tlconfig = LoadJson<TLConfig>("./Configuration/config.json");
@@ -62,6 +72,7 @@ namespace TelegramDownloader.Models
         public int SplitSize { get; set; } = 0;
         public int MaxSimultaneousDownloads = 1;
         public bool ShouldShowLogInTerminal { get; set; } = false;
+        public List<long> FavouriteChannels { get; set; } = new List<long>();
         
     }
 

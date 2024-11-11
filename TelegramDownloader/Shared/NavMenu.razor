@@ -57,9 +57,9 @@
             </div>
             <nav>
                 <div class="nav nav-tabs" id="nav-tab" role="tablist">
-                    <button class="nav-link navclass active" id="nav-mine-tab" data-bs-toggle="tab" data-bs-target="#nav-mine" type="button" role="tab" aria-controls="nav-mine" aria-selected="true">Mine</button>
-                    <button class="nav-link navclass" id="nav-fav-tab" data-bs-toggle="tab" data-bs-target="#nav-fav" type="button" role="tab" aria-controls="nav-fav" aria-selected="false">Fav</button>
-                    <button class="nav-link navclass" id="nav-all-tab" data-bs-toggle="tab" data-bs-target="#nav-all" type="button" role="tab" aria-controls="nav-all" aria-selected="false">All</button>
+                    <button class="nav-link navclass active" id="nav-mine-tab" data-bs-toggle="tab" data-bs-target="#nav-mine" type="button" role="tab" aria-controls="nav-mine" aria-selected="true"><i class="bi bi-chat-square-heart"></i> Mine</button>
+                    <button class="nav-link navclass" id="nav-fav-tab" data-bs-toggle="tab" data-bs-target="#nav-fav" type="button" role="tab" aria-controls="nav-fav" aria-selected="false"><i class="bi bi-bookmark-star"></i> Fav</button>
+                    <button class="nav-link navclass" id="nav-all-tab" data-bs-toggle="tab" data-bs-target="#nav-all" type="button" role="tab" aria-controls="nav-all" aria-selected="false"><i class="bi bi-chat-square-text"></i> All</button>
                 </div>
             </nav>
         </div>
@@ -70,7 +70,14 @@
                 {
                     <div class="row">
                         <div class="col-1" style="align-content: space-around; padding-left: 5%; ">
-                            <span style="color:white; cursor: pointer;" class="bi bi-star" @onclick="@setStar"></span>
+                            @if (isInFavourite(cb.chat.ID))
+                            {
+                                <span style="color:white; cursor: pointer;" class="bi bi-star-fill" @onclick="async () => await removeStar(cb.chat.ID)"></span>
+                            }
+                            else
+                            {
+                                <span style="color:white; cursor: pointer;" class="bi bi-star" @onclick="async () => await setStar(cb.chat.ID)"></span>
+                            }
                         </div>
                         <div class="col-9">
 
@@ -93,13 +100,47 @@
                     </div>
                 }
             </div>
-            <div class="tab-pane fade" id="nav-fav" role="tabpanel" aria-labelledby="nav-fav-tab">...</div>
+            <div class="tab-pane fade" id="nav-fav" role="tabpanel" aria-labelledby="nav-fav-tab">
+                @foreach (ChatViewBase cb in favouriteChats)
+                {
+                    <div class="row">
+                        <div class="col-1" style="align-content: space-around; padding-left: 5%; ">
+                            <span style="color:white; cursor: pointer;" class="bi bi-star-fill" @onclick="async () => await removeStar(cb.chat.ID)"></span>
+                        </div>
+                        <div class="col-9">
+
+                            <div class="nav-item" style="padding:inherit;" @onclick="ToggleNavMenu">
+                                <NavLink class="nav-link ellipsis" href="@($"/fetchdata/{cb.chat.ID}")" Match="NavLinkMatch.All">
+                                    <span aria-hidden="true">
+
+
+                                    </span>
+                                    <span class="text-truncate">@cb.chat.Title</span>
+                                </NavLink>
+
+                            </div>
+                        </div>
+                        <div class="col-2" style="position: relative; padding-top: 2%; padding-left: 0;">
+                            <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false" @onclick="@(async () => await goTo($"/fm/{cb.chat.ID}"))">
+                                <span style="color:white" class="bi bi-folder"></span>
+                            </button>
+                        </div>
+                    </div>
+                }
+            </div>
             <div class="tab-pane fade" id="nav-all" role="tabpanel" aria-labelledby="nav-all-tab">
                 @foreach (ChatViewBase cb in sChats)
                 {
                     <div class="row">
                         <div class="col-1" style="align-content: space-around; padding-left: 5%; ">
-                            <span style="color:white; cursor: pointer;" class="bi bi-star" @onclick="@setStar"></span>
+                            @if(isInFavourite(cb.chat.ID)) 
+                            {
+                                <span style="color:white; cursor: pointer;" class="bi bi-star-fill" @onclick="async () => await removeStar(cb.chat.ID)"></span>
+                            } else
+                            {
+                                <span style="color:white; cursor: pointer;" class="bi bi-star" @onclick="async () => await setStar(cb.chat.ID)"></span>
+                            }
+                            
                         </div>
                         <div class="col-9">
                             <div class="nav-item" style="padding:inherit;" @onclick="ToggleNavMenu">
@@ -140,6 +181,7 @@
     private List<ChatViewBase> sChats = new List<ChatViewBase>();
     private List<ChatViewBase> allChats = new List<ChatViewBase>();
     private List<ChatViewBase> mineChats = new List<ChatViewBase>();
+    private List<ChatViewBase> favouriteChats = new List<ChatViewBase>();
     private string searchString = "";
     private bool collapseNavMenu = true;
     private bool showSearch = false;
@@ -184,16 +226,30 @@
         uriHelper.NavigateTo(route, forceLoad: true, replace: false);
     }
 
-    public void searchChat(Microsoft.AspNetCore.Components.ChangeEventArgs e)
+    public async Task searchChat(Microsoft.AspNetCore.Components.ChangeEventArgs e)
     {
         searchString = e.Value?.ToString() ?? "";
-        filterChats();
+        await OnInitializedAsync();
         StateHasChanged();
     }
 
-    public async Task setStar()
+    private async Task setStar(long id)
     {
-        Console.WriteLine("start set");
+        await ts.AddFavouriteChannel(id);
+        await OnInitializedAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task removeStar(long id)
+    {
+        await ts.RemoveFavouriteChannel(id);
+        await OnInitializedAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private bool isInFavourite(long id)
+    {
+        return GeneralConfigStatic.config.FavouriteChannels.Contains(id);
     }
 
     private async Task showPlayer()
@@ -220,6 +276,7 @@
     {
         allChats = await ts.getAllSavedChats();
         filterChats();
+        favouriteChats = (await ts.GetFouriteChannels(false)).Where(x => sChats.Select(x => x.chat.ID).ToList().Contains(x.chat.ID)).ToList();
         StateHasChanged();
     }
 

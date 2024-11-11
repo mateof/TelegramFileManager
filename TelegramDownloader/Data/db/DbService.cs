@@ -10,13 +10,13 @@ namespace TelegramDownloader.Data.db
     public class DbService : IDbService
     {
         private MongoClient client { get; set; }
-        private ITelegramService _ts { get; set; }
         private IMongoDatabase currentDatabase { get; set; }
         private string dbName { get; set; }
 
-        public DbService(ITelegramService ts)
+        private const string CONFIG_DB_NAME = "TCCONFIG";
+
+        public DbService()
         {
-            _ts = ts;
             client = new MongoClient(GeneralConfigStatic.tlconfig?.mongo_connection_string ?? Environment.GetEnvironmentVariable("connectionString"));
             currentDatabase = getDatabase("default");
             this.dbName = "default";
@@ -64,12 +64,12 @@ namespace TelegramDownloader.Data.db
 
         public async Task SaveConfig(GeneralConfig gc)
         {
-            await getDatabase("TCCONFIG").GetCollection<GeneralConfig>("config").ReplaceOneAsync(new BsonDocument("_id", gc.type), options: new ReplaceOptions { IsUpsert = true }, replacement: gc);
+            await getDatabase(CONFIG_DB_NAME).GetCollection<GeneralConfig>("config").ReplaceOneAsync(new BsonDocument("_id", gc.type), options: new ReplaceOptions { IsUpsert = true }, replacement: gc);
         }
 
         public async Task<GeneralConfig> LoadConfig()
         {
-            return await (await getDatabase("TCCONFIG").GetCollection<GeneralConfig>("config").FindAsync(Builders<GeneralConfig>.Filter.Where(x => x.type == "general"))).FirstOrDefaultAsync() ?? new GeneralConfig();
+            return await (await getDatabase(CONFIG_DB_NAME).GetCollection<GeneralConfig>("config").FindAsync(Builders<GeneralConfig>.Filter.Where(x => x.type == "general"))).FirstOrDefaultAsync() ?? new GeneralConfig();
         }
 
         public async Task<List<BsonFileManagerModel>> getAllDatabaseData(string dbName, string collectionName = "directory")

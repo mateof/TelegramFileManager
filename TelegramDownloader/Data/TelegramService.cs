@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Components;
+using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
 using TelegramDownloader.Services;
 using TL;
@@ -10,15 +11,18 @@ namespace TelegramDownloader.Data
         public static bool isPremium = false;
         public static int splitSizeGB = 2;
         private TransactionInfoService _tis { get; set; }
+        private IDbService _db { get; set; }
         private static WTelegram.Client client = null;
         private static Messages_Chats chats = null;
+        private static List<ChatViewBase> favouriteChannels = new List<ChatViewBase>();
         private static Mutex mut = new Mutex();
 
 
 
-        public TelegramService(TransactionInfoService tis)
+        public TelegramService(TransactionInfoService tis, IDbService db)
         {
             _tis = tis;
+            _db = db;
             // createDownloadFolder();
             mut.WaitOne();
             if (client == null)
@@ -166,12 +170,32 @@ namespace TelegramDownloader.Data
             return peer.Title;
         }
 
+        public async Task<List<ChatViewBase>> GetFouriteChannels(bool mustRefresh = true)
+        {
+
+            
+            if (mustRefresh)
+            {
+                favouriteChannels = new List<ChatViewBase>();
+                foreach (ChatViewBase cvb in await getAllSavedChats())
+                {
+                    if (GeneralConfigStatic.config.FavouriteChannels.Contains(cvb.chat.ID))
+                    {
+                        favouriteChannels.Add(cvb);
+                    }
+                }
+            }
+                
+            return favouriteChannels;
+        }
+
 
         public async Task<List<ChatViewBase>> getAllChats()
         {
             if (!checkUserLogin()) return new List<ChatViewBase>();
             List<ChatViewBase> allChats = new List<ChatViewBase>();
             chats = await client.Messages_GetAllChats();
+            await GetFouriteChannels();
             foreach (var (id, chat) in chats.chats)
                 if (chat.IsActive)
                 {
@@ -280,6 +304,26 @@ namespace TelegramDownloader.Data
             };
             return "";
 
+        }
+
+        public async Task AddFavouriteChannel(long id)
+        {
+            if (!GeneralConfigStatic.config.FavouriteChannels.Contains(id))
+            {
+                GeneralConfigStatic.AddFavouriteChannel(id);
+                await GeneralConfigStatic.SaveChanges(_db, GeneralConfigStatic.config);
+                await GetFouriteChannels();
+            }
+        }
+
+        public async Task RemoveFavouriteChannel(long id)
+        {
+            if (GeneralConfigStatic.config.FavouriteChannels.Contains(id))
+            {
+                GeneralConfigStatic.DeleteFavouriteChannel(id);
+                await GeneralConfigStatic.SaveChanges(_db, GeneralConfigStatic.config);
+                await GetFouriteChannels();
+            }
         }
 
         public async Task<Stream> DownloadFileAndReturn(ChatMessages message, Stream ms = null, string fileName = null, string folder = null, DownloadModel model = null)

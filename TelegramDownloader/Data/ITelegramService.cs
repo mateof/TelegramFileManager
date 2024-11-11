@@ -12,6 +12,9 @@ namespace TelegramDownloader.Data
         Task deleteFile(string chatId, int idMessage);
         Task<string> DownloadFile(ChatMessages message, string fileName = null, string folder = null);
         Task<Stream> DownloadFileAndReturn(ChatMessages message, Stream ms = null, string fileName = null, string folder = null, DownloadModel model = null);
+        Task<List<ChatViewBase>> GetFouriteChannels(bool mustRefresh = true);
+        Task AddFavouriteChannel(long id);
+        Task RemoveFavouriteChannel(long id);
         Task<List<ChatViewBase>> getAllChats();
         Task<List<ChatViewBase>> getAllSavedChats();
         Task<List<ChatMessages>> getChatHistory(long id, int limit = 30, int addOffset = 0);
@@ -21,5 +24,6 @@ namespace TelegramDownloader.Data
         Task logOff();
         Task sendVerificationCode(string vc);
         Task<Message> uploadFile(string chatId, Stream file, string fileName, string mimeType = null, UploadModel um = null);
+
     }
 }
