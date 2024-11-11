@@ -195,14 +195,14 @@ namespace TelegramDownloader.Controllers
         [DisableRequestSizeLimit]
         // [RequestFormLimits(ValueLengthLimit = int.MaxValue, MultipartBodyLengthLimit = long.MaxValue)]
         [RequestFormLimits(MultipartBodyLengthLimit = long.MaxValue)]
-        public async Task<IActionResult> Upload([FromForm] string path, IFormFile file, [FromForm] string? data, [FromForm] string action, [FromForm] int id)
+        public async Task<IActionResult> Upload([FromForm] string path, IFormFile file, [FromForm] string? data, [FromForm] string action, [FromForm] long id)
         {
             IList<IFormFile> lfile = new List<IFormFile>();
             lfile.Add(file);
             this.operation.RootFolder(Path.Combine(basePath, root));
             FileManagerResponse uploadResponse;
 
-            uploadResponse = operation.Upload(Path.Combine(basePath, root, path), lfile, action, file.Length, null);
+            uploadResponse = operation.Upload(Path.Combine(basePath, root, path), lfile, action, null);
             if (uploadResponse.Error != null)
             {
                 Response.Clear();
