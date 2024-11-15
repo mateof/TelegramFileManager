@@ -6,11 +6,17 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 
 using Syncfusion.Blazor.FileManager;
+using Syncfusion.Blazor.Inputs;
 using Syncfusion.EJ2.FileManager.Base;
 using Syncfusion.EJ2.FileManager.PhysicalFileProvider;
+using System;
+using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Runtime.Serialization.Formatters.Binary;
+using System.Xml.Linq;
 using TelegramDownloader.Data;
 using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
@@ -268,6 +274,53 @@ namespace TelegramDownloader.Controllers
             };
 
         }
+
+        [Route("share/{id}")]
+        public async Task<IActionResult> ShareFiles(string id, string? bsonId, string? fileName)
+        {
+            ShareFilesModel sfm = new ShareFilesModel();
+            sfm.id = id;
+            sfm.name = fileName;
+            sfm.fileName = fileName;
+            sfm.files = await _fs.ShareFile(id, bsonId);
+            var json = System.Text.Json.JsonSerializer.Serialize(sfm);
+            var bytes = System.Text.Encoding.UTF8.GetBytes(json);
+
+            using (MemoryStream memoryStream = new MemoryStream(bytes))
+            {
+                memoryStream.Position = 0;
+
+                MemoryStream zippedFile = new MemoryStream(await GetZipArchive(memoryStream, $"{id}-{fileName}.tfm"));
+                zippedFile.Position = 0;
+
+                return new FileStreamResult(zippedFile, "application/octet-stream")
+                {
+                    FileDownloadName = $"{id}-{fileName}.tfm"
+                };
+            }
+
+        }
+
+        private static async Task<byte[]> GetZipArchive(MemoryStream ms, string fileName)
+        {
+            byte[] archiveFile;
+            using (var archiveStream = new MemoryStream())
+            {
+                using (var archive = new ZipArchive(archiveStream, ZipArchiveMode.Create, true))
+                {
+                    var zipArchiveEntry = archive.CreateEntry(fileName, CompressionLevel.Optimal);
+
+                    using var zipStream = zipArchiveEntry.Open();
+                    await ms.CopyToAsync(zipStream);
+                }
+
+                archiveFile = archiveStream.ToArray();
+            }
+
+            return archiveFile;
+        }
+
+        
 
         public string ToCamelCase(FileManagerResponse<BsonFileManagerModel> userData)
         {

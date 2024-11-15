@@ -23,7 +23,7 @@
 
 <div class="page">
     <div class="sidebar">
-        <NavMenu OnClickCallback="openOffCanvasMenu" />
+        <NavMenu OnClickCallback="openOffCanvasMenu" OnClickOpenImportCallback="openImportModalMenu" />
     </div>
 
     <main>
@@ -51,6 +51,7 @@
                 </div>
             </BodyTemplate>
         </Offcanvas>
+        <TelegramDownloader.Pages.Modals.ImportDataModal isShared=true @ref="ImportModal"></TelegramDownloader.Pages.Modals.ImportDataModal>
         
         <Modal IsServiceModal="true" />
         <Toasts class="p-3" AutoHide="true" Delay="4000" Placement="ToastsPlacement.TopRight" />
@@ -61,6 +62,7 @@
 @code {
 
     private Offcanvas offcanvas = default!;
+    private Pages.Modals.ImportDataModal ImportModal { get; set; }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -82,6 +84,16 @@
     private async Task openOffCanvasMenu()
     {
         await offcanvas.ShowAsync(); 
+    }
+
+    private async Task openImportModalMenu()
+    {
+        await ImportModal.Open();
+    }
+
+    private async Task openImportMenu()
+    {
+        await offcanvas.ShowAsync();
     }
 
 

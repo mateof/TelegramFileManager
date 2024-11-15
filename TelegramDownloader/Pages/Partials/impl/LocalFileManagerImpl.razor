@@ -1,0 +1,266 @@
+﻿@using TelegramDownloader.Data
+@using TelegramDownloader.Models
+@using TelegramDownloader.Pages.Modals
+@using TelegramDownloader.Pages.Modals.InfoModals
+@inject HttpClient httpClient;
+@inject IJSRuntime JSRuntime;
+@inject NavigationManager MyNavigationManager;
+@inject IFileService fs;
+@inject ITelegramService ts;
+@inject ILogger<FileManager> Logger;
+
+
+<SfFileManager @ref="FileManager" ID="localfm" TValue="FileManagerDirectoryContent">
+    <FileManagerAjaxSettings Url=@($"/api/file/FileOperations")
+                             UploadUrl="/api/file/Upload"
+                             DownloadUrl="/api/file/Download"
+                             GetImageUrl="/api/file/GetImage">
+    </FileManagerAjaxSettings>
+    <FileManagerSearchSettings FilterDelay="1200"></FileManagerSearchSettings>
+    <FileManagerUploadSettings MaxFileSize="@(long.MaxValue)" AutoUpload="true"></FileManagerUploadSettings>
+    <FileManagerToolbarSettings ToolbarItems="@Items"></FileManagerToolbarSettings>
+    <FileManagerContextMenuSettings File="@ContextItems"></FileManagerContextMenuSettings>
+    <FileManagerEvents TValue="FileManagerDirectoryContent" FileSelection="FileSelection" ToolbarItemClicked="toolBarClicked" OnFileOpen="fileOpen" MenuOpened="MenuOpened" OnMenuClick="OnMenuClick"></FileManagerEvents>
+
+</SfFileManager>
+
+<TelegramDownloader.Pages.Modals.UploadToTelegramModal @ref="Modal"></TelegramDownloader.Pages.Modals.UploadToTelegramModal>
+<TelegramDownloader.Pages.Modals.FileUploadModal @ref="ModalUpSer"></TelegramDownloader.Pages.Modals.FileUploadModal>
+<TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal @ref="mediaUrlModal"></TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal>
+
+
+@code {
+    const string param = "path";
+    [Parameter]
+    public string id { get; set; }
+    [Parameter]
+    public bool isShared { get; set; } = false;
+    [Inject] NavigationManager NavigationManager { get; set; } = null!;
+
+    SfFileManager<FileManagerDirectoryContent>? FileManager;
+
+    private MediaUrlModal mediaUrlModal { get; set; } = default!;
+
+    NotificationModel nm = new NotificationModel();
+    public string[] ContextItems = new string[] { "Open", "Delete", "Download", "Rename", "Details", "Copy Media Url" };
+
+    private Modals.UploadToTelegramModal Modal { get; set; }
+    private Modals.FileUploadModal ModalUpSer { get; set; }
+
+
+    public List<ToolBarItemModel> Items = new List<ToolBarItemModel>(){
+        new ToolBarItemModel() { Name = "NewFolder" },
+        new ToolBarItemModel() { Name = "Cut" },
+        new ToolBarItemModel() { Name = "Copy" },
+        new ToolBarItemModel() { Name = "Paste" },
+        new ToolBarItemModel() { Name = "Delete" },
+        new ToolBarItemModel() { Name = "Download" },
+        // new ToolBarItemModel() { Name = "Upload" },
+        new ToolBarItemModel() { Name = "Rename" },
+        new ToolBarItemModel() { Name = "SortBy" },
+        new ToolBarItemModel() { Name = "Refresh" },
+        new ToolBarItemModel() { Name = "Selection" },
+        new ToolBarItemModel() { Name = "View" },
+        new ToolBarItemModel() { Name = "Details" },
+        new ToolBarItemModel() { Name = "UrlMedia", Text = "Url Media", TooltipText = "Url Media", PrefixIcon = "bi bi-collection-play-fill", Visible = false }
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!isShared)
+        {
+            // Items = Items.Prepend(new ToolBarItemModel() { Name = "NewFolder" }).ToList();
+            Items.AddRange(new List<ToolBarItemModel>(){
+                    new ToolBarItemModel() { Name = "Upload File", Text = "Upload To Server", TooltipText = "Upload To server", PrefixIcon = "e-icons e-fe-upload" },
+                    new ToolBarItemModel() { Name = "UploadTelegram", Text = "Upload Telegram", TooltipText = "Upload File", PrefixIcon = "bi bi-telegram" },
+                    
+                }
+            );
+        }
+        try
+        {
+            if (!isShared)
+                await fs.CreateDatabase(id);
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Error on CreateDatabase");
+            nm.sendMessage("Error", "Error on CreateDatabase", NotificationTypes.Error);
+        }
+
+    }
+
+    // Uncomment for url navigate
+    // protected override async Task OnAfterRenderAsync(bool firstRender)
+    // {
+    //     if (firstRender)
+    //     {
+    //         var paramValue = getParamFromUrl("path", NavigationManager.Uri);
+
+    //         if (!string.IsNullOrEmpty(paramValue))
+    //         {
+    //             FileManager.Path = paramValue;
+    //             // FileManager.RefreshFilesAsync();
+    //         }
+    //         NavigationManager.LocationChanged += OnLocationChanged;
+    //     }
+    // }
+
+    // private void OnLocationChanged(object sender, LocationChangedEventArgs e)
+    // {
+    //     var route = getParamFromUrl(param, e.Location);
+    //     if (route != FileManager.Path)
+    //     {
+    //         var paramValue = getParamFromUrl(param, NavigationManager.Uri);
+
+    //         if (!string.IsNullOrEmpty(paramValue))
+    //         {
+    //             FileManager.Path = Uri.EscapeUriString(paramValue);
+    //             //FileManager.RefreshFilesAsync();
+    //         }
+    //     }
+    // }
+
+    // private string getParamFromUrl(string param, string url)
+    // {
+    //     var uri = NavigationManager.ToAbsoluteUri(url);
+    //     var queryParams = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
+    //     if (queryParams.TryGetValue(param, out var paramValue))
+    //     {
+    //         return paramValue;
+    //     }
+    //     return "";
+    // }
+
+    // public async Task fileLoad(ReadEventArgs<FileManagerDirectoryContent> args)
+    // {
+    //     try
+    //     {
+    //         var paramValue = getParamFromUrl(param, NavigationManager.Uri);
+
+
+    //         if (string.IsNullOrEmpty(paramValue) || FileManager.Path != Uri.EscapeUriString(paramValue))
+    //         {
+    //             var url = NavigationManager.Uri.Split('?')[0]; // Obtener la URL base sin parámetros
+    //             NavigationManager.NavigateTo($"{url}?path={FileManager.Path}", forceLoad: false, replace: false);
+    //         }
+    //     }
+    //     catch (Exception ex)
+    //     {
+
+    //     }
+
+
+    // }
+
+
+    public void FileSelection(FileSelectionEventArgs<FileManagerDirectoryContent> args)
+    {
+        List<FileManagerDirectoryContent> selectedList = FileManager.GetSelectedFiles();
+        if ((selectedList.Count() + (args.Action == "UnSelect" ? -1 : 1)) == 1)
+        {
+            if (args.FileDetails.IsFile)
+            {
+                Items.Where(x => x.Name == "UrlMedia").FirstOrDefault().Visible = true;
+                return;
+            }
+
+        }
+        Items.Where(x => x.Name == "UrlMedia").FirstOrDefault().Visible = false;
+    }
+
+    public async Task fileOpen(FileOpenEventArgs<FileManagerDirectoryContent> args)
+    {
+        if (args != null && args.FileDetails != null && args.FileDetails.IsFile && new List<string> { ".mp3", ".ogg", ".flac", ".aac", ".wav" }.Contains(args.FileDetails.Type.ToLower()))
+        {
+            await playAudio(args);
+            // string localdir = "/" + FileService.STATICRELATIVELOCALDIR.Replace("\\", "/");
+            // string path = Path.Combine(localdir, args.FileDetails.FilterPath.Substring(1).Replace("\\", "/"), args.FileDetails.Name);
+            // await JSRuntime.InvokeVoidAsync("open", path, "_blank");
+        }
+    }
+
+    private async Task playAudio(FileOpenEventArgs<FileManagerDirectoryContent> args)
+    {
+        string localdir = MyNavigationManager.BaseUri + FileService.STATICRELATIVELOCALDIR.Replace("\\", "/");
+        string path = new System.Uri((Path.Combine(localdir, args.FileDetails.FilterPath.Substring(1).Replace("\\", "/"), args.FileDetails.Name)).Replace("\\", "/")).AbsoluteUri;
+        await JSRuntime.InvokeVoidAsync("openAudioPlayerModal", path, null, args.FileDetails.Name);
+    }
+
+    public void MenuOpened(MenuOpenEventArgs<FileManagerDirectoryContent> args)
+    {
+        if (args.FileDetails.Count() == 1)
+        {
+
+        }
+        // for (int i = 0; i < args.FileDetails.Count(); i++)
+        // {
+        //     if (!args.FileDetails[i].IsFile)
+        //     {
+        //         for (int j = 0; j < args.Items.Count(); j++)
+        //         {
+        //             if (args.Items[j].Text == "Cut")
+        //             {
+        //                 args.Items[j].Disabled = true;
+        //             }
+        //         }
+        //     }
+        //     else
+        //     {
+        //         for (int j = 0; j < args.Items.Count(); j++)
+        //         {
+        //             if (args.Items[j].Disabled == true)
+        //             {
+        //                 args.Items[j].Disabled = false;
+        //             }
+        //         }
+        //     }
+        // }
+
+    }
+
+    public async Task OnMenuClick(MenuClickEventArgs<FileManagerDirectoryContent> args)
+    {
+        if (args.FileDetails.Count() == 1)
+        {
+            if (args.Item.Text == "Copy Media Url")
+            {
+                await ShowMediaURLModal(args.FileDetails[0].FilterPath, args.FileDetails[0].Name);
+            }
+
+        }
+    }
+
+    private async Task ShowMediaURLModal(string FilterPath, string Name)
+    {
+        string localdir = MyNavigationManager.BaseUri + FileService.STATICRELATIVELOCALDIR.Replace("\\", "/");
+        string path = new System.Uri((Path.Combine(localdir, FilterPath.Substring(1).Replace("\\", "/"), Name)).Replace("\\", "/")).AbsoluteUri;
+        mediaUrlModal.url = path;
+        await mediaUrlModal.OnShowModalClick();
+    }
+
+
+    public async Task toolBarClicked(ToolbarClickEventArgs<FileManagerDirectoryContent> args)
+    {
+        if (args.Item.Text == "Upload Telegram" && args.FileDetails.Count() > 0)
+        {
+            Modal.id = id;
+            Modal.fileList = args.FileDetails;
+            Modal.filePath = args.FileDetails.FirstOrDefault().IsFile ? args.FileDetails.FirstOrDefault().FilterPath.Replace("\\", "/") + args.FileDetails.FirstOrDefault().Name : args.FileDetails.FirstOrDefault().FilterPath.Replace("\\", "/") + args.FileDetails.FirstOrDefault().Name + "/";
+            Modal.Open();
+        }
+
+        if (args.Item.Text == "Upload To Server" && args.FileDetails.Count() > 0)
+        {
+            ModalUpSer.id = id;
+            ModalUpSer.url = "/api/file/Upload";
+            ModalUpSer.filePath = args.FileDetails.FirstOrDefault().IsFile ? args.FileDetails.FirstOrDefault().FilterPath.Replace("\\", "/") + args.FileDetails.FirstOrDefault().Name : args.FileDetails.FirstOrDefault().FilterPath.Replace("\\", "/") + args.FileDetails.FirstOrDefault().Name + "/";
+            ModalUpSer.Open();
+        }
+
+        if (args.Item.Text == "Url Media" && args.FileDetails.Count() > 0)
+        {
+            await ShowMediaURLModal(args.FileDetails[0].FilterPath, args.FileDetails[0].Name);
+        }
+    }
+}

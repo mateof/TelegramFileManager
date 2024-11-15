@@ -1,6 +1,8 @@
-﻿@page "/localfm/{id}"
+﻿@page "/shared-local/{id}"
 @using TelegramDownloader.Data
+@using TelegramDownloader.Models
 
+@inject IFileService fs
 @inject ITelegramService ts;
 @inject ILogger<FileManager> Logger;
 
@@ -19,29 +21,31 @@
 
 <ul class="nav nav-tabs">
     <li class="nav-item">
-        <a class="nav-link" aria-current="page" href="@($"/fm/{id}")">Remote</a>
+        <a class="nav-link" aria-current="page" href="@($"/shared/{id}")">Remote</a>
     </li>
     <li class="nav-item">
-        <a class="nav-link active" href="@($"/localfm/{id}")">Local</a>
+        <a class="nav-link active" href="@($"/shared-local/{id}")">Local</a>
     </li>
 </ul>
-<TelegramDownloader.Pages.Partials.impl.LocalFileManagerImpl id="@id"></TelegramDownloader.Pages.Partials.impl.LocalFileManagerImpl>
+<TelegramDownloader.Pages.Partials.impl.LocalFileManagerImpl id="@id" isShared=true></TelegramDownloader.Pages.Partials.impl.LocalFileManagerImpl>
 
 
 @code {
     [Parameter]
     public string id { get; set; }
+    BsonSharedInfoModel bsi { get; set; }
     private string chatName { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
         try
         {
-            chatName = ts.getChatName(Convert.ToInt64(id));
+            bsi = await fs.GetSharedInfoById(id);
+            chatName = bsi.Name;
         }
-        catch (Exception e)
+        catch (Exception ex)
         {
-            Logger.LogError(e, "Error on getChatName");
+            Logger.LogError(ex, "Error on GetSharedInfoById");
         }
 
     }

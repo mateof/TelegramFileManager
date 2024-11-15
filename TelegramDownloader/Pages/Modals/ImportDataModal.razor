@@ -3,11 +3,11 @@
 @inject ILogger<FileManager> Logger
 @inject IFileService fs
 
-<div class="modal @ModalClass" tabindex="-1" role="dialog" style="display:@ModalDisplay">
-    <div class="modal-dialog" role="document">
+<div class="modal @ModalClass" tabindex="-1" role="dialog" style="display:@ModalDisplay;">
+    <div class="modal-dialog modal-dialog-centered" role="document">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Import Data Channel</h5>
+                <h5 class="modal-title">Import Channel Data</h5>
                 <button type="button" class="close" data-dismiss="modal" @onclick="() => Close()" aria-label="Close" style="border-color: transparent;background-color: transparent;">
                     <span aria-hidden="true">&times;</span>
                 </button>
@@ -16,7 +16,7 @@
                 <p>
                     <label>
                         Upload file to import:
-                        <InputFile OnChange="LoadFiles" />
+                        <InputFile @key=@(_inputFileId) OnChange="LoadFiles" />
                     </label>
                 </p>
 
@@ -41,7 +41,7 @@
                     </ul>
                 }
 
-                @if(npe != null)
+                @if (npe != null)
                 {
                     <p>@npe.CompletedItems of @npe.TotalItems</p>
                     <div class="progress">
@@ -59,8 +59,11 @@
 
 @code {
     [Parameter]
-    public string id { get; set; }
-    NotificationProgressEvent npe { get; set; }
+    public string? id { get; set; }
+    [Parameter]
+    public bool isShared { get; set; } = false;
+    private string _inputFileId = Guid.NewGuid().ToString();
+    NotificationProgressEvent? npe { get; set; } = null;
     private string ModalDisplay = "none;";
     private string ModalClass = "";
     private List<IBrowserFile> loadedFiles = new();
@@ -73,6 +76,10 @@
     {
         ModalDisplay = "block;";
         ModalClass = "Show";
+        loadedFiles.Clear();
+        _inputFileId = Guid.NewGuid().ToString();
+        npe = null;
+        progressPercent = 0;
         StateHasChanged();
     }
 
@@ -89,52 +96,77 @@
         loadedFiles.Clear();
         progressPercent = 0;
 
+
         foreach (var file in e.GetMultipleFiles(maxAllowedFiles))
         {
-            try
-            {
-                var trustedFileName = file.Name;
-                // string fileName = $"importfile_{id}.json";
-                var path = System.IO.Path.Combine(FileService.TEMPDIR, trustedFileName);
-                if (File.Exists(path))
-                    File.Delete(path);
-
-                await using FileStream writeStream = new(path, FileMode.Create);
-                using var readStream = file.OpenReadStream(maxFileSize);
-                var bytesRead = 0;
-                var totalRead = 0;
-                var buffer = new byte[1024 * 10];
-
-                while ((bytesRead = await readStream.ReadAsync(buffer)) != 0)
+            if (!isShared)
+                try
                 {
-                    totalRead += bytesRead;
-                    await writeStream.WriteAsync(buffer, 0, bytesRead);
-                    progressPercent = Decimal.Divide(totalRead, file.Size);
-                    StateHasChanged();
+                    var trustedFileName = file.Name;
+                    // string fileName = $"importfile_{id}.json";
+                    var path = System.IO.Path.Combine(FileService.TEMPDIR, trustedFileName);
+                    if (File.Exists(path))
+                        File.Delete(path);
+
+                    await using FileStream writeStream = new(path, FileMode.Create);
+                    using var readStream = file.OpenReadStream(maxFileSize);
+                    var bytesRead = 0;
+                    var totalRead = 0;
+                    var buffer = new byte[1024 * 10];
+
+                    while ((bytesRead = await readStream.ReadAsync(buffer)) != 0)
+                    {
+                        totalRead += bytesRead;
+                        await writeStream.WriteAsync(buffer, 0, bytesRead);
+                        progressPercent = Decimal.Divide(totalRead, file.Size);
+                        StateHasChanged();
+                    }
+
+                    loadedFiles.Add(file);
+
+                    Logger.LogInformation(
+                        "Unsafe Filename: {UnsafeFilename} File saved: {Filename}",
+                        file.Name, trustedFileName);
+
+                    readStream.Dispose();
+                    readStream.Close();
+                    writeStream.Dispose();
+                    writeStream.Close();
+                    GenericNotificationProgressModel gnp = new GenericNotificationProgressModel();
+                    gnp.EventNotification += eventChanged;
+                    await fs.importData(id, path, gnp);
                 }
-
-                loadedFiles.Add(file);
-
-                Logger.LogInformation(
-                    "Unsafe Filename: {UnsafeFilename} File saved: {Filename}",
-                    file.Name, trustedFileName);
-
-                readStream.Dispose();
-                readStream.Close();
-                writeStream.Dispose();
-                writeStream.Close();
-                GenericNotificationProgressModel gnp = new GenericNotificationProgressModel();
-                gnp.EventNotification += eventChanged;
-                await fs.importData(id, path, gnp);
-            }
-            catch (Exception ex)
+                catch (Exception ex)
+                {
+                    Logger.LogError($"LoadFiles: {file.Name} Error: {ex.Message}",
+                        file.Name, ex.Message);
+                }
+            else
             {
-                Logger.LogError("File: {FileName} Error: {Error}",
-                    file.Name, ex.Message);
+                try
+                {
+                    using(var ms = new MemoryStream())
+                    {
+                        await file.OpenReadStream(maxFileSize).CopyToAsync(ms);
+                        ms.Position = 0;
+                        ShareFilesModel? sfm = await FileService.UnZipArchiveToFile<ShareFilesModel>(ms);
+                        GenericNotificationProgressModel gnp = new GenericNotificationProgressModel();
+                        gnp.EventNotification += eventChanged;
+                        await fs.importSharedData(sfm, gnp);
+                    }
+                    
+                } catch(Exception ex)
+                {
+                    Logger.LogError($"LoadFiles shared: {file.Name} Error: {ex.Message}",
+                        file.Name, ex.Message);
+                }
+                
+
             }
         }
 
         isLoading = false;
+        await InvokeAsync(StateHasChanged);
     }
 
     async void eventChanged(object sender, NotificationProgressEvent e)
