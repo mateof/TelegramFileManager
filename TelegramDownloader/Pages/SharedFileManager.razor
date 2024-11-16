@@ -1,9 +1,10 @@
-﻿@page "/fm/{id}"
+﻿@page "/shared/{id}"
 
 @using TelegramDownloader.Data
 @using TelegramDownloader.Data.db
 @using TelegramDownloader.Models
 @using TelegramDownloader.Pages.Partials
+@using TelegramDownloader.Pages.Partials.impl
 @inject IFileService fs
 @inject ILogger<FileManager> Logger
 @inject IJSRuntime JSRuntime;
@@ -21,28 +22,27 @@
 
 <h3>File Manager <span class="badge bg-secondary">@chatName</span></h3>
 
-<button class="btn" @onclick="exportData"><i class="bi bi-cloud-download"></i> Export</button>
-<button class="btn" @onclick="importData"><i class="bi bi-cloud-upload"></i> Import</button>
 
 <ul class="nav nav-tabs">
     <li class="nav-item">
-        <a class="nav-link active" aria-current="page" href="@($"/fm/{id}")">Remote</a>
+        <a class="nav-link active" aria-current="page" href="@($"/shared/{id}")">Remote</a>
     </li>
     <li class="nav-item">
-        <a class="nav-link" href="@($"/localfm/{id}")">Local</a>
+        <a class="nav-link" href="@($"/shared-local/{id}")">Local</a>
     </li>
 </ul>
 
-<TelegramDownloader.Pages.Partials.impl.FileManagerImpl id="@id"></TelegramDownloader.Pages.Partials.impl.FileManagerImpl>
-<TelegramDownloader.Pages.Modals.ImportDataModal id="@id" @ref="ImportModal"></TelegramDownloader.Pages.Modals.ImportDataModal>
+<TelegramDownloader.Pages.Partials.impl.FileManagerImpl @ref="fmi" id="@id" isShared=true bsi="@bsi"></TelegramDownloader.Pages.Partials.impl.FileManagerImpl>
+
 
 @code {
-    private Modals.ImportDataModal ImportModal { get; set; }
+
     [Parameter]
     public string id { get; set; }
 
     BsonSharedInfoModel bsi { get; set; }
     public string chatName { get; set; }
+    FileManagerImpl fmi { get; set; }
 
     NotificationModel nm = new NotificationModel();
 
@@ -53,21 +53,12 @@
         {
             bsi = await fs.GetSharedInfoById(id);
             chatName = bsi.Name;
-        } catch(Exception ex)
+        }
+        catch (Exception ex)
         {
             Logger.LogError(ex, "Error on GetSharedInfoById");
             nm.sendMessage("Error", "Error on GetSharedInfoById", NotificationTypes.Error);
-        }     
+        }
     }
 
-    public void exportData()
-    {
-        MyNavigationManager.NavigateTo("/api/file/export/" + id, true);
-    }
-    public async Task importData()
-    {
-        await ImportModal.Open();
-    }
-
-    
 }

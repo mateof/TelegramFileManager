@@ -1,5 +1,6 @@
 ﻿@using TL
 @using TelegramDownloader.Data
+@using TelegramDownloader.Data.db
 @using TelegramDownloader.Models
 @using TelegramDownloader.Services
 @using TelegramDownloader.Shared
@@ -34,15 +35,15 @@
     </div>
 </div>
 
-
-
-
-
 @code {
     public NewDownloadModel? model { get; set; }
     public Ddtree ddtree { get; set; }
     [Parameter]
     public string id { get; set; }
+    [Parameter]
+    public bool isShare { get; set; } = false;
+    [Parameter]
+    public BsonSharedInfoModel bsi { get; set; }
     public string filePath { get; set; }
     public List<FileManagerDirectoryContent> fileList { get; set; }
 
@@ -79,19 +80,11 @@
     private async Task Submit()
     {
         // ts.
-        fs.downloadFile(id, fileList.ToList(), ddtree.selectedNode == null ? null : ddtree.selectedNode.FirstOrDefault());
+        if (isShare)
+            fs.downloadFile(DbService.SHARED_DB_NAME, fileList.ToList(), ddtree.selectedNode == null ? null : ddtree.selectedNode.FirstOrDefault(), bsi.CollectionId, bsi.ChannelId);
+        else
+            fs.downloadFile(id, fileList.ToList(), ddtree.selectedNode == null ? null : ddtree.selectedNode.FirstOrDefault());
         Close();
-        // ts.DownloadFile(mc, model?.newName == "" ? null : model.newName, ddtree.selectedNode == null ? null : ddtree.selectedNode.FirstOrDefault());
-        // Close();
-        // Model.type = await ts.checkAuth(Model.value, Model.type == "phone");
-        // Model.value = "";
-        // StateHasChanged();
-        // isLogin();
-        // Logger.LogInformation("Id = {Id}", Model?.Id);
+
     }
 }
-@* 
-@if (ShowBackdrop)
-{
-    <div class="modal-backdrop fade show"></div>
-} *@

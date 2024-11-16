@@ -4,6 +4,8 @@ using TelegramDownloader.Models;
 using Syncfusion.Blazor.FileManager;
 using System.Text.RegularExpressions;
 using MongoDB.Driver.Linq;
+using System.Collections;
+using Syncfusion.Blazor.PivotView;
 
 namespace TelegramDownloader.Data.db
 {
@@ -15,11 +17,18 @@ namespace TelegramDownloader.Data.db
 
         private const string CONFIG_DB_NAME = "TCCONFIG";
 
+        public const string SHARED_DB_NAME = "TFM-SHARED";
+
         public DbService()
         {
             client = new MongoClient(GeneralConfigStatic.tlconfig?.mongo_connection_string ?? Environment.GetEnvironmentVariable("connectionString"));
             currentDatabase = getDatabase("default");
             this.dbName = "default";
+        }
+
+        public async Task<IClientSessionHandle> getSession()
+        {
+            return await client.StartSessionAsync();
         }
 
         public IMongoDatabase getDatabase(string dbName)
@@ -62,6 +71,43 @@ namespace TelegramDownloader.Data.db
             await CreateDatabase(dbName, CreateDefaultEntry: false);
         }
 
+        public async Task resetCollection(string dbName = "default", string collection = "directory", IClientSessionHandle? session = null)
+        {
+            var db = getDatabase(dbName);
+            if (session != null)
+            {
+                await db.DropCollectionAsync(session, collection);
+                await db.CreateCollectionAsync(session, collection);
+            } else
+            {
+                await db.DropCollectionAsync(collection);
+                await db.CreateCollectionAsync(collection);
+            }
+            
+        }
+
+        public async Task<BsonSharedInfoModel> InsertSharedInfo(BsonSharedInfoModel sim, string dbName = SHARED_DB_NAME, string collection = "info")
+        {
+            await getDatabase(dbName).GetCollection<BsonSharedInfoModel>(collection).InsertOneAsync(sim);
+            return sim;
+
+        }
+
+        public async Task<List<BsonSharedInfoModel>> getSharedInfoList(string dbName = SHARED_DB_NAME, string collection = "info", string? filter = null)
+        {
+            List<BsonSharedInfoModel> list = new List<BsonSharedInfoModel>();
+            if (string.IsNullOrEmpty(filter))
+                list = await (await getDatabase(dbName).GetCollection<BsonSharedInfoModel>(collection).FindAsync<BsonSharedInfoModel>(Builders<BsonSharedInfoModel>.Filter.Empty)).ToListAsync();
+            else
+                list = await getDatabase(dbName).GetCollection<BsonSharedInfoModel>(collection).Find(Builders<BsonSharedInfoModel>.Filter.Where( x => x.Name.Contains(filter) || x.Description.Contains(filter))).ToListAsync();
+            return list;
+        }
+
+        public async Task<BsonSharedInfoModel> getSingleFile(string id, string dbName = SHARED_DB_NAME, string collection = "info")
+        {
+            return await getDatabase(dbName).GetCollection<BsonSharedInfoModel>(collection).Find(Builders<BsonSharedInfoModel>.Filter.Where(x => x.Id == id)).FirstOrDefaultAsync();
+        }
+
         public async Task SaveConfig(GeneralConfig gc)
         {
             await getDatabase(CONFIG_DB_NAME).GetCollection<GeneralConfig>("config").ReplaceOneAsync(new BsonDocument("_id", gc.type), options: new ReplaceOptions { IsUpsert = true }, replacement: gc);
@@ -75,6 +121,59 @@ namespace TelegramDownloader.Data.db
         public async Task<List<BsonFileManagerModel>> getAllDatabaseData(string dbName, string collectionName = "directory")
         {
             return await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).AsQueryable<BsonFileManagerModel>().ToListAsync();
+        }
+
+        public async Task<List<BsonFileManagerModel>> getShareFolder(string dbName, string bsonId, string collectionName = "directory")
+        {
+            BsonFileManagerModel father = await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Where(x => x.Id == bsonId))).FirstOrDefaultAsync();
+            if (father == null)
+            {
+                throw new InvalidOperationException("File not found");
+            }
+
+            if (father.FilePath == "")
+            {
+                return await getAllDatabaseData(dbName);
+            }
+            List<BsonFileManagerModel> bsonFileManagerModels = new List<BsonFileManagerModel>();
+
+            if (father.IsFile)
+            {
+                var newFather = getDefaultEntry("1");
+                father.ParentId = newFather.Id;
+                father.FilePath = "/" + newFather.Name;
+                father.FilterId = newFather.Id + "/";
+                father.FilterPath = "/";
+                bsonFileManagerModels.Add(newFather);
+                bsonFileManagerModels.Add(father);
+            } else
+            {
+                
+
+                List<BsonFileManagerModel> childs = await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Where(x => x.FilterPath.StartsWith(father.FilePath)))).ToListAsync();
+                
+                foreach (var child in childs)
+                {
+                    var regexFP = new Regex(Regex.Escape(father.FilePath));
+                    child.FilterPath = regexFP.Replace(child.FilterPath, "", 1);
+                    var regexFi = new Regex(Regex.Escape(father.FilterId));
+                    child.FilterId = regexFi.Replace(child.FilterId, "", 1);
+                    var regexFilePath = new Regex(Regex.Escape(father.FilePath));
+                    child.FilePath = regexFilePath.Replace(child.FilePath, "", 1);
+                }
+
+                father.FilterPath = "";
+                father.FilterId = "";
+                father.FilePath = "";
+                father.ParentId = "";
+                bsonFileManagerModels.Add(father);
+
+                bsonFileManagerModels.AddRange(childs);
+            }
+
+            
+            
+            return bsonFileManagerModels;
         }
 
         public async Task<BsonFileManagerModel> getParentDirectory(string dbName, string filterPath, string collectionName = "directory")
@@ -283,11 +382,14 @@ namespace TelegramDownloader.Data.db
             return await getFileById(dbName, id);
         }
 
-        public async Task<List<BsonFileManagerModel>> createEntry(string dbName, BsonFileManagerModel file, string collectionName = "directory")
+        public async Task<List<BsonFileManagerModel>> createEntry(string dbName, BsonFileManagerModel file, string collectionName = "directory", IClientSessionHandle? session = null)
         {
             if (file != null)
             {
-                await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).InsertOneAsync(file);
+                if (session != null)
+                    await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).InsertOneAsync(session, file);
+                else
+                    await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).InsertOneAsync(file);
                 if (!file.IsFile)
                 {
                     //return file.FilePath == "/" ? await getAllFilesInDirectoryPath2(file.FilePath) : await getAllFilesInDirectoryPath(file.FilePath);
@@ -333,24 +435,35 @@ namespace TelegramDownloader.Data.db
             BsonFileManagerModel lbfmm = (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(filter)).FirstOrDefault();
             if (lbfmm == null)
             {
-                lbfmm = new BsonFileManagerModel()
-                {
-                    CaseSensitive = false,
-                    DateCreated = DateTime.Now,
-                    DateModified = DateTime.Now,
-                    FilterPath = "",
-                    FilterId = "",
-                    FilePath = "",
-                    HasChild = true,
-                    IsFile = false,
-                    Name = "Files",
-                    ParentId = "",
-                    ShowHiddenItems = false,
-                    Size = 0,
-                    Type = "folder"
-                };
+                lbfmm = getDefaultEntry();
                 await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).InsertOneAsync(lbfmm);
             }
+        }
+
+        private BsonFileManagerModel getDefaultEntry(string? id = null)
+        {
+            BsonFileManagerModel entry = new BsonFileManagerModel()
+            {
+                CaseSensitive = false,
+                DateCreated = DateTime.Now,
+                DateModified = DateTime.Now,
+                FilterPath = "",
+                FilterId = "",
+                FilePath = "",
+                HasChild = true,
+                IsFile = false,
+                Name = "Files",
+                ParentId = "",
+                ShowHiddenItems = false,
+                Size = 0,
+                Type = "folder"
+            };
+
+            if (id != null)
+            {
+                entry.Id = id;
+            }
+            return entry;
         }
 
 
