@@ -20,7 +20,7 @@ jobs:
         password: ${{secrets.GHCR}}
     - name: Build and Push the Docker image
       run: |
-        docker build ./TelegramDownloader -f ./TelegramDownloader/Dockerfile --tag ghcr.io/mateof/telegramfilemanager:latest
+        docker build ./TelegramDownloader -f ./TelegramDownloader/Dockerfile --tag ghcr.io/mateof/telegramfilemanager:latest --build-arg tag=${{github.ref_name}}
         IMAGE_ID=$(docker images | grep ghcr.io/mateof/telegramfilemanager | awk '{print $3}')
         docker tag $IMAGE_ID ghcr.io/mateof/telegramfilemanager:${{github.ref_name}}
         docker push ghcr.io/mateof/telegramfilemanager:latest
