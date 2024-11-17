@@ -96,7 +96,7 @@
         var modalOption = new ModalOption
             {
                 Title = "Versión",
-                Message = $@"Your versión is v{GetType().Assembly.GetName().Version.ToString()} 
+                Message = GetType().Assembly.GetName().Version.ToString() == "0.0.0.0" ? "You have a docker version" : $@"Your versión is v{GetType().Assembly.GetName().Version.ToString()}
 [[Last version is {(LastVersion != null ? LastVersion.tag_name : "")}]]",
                 Type = modalType,
             };
