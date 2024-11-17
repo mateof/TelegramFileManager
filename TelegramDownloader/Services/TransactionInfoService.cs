@@ -76,8 +76,8 @@ namespace TelegramDownloader.Services
                 && !isPauseDownloads)
             {
                 DownloadModel dm = pendingDownloadModels.FirstOrDefault();
-                pendingDownloadModels.Remove(dm);
                 downloadModels.Insert(0, dm);
+                pendingDownloadModels.Remove(dm);
                 dm.RetryCallback();
             }
             PendingDownloadMutex.ReleaseMutex();
