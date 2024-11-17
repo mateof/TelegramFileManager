@@ -24,6 +24,7 @@ jobs:
 
           - name: '📦 Package windows x64'
             run: |
+                echo "$TAG"
                 cd ${{github.workspace}}
                 dotnet publish TelegramDownloader/TelegramDownloader.csproj -r win-x64 -c Release -o bin/win-x64 -p:PublishSingleFile=true,AssemblyVersion=$TAG,Version=$TAG --self-contained false
                 zip -r TelegramFileManager-${{github.event.release.tag_name}}-win-x64.zip bin/win-x64
