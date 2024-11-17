@@ -39,6 +39,7 @@ namespace TelegramDownloader.Data.db
 
         public async Task createIndex(string dbName, string collectionName = "directory")
         {
+            if (collectionName == null) collectionName = "directory";
             var options = new CreateIndexOptions() { Unique = true, Name = "uniquefile" };
             var indexKeysDefinition = Builders<BsonFileManagerModel>.IndexKeys.Ascending(x => x.FilePath);
             await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).Indexes.CreateOneAsync(indexKeysDefinition, options);
@@ -46,6 +47,9 @@ namespace TelegramDownloader.Data.db
 
         public async Task CreateDatabase(string dbName = "default", string collection = "directory", bool CreateDefaultEntry = true)
         {
+            if (dbName == null)
+                dbName = "default";
+            if (collection == null) collection = "directory";
             this.dbName = dbName;
             var db = getDatabase(dbName);
             var filter = new BsonDocument("name", collection);
@@ -62,17 +66,28 @@ namespace TelegramDownloader.Data.db
 
         public async Task deleteDatabase(string dbName = "default")
         {
+            if (dbName == null)
+                dbName = "default";
             await client.DropDatabaseAsync(dbName);
         }
 
         public async Task resetDatabase(string dbName = "default")
         {
+            if (dbName == null)
+                dbName = "default";
             await deleteDatabase(dbName);
             await CreateDatabase(dbName, CreateDefaultEntry: false);
         }
 
         public async Task resetCollection(string dbName = "default", string collection = "directory", IClientSessionHandle? session = null)
         {
+            if (collection == null)
+            {
+                collection = "directory";
+            }
+            if (dbName == null)
+                dbName = "default";
+                
             var db = getDatabase(dbName);
             if (session != null)
             {
@@ -88,6 +103,8 @@ namespace TelegramDownloader.Data.db
 
         public async Task<BsonSharedInfoModel> InsertSharedInfo(BsonSharedInfoModel sim, string dbName = SHARED_DB_NAME, string collection = "info")
         {
+            if (collection == null)
+                collection = "info";
             await getDatabase(dbName).GetCollection<BsonSharedInfoModel>(collection).InsertOneAsync(sim);
             return sim;
 
@@ -95,6 +112,8 @@ namespace TelegramDownloader.Data.db
 
         public async Task<List<BsonSharedInfoModel>> getSharedInfoList(string dbName = SHARED_DB_NAME, string collection = "info", string? filter = null)
         {
+            if (collection == null)
+                collection = "info";
             List<BsonSharedInfoModel> list = new List<BsonSharedInfoModel>();
             if (string.IsNullOrEmpty(filter))
                 list = await (await getDatabase(dbName).GetCollection<BsonSharedInfoModel>(collection).FindAsync<BsonSharedInfoModel>(Builders<BsonSharedInfoModel>.Filter.Empty)).ToListAsync();
@@ -105,6 +124,8 @@ namespace TelegramDownloader.Data.db
 
         public async Task<BsonSharedInfoModel> getSingleFile(string id, string dbName = SHARED_DB_NAME, string collection = "info")
         {
+            if (collection == null)
+                collection = "info";
             return await getDatabase(dbName).GetCollection<BsonSharedInfoModel>(collection).Find(Builders<BsonSharedInfoModel>.Filter.Where(x => x.Id == id)).FirstOrDefaultAsync();
         }
 
@@ -120,11 +141,15 @@ namespace TelegramDownloader.Data.db
 
         public async Task<List<BsonFileManagerModel>> getAllDatabaseData(string dbName, string collectionName = "directory")
         {
+            if (collectionName == null)
+                collectionName = "directory";
             return await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).AsQueryable<BsonFileManagerModel>().ToListAsync();
         }
 
         public async Task<List<BsonFileManagerModel>> getShareFolder(string dbName, string bsonId, string collectionName = "directory")
         {
+            if (collectionName == null)
+                collectionName = "directory";
             BsonFileManagerModel father = await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Where(x => x.Id == bsonId))).FirstOrDefaultAsync();
             if (father == null)
             {
@@ -178,6 +203,8 @@ namespace TelegramDownloader.Data.db
 
         public async Task<BsonFileManagerModel> getParentDirectory(string dbName, string filterPath, string collectionName = "directory")
         {
+            if (collectionName == null)
+                collectionName = "directory";
             if (filterPath == "/")
                 return await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Eq(x => x.FilterPath, filterPath == "/" ? "" : filterPath))).FirstOrDefaultAsync();
             else
@@ -186,6 +213,8 @@ namespace TelegramDownloader.Data.db
 
         public async Task<BsonFileManagerModel> getParentDirectoryByPath(string dbName, string filterPath, string collectionName = "directory")
         {
+            if (collectionName == null)
+                collectionName = "directory";
             if (filterPath == "/")
                 return await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Eq(x => x.FilterPath, filterPath == "/" ? "" : filterPath))).FirstOrDefaultAsync();
             else
@@ -194,24 +223,31 @@ namespace TelegramDownloader.Data.db
 
         public async Task setDirectoryHasChild(string dbName, string id, string collectionName = "directory", bool hasChild = true)
         {
-
+            if (collectionName == null)
+                collectionName = "directory";
             var update = new UpdateDefinitionBuilder<BsonFileManagerModel>().Set(n => n.HasChild, hasChild);
             await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).UpdateManyAsync(Builders<BsonFileManagerModel>.Filter.Where(x => x.Id == id), update);
         }
 
         public async Task checkAndSetDirectoryHasChild(string dbName, string id, string collectionName = "directory")
         {
+            if (collectionName == null)
+                collectionName = "directory";
             var listFiles = await getAllFilesInDirectoryById(dbName, id, collectionName);
             await setDirectoryHasChild(dbName, id, collectionName, listFiles.Count() > 0);
         }
 
         public async Task<BsonFileManagerModel> getEntry(string dbName, string filterId, string name, string collectionName = "directory")
         {
+            if (collectionName == null)
+                collectionName = "directory";
             return await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Where(x => x.FilterPath == filterId && x.Name == name))).FirstOrDefaultAsync();
         }
 
         public async Task deleteEntry(string dbName, string id, string collectionName = "directory")
         {
+            if (collectionName == null)
+                collectionName = "directory";
             //BsonFileManagerModel entry = await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Eq(x => x.Id, id))).FirstOrDefaultAsync();
             await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).DeleteOneAsync(Builders<BsonFileManagerModel>.Filter.Eq(x => x.Id, id));
             // return entry;
@@ -219,12 +255,16 @@ namespace TelegramDownloader.Data.db
 
         public async Task<List<BsonFileManagerModel>> Search(string dbName, string path, string searchText, string collectionName = "directory")
         {
+            if (collectionName == null)
+                collectionName = "directory";
             var files = await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Where(x => x.FilePath.StartsWith(path) && x.Name.ToLower().Contains(searchText.Replace("*", "").ToLower())));
             return files.ToList();
         }
 
         public async Task<BsonFileManagerModel> getFileByPath(string dbName, string path, string collectionName = "directory")
         {
+            if (collectionName == null)
+                collectionName = "directory";
             var files = await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Where(x => x.FilePath == path));
             var file = await files.FirstOrDefaultAsync();
             return file;
@@ -232,6 +272,8 @@ namespace TelegramDownloader.Data.db
 
         public BsonFileManagerModel getFileByPathSync(string dbName, string path, string collectionName = "directory")
         {
+            if (collectionName == null)
+                collectionName = "directory";
             var files = getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).Find(Builders<BsonFileManagerModel>.Filter.Where(x => x.FilePath == path));
             var file = files.FirstOrDefault();
             return file;
@@ -239,41 +281,55 @@ namespace TelegramDownloader.Data.db
 
         public async Task<List<BsonFileManagerModel>> getAllFiles(string dbName, string collectionName = "directory")
         {
+            if (collectionName == null)
+                collectionName = "directory";
             return await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Eq(x => x.FilterPath, "/") | Builders<BsonFileManagerModel>.Filter.Eq(x => x.FilterId, ""))).ToListAsync();
         }
 
         public async Task<List<BsonFileManagerModel>> getAllFilesInDirectory(string dbName, string path, string collectionName = "directory")
         {
+            if (collectionName == null)
+                collectionName = "directory";
             var result = await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Eq(x => x.FilterId, path) | Builders<BsonFileManagerModel>.Filter.Where(x => x.FilterId + x.Id.ToString() + "/" == path))).ToListAsync();
             return result;
         }
 
         public async Task<List<BsonFileManagerModel>> getAllChildFilesInDirectory(string dbName, string path, string collectionName = "directory")
         {
+            if (collectionName == null)
+                collectionName = "directory";
             var result = await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Where(x => x.FilterPath.StartsWith(path)))).ToListAsync();
             return result;
         }
 
         public async Task<List<BsonFileManagerModel>> getAllChildFoldersInDirectory(string dbName, string parentId, string collectionName = "directory")
         {
+            if (collectionName == null)
+                collectionName = "directory";
             var result = await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Where(x => x.ParentId == parentId && !x.IsFile))).ToListAsync();
             return result;
         }
 
         public async Task<List<BsonFileManagerModel>> getAllFilesInDirectoryPath(string dbName, string path, string collectionName = "directory")
         {
+            if (collectionName == null)
+                collectionName = "directory";
             var result = await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Where(x => x.FilterPath == path))).ToListAsync();
             return result;
         }
 
         public async Task<List<BsonFileManagerModel>> getAllFilesInDirectoryPath2(string dbName, string path, string collectionName = "directory")
         {
+            if (collectionName == null)
+                collectionName = "directory";
             var result = await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Where(x => x.FilePath + "/" == path || x.FilterPath == path))).ToListAsync();
             return result;
         }
 
         public async Task<List<BsonFileManagerModel>> getAllFolders(string dbName, string? parentId = null, string collectionName = "directory")
         {
+            if (collectionName == null)
+                collectionName = "directory";
             return await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Where(x => !x.IsFile))).ToListAsync();
             //if (parentId  == null)
             //{
@@ -284,23 +340,31 @@ namespace TelegramDownloader.Data.db
 
         public async Task<List<BsonFileManagerModel>> getAllFilesInDirectoryById(string dbName, string idFolder, string collectionName = "directory")
         {
+            if (collectionName == null)
+                collectionName = "directory";
             var result = await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Eq(x => x.ParentId, idFolder))).ToListAsync();
             return result;
         }
 
         public async Task<BsonFileManagerModel> getFileById(string dbName, string id, string collectionName = "directory")
         {
+            if (collectionName == null)
+                collectionName = "directory";
             return await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Eq(x => x.Id, id))).FirstOrDefaultAsync();
         }
 
         public async Task<bool> existItemByTelegramId(string dbName, int id, string collectionName = "directory")
         {
+            if (collectionName == null)
+                collectionName = "directory";
             var result = await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Where(x => x.MessageId == id || (x.ListMessageId != null && x.ListMessageId.Contains(id))))).FirstOrDefaultAsync();
             return result != null;
         }
 
         public async Task<BsonFileManagerModel> copyItem(string dbName, string sourceId, Syncfusion.Blazor.FileManager.FileManagerDirectoryContent target, string targetPath, bool isFile, string collectionName = "directory")
         {
+            if (collectionName == null)
+                collectionName = "directory";
             var result = await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Where(x => x.Id == sourceId))).FirstOrDefaultAsync();
             result.Id = null;
             result.ParentId = target.Id;
@@ -317,6 +381,8 @@ namespace TelegramDownloader.Data.db
 
         private async Task<List<string>> getParentFolders(string dbName, string folderId, string collectionName = "directory")
         {
+            if (collectionName == null)
+                collectionName = "directory";
             List<string> folders = new List<string>();
             while (!string.IsNullOrEmpty(folderId))
             {
@@ -337,6 +403,8 @@ namespace TelegramDownloader.Data.db
         /// <returns></returns>
         public async Task addBytesToFolder(string dbName, string folderId, long bytes, string collectionName = "directory")
         {
+            if (collectionName == null)
+                collectionName = "directory";
             List<string> folders = await getParentFolders(dbName, folderId, collectionName);
             var update = new UpdateDefinitionBuilder<BsonFileManagerModel>().Inc(n => n.Size, bytes);
             await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).UpdateManyAsync(Builders<BsonFileManagerModel>.Filter.Where(x => folders.Contains(x.Id) && !x.IsFile), update);
@@ -351,6 +419,8 @@ namespace TelegramDownloader.Data.db
         /// <returns></returns>
         public async Task subBytesToFolder(string dbName, string folderId, long bytes, string collectionName = "directory")
         {
+            if (collectionName == null)
+                collectionName = "directory";
             List<string> folders = await getParentFolders(dbName, folderId, collectionName);
             var update = new UpdateDefinitionBuilder<BsonFileManagerModel>().Inc(n => n.Size, -bytes);
             await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).UpdateManyAsync(Builders<BsonFileManagerModel>.Filter.Where(x => folders.Contains(x.Id) && !x.IsFile), update);
@@ -358,6 +428,8 @@ namespace TelegramDownloader.Data.db
 
         public void updateAllPathFiles(string dbName, string oldPath, string newPath, string collectionName = "directory")
         {
+            if (collectionName == null)
+                collectionName = "directory";
             getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).AsQueryable().Where(r => r.FilePath.StartsWith(oldPath)).ToList().ForEach(x =>
             {
                 var regex = new Regex(Regex.Escape(oldPath));
@@ -373,6 +445,8 @@ namespace TelegramDownloader.Data.db
 
         public async Task<BsonFileManagerModel> updateName(string dbName, string id, string newName, string oldName, bool isFile, string filePath, string collectionName = "directory")
         {
+            if (collectionName == null)
+                collectionName = "directory";
             var update = new UpdateDefinitionBuilder<BsonFileManagerModel>().Set(n => n.Name, newName);
             await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).UpdateOneAsync(Builders<BsonFileManagerModel>.Filter.Where(x => x.Id == id), update);
             if (!isFile)
@@ -384,6 +458,8 @@ namespace TelegramDownloader.Data.db
 
         public async Task<List<BsonFileManagerModel>> createEntry(string dbName, BsonFileManagerModel file, string collectionName = "directory", IClientSessionHandle? session = null)
         {
+            if (collectionName == null)
+                collectionName = "directory";
             if (file != null)
             {
                 if (session != null)
@@ -431,6 +507,8 @@ namespace TelegramDownloader.Data.db
 
         private async Task createDefaultEntry(string dbName, string collectionName = "directory")
         {
+            if (collectionName == null)
+                collectionName = "directory";
             var filter = Builders<BsonFileManagerModel>.Filter.Eq(x => x.FilterPath, "");
             BsonFileManagerModel lbfmm = (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(filter)).FirstOrDefault();
             if (lbfmm == null)

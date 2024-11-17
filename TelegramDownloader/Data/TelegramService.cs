@@ -360,7 +360,7 @@ namespace TelegramDownloader.Data
                 Console.WriteLine("Downloading " + filename);
                 MemoryStream dest = new MemoryStream();
                 // using var dest = new FileStream($"{Path.Combine(Environment.CurrentDirectory!, "wwwroot", "img", "telegram", filename)}", FileMode.Create, FileAccess.Write);
-                var type = await client.DownloadFileAsync(photo, ms ?? dest);
+                var type = await client.DownloadFileAsync(photo, ms ?? dest, null, model.ProgressCallback);
                 dest.Close(); // necessary for the renaming
                 Console.WriteLine("Download finished");
                 //if (type is not Storage_FileType.unknown and not Storage_FileType.partial)
@@ -375,9 +375,10 @@ namespace TelegramDownloader.Data
             return null;
         }
 
-        public async Task<string> DownloadFile(ChatMessages message, string fileName = null, string folder = null)
+        public async Task<string> DownloadFile(ChatMessages message, string fileName = null, string folder = null, DownloadModel model = null)
         {
-            DownloadModel model = new DownloadModel();
+            if (model == null)
+                model = new DownloadModel();
             model.m = message;
             model.channel = message.user;
 
@@ -405,7 +406,7 @@ namespace TelegramDownloader.Data
                     return filename;
                 Console.WriteLine("Downloading " + filename);
                 using var dest = new FileStream($"{Path.Combine(Environment.CurrentDirectory!, "wwwroot", "img", "telegram", filename)}", FileMode.Create, FileAccess.Write);
-                var type = await client.DownloadFileAsync(photo, dest);
+                var type = await client.DownloadFileAsync(photo, dest, progress: model.ProgressCallback);
                 dest.Close();
                 Console.WriteLine("Download finished");
                 if (type is not Storage_FileType.unknown and not Storage_FileType.partial)

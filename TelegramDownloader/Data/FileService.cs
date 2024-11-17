@@ -291,7 +291,7 @@ namespace TelegramDownloader.Data
         public async Task<FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>> SearchAsync(string dbName, string path, string searchText, string? collectionId = null)
         {
             FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> response = new FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>();
-            var files = await _db.Search(dbName, path, searchText, collectionName: collectionId);
+            var files = collectionId == null ? await _db.Search(dbName, path, searchText) : await _db.Search(dbName, path, searchText, collectionName: collectionId);
             response.Files = files.Select(x => x.toFileManagerContent()).ToList();
             return response;
         }
@@ -515,7 +515,7 @@ namespace TelegramDownloader.Data
         {
             try
             {
-                BsonFileManagerModel file = _db.getFileByPathSync(dbName, path + fileName, collectionId);
+                BsonFileManagerModel file = collectionId == null ? _db.getFileByPathSync(dbName, path + fileName) : _db.getFileByPathSync(dbName, path + fileName, collectionId);
                 string currentFilePath = System.IO.Path.Combine(Directory.GetCurrentDirectory(), RELATIVELOCALDIR, dbName + path);
                 Directory.CreateDirectory(currentFilePath);
                 if (file == null)
@@ -568,12 +568,12 @@ namespace TelegramDownloader.Data
                 foreach (string fileName in files)
                 {
                     WaitingTime wt = new WaitingTime();
-                    BsonFileManagerModel file = _db.getFileByPathSync(dbName, path + fileName, collectionId);
+                    BsonFileManagerModel file = collectionId == null ? _db.getFileByPathSync(dbName, path + fileName) : _db.getFileByPathSync(dbName, path + fileName, collectionId);
                     string currentFilePath = System.IO.Path.Combine(Directory.GetCurrentDirectory(), RELATIVETEMPDIR, targetPath[0] == '/' ? targetPath.Substring(1) : targetPath);
                     if (file == null)
                     {
                         Directory.CreateDirectory(System.IO.Path.Combine(currentFilePath, fileName));
-                        var filesInDir = await _db.getAllFilesInDirectoryPath(dbName, path, collectionId);
+                        var filesInDir = collectionId == null ?  await _db.getAllFilesInDirectoryPath(dbName, path) : await _db.getAllFilesInDirectoryPath(dbName, path, collectionId);
                         if (filesInDir.Count() > 0)
                         {
                             await downloadFile(dbName, path.EndsWith(fileName + "/") ? path : System.IO.Path.Combine(path, fileName) + "/", filesInDir.Select(x => x.Name).ToList(), System.IO.Path.Combine(targetPath, fileName), collectionId, channelId);
@@ -640,12 +640,12 @@ namespace TelegramDownloader.Data
                 foreach (var itemFile in files)
                 {
 
-                    BsonFileManagerModel file = _db.getFileByPathSync(dbName, itemFile.FilterPath.Replace("\\", "/") + itemFile.Name, collectionId);
+                    BsonFileManagerModel file = collectionId == null ? _db.getFileByPathSync(dbName, itemFile.FilterPath.Replace("\\", "/") + itemFile.Name) : _db.getFileByPathSync(dbName, itemFile.FilterPath.Replace("\\", "/") + itemFile.Name, collectionId);
                     string currentFilePath = currentTargetPath;
                     if (!itemFile.IsFile)
                     {
                         Directory.CreateDirectory(System.IO.Path.Combine(currentFilePath, itemFile.Name));
-                        var filesInDir = await _db.getAllFilesInDirectoryPath(dbName, itemFile.FilterPath + itemFile.Name + "/", collectionId);
+                        var filesInDir = collectionId == null ? await _db.getAllFilesInDirectoryPath(dbName, itemFile.FilterPath + itemFile.Name + "/") : await _db.getAllFilesInDirectoryPath(dbName, itemFile.FilterPath + itemFile.Name + "/", collectionId);
                         if (filesInDir.Count() > 0)
                         {
                             await downloadFile(dbName, filesInDir.Select(x => x.toFileManagerContent()).ToList(), System.IO.Path.Combine(currentTargetPath, itemFile.Name).Replace("\\", "/"), collectionId, channelId);
@@ -664,7 +664,7 @@ namespace TelegramDownloader.Data
                             foreach (int messageId in file.ListMessageId)
                             {
                                 string filePathPart = System.IO.Path.Combine(currentFilePath, $"({i})" + itemFile.Name);
-                                await downloadFromTelegram(channelId == null ? dbName : channelId, messageId, filePathPart);
+                                await downloadFromTelegram(channelId == null ? dbName : channelId, messageId, filePathPart, file);
                                 splitPaths.Add(filePathPart);
                                 i++;
                             }
@@ -676,7 +676,7 @@ namespace TelegramDownloader.Data
                         }
                         else
                         {
-                            await downloadFromTelegram(channelId == null ? dbName : channelId, (int)file.MessageId, System.IO.Path.Combine(currentFilePath, itemFile.Name));
+                            await downloadFromTelegram(channelId == null ? dbName : channelId, (int)file.MessageId, System.IO.Path.Combine(currentFilePath, itemFile.Name), file);
                         }
                     }
 
