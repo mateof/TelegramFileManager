@@ -12,6 +12,8 @@ using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore;
 using TelegramDownloader.Models;
+using TelegramDownloader.Services.GitHub;
+using System.Net.Http;
 
 var extensionProvider = new FileExtensionContentTypeProvider();
 foreach(var mime in FileService.MIMETypesDictionary)
@@ -52,6 +54,7 @@ builder.Services.AddSingleton<IDbService, DbService>();
 builder.Services.AddTransient<IFileService, FileService>();
 builder.Services.AddTransient<TransactionInfoService>();
 builder.Services.AddSingleton<FileManagerService>();
+builder.Services.AddSingleton<GHService>();
 builder.Services.AddBlazorBootstrap();
 
 
