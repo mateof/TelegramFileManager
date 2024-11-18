@@ -16,15 +16,13 @@ jobs:
           - name: '📄 Checkout'
             uses: actions/checkout@v4
 
-          - name: Write release version
-            run: |
-              TAG=${{github.event.release.tag_name}}
-              TAG=${TAG:1}
-
           - name: '📦 Package windows x64'
             run: |
+                TAG=${{github.event.release.tag_name}}
+                TAG=${TAG:1}
+                echo "$TAG"
                 cd ${{github.workspace}}
-                dotnet publish TelegramDownloader/TelegramDownloader.csproj -r win-x64 -c Release -o bin/win-x64 -p:PublishSingleFile=true --self-contained false /p:Version=${TAG}
+                dotnet publish TelegramDownloader/TelegramDownloader.csproj -r win-x64 -c Release -o bin/win-x64 -p:PublishSingleFile=true,Version=$TAG --self-contained false
                 zip -r TelegramFileManager-${{github.event.release.tag_name}}-win-x64.zip bin/win-x64
                 gh release upload ${{github.event.release.tag_name}} TelegramFileManager-${{github.event.release.tag_name}}-win-x64.zip
             env:
@@ -33,8 +31,10 @@ jobs:
 
           - name: '📦 Package windows x86'
             run: |
+                TAG=${{github.event.release.tag_name}}
+                TAG=${TAG:1}
                 cd ${{github.workspace}}
-                dotnet publish TelegramDownloader/TelegramDownloader.csproj -r win-x86 -c Release -o bin/win-x86 -p:PublishSingleFile=true --self-contained false /p:Version=${TAG}
+                dotnet publish TelegramDownloader/TelegramDownloader.csproj -r win-x86 -c Release -o bin/win-x86 -p:PublishSingleFile=true,Version=$TAG --self-contained false
                 zip -r TelegramFileManager-${{github.event.release.tag_name}}-win-x86.zip bin/win-x86
                 gh release upload ${{github.event.release.tag_name}} TelegramFileManager-${{github.event.release.tag_name}}-win-x86.zip
             env:
@@ -43,8 +43,10 @@ jobs:
 
           - name: '📦 Package windows arm'
             run: |
+                TAG=${{github.event.release.tag_name}}
+                TAG=${TAG:1}
                 cd ${{github.workspace}}
-                dotnet publish TelegramDownloader/TelegramDownloader.csproj -r win-arm64 -c Release -o bin/win-arm64 -p:PublishSingleFile=true --self-contained false /p:Version=${TAG}
+                dotnet publish TelegramDownloader/TelegramDownloader.csproj -r win-arm64 -c Release -o bin/win-arm64 -p:PublishSingleFile=true,Version=$TAG --self-contained false
                 zip -r TelegramFileManager-${{github.event.release.tag_name}}-win-arm64.zip bin/win-arm64
                 gh release upload ${{github.event.release.tag_name}} TelegramFileManager-${{github.event.release.tag_name}}-win-arm64.zip
             env:
@@ -53,8 +55,10 @@ jobs:
 
           - name: '📦 Package linux x64'
             run: |
+                TAG=${{github.event.release.tag_name}}
+                TAG=${TAG:1}
                 cd ${{github.workspace}}
-                dotnet publish TelegramDownloader/TelegramDownloader.csproj -r linux-x64 -c Release -o bin/linux-x64 -p:PublishSingleFile=true --self-contained false /p:Version=${TAG}
+                dotnet publish TelegramDownloader/TelegramDownloader.csproj -r linux-x64 -c Release -o bin/linux-x64 -p:PublishSingleFile=true,Version=$TAG --self-contained false
                 zip -r TelegramFileManager-${{github.event.release.tag_name}}-linux-x64.zip bin/linux-x64
                 gh release upload ${{github.event.release.tag_name}} TelegramFileManager-${{github.event.release.tag_name}}-linux-x64.zip
             env:
@@ -63,8 +67,10 @@ jobs:
 
           - name: '📦 Package linux arm'
             run: |
+                TAG=${{github.event.release.tag_name}}
+                TAG=${TAG:1}
                 cd ${{github.workspace}}
-                dotnet publish TelegramDownloader/TelegramDownloader.csproj -r linux-arm -c Release -o bin/linux-arm -p:PublishSingleFile=true --self-contained false /p:Version=${TAG}
+                dotnet publish TelegramDownloader/TelegramDownloader.csproj -r linux-arm -c Release -o bin/linux-arm -p:PublishSingleFile=true,Version=$TAG --self-contained false
                 zip -r TelegramFileManager-${{github.event.release.tag_name}}-linux-arm.zip bin/linux-arm
                 gh release upload ${{github.event.release.tag_name}} TelegramFileManager-${{github.event.release.tag_name}}-linux-arm.zip
             env:
@@ -73,8 +79,10 @@ jobs:
 
           - name: '📦 Package mac OS x64' 
             run: |
+                TAG=${{github.event.release.tag_name}}
+                TAG=${TAG:1}
                 cd ${{github.workspace}}
-                dotnet publish TelegramDownloader/TelegramDownloader.csproj -r osx-x64 -c Release -o bin/osx-x64 -p:PublishSingleFile=true --self-contained false /p:Version=${TAG}
+                dotnet publish TelegramDownloader/TelegramDownloader.csproj -r osx-x64 -c Release -o bin/osx-x64 -p:PublishSingleFile=true,Version=$TAG --self-contained false
                 zip -r TelegramFileManager-${{github.event.release.tag_name}}-osx-x64.zip bin/osx-x64
                 gh release upload ${{github.event.release.tag_name}} TelegramFileManager-${{github.event.release.tag_name}}-osx-x64.zip
             env:
