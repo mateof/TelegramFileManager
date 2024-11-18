@@ -5,6 +5,7 @@
 @using TelegramDownloader.Models
 @using TelegramDownloader.Pages.Partials
 @inject IFileService fs
+@inject ITelegramService ts
 @inject ILogger<FileManager> Logger
 @inject IJSRuntime JSRuntime;
 @inject NavigationManager MyNavigationManager;
@@ -19,10 +20,16 @@
     }
 </style>
 
-<h3>File Manager <span class="badge bg-secondary">@chatName</span></h3>
-
-<button class="btn" @onclick="exportData"><i class="bi bi-cloud-download"></i> Export</button>
-<button class="btn" @onclick="importData"><i class="bi bi-cloud-upload"></i> Import</button>
+<h3>
+    File Manager 
+    <Dropdown Color="DropdownColor.Secondary">
+        <DropdownToggleButton>@chatName</DropdownToggleButton>
+        <DropdownMenu>
+            <DropdownItem @onclick="exportData" Type="DropdownItemType.Button"><i class="bi bi-cloud-download"></i> Export</DropdownItem>
+            <DropdownItem @onclick="importData" Type="DropdownItemType.Button"><i class="bi bi-cloud-upload"></i> Import</DropdownItem>
+        </DropdownMenu>
+    </Dropdown>
+</h3>
 
 <ul class="nav nav-tabs">
     <li class="nav-item">
@@ -51,8 +58,7 @@
     {
         try
         {
-            bsi = await fs.GetSharedInfoById(id);
-            chatName = bsi.Name;
+            chatName = ts.getChatName(Convert.ToInt64(id));
         } catch(Exception ex)
         {
             Logger.LogError(ex, "Error on GetSharedInfoById");
