@@ -276,6 +276,12 @@ namespace TelegramDownloader.Data
             return await _db.getSingleFile(id);
         }
 
+        public async Task DeleteShared(string id, string collectionId)
+        {
+            await _db.DeleteSharedCollection(collectionId);
+            await _db.DeleteSharedInfo(id);
+        }
+
         public async Task<MemoryStream> exportAllData(string dbName)
         {
             var json = System.Text.Json.JsonSerializer.Serialize(await _db.getAllDatabaseData(dbName));

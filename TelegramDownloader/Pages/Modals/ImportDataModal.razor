@@ -59,6 +59,8 @@
 
 @code {
     [Parameter]
+    public EventCallback OnCloseCallback { get; set; }
+    [Parameter]
     public string? id { get; set; }
     [Parameter]
     public bool isShared { get; set; } = false;
@@ -83,10 +85,14 @@
         StateHasChanged();
     }
 
-    public void Close()
+    public async Task Close()
     {
         ModalDisplay = "none";
         ModalClass = "";
+        if (OnCloseCallback.HasDelegate)
+        {
+            await OnCloseCallback.InvokeAsync(null);
+        }
         StateHasChanged();
     }
 
