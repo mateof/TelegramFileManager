@@ -35,7 +35,6 @@
     public string id { get; set; }
     [Parameter]
     public bool isShared { get; set; } = false;
-    [Inject] NavigationManager NavigationManager { get; set; } = null!;
 
     SfFileManager<FileManagerDirectoryContent>? FileManager;
 
@@ -95,14 +94,14 @@
     // {
     //     if (firstRender)
     //     {
-    //         var paramValue = getParamFromUrl("path", NavigationManager.Uri);
+    //         var paramValue = getParamFromUrl("path", MyNavigationManager.Uri);
 
     //         if (!string.IsNullOrEmpty(paramValue))
     //         {
     //             FileManager.Path = paramValue;
     //             // FileManager.RefreshFilesAsync();
     //         }
-    //         NavigationManager.LocationChanged += OnLocationChanged;
+    //         MyNavigationManager.LocationChanged += OnLocationChanged;
     //     }
     // }
 
@@ -111,7 +110,7 @@
     //     var route = getParamFromUrl(param, e.Location);
     //     if (route != FileManager.Path)
     //     {
-    //         var paramValue = getParamFromUrl(param, NavigationManager.Uri);
+    //         var paramValue = getParamFromUrl(param, MyNavigationManager.Uri);
 
     //         if (!string.IsNullOrEmpty(paramValue))
     //         {
@@ -123,7 +122,7 @@
 
     // private string getParamFromUrl(string param, string url)
     // {
-    //     var uri = NavigationManager.ToAbsoluteUri(url);
+    //     var uri = MyNavigationManager.ToAbsoluteUri(url);
     //     var queryParams = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(uri.Query);
     //     if (queryParams.TryGetValue(param, out var paramValue))
     //     {
@@ -136,13 +135,13 @@
     // {
     //     try
     //     {
-    //         var paramValue = getParamFromUrl(param, NavigationManager.Uri);
+    //         var paramValue = getParamFromUrl(param, MyNavigationManager.Uri);
 
 
     //         if (string.IsNullOrEmpty(paramValue) || FileManager.Path != Uri.EscapeUriString(paramValue))
     //         {
-    //             var url = NavigationManager.Uri.Split('?')[0]; // Obtener la URL base sin parámetros
-    //             NavigationManager.NavigateTo($"{url}?path={FileManager.Path}", forceLoad: false, replace: false);
+    //             var url = MyNavigationManager.Uri.Split('?')[0]; // Obtener la URL base sin parámetros
+    //             MyNavigationManager.NavigateTo($"{url}?path={FileManager.Path}", forceLoad: false, replace: false);
     //         }
     //     }
     //     catch (Exception ex)

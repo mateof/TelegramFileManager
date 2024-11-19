@@ -651,7 +651,7 @@ namespace TelegramDownloader.Data
                     if (!itemFile.IsFile)
                     {
                         Directory.CreateDirectory(System.IO.Path.Combine(currentFilePath, itemFile.Name));
-                        var filesInDir = collectionId == null ? await _db.getAllFilesInDirectoryPath(dbName, itemFile.FilterPath + itemFile.Name + "/") : await _db.getAllFilesInDirectoryPath(dbName, itemFile.FilterPath + itemFile.Name + "/", collectionId);
+                        var filesInDir = collectionId == null ? await _db.getAllFilesInDirectoryPath(dbName, itemFile.FilterPath == "" ? "/" : itemFile.FilterPath + itemFile.Name + "/") : await _db.getAllFilesInDirectoryPath(dbName, itemFile.FilterPath == "" ?  "/" : itemFile.FilterPath + itemFile.Name + "/", collectionId);
                         if (filesInDir.Count() > 0)
                         {
                             await downloadFile(dbName, filesInDir.Select(x => x.toFileManagerContent()).ToList(), System.IO.Path.Combine(currentTargetPath, itemFile.Name).Replace("\\", "/"), collectionId, channelId);
