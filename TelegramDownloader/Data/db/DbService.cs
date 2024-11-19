@@ -110,8 +110,19 @@ namespace TelegramDownloader.Data.db
 
         }
 
+        public async Task DeleteSharedCollection(string collectionId, string dbName = SHARED_DB_NAME)
+        {
+            await getDatabase(dbName).DropCollectionAsync(collectionId);
+        }
+
+        public async Task DeleteSharedInfo(string id, string dbName = SHARED_DB_NAME, string collection = "info")
+        {
+            await getDatabase(dbName).GetCollection<BsonSharedInfoModel>(collection).DeleteOneAsync(x => x.Id == id);
+        }
+
         public async Task<List<BsonSharedInfoModel>> getSharedInfoList(string dbName = SHARED_DB_NAME, string collection = "info", string? filter = null)
         {
+            if (collection == null)
             if (collection == null)
                 collection = "info";
             List<BsonSharedInfoModel> list = new List<BsonSharedInfoModel>();

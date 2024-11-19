@@ -10,6 +10,7 @@ namespace TelegramDownloader.Data
         bool checkChannelExist(string id);
         bool checkUserLogin();
         Task deleteFile(string chatId, int idMessage);
+        Task<User> CallQrGenerator(Action<string> func, CancellationToken ct, bool logoutFirst = false);
         Task<string> DownloadFile(ChatMessages message, string fileName = null, string folder = null, DownloadModel model = null);
         Task<Stream> DownloadFileAndReturn(ChatMessages message, Stream ms = null, string fileName = null, string folder = null, DownloadModel model = null);
         Task<List<ChatViewBase>> GetFouriteChannels(bool mustRefresh = true);

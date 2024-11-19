@@ -48,6 +48,11 @@ namespace TelegramDownloader.Data
 
         }
 
+        public async Task<User> CallQrGenerator(Action<string> func, CancellationToken ct, bool logoutFirst = false)
+        {
+            return await client.LoginWithQRCode(func, logoutFirst: logoutFirst, ct: ct);
+        }
+
         public async Task<User> GetUser()
         {
             return client.User;

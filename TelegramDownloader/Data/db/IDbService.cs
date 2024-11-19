@@ -10,6 +10,8 @@ namespace TelegramDownloader.Data.db
         Task<BsonSharedInfoModel> InsertSharedInfo(BsonSharedInfoModel sim, string dbName = DbService.SHARED_DB_NAME, string collection = "info");
         Task<List<BsonSharedInfoModel>> getSharedInfoList(string dbName = DbService.SHARED_DB_NAME, string collection = "info", string? filter = null);
         Task<BsonSharedInfoModel> getSingleFile(string id, string dbName = DbService.SHARED_DB_NAME, string collection = "info");
+        Task DeleteSharedCollection(string collectionId, string dbName = DbService.SHARED_DB_NAME);
+        Task DeleteSharedInfo(string id, string dbName = DbService.SHARED_DB_NAME, string collection = "info");
         Task addBytesToFolder(string dbName, string folderId, long bytes, string collectionName = "directory");
         Task checkAndSetDirectoryHasChild(string dbName, string id, string collectionName = "directory");
         Task<BsonFileManagerModel> copyItem(string dbName, string sourceId, FileManagerDirectoryContent target, string targetPath, bool isFile, string collectionName = "directory");

@@ -77,3 +77,28 @@ a, .btn-link {
     white-space: nowrap;
     scrollbar-width: thin;
 }
+
+.ellipsis {
+    text-overflow: ellipsis;
+}
+
+#menutab .nav-link {
+    color: white;
+}
+
+    #menutab .active {
+        color: black;
+    }
+
+.groupbtnactionclass {
+    color: antiquewhite;
+    --bs-btn-border-color: #0d6efd00;
+    --bs-btn-hover-bg: #00f2ff4a;
+    --bs-btn-active-bg: #7b9ccd75;
+}
+
+.groupbtnclass {
+    width: 90%;
+    padding-left: 10%;
+    padding-bottom: 5%;
+}

@@ -12,6 +12,7 @@ namespace TelegramDownloader.Data
         Task<List<FileManagerDirectoryContent>> createFolder(string dbName, FolderCreateEventArgs<FileManagerDirectoryContent> args);
         void cleanTempFolder();
         Task<BsonSharedInfoModel> GetSharedInfoById(string id);
+        Task DeleteShared(string id, string collectionId);
         Task downloadFile(string dbName, List<FileManagerDirectoryContent> files, string targetPath, string? collectionId = null, string? channelId = null);
         Task downloadFile(string dbName, string path, List<string> files, string targetPath, string? collectionId = null, string? channelId = null);
         Task downloadFileToServer(string dbName, string path, string destPath);

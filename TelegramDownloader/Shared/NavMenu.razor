@@ -2,32 +2,16 @@
 @using TL
 @using TelegramDownloader.Data.db
 @using TelegramDownloader.Models
+@using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage
+@inject ProtectedSessionStorage ProtectedSessionStore
 @inject NavigationManager uriHelper;
 @inject IDbService db;
-@inject ITelegramService ts
-@inject IJSRuntime JS
+@inject IFileService fs;
+@inject ITelegramService ts;
+@inject IJSRuntime JS;
 
 <style>
-    .ellipsis {
-        text-overflow: ellipsis;
-    }
-
-    .navclass {
-        color: white
-    }
-
-    .groupbtnactionclass {
-        color: antiquewhite;
-        --bs-btn-border-color: #0d6efd00;
-        --bs-btn-hover-bg: #00f2ff4a;
-        --bs-btn-active-bg: #7b9ccd75;
-    }
-
-    .groupbtnclass {
-        width: 90%;
-        padding-left: 10%;
-        padding-bottom: 5%;
-    }
+    
 </style>
 
 <div class="top-row ps-3 navbar navbar-dark">
@@ -57,154 +41,170 @@
                 <button type="button" class="btn btn-outline-primary groupbtnactionclass" @onclick="showPlayer"><i class="bi bi-boombox"></i></button>
                 <button class="btn groupbtnactionclass" type="button" @onclick="HandleThreeDots"><i class="bi bi-three-dots"></i></button>
             </div>
-            <nav>
-                <div class="nav nav-tabs" id="nav-tab" role="tablist">
-                    <button class="nav-link navclass active" id="nav-mine-tab" data-bs-toggle="tab" data-bs-target="#nav-mine" type="button" role="tab" aria-controls="nav-mine" aria-selected="true"><i class="bi bi-chat-square-heart"></i> Mine</button>
-                    <button class="nav-link navclass" id="nav-fav-tab" data-bs-toggle="tab" data-bs-target="#nav-fav" type="button" role="tab" aria-controls="nav-fav" aria-selected="false"><i class="bi bi-bookmark-star"></i> Fav</button>
-                    <button class="nav-link navclass" id="nav-sha-tab" data-bs-toggle="tab" data-bs-target="#nav-sha" type="button" role="tab" aria-controls="nav-sha" aria-selected="false"><i class="bi bi-share"></i> Shared</button>
-                    <button class="nav-link navclass" id="nav-all-tab" data-bs-toggle="tab" data-bs-target="#nav-all" type="button" role="tab" aria-controls="nav-all" aria-selected="false"><i class="bi bi-chat-square-text"></i> All</button>
-                </div>
-            </nav>
-        </div>
+           
 
-        <div class="tab-content" id="nav-tabContent">
-            <div class="tab-pane fade show active" id="nav-mine" role="tabpanel" aria-labelledby="nav-mine-tab">
-                @foreach (ChatViewBase cb in mineChats)
-                {
-                    <div class="row">
-                        <div class="col-1" style="align-content: space-around; padding-left: 5%; ">
-                            @if (isInFavourite(cb.chat.ID))
-                            {
-                                <span style="color:white; cursor: pointer;" class="bi bi-star-fill" @onclick="async () => await removeStar(cb.chat.ID)"></span>
-                            }
-                            else
-                            {
-                                <span style="color:white; cursor: pointer;" class="bi bi-star" @onclick="async () => await setStar(cb.chat.ID)"></span>
-                            }
-                        </div>
-                        <div class="col-9">
-
-                            <div class="nav-item" style="padding:inherit;" @onclick="ToggleNavMenu">
-                                <NavLink class="nav-link ellipsis" href="@($"/fetchdata/{cb.chat.ID}")" Match="NavLinkMatch.All">
-                                    <span aria-hidden="true">
-
-
-                                    </span>
-                                    <span class="text-truncate">@cb.chat.Title</span>
-                                </NavLink>
-
-                            </div>
-                        </div>
-                        <div class="col-2" style="position: relative; padding-top: 2%; padding-left: 0;">
-                            <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false" @onclick="@(async () => await goTo($"/fm/{cb.chat.ID}"))">
-                                <span style="color:white" class="bi bi-folder"></span>
-                            </button>
-                        </div>
-                    </div>
-                }
-            </div>
-            <div class="tab-pane fade" id="nav-sha" role="tabpanel" aria-labelledby="nav-sha-tab">
-                <div class="row">
-                    <div class="btn-group" role="group" aria-label="Basic outlined example">
-                        <button class="btn btn-outline-warning" type="button" @onclick="HandleImportMenu"><i class="bi bi-cloud-upload"></i> Import</button>
-                        <button type="button" class="btn btn-outline-info"><i class="bi bi-grid-3x3-gap-fill"></i> List</button>
-                    </div>
-                </div>
-                @foreach (BsonSharedInfoModel sc in sharedChats)
-                {
-                    <div class="row">
-                        <div class="col-1" style="align-content: space-around; padding-left: 5%; ">
-                            <span style="color:white; cursor: pointer;" class="bi bi-star-fill" ></span>
-                        </div>
-                        <div class="col-9">
-
-                            <div class="nav-item" style="padding:inherit;" @onclick="ToggleNavMenu">
-                                <NavLink class="nav-link ellipsis" href="@($"/shared/{sc.Id}")" Match="NavLinkMatch.All">
-                                    <span aria-hidden="true">
-
-
-                                    </span>
-                                    <span class="text-truncate">@sc.Name</span>
-                                </NavLink>
-
-                            </div>
-                        </div>
-                        <div class="col-2" style="position: relative; padding-top: 2%; padding-left: 0;">
-                            <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false" @onclick="@(async () => await goTo($"/shared/{sc.Id}"))">
-                                <span style="color:white" class="bi bi-folder"></span>
-                            </button>
-                        </div>
-                    </div>
-                }
-            </div>
-            <div class="tab-pane fade" id="nav-fav" role="tabpanel" aria-labelledby="nav-fav-tab">
-                @foreach (ChatViewBase cb in favouriteChats)
-                {
-                    <div class="row">
-                        <div class="col-1" style="align-content: space-around; padding-left: 5%; ">
-                            <span style="color:white; cursor: pointer;" class="bi bi-star-fill" @onclick="async () => await removeStar(cb.chat.ID)"></span>
-                        </div>
-                        <div class="col-9">
-
-                            <div class="nav-item" style="padding:inherit;" @onclick="ToggleNavMenu">
-                                <NavLink class="nav-link ellipsis" href="@($"/fetchdata/{cb.chat.ID}")" Match="NavLinkMatch.All">
-                                    <span aria-hidden="true">
-
-
-                                    </span>
-                                    <span class="text-truncate">@cb.chat.Title</span>
-                                </NavLink>
-
-                            </div>
-                        </div>
-                        <div class="col-2" style="position: relative; padding-top: 2%; padding-left: 0;">
-                            <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false" @onclick="@(async () => await goTo($"/fm/{cb.chat.ID}"))">
-                                <span style="color:white" class="bi bi-folder"></span>
-                            </button>
-                        </div>
-                    </div>
-                }
-            </div>
-            <div class="tab-pane fade" id="nav-all" role="tabpanel" aria-labelledby="nav-all-tab">
-                @foreach (ChatViewBase cb in sChats)
-                {
-                    <div class="row">
-                        <div class="col-1" style="align-content: space-around; padding-left: 5%; ">
-                            @if(isInFavourite(cb.chat.ID)) 
-                            {
-                                <span style="color:white; cursor: pointer;" class="bi bi-star-fill" @onclick="async () => await removeStar(cb.chat.ID)"></span>
-                            } else
-                            {
-                                <span style="color:white; cursor: pointer;" class="bi bi-star" @onclick="async () => await setStar(cb.chat.ID)"></span>
-                            }
-                            
-                        </div>
-                        <div class="col-9">
-                            <div class="nav-item" style="padding:inherit;" @onclick="ToggleNavMenu">
-                                <NavLink class="nav-link ellipsis" href="@($"/fetchdata/{cb.chat.ID}")" Match="NavLinkMatch.All">
-                                    <span aria-hidden="true">
-                                        @*  @if (cb.chat.Photo != null)
+            <Tabs EnableFadeEffect="true" @ref="tabs" Id="menutab" OnShowing="@(args => OnTabShowingAsync(args))">
+                <Tab Active="true" Title="Mine" Name="Mine">
+                    <TitleTemplate >
+                        <i class="bi bi-chat-square-heart"></i> Mine
+                    </TitleTemplate>
+                    <Content>
+                        @foreach (ChatViewBase cb in mineChats)
+                        {
+                            <div class="row">
+                                <div class="col-1" style="align-content: space-around; padding-left: 5%; ">
+                                    @if (isInFavourite(cb.chat.ID))
                                     {
-                                    <img src="data:image/jpg;base64, @cb.img64" alt="photo" style="width:1vw;" />
-                                    } *@
+                                        <span style="color:white; cursor: pointer;" class="bi bi-star-fill" @onclick="async () => await removeStar(cb.chat.ID)"></span>
+                                    }
+                                    else
+                                    {
+                                        <span style="color:white; cursor: pointer;" class="bi bi-star" @onclick="async () => await setStar(cb.chat.ID)"></span>
+                                    }
+                                </div>
+                                <div class="col-9">
 
-                                    </span>
-                                    <span class="text-truncate">@cb.chat.Title</span>
-                                </NavLink>
+                                    <div class="nav-item" style="padding:inherit;" @onclick="ToggleNavMenu">
+                                        <NavLink class="nav-link ellipsis" href="@($"/fetchdata/{cb.chat.ID}")" Match="NavLinkMatch.All">
+                                            <span aria-hidden="true">
 
+
+                                            </span>
+                                            <span class="text-truncate">@cb.chat.Title</span>
+                                        </NavLink>
+
+                                    </div>
+                                </div>
+                                <div class="col-2" style="position: relative; padding-top: 2%; padding-left: 0;">
+                                    <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false" @onclick="@(async () => await goTo($"/fm/{cb.chat.ID}"))">
+                                        <span style="color:white" class="bi bi-folder"></span>
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    </Content>
+                </Tab>
+                <Tab Title="Fav" Name="Fav">
+                    <TitleTemplate>
+                        <i class="bi bi-bookmark-star"></i> Fav
+                    </TitleTemplate>
+                    <Content>
+                        @foreach (ChatViewBase cb in favouriteChats)
+                        {
+                            <div class="row">
+                                <div class="col-1" style="align-content: space-around; padding-left: 5%; ">
+                                    <span style="color:white; cursor: pointer;" class="bi bi-star-fill" @onclick="async () => await removeStar(cb.chat.ID)"></span>
+                                </div>
+                                <div class="col-9">
+
+                                    <div class="nav-item" style="padding:inherit;" @onclick="ToggleNavMenu">
+                                        <NavLink class="nav-link ellipsis" href="@($"/fetchdata/{cb.chat.ID}")" Match="NavLinkMatch.All">
+                                            <span aria-hidden="true">
+
+
+                                            </span>
+                                            <span class="text-truncate">@cb.chat.Title</span>
+                                        </NavLink>
+
+                                    </div>
+                                </div>
+                                <div class="col-2" style="position: relative; padding-top: 2%; padding-left: 0;">
+                                    <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false" @onclick="@(async () => await goTo($"/fm/{cb.chat.ID}"))">
+                                        <span style="color:white" class="bi bi-folder"></span>
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    </Content>
+                </Tab>
+                <Tab Title="Shared" Name="Shared">
+                    <TitleTemplate>
+                        <i class="bi bi-share"></i> Shared
+                    </TitleTemplate>
+                    <Content>
+                        <div class="row">
+                            <div class="btn-group" role="group" aria-label="Basic outlined example">
+                                <button class="btn btn-outline-light" type="button" @onclick="HandleImportMenu"><i class="bi bi-cloud-upload"></i> Import</button>
+                                <button type="button" class="btn btn-outline-light"><i class="bi bi-grid-3x3-gap-fill"></i> List</button>
                             </div>
                         </div>
-                        <div class="col-2" style="position: relative; padding-top: 2%; padding-left: 0;">
+                        @foreach (BsonSharedInfoModel sc in sharedChats)
+                        {
+                            <div class="row">
+                                <div class="col-1" style="align-content: space-around; padding-left: 5%; ">
+                                    <span style="color:white; cursor: pointer;" class="bi bi-trash" @onclick="async () => await removeShared(sc.Id, sc.CollectionId)"></span>
+                                </div>
+                                <div class="col-9">
 
-                            <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false" @onclick="@(async () => await goTo($"/fm/{cb.chat.ID}"))">
-                                <span style="color:white" class="bi bi-folder"></span>
-                            </button>
+                                    <div class="nav-item" style="padding:inherit;" @onclick="ToggleNavMenu">
+                                        <NavLink class="nav-link ellipsis" @onclick="@(async () => await goTo($"/shared/{sc.Id}"))" Match="NavLinkMatch.All">
+                                            <span aria-hidden="true">
 
-                        </div>
-                    </div>
-                }
-            </div>
+
+                                            </span>
+                                            <span class="text-truncate">@sc.Name</span>
+                                        </NavLink>
+
+                                    </div>
+                                </div>
+                                <div class="col-2" style="position: relative; padding-top: 2%; padding-left: 0;">
+                                    <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false" @onclick="@(async () => await goTo($"/shared/{sc.Id}"))">
+                                        <span style="color:white" class="bi bi-folder"></span>
+                                    </button>
+                                </div>
+                            </div>
+                        }
+                    </Content>
+                </Tab>
+                <Tab Title="All" Name="All">
+                    <TitleTemplate>
+                        <i class="bi bi-chat-square-text"></i> All
+                    </TitleTemplate>
+                    <Content>
+                        @foreach (ChatViewBase cb in sChats)
+                        {
+                            <div class="row">
+                                <div class="col-1" style="align-content: space-around; padding-left: 5%; ">
+                                    @if (isInFavourite(cb.chat.ID))
+                                    {
+                                        <span style="color:white; cursor: pointer;" class="bi bi-star-fill" @onclick="async () => await removeStar(cb.chat.ID)"></span>
+                                    }
+                                    else
+                                    {
+                                        <span style="color:white; cursor: pointer;" class="bi bi-star" @onclick="async () => await setStar(cb.chat.ID)"></span>
+                                    }
+
+                                </div>
+                                <div class="col-9">
+                                    <div class="nav-item" style="padding:inherit;" @onclick="ToggleNavMenu">
+                                        <NavLink class="nav-link ellipsis" href="@($"/fetchdata/{cb.chat.ID}")" Match="NavLinkMatch.All">
+                                            <span aria-hidden="true">
+                                                @*  @if (cb.chat.Photo != null)
+                                            {
+                                            <img src="data:image/jpg;base64, @cb.img64" alt="photo" style="width:1vw;" />
+                                            } *@
+
+                                            </span>
+                                            <span class="text-truncate">@cb.chat.Title</span>
+                                        </NavLink>
+
+                                    </div>
+                                </div>
+                                <div class="col-2" style="position: relative; padding-top: 2%; padding-left: 0;">
+
+                                    <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false" @onclick="@(async () => await goTo($"/fm/{cb.chat.ID}"))">
+                                        <span style="color:white" class="bi bi-folder"></span>
+                                    </button>
+
+                                </div>
+                            </div>
+                        }
+                    </Content>
+                </Tab>
+            </Tabs>
         </div>
+
+      
 
 
     </nav>
@@ -219,6 +219,7 @@
     [Parameter] public EventCallback OnClickCallback { get; set; }
     [Parameter] public EventCallback OnClickOpenImportCallback { get; set; }
 
+    Tabs tabs = default!;
 
     private List<ChatViewBase> sChats = new List<ChatViewBase>();
     private List<ChatViewBase> allChats = new List<ChatViewBase>();
@@ -244,6 +245,32 @@
         // }
     }
 
+    private async Task OnTabShowingAsync(TabsEventArgs args)
+    {
+        await ProtectedSessionStore.SetAsync("tabmenu", args.ActiveTabTitle);
+    }
+
+    private async Task getActiveTab()
+    {
+        var tab = await ProtectedSessionStore.GetAsync<string>("tabmenu");
+        if (!tab.Success || string.IsNullOrEmpty(tab.Value))
+        {
+            await tabs.ShowTabByNameAsync("Mine");
+        } else
+        {
+            await tabs.ShowTabByNameAsync(tab.Value);
+        }
+    }
+
+    private async Task removeShared(string id, string collecionId)
+    {
+        PreloadService.Show(SpinnerColor.Light, "Deleting shared...");
+        await fs.DeleteShared(id, collecionId);
+        await OnInitializedAsync();
+        PreloadService.Hide();
+    }
+    // => messages.Add(new("OnShowing", args.ActiveTabTitle, args.PreviousActiveTabTitle));
+
     private async Task HandleThreeDots()
     {
         ToggleNavMenu();
@@ -265,7 +292,7 @@
     }
 
 
-    private async Task RefreshChannels()
+    public async Task RefreshChannels()
     {
         PreloadService.Show(SpinnerColor.Light, "Loading data...");
         allChats = await ts.getAllChats();
@@ -323,6 +350,14 @@
         }
         filterMyChats(searchString);
 
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await getActiveTab();
+        }
     }
 
     protected override async Task OnInitializedAsync()

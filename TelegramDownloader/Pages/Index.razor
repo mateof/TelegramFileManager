@@ -1,11 +1,14 @@
 ﻿@layout EmptyLayout
 @page "/"
+@implements IDisposable
 
+@using QRCoder
 @using TelegramDownloader.Data
 @using TelegramDownloader.Models
 @inject ITelegramService ts
 @inject NavigationManager NavManager
 @inject IJSRuntime JSRuntime;
+@inject PreloadService preloadService
 
 <style>
     .form-signin {
@@ -19,55 +22,66 @@
         padding-top: inherit;
     }
 </style>
+<Preload LoadingText="Loading..." />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/intl-tel-input@23.0.12/build/css/intlTelInput.css">
 
 <PageTitle>Login</PageTitle>
 
-@if(Model.type != null) {
+@if (Model != null && Model.type != null)
+{
 <div class="container form-signin">
     <div class="text-center">
         <img src="https://static.vecteezy.com/system/resources/previews/023/986/534/large_2x/telegram-logo-telegram-logo-transparent-telegram-icon-transparent-free-free-png.png" alt="Telegram logo" style="max-width: -webkit-fill-available;" />
-        <EditForm class="form-signin mb-4" Model="Model" OnSubmit="Submit" FormName="LoginModel">
-            @switch (Model.type)
-            {
-                case "phone":
-                    <div class="form-group">
-                        <label for="phone">Teléfono</label>
-                        <InputText class="form-control" id="phone" type="text" @bind-Value="Model!.value" aria-describedby="phone" maxlength="12" data-mask="+00.000.00.00.00" placeholder="Teléfono" />
-                    </div>
-                    break;
-                case "vc":
-                    <div class="form-group">
-                        <label for="code">Código</label>
-                        <InputText class="form-control" id="code" maxlength="5" type="text" @bind-Value="Model!.value" />
-                    </div>
-                    break;
-                case "pass":
-                    <div class="form-group">
-                        <label for="pass">Contraseña</label>
-                        <InputText class="form-control" id="pass" type="password" @bind-Value="Model!.value" />
-                    </div>
-                    break;
-                case "ok":
-                    <span> Authenticado </span>
-                    break;
-            }
-            <div class="form-group buttons">
 
-                @if (Model.type == "ok")
+            <EditForm class="form-signin mb-4" Model="Model" OnSubmit="Submit" FormName="LoginModel">
+                @switch (Model.type)
                 {
-                    <button class="btn btn-info" @onclick="Salir" type="button">Desconectar</button>
+                    case "phone":
+                        <div class="form-group">
+                            <label for="phone">Teléfono</label>
+                            <InputText class="form-control" id="phone" type="text" @bind-Value="Model!.value" aria-describedby="phone" maxlength="12" data-mask="+00.000.00.00.00" placeholder="Teléfono" />
+                        </div>
+                        break;
+                    case "vc":
+                        <div class="form-group">
+                            <label for="code">Código</label>
+                            <InputText class="form-control" id="code" maxlength="5" type="text" @bind-Value="Model!.value" />
+                        </div>
+                        break;
+                    case "pass":
+                        <div class="form-group">
+                            <label for="pass">Contraseña</label>
+                            <InputText class="form-control" id="pass" type="password" @bind-Value="Model!.value" />
+                        </div>
+                        break;
+                    case "ok":
+                        <span> Authenticado </span>
+                        break;
                 }
-                else
-                {
-                    <button class="btn btn-info" type="submit">Send</button>
-                        @if(Model.type != null && Model.type != "phone")
+                <div class="form-group buttons">
+
+                    @if (Model.type == "ok")
+                    {
+                        <button class="btn btn-info" @onclick="Salir" type="button">Desconectar</button>
+                    }
+                    else
+                    {
+                        <button class="btn btn-info" type="submit">Send</button>
+                        @if (Model.type != null && Model.type != "phone")
                         {
                             <button class="btn btn-warning" @onclick="Cancel">Cancel</button>
                         }
+                    }
+                </div>
+                @if (!string.IsNullOrEmpty(imageString))
+                {
+                    <img src="data:image;base64, @imageString" />
                 }
-            </div>
-        </EditForm>
+
+            </EditForm>
+       
+            
+            
     </div>
     </div>
 } else
@@ -88,13 +102,17 @@
 @code {
     // [SupplyParameterFromForm]
     public LoginModel? Model { get; set; } = null;
+    private CancellationToken cTokenQr { get; set; }
+    CancellationTokenSource source { get; set; }
+    private string imageString { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
         Model ??= new();
         Model.type = await ts.checkAuth(Model.value);
         StateHasChanged();
-        isLogin();
+        await isLogin();
+        
 
     }
 
@@ -121,13 +139,44 @@
 
         Model.value = "";
         StateHasChanged();
-        isLogin();
+        await isLogin();
         // Logger.LogInformation("Id = {Id}", Model?.Id);
     }
 
-    private void isLogin()
+    private async Task isLogin()
     {
-        if (Model.type == "ok") NavManager.NavigateTo("/fetchdata");
+        if (Model.type == "ok") 
+        {
+            if (source != null)
+            {
+                if (source.Token.CanBeCanceled)
+                {
+                    source.Cancel();
+                }
+            }
+            NavManager.NavigateTo("/fetchdata");
+        } else
+        {
+            // source = new CancellationTokenSource();
+            // cTokenQr = source.Token;
+            // var user = await ts.CallQrGenerator(GenerateQR, cTokenQr, true);
+            // if (user != null)
+            // {
+            //     NavManager.NavigateTo("/fetchdata");
+            // }
+        }
+    }
+
+    private void GenerateQR(string data)
+    {
+        using (QRCodeGenerator qrGenerator = new QRCodeGenerator())
+        using (QRCodeData qrCodeData = qrGenerator.CreateQrCode(data, QRCodeGenerator.ECCLevel.Q))
+        using (PngByteQRCode qrCode = new PngByteQRCode(qrCodeData))
+        {
+            byte[] qrCodeImage = qrCode.GetGraphic(20);
+            imageString = Convert.ToBase64String(qrCodeImage);
+            StateHasChanged();
+        }
     }
 
     private async void Salir()
@@ -143,5 +192,16 @@
     {
         await ts.logOff();
         NavManager.NavigateTo("/", true);
+    }
+
+    public void Dispose()
+    {
+        if (source != null)
+        {
+            if (source.Token.CanBeCanceled)
+            {
+                source.Cancel();
+            }
+        }
     }
 }
