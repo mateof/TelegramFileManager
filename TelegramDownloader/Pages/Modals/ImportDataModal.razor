@@ -1,7 +1,8 @@
 ﻿@using TelegramDownloader.Data
 @using TelegramDownloader.Models
-@inject ILogger<FileManager> Logger
-@inject IFileService fs
+@inject ILogger<FileManager> Logger;
+@inject IFileService fs;
+@inject ToastService toastService;
 
 <div class="modal @ModalClass" tabindex="-1" role="dialog" style="display:@ModalDisplay;">
     <div class="modal-dialog modal-dialog-centered" role="document">

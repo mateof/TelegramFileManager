@@ -10,8 +10,10 @@ namespace TelegramDownloader.Models
         public string id {  get; set; }
         [MaxLength(40)]
         public string name { get; set; }
+        public string chatName { get; set; }
         public string fileName { get; set; }
         public string description { get; set; }
+        public InvitationInfo? invitation { get; set; }
         public List<BsonFileManagerModel> files { get; set; }
     }
 
@@ -30,5 +32,18 @@ namespace TelegramDownloader.Models
         public string Name { get; set; }
         public string Description { get; set; }
 
+    }
+
+    public class InvitationInfo
+    {
+        public string? invitationHash { get; set; }
+        public string? invitationLink { get; set; }
+
+        public InvitationInfo() { }
+        public InvitationInfo(string? invitationHash, string? invitationLink)
+        {
+            this.invitationHash = invitationHash;
+            this.invitationLink = invitationLink;
+        }
     }
 }

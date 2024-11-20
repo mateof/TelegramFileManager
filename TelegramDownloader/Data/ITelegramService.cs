@@ -1,5 +1,6 @@
 ﻿using TelegramDownloader.Models;
 using TL;
+using WTelegram;
 
 namespace TelegramDownloader.Data
 {
@@ -10,6 +11,9 @@ namespace TelegramDownloader.Data
         bool checkChannelExist(string id);
         bool checkUserLogin();
         Task deleteFile(string chatId, int idMessage);
+        bool isInChat(long id);
+        Task<InvitationInfo?> getInvitationHash(long id);
+        Task joinChatInvitationHash(string? hash);
         Task<User> CallQrGenerator(Action<string> func, CancellationToken ct, bool logoutFirst = false);
         Task<string> DownloadFile(ChatMessages message, string fileName = null, string folder = null, DownloadModel model = null);
         Task<Stream> DownloadFileAndReturn(ChatMessages message, Stream ms = null, string fileName = null, string folder = null, DownloadModel model = null);

@@ -282,6 +282,7 @@ namespace TelegramDownloader.Controllers
             sfm.id = id;
             sfm.name = fileName;
             sfm.fileName = fileName;
+            sfm.invitation = await _ts.getInvitationHash(Convert.ToInt64(id));
             sfm.files = await _fs.ShareFile(id, bsonId);
             var json = System.Text.Json.JsonSerializer.Serialize(sfm);
             var bytes = System.Text.Encoding.UTF8.GetBytes(json);

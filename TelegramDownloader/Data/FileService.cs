@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Components.Forms;
+﻿using BlazorBootstrap;
+using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
@@ -232,15 +233,17 @@ namespace TelegramDownloader.Data
         private IDbService _db { get; set; }
         private ILogger<IFileService> _logger { get; set; }
         private TransactionInfoService _tis { get; set; }
+        private ToastService _toastService { get; set;  }
 
         const int MaxSize = 1024 * 1024 * 1000; // 1GB 
 
 
-        public FileService(ITelegramService ts, IDbService db, ILogger<IFileService> logger, TransactionInfoService tis)
+        public FileService(ITelegramService ts, IDbService db, ILogger<IFileService> logger, TransactionInfoService tis, ToastService toastService)
         {
             _ts = ts;
             _db = db;
             _tis = tis;
+            _toastService = toastService;
             _logger = logger;
             createTempFolder();
         }
@@ -736,7 +739,13 @@ namespace TelegramDownloader.Data
             }
             model._transmitted = 0;
             model.callbacks = new Callbacks();
-            model.channelName = _ts.getChatName(Convert.ToInt64(dbName));
+            try
+            {
+                model.channelName = _ts.getChatName(Convert.ToInt64(dbName));
+            } catch(Exception ex) {
+                model.channelName = "Public or Shared";
+            }
+            
             model.callbacks.callback = async () => await DownloadFileNow(dbName, messageId, destPath, model);
             _tis.addToPendingDownloadList(model);
         }
@@ -831,6 +840,19 @@ namespace TelegramDownloader.Data
 
             try
             {
+                if (!_ts.isInChat(Convert.ToInt64(sfm.id)) && sfm.invitation != null && !string.IsNullOrEmpty(sfm.invitation.invitationHash))
+                    try
+                    {
+                        await _ts.joinChatInvitationHash(sfm.invitation.invitationHash);
+                        _toastService.Notify(new(ToastType.Success, "Join chat", $"Joined to chat"));
+                    }
+                    catch (Exception ex)
+                    {
+                        _toastService.Notify(new(ToastType.Danger, $"Error: {ex.Message}."));
+                    }
+                else
+                    _toastService.Notify(new(ToastType.Info, "You were already joined the chat"));
+                    
                 BsonSharedInfoModel bsi = new BsonSharedInfoModel();
                 bsi.ChannelId = sfm.id;
                 bsi.Name = sfm.name;

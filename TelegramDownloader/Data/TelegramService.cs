@@ -44,7 +44,13 @@ namespace TelegramDownloader.Data
         private void newClient()
         {
             client = new WTelegram.Client(Convert.ToInt32(GeneralConfigStatic.tlconfig?.api_id ?? Environment.GetEnvironmentVariable("api_id")), GeneralConfigStatic.tlconfig?.hash_id ?? Environment.GetEnvironmentVariable("hash_id"), UserService.USERDATAFOLDER + "/WTelegram.session");
-            WTelegram.Helpers.Log = (lvl, str) => { }; // WTelegram.Helpers.Log = (lvl, str) => WTelegramLogs.WriteLine($"{DateTime.Now:yyyy-MM-dd HH:mm:ss} [{"TDIWE!"[lvl]}] {str}");
+            if (GeneralConfigStatic.config.ShouldShowLogInTerminal)
+            {
+                // WTelegram.Helpers.Log = (lvl, str) => Console.WriteLine($"{DateTime.Now:yyyy-MM-dd HH:mm:ss} [{"TDIWE!"[lvl]}] {str}");
+            } else
+            {
+                WTelegram.Helpers.Log = (lvl, str) => { };
+            }
 
         }
 
@@ -168,6 +174,52 @@ namespace TelegramDownloader.Data
             client.Dispose();
             newClient();
         }
+
+        public async Task<InvitationInfo?> getInvitationHash(long id)
+        {
+            var peer = chats.chats[id];
+            var invites = await client.Messages_GetExportedChatInvites(peer, client.User);
+            if (invites != null && invites.invites.Count() > 0)
+            {
+                
+                if (invites.invites.FirstOrDefault() is ChatInviteExported invi)
+                {
+                    return buildInvitationInfo(invi);
+                }
+            }
+            var invitation = await client.Messages_ExportChatInvite(peer);
+            if(invitation is ChatInviteExported inv)
+            {
+                return buildInvitationInfo(inv);
+            }
+            return null;
+        }
+
+        private InvitationInfo buildInvitationInfo(ChatInviteExported invi)
+        {
+            var hash = invi.link.Split("/").LastOrDefault();
+            if (hash[0] == '+')
+                return new InvitationInfo(hash.Substring(1), invi.link);
+            return new InvitationInfo(hash, invi.link);
+        }
+
+        public async Task joinChatInvitationHash(string? hash)
+        {
+            await client.Messages_ImportChatInvite(hash);
+        }
+
+        public bool isInChat(long id)
+        {
+            try
+            {
+                var _chat = chats.chats[id];
+                return true;
+            } catch(Exception)
+            {
+                return false;
+            }
+        }
+
         public string getChatName(long id)
         {
             List<ChatMessages> cm = new List<ChatMessages>();
