@@ -14,6 +14,7 @@ using Microsoft.AspNetCore;
 using TelegramDownloader.Models;
 using TelegramDownloader.Services.GitHub;
 using System.Net.Http;
+using System.Net;
 
 var extensionProvider = new FileExtensionContentTypeProvider();
 foreach(var mime in FileService.MIMETypesDictionary)
@@ -22,6 +23,13 @@ foreach(var mime in FileService.MIMETypesDictionary)
 }
 
 GeneralConfigStatic.loadDbConfig();
+
+if (GeneralConfigStatic.tlconfig?.avoid_checking_certificate != null || Environment.GetEnvironmentVariable("avoid_checking_certificate") != null)
+    if (GeneralConfigStatic.tlconfig?.avoid_checking_certificate ?? Convert.ToBoolean(Environment.GetEnvironmentVariable("avoid_checking_certificate")))
+        ServicePointManager.ServerCertificateValidationCallback +=
+            (sender, certificate, chain, errors) => {
+                return true;
+            };
 
 
 var builder = WebApplication.CreateBuilder(args);
