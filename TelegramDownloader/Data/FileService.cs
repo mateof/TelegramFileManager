@@ -1031,14 +1031,19 @@ namespace TelegramDownloader.Data
                 var fileInfo = new System.IO.FileInfo(currentFilePath);
                 if (!file.IsFile)
                 {
+                    if (file.Name == "@eaDir") continue;
                     var allFiles = new DirectoryInfo(currentFilePath).GetFiles("*.*", SearchOption.AllDirectories).Where(x => !x.Attributes.HasFlag(FileAttributes.Hidden));
                     idt.total += allFiles.Count();
                     idt.totalSize += allFiles.Sum(x => x.Length);
                 }
                 else
                 {
-                    idt.total++;
-                    idt.totalSize += fileInfo.Length;
+                    if (file.Size > 0)
+                    {
+                        idt.total++;
+                        idt.totalSize += fileInfo.Length;
+                    }
+                    
                 }
 
             }
