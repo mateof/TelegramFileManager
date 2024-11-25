@@ -81,5 +81,6 @@ namespace TelegramDownloader.Models
         public string? api_id { get; set; }
         public string? hash_id { get; set;}
         public string? mongo_connection_string { get; set; }
+        public bool? avoid_checking_certificate { get; set; }
     }
 }

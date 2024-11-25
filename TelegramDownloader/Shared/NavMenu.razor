@@ -247,19 +247,30 @@
 
     private async Task OnTabShowingAsync(TabsEventArgs args)
     {
-        await ProtectedSessionStore.SetAsync("tabmenu", args.ActiveTabTitle);
+        try
+        {
+            await ProtectedSessionStore.SetAsync("tabmenu", args.ActiveTabTitle);
+        } catch(Exception) {}
     }
 
     private async Task getActiveTab()
     {
-        var tab = await ProtectedSessionStore.GetAsync<string>("tabmenu");
-        if (!tab.Success || string.IsNullOrEmpty(tab.Value))
+        try
         {
-            await tabs.ShowTabByNameAsync("Mine");
-        } else
+            var tab = await ProtectedSessionStore.GetAsync<string>("tabmenu");
+            if (!tab.Success || string.IsNullOrEmpty(tab.Value))
+            {
+                await tabs.ShowTabByNameAsync("Mine");
+            }
+            else
+            {
+                await tabs.ShowTabByNameAsync(tab.Value);
+            }
+        } catch(Exception)
         {
-            await tabs.ShowTabByNameAsync(tab.Value);
+            
         }
+        
     }
 
     private async Task removeShared(string id, string collecionId)

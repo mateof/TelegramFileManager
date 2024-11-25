@@ -2,5 +2,6 @@
 {
   "api_id": "",
   "hash_id": "",
-  "mongo_connection_string": ""
+  "mongo_connection_string": "",
+  "avoid_checking_certificate":  false
 }
