@@ -1032,7 +1032,7 @@ namespace TelegramDownloader.Data
                 if (!file.IsFile)
                 {
                     if (file.Name == "@eaDir") continue;
-                    var allFiles = new DirectoryInfo(currentFilePath).GetFiles("*.*", SearchOption.AllDirectories).Where(x => !x.Attributes.HasFlag(FileAttributes.Hidden) && x.Name != "@eaDir" && x.Length > 0);
+                    var allFiles = new DirectoryInfo(currentFilePath).GetFiles("*.*", SearchOption.AllDirectories).Where(x => !x.Attributes.HasFlag(FileAttributes.Hidden) && !x.Attributes.HasFlag(FileAttributes.Directory) && x.Name != "@eaDir" && x.Length > 0);
                     idt.total += allFiles.Count();
                     idt.totalSize += allFiles.Sum(x => x.Length);
                 }
