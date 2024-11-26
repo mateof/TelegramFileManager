@@ -181,7 +181,7 @@
             // await JSRuntime.InvokeVoidAsync("open", path, "_blank");
         } else
         {
-            if (args != null && args.FileDetails != null && args.FileDetails.IsFile && new List<string> { ".mp4", ".avi", ".wmv", ".mkv", ".mov" }.Contains(args.FileDetails.Type.ToLower()))
+            if (args != null && args.FileDetails != null && args.FileDetails.IsFile && new List<string> { ".mov", ".mp4", ".m4v", ".ogv", ".webm", ".flv", ".f4v" }.Contains(args.FileDetails.Type.ToLower()))
             {
                 string localdir = MyNavigationManager.BaseUri + FileService.STATICRELATIVELOCALDIR.Replace("\\", "/");
                 string path = new System.Uri((Path.Combine(localdir, args.FileDetails.FilterPath.Substring(1).Replace("\\", "/"), args.FileDetails.Name)).Replace("\\", "/")).AbsoluteUri;
