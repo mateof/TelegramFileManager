@@ -42,8 +42,7 @@ services:
     depends_on:
       - mongodb_container
     ports:
-      - "8015:80"
-      - "8016:443"
+      - "8015:8080"
     volumes:
       - <local folder/>:/app/local
       - <folder logs/>:/app/logs
@@ -99,6 +98,7 @@ services:
 - [Blazor Bootstrap](https://demos.blazorbootstrap.com/)
 - [WTelegramClient](https://github.com/wiz0u/WTelegramClient)
 
+<!---
 
 ## Name
 
@@ -120,8 +120,13 @@ services:
 
 ## Authors and acknowledgment
 
+-->
 
 ## License
 - GPLv3
 
+<!--
+
 ## Project status
+
+-->
