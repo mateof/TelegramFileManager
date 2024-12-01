@@ -10,6 +10,7 @@
 @inject ILogger<FileManager> Logger;
 
 
+
 <SfFileManager @ref="FileManager" ID="localfm" TValue="FileManagerDirectoryContent">
     <FileManagerAjaxSettings Url=@($"/api/file/FileOperations")
                              UploadUrl="/api/file/Upload"
@@ -27,6 +28,7 @@
 <TelegramDownloader.Pages.Modals.UploadToTelegramModal @ref="Modal"></TelegramDownloader.Pages.Modals.UploadToTelegramModal>
 <TelegramDownloader.Pages.Modals.FileUploadModal @ref="ModalUpSer"></TelegramDownloader.Pages.Modals.FileUploadModal>
 <TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal @ref="mediaUrlModal"></TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal>
+<TelegramDownloader.Pages.Modals.VideoPlayerModal @ref=videoPlayer></TelegramDownloader.Pages.Modals.VideoPlayerModal>
 
 
 @code {
@@ -39,6 +41,7 @@
     SfFileManager<FileManagerDirectoryContent>? FileManager;
 
     private MediaUrlModal mediaUrlModal { get; set; } = default!;
+    private VideoPlayerModal videoPlayer { get; set; } = default!;
 
     NotificationModel nm = new NotificationModel();
     public string[] ContextItems = new string[] { "Open", "Delete", "Download", "Rename", "Details", "Copy Media Url" };
@@ -72,7 +75,7 @@
             Items.AddRange(new List<ToolBarItemModel>(){
                     new ToolBarItemModel() { Name = "Upload File", Text = "Upload To Server", TooltipText = "Upload To server", PrefixIcon = "e-icons e-fe-upload" },
                     new ToolBarItemModel() { Name = "UploadTelegram", Text = "Upload Telegram", TooltipText = "Upload File", PrefixIcon = "bi bi-telegram" },
-                    
+
                 }
             );
         }
@@ -176,7 +179,17 @@
             // string localdir = "/" + FileService.STATICRELATIVELOCALDIR.Replace("\\", "/");
             // string path = Path.Combine(localdir, args.FileDetails.FilterPath.Substring(1).Replace("\\", "/"), args.FileDetails.Name);
             // await JSRuntime.InvokeVoidAsync("open", path, "_blank");
+        } else
+        {
+            if (args != null && args.FileDetails != null && args.FileDetails.IsFile && new List<string> { ".mov", ".mp4", ".m4v", ".ogv", ".webm", ".flv", ".f4v" }.Contains(args.FileDetails.Type.ToLower()))
+            {
+                string localdir = MyNavigationManager.BaseUri + FileService.STATICRELATIVELOCALDIR.Replace("\\", "/");
+                string path = new System.Uri((Path.Combine(localdir, args.FileDetails.FilterPath.Substring(1).Replace("\\", "/"), args.FileDetails.Name)).Replace("\\", "/")).AbsoluteUri;
+                videoPlayer.ShowModal(path);
+            }
+            
         }
+
     }
 
     private async Task playAudio(FileOpenEventArgs<FileManagerDirectoryContent> args)

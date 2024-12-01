@@ -1,0 +1,43 @@
+﻿<Modal @ref="modal" Title="Video" UseStaticBackdrop="true" CloseOnEscape="false" Size="ModalSize.ExtraLarge">
+    <BodyTemplate>
+        @if(!string.IsNullOrEmpty(fileUrl))
+        {
+            <video id="video-player"
+                   class="video-js"
+                   controls
+                   preload="auto"
+                   style="height: 100% !important; width: 100% !important"
+                   data-setup="{}">
+                <source src=@fileUrl type="video/mp4" />
+                <p class="vjs-no-js">
+                    To view this video please enable JavaScript, and consider upgrading to a
+                    web browser that
+                    <a href="https://videojs.com/html5-video-support/" target="_blank">supports HTML5 video</a>
+                </p>
+            </video>
+        }
+        
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Secondary" @onclick="OnHideModalClick">Close</Button>
+    </FooterTemplate>
+</Modal>
+
+
+@code {
+    public string fileUrl = "";
+
+    private Modal modal = default!;
+
+    public async Task ShowModal(string file)
+    {
+        fileUrl = file;
+        await modal.ShowAsync();
+    }
+
+    public async Task OnHideModalClick()
+    {
+        fileUrl = "";
+        await modal.HideAsync();
+    }
+}
