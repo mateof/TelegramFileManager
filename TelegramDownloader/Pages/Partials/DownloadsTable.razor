@@ -5,13 +5,13 @@
 @inject TransactionInfoService tis
 
 <Grid @ref="grid"
-      TItem="DownloadModel"
-      Class="table table-hover table-bordered table-striped"
-      DataProvider="UploadsDataProvider"
-      AllowFiltering="false"
-      AllowPaging="true"
-      AllowSorting="false"
-      Responsive="true">
+TItem="DownloadModel"
+Class="table table-hover table-bordered table-striped"
+DataProvider="DownloadsDataProvider"
+AllowFiltering="false"
+AllowPaging="true"
+AllowSorting="false"
+Responsive="true">
 
     <GridColumn TItem="DownloadModel" HeaderText="ID" PropertyName="id" SortString="id" SortKeySelector="item => item.id" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
         @context.id
@@ -31,7 +31,7 @@
         @context._transmittedString of @context._sizeString
     </GridColumn>
     <GridColumn TItem="DownloadModel" HeaderText="Actions">
-        @if (context.state == StateTask.Working)
+        @if (context.state == StateTask.Working && !isPending)
         {
             <td><button class="btn btn-danger" @onclick="() => cancel(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Cancel task"><i class="bi bi-x"></i></button></td>
         }
@@ -40,7 +40,17 @@
         {
             <td>
                 <div class="btn-group" role="group">
-                    <button class="btn btn-info" @onclick="() => retry(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="retry task"><i class="bi bi-arrow-clockwise"></i></button>
+                    @if(!isPending) {
+                        <button class="btn btn-info" @onclick="() => retry(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="retry task"><i class="bi bi-arrow-clockwise"></i></button>
+                    }
+                    <button class="btn btn-danger" @onclick="() => deleteDownload(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="delete task"><i class="bi bi-trash"></i></button>
+                </div>
+            </td>
+        }
+        @if(isPending) 
+        {
+            <td>
+                <div class="btn-group" role="group">
                     <button class="btn btn-danger" @onclick="() => deleteDownload(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="delete task"><i class="bi bi-trash"></i></button>
                 </div>
             </td>
@@ -50,6 +60,8 @@
 </Grid>
 
 @code {
+    [Parameter]
+    public bool isPending { get; set; } = false;
     public static List<DownloadModel> ldm = new List<DownloadModel>();
     BlazorBootstrap.Grid<DownloadModel> grid = default!;
 
@@ -59,10 +71,10 @@
         TransactionInfoService.EventChanged += eventChangedNew;
     }
 
-    private async Task<GridDataProviderResult<DownloadModel>> UploadsDataProvider(GridDataProviderRequest<DownloadModel> request)
+    private async Task<GridDataProviderResult<DownloadModel>> DownloadsDataProvider(GridDataProviderRequest<DownloadModel> request)
     {
         await getDownloadModels(request.PageNumber - 1, request.PageSize, ldm.Count() == 0);
-        int totalUploads = tis.getTotalDownloads();
+        int totalUploads = tis.getTotalDownloads(isPending);
         return await Task.FromResult(new GridDataProviderResult<DownloadModel> { Data = ldm ?? new List<DownloadModel>(), TotalCount = totalUploads });//request.ApplyTo(uploads));
     }
 
@@ -82,6 +94,10 @@
 
     private async Task deleteDownload(DownloadModel um)
     {
+        if (isPending) {
+            tis.deletePendingDownloadInList(um);
+            return;
+        }
         tis.deleteDownloadInList(um);
     }
 
@@ -100,7 +116,7 @@
 
     private async Task getDownloadModels(int pageNumber, int pageSize, bool mustCallEnventHandler = false)
     {
-        ldm = tis.GetDownloadModels(pageNumber, pageSize);
+        ldm = tis.GetDownloadModels(pageNumber, pageSize, isPending);
         if (mustCallEnventHandler)
             checkNewEventsHandler();
     }

@@ -119,16 +119,22 @@ namespace TelegramDownloader.Services
         }
 
 
-        public List<DownloadModel> GetDownloadModels(int pageNumber, int pageSize)
+        public List<DownloadModel> GetDownloadModels(int pageNumber, int pageSize, bool isPending = false)
         {
+            if (isPending)
+            {
+                if (pendingDownloadModels.Count() == 0 || pendingDownloadModels.Count() < (pageNumber) * pageSize)
+                    return pendingDownloadModels;
+                return pendingDownloadModels.Skip(pageNumber * pageSize).Take(pageSize).ToList();
+            }
             if (downloadModels.Count() == 0 || downloadModels.Count() < (pageNumber) * pageSize)
                 return downloadModels;
             return downloadModels.Skip(pageNumber * pageSize).Take(pageSize).ToList(); //.GetRange(pageNumber * pageSize, pageSize);
         }
 
-        public int getTotalDownloads()
+        public int getTotalDownloads(bool isPending = false)
         {
-            return downloadModels.Count();
+            return isPending ? pendingDownloadModels.Count() : downloadModels.Count();
         }
 
         public List<UploadModel> GetUploadModels(int pageNumber, int pageSize)
@@ -147,6 +153,14 @@ namespace TelegramDownloader.Services
         {
             PendingDownloadMutex.WaitOne();
                 downloadModels.Remove(downloadModel);
+            PendingDownloadMutex.ReleaseMutex();
+            EventChanged?.Invoke(this, new EventArgs());
+        }
+
+        public void deletePendingDownloadInList(DownloadModel downloadModel)
+        {
+            PendingDownloadMutex.WaitOne();
+            pendingDownloadModels.Remove(downloadModel);
             PendingDownloadMutex.ReleaseMutex();
             EventChanged?.Invoke(this, new EventArgs());
         }
