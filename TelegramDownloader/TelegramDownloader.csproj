@@ -15,12 +15,12 @@
   <ItemGroup>
     <PackageReference Include="Blazor.Bootstrap" Version="3.2.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Log4Net.AspNetCore" Version="8.0.0" />
-    <PackageReference Include="MongoDB.Driver" Version="3.0.0" />
+    <PackageReference Include="MongoDB.Driver" Version="3.1.0" />
     <PackageReference Include="QRCoder" Version="1.6.0" />
-    <PackageReference Include="Syncfusion.Blazor" Version="27.2.4" />
+    <PackageReference Include="Syncfusion.Blazor" Version="28.1.36" />
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.21.0" />
-    <PackageReference Include="Syncfusion.EJ2.AspNet.Core" Version="27.2.4" />
-    <PackageReference Include="WTelegramClient" Version="4.2.4" />
+    <PackageReference Include="Syncfusion.EJ2.AspNet.Core" Version="28.1.36" />
+    <PackageReference Include="WTelegramClient" Version="4.2.5" />
   </ItemGroup>
 
   <ItemGroup>

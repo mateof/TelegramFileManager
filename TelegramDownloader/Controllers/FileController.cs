@@ -208,7 +208,7 @@ namespace TelegramDownloader.Controllers
             this.operation.RootFolder(Path.Combine(basePath, root));
             FileManagerResponse uploadResponse;
 
-            uploadResponse = operation.Upload(Path.Combine(basePath, root, path), lfile, action, null);
+            uploadResponse = operation.Upload(Path.Combine(basePath, root, path), lfile, action, 0, null);
             if (uploadResponse.Error != null)
             {
                 Response.Clear();
