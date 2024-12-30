@@ -57,7 +57,7 @@
     private FilesAndCount getLogs(int pageNumber, int pageSize)
     {
         FilesAndCount fac = new FilesAndCount();
-        List<string> totalLogs = Directory.GetFiles(Path.Combine(Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location), "logs")).ToList();
+        List<string> totalLogs = Directory.GetFiles(Path.Combine(Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? AppDomain.CurrentDomain.BaseDirectory, "logs")).ToList();
         totalLogs.Reverse();
         fac.totalFiles = totalLogs.Count();
 
