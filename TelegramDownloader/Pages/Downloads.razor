@@ -32,7 +32,19 @@
                 </div>
                 
             </div>
-            <TelegramDownloader.Pages.Partials.DownloadsTable></TelegramDownloader.Pages.Partials.DownloadsTable>
+            <Tabs>
+                <Tab Title="Downloads">
+                    <Content>
+                        <TelegramDownloader.Pages.Partials.DownloadsTable isPending="false"></TelegramDownloader.Pages.Partials.DownloadsTable>
+                    </Content>
+                </Tab>
+                <Tab Title="Pending">
+                    <Content>
+                        <TelegramDownloader.Pages.Partials.DownloadsTable isPending="true"></TelegramDownloader.Pages.Partials.DownloadsTable>
+                    </Content>
+                </Tab>
+            </Tabs>
+            
         </Content>
     </Tab>
     <Tab Title="Uploads">

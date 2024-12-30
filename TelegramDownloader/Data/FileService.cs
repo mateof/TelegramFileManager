@@ -10,6 +10,7 @@ using Syncfusion.Blazor.Inputs;
 
 using Syncfusion.EJ2.FileManager.PhysicalFileProvider;
 using Syncfusion.EJ2.Linq;
+using Syncfusion.EJ2.Notifications;
 using System.Dynamic;
 using System.IO.Compression;
 using System.Security.Cryptography;
@@ -706,7 +707,7 @@ namespace TelegramDownloader.Data
 
         private async Task<MemoryStream> downloadFromTelegramAndReturn(string dbName, int messageId, string destPath, MemoryStream ms = null)
         {
-            Message m = await _ts.getMessageFile(dbName, messageId);
+            TL.Message m = await _ts.getMessageFile(dbName, messageId);
             ChatMessages cm = new ChatMessages();
             cm.message = m;
 
@@ -747,6 +748,28 @@ namespace TelegramDownloader.Data
             }
             
             model.callbacks.callback = async () => await DownloadFileNow(dbName, messageId, destPath, model);
+            _tis.addToPendingDownloadList(model);
+        }
+
+        public async Task DownloadFileFromChat(ChatMessages message, string fileName = null, string folder = null, DownloadModel model = null)
+        {
+            if (model == null)
+                model = new DownloadModel();
+            model.name = fileName;
+            if (message.message.media is MessageMediaDocument { document: Document document })
+            {
+                model._size = document.size;
+            }
+            if (message.user is Channel channel)
+            {
+                model.channelName = channel.Title;
+            }
+            model._transmitted = 0;
+            model.channel = message.user;
+            //model.channelName = message.user.;
+            model.callbacks = new Callbacks();
+
+            model.callbacks.callback = async () => await _ts.DownloadFile(message,fileName, folder, model);
             _tis.addToPendingDownloadList(model);
         }
 
@@ -1149,7 +1172,7 @@ namespace TelegramDownloader.Data
                         _logger.LogInformation($"Calculating MD5 of file {currentFilePath}");
                         model.MD5Hash = GetMd5HashFromFile(currentFilePath);
                         _logger.LogInformation($"Calculated MD5 of file {currentFilePath}: {model.MD5Hash}");
-                        Message m = null;
+                        TL.Message m = null;
                         long max = (long)MaxSize * (long)TelegramService.splitSizeGB;
                         if (fileInfo.Length > max)
                         {
@@ -1398,7 +1421,7 @@ namespace TelegramDownloader.Data
 
                 BsonFileManagerModel model = new BsonFileManagerModel();
                 model.Size = file.File.Size;
-                Message m = null;
+                TL.Message m = null;
                 if (file.File.Size > MaxSize)
                 {
 

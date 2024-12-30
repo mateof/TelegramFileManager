@@ -33,7 +33,7 @@ if (GeneralConfigStatic.tlconfig?.avoid_checking_certificate != null || Environm
 
 
 var builder = WebApplication.CreateBuilder(args);
-Syncfusion.Licensing.SyncfusionLicenseProvider.RegisterLicense("Ngo9BigBOggjHTQxAR8/V1NDaF5cWWtCf1FpRmJGdld5fUVHYVZUTXxaS00DNHVRdkdnWXZccXRQR2FZVEVzWUQ=");
+Syncfusion.Licensing.SyncfusionLicenseProvider.RegisterLicense("MzY0NjIwOUAzMjM4MmUzMDJlMzBZdngxNkEzSjRTQTczaDdlWkxEd1BIeUovNjh1eHByNEg5SkRVZ1lmWHc4PQ==");
 builder.Services.AddSyncfusionBlazor();
 
 if (!Directory.Exists(FileService.IMGDIR))

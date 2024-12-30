@@ -432,7 +432,7 @@ namespace TelegramDownloader.Data
             return null;
         }
 
-        public async Task<string> DownloadFile(ChatMessages message, string fileName = null, string folder = null, DownloadModel model = null)
+        public async Task<string> DownloadFile(ChatMessages message, string fileName = null, string folder = null, DownloadModel model = null, bool shouldAddToList = false)
         {
             if (model == null)
                 model = new DownloadModel();
@@ -447,7 +447,8 @@ namespace TelegramDownloader.Data
                 var filename = fileName ?? document.Filename;
                 filename ??= $"{document.id}.{document.mime_type[(document.mime_type.IndexOf('/') + 1)..]}";
                 model.name = filename;
-                _tis.addToDownloadList(model);
+                if (shouldAddToList)
+                    _tis.addToDownloadList(model);
                 Console.WriteLine("Downloading " + filename);
                 // using var fileStream = File.Create(filename);
                 using var dest = new FileStream($"{Path.Combine(folder != null ? folder : Path.Combine(Environment.CurrentDirectory, "local", "temp"), filename)}", FileMode.Create, FileAccess.Write);

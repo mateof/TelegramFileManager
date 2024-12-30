@@ -13,7 +13,7 @@
       AllowSorting="false"
       Responsive="true">
 
-    <GridColumn TItem="UploadModel" HeaderText="ID" PropertyName="id" SortString="id" SortKeySelector="item => item.id" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
+    <GridColumn TItem="UploadModel" Class="d-none d-md-table-cell" HeaderText="ID" PropertyName="id" SortString="id" SortKeySelector="item => item.id" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
         @context.id
     </GridColumn>
     <GridColumn TItem="UploadModel" HeaderText="File" PropertyName="name" SortString="name" SortKeySelector="item => item.name" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">

@@ -15,7 +15,7 @@ namespace TelegramDownloader.Data
         Task<InvitationInfo?> getInvitationHash(long id);
         Task joinChatInvitationHash(string? hash);
         Task<User> CallQrGenerator(Action<string> func, CancellationToken ct, bool logoutFirst = false);
-        Task<string> DownloadFile(ChatMessages message, string fileName = null, string folder = null, DownloadModel model = null);
+        Task<string> DownloadFile(ChatMessages message, string fileName = null, string folder = null, DownloadModel model = null, bool shouldAddToList = false);
         Task<Stream> DownloadFileAndReturn(ChatMessages message, Stream ms = null, string fileName = null, string folder = null, DownloadModel model = null);
         Task<List<ChatViewBase>> GetFouriteChannels(bool mustRefresh = true);
         Task AddFavouriteChannel(long id);

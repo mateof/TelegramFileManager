@@ -13,7 +13,7 @@
       AllowSorting="false"
       Responsive="true">
 
-    <GridColumn TItem="InfoDownloadTaksModel" HeaderText="ID" PropertyName="id" SortString="id" SortKeySelector="item => item.id" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
+    <GridColumn TItem="InfoDownloadTaksModel" Class="d-none d-md-table-cell" HeaderText="ID" PropertyName="id" SortString="id" SortKeySelector="item => item.id" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
         @context.id
     </GridColumn>
     <GridColumn TItem="InfoDownloadTaksModel" HeaderText="To" PropertyName="toPath" SortString="toPath" SortKeySelector="item => item.toPath" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">

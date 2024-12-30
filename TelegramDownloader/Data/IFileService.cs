@@ -15,6 +15,7 @@ namespace TelegramDownloader.Data
         Task DeleteShared(string id, string collectionId);
         Task downloadFile(string dbName, List<FileManagerDirectoryContent> files, string targetPath, string? collectionId = null, string? channelId = null);
         Task downloadFile(string dbName, string path, List<string> files, string targetPath, string? collectionId = null, string? channelId = null);
+        Task DownloadFileFromChat(ChatMessages message, string fileName = null, string folder = null, DownloadModel model = null);
         Task downloadFileToServer(string dbName, string path, string destPath);
         FileStream? ExistFileIntempFolder(string id);
         Task<MemoryStream> exportAllData(string dbName);
