@@ -382,6 +382,67 @@ namespace TelegramDownloader.Data
             return await GetFilesPath(dbName, args.Path);
         }
 
+        private async Task itemDeleteAsync(string dbName, string filterPath, string name, string parentId, string path)
+        {
+
+            BsonFileManagerModel entry = await _db.getEntry(dbName, filterPath, name);
+            if (entry == null)
+                throw new Exception($"File {System.IO.Path.Combine(filterPath, name)} not found");
+            if (!entry.IsFile)
+            {
+                List<BsonFileManagerModel> allChilds = await _db.getAllChildFilesInDirectory(dbName, filterPath + name + "/");
+                foreach (BsonFileManagerModel child in allChilds)
+                {
+                    await _db.deleteEntry(dbName, child.Id);
+                    if (child.IsFile)
+                    {
+                        if (child.isSplit)
+                        {
+                            foreach (int id in child.ListMessageId)
+                            {
+                                if (!await _db.existItemByTelegramId(dbName, id))
+                                    await _ts.deleteFile(dbName, id);
+                            }
+                        }
+                        else
+                        {
+                            if (!await _db.existItemByTelegramId(dbName, (int)child.MessageId))
+                                await _ts.deleteFile(dbName, (int)child.MessageId);
+                        }
+                    }
+
+                    //if (item.IsFile)
+                    //    await _db.subBytesToFolder(dbName, item.ParentId, item.Size);
+                }
+                await _db.deleteEntry(dbName, entry.Id);
+                // await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size);
+            }
+
+            if (entry.IsFile)
+            {
+                await _db.deleteEntry(dbName, entry.Id);
+                if (entry.isSplit)
+                {
+                    foreach (int id in entry.ListMessageId)
+                    {
+                        if (!await _db.existItemByTelegramId(dbName, id))
+                            await _ts.deleteFile(dbName, id);
+                    }
+                }
+                else
+                {
+                    if (!await _db.existItemByTelegramId(dbName, (int)entry.MessageId))
+                        await _ts.deleteFile(dbName, (int)entry.MessageId);
+                }
+            }
+
+
+
+            await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size);
+
+            await _db.checkAndSetDirectoryHasChild(dbName, parentId);
+        }
+
         public async Task oneItemDeleteAsync(string dbName, Syncfusion.Blazor.FileManager.FileManagerDirectoryContent File)
         {
 
@@ -1163,11 +1224,16 @@ namespace TelegramDownloader.Data
                             continue;
                         }
                         idt.currentUpload++;
-                        if (file.Size == 0 || (await _db.getFileByPath(dbName, System.IO.Path.Combine(currentPath, file.Name))) != null)
+                        BsonFileManagerModel savedFile = await _db.getFileByPath(dbName, System.IO.Path.Combine(currentPath, file.Name));
+                        if (file.Size == 0 || (savedFile != null && savedFile.DateModified < file.DateModified))
                         {
                             if (idt != null) idt.AddOne(file.Size);
                             continue;
                         };
+                        if (savedFile != null)
+                        {
+                            await itemDeleteAsync(dbName, savedFile.FilterPath, savedFile.Name, savedFile.ParentId, savedFile.FilePath);
+                        }
                         model.Size = fileInfo.Length;
                         _logger.LogInformation($"Calculating MD5 of file {currentFilePath}");
                         model.MD5Hash = GetMd5HashFromFile(currentFilePath);
