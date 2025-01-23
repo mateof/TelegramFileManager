@@ -1225,7 +1225,7 @@ namespace TelegramDownloader.Data
                         }
                         idt.currentUpload++;
                         BsonFileManagerModel savedFile = await _db.getFileByPath(dbName, System.IO.Path.Combine(currentPath, file.Name));
-                        if (file.Size == 0 || (savedFile != null && savedFile.DateModified < file.DateModified))
+                        if (file.Size == 0 || (savedFile != null && savedFile.DateModified > file.DateModified))
                         {
                             if (idt != null) idt.AddOne(file.Size);
                             continue;
