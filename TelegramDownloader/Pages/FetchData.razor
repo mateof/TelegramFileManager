@@ -5,8 +5,9 @@
 @using TelegramDownloader.Models
 @using TelegramDownloader.Services
 
-@inject ITelegramService ts
-@inject NavigationManager NavManager
+@inject ITelegramService ts;
+@inject NavigationManager NavManager;
+@inject PreloadService PreloadService;
 
 <PageTitle>Chat</PageTitle>
 
@@ -20,67 +21,22 @@ else
     <div>
         @if(m != null)
         {
+            <Switch @bind-Value="showAll" @ref="allMessageSwitch" @oninput="ShowAllChanged" Label="Show all messages" />
             @foreach (var mess in m)
             {
-                <div aria-live="polite" aria-atomic="true" class="bottom-0 start-0" style="padding-bottom: 10px;">
-                    <div class="toast-container position-static">
-                        <div class="toast" style="display: block !important; width: 600px;">
-                            <div class="toast-header">
-                                @* <img src="@(msg.media)" class="rounded me-2" alt="..."> *@
-                                <strong class="me-auto">@mess.user</strong>
-                                <small style="padding-right: 5px;">@mess.message.edit_date.ToShortDateString()</small>
-                                @if (mess.message.media is MessageMediaDocument { document: Document document })
-                                {
-                                    <span>@HelperService.SizeSuffix(document.size)</span>
-                                    <div class="dropdown">
-                                        <button class="btn" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                            <svg width="12" height="14" fill="currentColor" class="bi bi-three-dots-vertical" viewBox="0 0 16 16">
-                                                <path d="M9.5 13a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z" />
-                                            </svg>
-                                        </button>
-                                        <ul class="dropdown-menu">
-                                            <li><span class="dropdown-item" @onclick="() => Modal.Open(mess)">Download</span></li>
-                                            <li><span class="dropdown-item" @onclick="() => save(mess)">Download Now</span></li>
-                                        </ul>
-                                    </div>
-                                }
-                                
-                            </div>
-                            <div class="toast-body">
-                                <div>
-                                    <div>
-                                        @if (mess.message.media is MessageMediaDocument { document: Document document2 })
-                                        {
-                                            <span>@document2.Filename</span>
-                                        }
-                                    </div>
-                                    <div>
-                                        @if (mess.message.media is MessageMediaPhoto { photo: Photo photo })
-                                        {
-                                            <img alt="@photo.id" style="max-width:-webkit-fill-available;" src="/img/telegram/@($"{photo.id}.jpg")" />
-                                            
-                                        }
-                                    </div>
-                                    <div>
-                                        @* @{
-                                            Regex rrg = new Regex(@"(https?://[^\s]+)");
-                                        }
-                                        @((MarkupString)rrg.Replace(msg.message, "<a href=\"$1\">$1</a>").Replace("\n", "<br>")) *@
-                                        @((MarkupString)mess.htmlMessage.Replace("\n", "<br>"))
-                                    </div>
-                                    @* <div>@msg.media</div> *@
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                    
+
+                <TelegramDownloader.Pages.Partials.ChatMessage mess="@mess" modal="Modal" />
 
             }
-            <button type="button" class="btn btn-outline-secondary" @onclick="moreElements"> More elements </button>
+            @if (!showAll)
+            {
+                <button type="button" class="btn btn-outline-secondary" @onclick="moreElements"> More elements </button>
+            }
+            
         }
-        
+
     </div>
+    
     <TelegramDownloader.Pages.Modals.DownloadModal @ref="Modal"></TelegramDownloader.Pages.Modals.DownloadModal>
 }
 
@@ -95,10 +51,13 @@ else
 </script> *@
 
 @code {
+
     private Modals.DownloadModal Modal { get; set; }
     private string? idChat;
     private int elements = 20;
     private int page = 0;
+    bool showAll = false;
+    Switch allMessageSwitch { get; set; }
     [Parameter]
     public string? id {
         get => idChat;
@@ -111,55 +70,75 @@ else
             }
         }
     }
+
+
     private async Task<string> downloadPhoto(ChatMessages m)
     {
         return await ts.DownloadFile(m, idChat);
     }
+
     public List<ChatMessages> m = null;
 
-    //private WeatherForecast[]? forecasts;
+
+    private async Task ShowAllChanged(Microsoft.AspNetCore.Components.ChangeEventArgs args)
+    {
+        if (args.Value != null)
+            if ((bool) args.Value)
+            {
+                if (!String.IsNullOrEmpty(idChat))
+                {
+                    PreloadService.Show(SpinnerColor.Light, "Loading data...");
+                    m = await ts.getAllMessages(long.Parse(idChat));
+                    downloadPhotos(m);
+                    PreloadService.Hide();
+                    StateHasChanged();
+                }
+            } else 
+            {
+                await updateId(isRefresh: true);
+            }
+    }
 
     protected override async Task OnInitializedAsync()
     {
         if (!ts.checkUserLogin()) NavManager.NavigateTo("/");
-        // forecasts = await ForecastService.GetForecastAsync(DateTime.Now);
     }
 
-    private async Task updateId()
+    private async Task downloadPhotos(List<ChatMessages> m)
     {
+        foreach (ChatMessages mess in m)
+        {
+            if (mess.message.media is MessageMediaPhoto { photo: Photo photo })
+            {
+                await downloadPhoto(mess);
+            }
+        }
+    }
+
+    private async Task updateId(bool isRefresh = false)
+    {
+        if (!isRefresh)
+            showAll = false;
         page = 0;
         if (!String.IsNullOrEmpty(idChat))
         {
-            List<ChatMessages> mb = await ts.getChatHistory(long.Parse(idChat), limit: elements, addOffset: elements * page);
-            m = mb;
-            foreach(ChatMessages mess in m)
-            {
-                if (mess.message.media is MessageMediaPhoto { photo: Photo photo })
-                {
-                    await downloadPhoto(mess);
-                }
-            }
-            page += 1;
-            StateHasChanged();
+            m = new List<ChatMessages>();
+            await moreElements();
         }
     }
 
     private async Task moreElements()
     {
+        PreloadService.Show(SpinnerColor.Light, "Loading data...");
         if (!String.IsNullOrEmpty(idChat))
         {
             List<ChatMessages> mb = await ts.getChatHistory(long.Parse(idChat), limit: elements, addOffset: elements * page);
             m.AddRange(mb);
-            foreach (ChatMessages mess in mb)
-            {
-                if (mess.message.media is MessageMediaPhoto { photo: Photo photo })
-                {
-                    await downloadPhoto(mess);
-                }
-            }
+            downloadPhotos(page > 0 ? mb : m);
             page += 1;
             StateHasChanged();
         }
+        PreloadService.Hide();
     }
 
     public async Task save(ChatMessages cm)

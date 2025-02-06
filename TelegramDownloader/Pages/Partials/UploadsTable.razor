@@ -1,17 +1,18 @@
 ﻿@using TelegramDownloader.Data
 @using TelegramDownloader.Models
+@using TelegramDownloader.Pages.Modals.InfoModals
 @using TelegramDownloader.Services
 
 @inject TransactionInfoService tis
 
 <Grid @ref="grid"
-      TItem="UploadModel"
-      Class="table table-hover table-bordered table-striped"
-      DataProvider="UploadsDataProvider"
-      AllowFiltering="false"
-      AllowPaging="true"
-      AllowSorting="false"
-      Responsive="true">
+TItem="UploadModel"
+Class="table table-hover table-bordered table-striped"
+DataProvider="UploadsDataProvider"
+AllowFiltering="false"
+AllowPaging="true"
+AllowSorting="false"
+Responsive="true">
 
     <GridColumn TItem="UploadModel" Class="d-none d-md-table-cell" HeaderText="ID" PropertyName="id" SortString="id" SortKeySelector="item => item.id" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
         @context.id
@@ -36,7 +37,12 @@
     <GridColumn TItem="UploadModel" HeaderText="Actions">
         @if (context.state == StateTask.Working)
         {
-            <td><button class="btn btn-danger" @onclick="() => cancel(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Cancel task"><i class="bi bi-x"></i></button></td>
+            <td>
+                <div class="btn-group" role="group">
+                    <button class="btn btn-danger" @onclick="() => cancel(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Cancel task"><i class="bi bi-x"></i></button>
+                    <button class="btn btn-info" @onclick="() => infoModal.ShowModal(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Show Info"><i class="bi bi-info"></i></button>
+                </div>
+            </td>
         }
 
         @if (context.state == StateTask.Canceled || context.state == StateTask.Error)
@@ -45,6 +51,7 @@
                 <div class="btn-group" role="group">
                     <button class="btn btn-info" @onclick="() => retry(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="retry task"><i class="bi bi-arrow-clockwise"></i></button>
                     <button class="btn btn-danger" @onclick="() => deleteUpload(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="delete task"><i class="bi bi-trash"></i></button>
+                    <button class="btn btn-info" @onclick="() => infoModal.ShowModal(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Show Info"><i class="bi bi-info"></i></button>
                 </div>
             </td>
         }
@@ -52,9 +59,12 @@
 
 </Grid>
 
+<TelegramDownloader.Pages.Modals.InfoModals.UploadFileInfoModal @ref="infoModal"></TelegramDownloader.Pages.Modals.InfoModals.UploadFileInfoModal>
+
 @code {
     public static List<UploadModel> lum = new List<UploadModel>();
     BlazorBootstrap.Grid<UploadModel> grid = default!;
+    UploadFileInfoModal infoModal { get; set; }
 
     protected override async Task OnInitializedAsync()
     {

@@ -73,7 +73,7 @@
         {
             // Items = Items.Prepend(new ToolBarItemModel() { Name = "NewFolder" }).ToList();
             Items.AddRange(new List<ToolBarItemModel>(){
-                    new ToolBarItemModel() { Name = "Upload File", Text = "Upload To Server", TooltipText = "Upload To server", PrefixIcon = "e-icons e-fe-upload" },
+                    new ToolBarItemModel() { Name = "Upload File", Text = "Upload To Local", TooltipText = "Upload To local", PrefixIcon = "e-icons e-fe-upload" },
                     new ToolBarItemModel() { Name = "UploadTelegram", Text = "Upload Telegram", TooltipText = "Upload File", PrefixIcon = "bi bi-telegram" },
 
                 }
@@ -262,7 +262,7 @@
             Modal.Open();
         }
 
-        if (args.Item.Text == "Upload To Server" && args.FileDetails.Count() > 0)
+        if (args.Item.Text == "Upload To Local" && args.FileDetails.Count() > 0)
         {
             ModalUpSer.id = id;
             ModalUpSer.url = "/api/file/Upload";

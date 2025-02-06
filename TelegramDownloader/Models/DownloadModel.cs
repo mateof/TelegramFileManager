@@ -199,13 +199,14 @@ namespace TelegramDownloader.Models
         public StateTask state { get; set; } = StateTask.Working;
         public ChatMessages m { get; set; }
         public string name { get; set; }
+        public string path { get; set; }
 
         public long _size { get; set; }
         public long _transmitted { get; set; }
 
         public string _sizeString { get; set; }
         public string _transmittedString { get; set; }
-
+        public string chatName { get; set; }
         public IPeerInfo channel { get; set; }
         public int progress { get; set; }
         public Thread thread { get; set; }
@@ -280,18 +281,26 @@ namespace TelegramDownloader.Models
         {
             action = "MD5 Calc";
         }
-        public void Init(long size, string filename)
+        public virtual void Init(long size, string filename)
         {
             _sizeString = HelperService.SizeSuffix(size);
             name = filename;
             base.InvokeEvent(new UploadEventArgs());
         }
 
-        public void Finish()
+        public virtual void Finish()
         {
             state = StateTask.Completed;
             progress = 100;
             base.InvokeEvent(new UploadEventArgs());
+        }
+    }
+
+    public class XxHashModel : Md5Model
+    {
+        public XxHashModel() : base()
+        {
+            action = "XxHash Calc";
         }
     }
 

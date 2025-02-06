@@ -1,0 +1,74 @@
+﻿@using TL
+@using TelegramDownloader.Data
+@using TelegramDownloader.Models
+@using TelegramDownloader.Services
+@inject ITelegramService ts
+@inject NavigationManager NavManager
+
+@if(mess != null) {
+    <div aria-live="polite" aria-atomic="true" class="bottom-0 start-0" style="padding-bottom: 10px;">
+        <div class="toast-container position-static">
+            <div class="toast" style="display: block !important; width: 600px;">
+                <div class="toast-header">
+                    @* <img src="@(msg.media)" class="rounded me-2" alt="..."> *@
+                    <strong class="me-auto">@mess.user</strong>
+                    <small style="padding-right: 5px;">@mess.message.edit_date.ToShortDateString()</small>
+                    @if (mess.message.media is MessageMediaDocument { document: Document document })
+                    {
+                        <span>@HelperService.SizeSuffix(document.size)</span>
+                        <div class="dropdown">
+                            <button class="btn" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <svg width="12" height="14" fill="currentColor" class="bi bi-three-dots-vertical" viewBox="0 0 16 16">
+                                    <path d="M9.5 13a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z" />
+                                </svg>
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><span class="dropdown-item" @onclick="() => modal.Open(mess)">Download</span></li>
+                                <li><span class="dropdown-item" @onclick="() => save(mess)">Download Now</span></li>
+                            </ul>
+                        </div>
+                    }
+
+                </div>
+                <div class="toast-body">
+                    <div>
+                        <div>
+                            @if (mess.message.media is MessageMediaDocument { document: Document document2 })
+                            {
+                                <span>@document2.Filename</span>
+                            }
+                        </div>
+                        <div>
+                            @if (mess.message.media is MessageMediaPhoto { photo: Photo photo })
+                            {
+                                <img alt="@photo.id" style="max-width:-webkit-fill-available;" src="/img/telegram/@($"{photo.id}.jpg")" />
+
+                            }
+                        </div>
+                        <div>
+                            @* @{
+                                            Regex rrg = new Regex(@"(https?://[^\s]+)");
+                                        }
+                                        @((MarkupString)rrg.Replace(msg.message, "<a href=\"$1\">$1</a>").Replace("\n", "<br>")) *@
+                            @((MarkupString)mess.htmlMessage.Replace("\n", "<br>"))
+                        </div>
+                        @* <div>@msg.media</div> *@
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+
+@code {
+    [Parameter]
+    public ChatMessages mess { get; set; }
+    [Parameter]
+    public Modals.DownloadModal modal { get; set; }
+
+    public async Task save(ChatMessages cm)
+    {
+        await ts.DownloadFile(cm);
+    }
+}
