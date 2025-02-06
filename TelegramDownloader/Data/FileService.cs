@@ -12,7 +12,9 @@ using Syncfusion.EJ2.FileManager.PhysicalFileProvider;
 using Syncfusion.EJ2.Linq;
 using Syncfusion.EJ2.Notifications;
 using System.Dynamic;
+using System.IO;
 using System.IO.Compression;
+using System.IO.Hashing;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Xml.Linq;
@@ -1230,14 +1232,13 @@ namespace TelegramDownloader.Data
                             if (idt != null) idt.AddOne(file.Size);
                             continue;
                         };
-                        if (savedFile != null)
-                        {
-                            await itemDeleteAsync(dbName, savedFile.FilterPath, savedFile.Name, savedFile.ParentId, savedFile.FilePath);
-                        }
                         model.Size = fileInfo.Length;
-                        _logger.LogInformation($"Calculating MD5 of file {currentFilePath}");
-                        model.MD5Hash = GetMd5HashFromFile(currentFilePath);
-                        _logger.LogInformation($"Calculated MD5 of file {currentFilePath}: {model.MD5Hash}");
+                        if (GeneralConfigStatic.config.CheckHash)
+                        {
+                            _logger.LogInformation($"Calculating HASH of file {currentFilePath}");
+                            model.XXHash = ComputeXXHash64(currentFilePath);
+                            _logger.LogInformation($"Calculated HASH of file {currentFilePath}: {model.XXHash}");
+                        }
                         TL.Message m = null;
                         long max = (long)MaxSize * (long)TelegramService.splitSizeGB;
                         if (fileInfo.Length > max)
@@ -1253,6 +1254,8 @@ namespace TelegramDownloader.Data
                                 int attempts = 3;
                                 int waitForNextAttempt = 1000;
                                 UploadModel um = new UploadModel();
+                                um.path = currentFilePath;
+                                um.chatName = _ts.getChatName(Convert.ToInt64(dbName));
                                 // add upload to task list
                                 idt.addUpload(um);
                                 um.thread = Thread.CurrentThread;
@@ -1300,6 +1303,8 @@ namespace TelegramDownloader.Data
                             int attempts = 3;
                             int waitForNextAttempt = 60000;
                             UploadModel um = new UploadModel();
+                            um.path = currentFilePath;
+                            um.chatName = _ts.getChatName(Convert.ToInt64(dbName));
                             // add upload to task list
                             idt.addUpload(um);
                             while (attempts != 0 || um.state == StateTask.Canceled)
@@ -1360,7 +1365,11 @@ namespace TelegramDownloader.Data
 
                             model.MessageId = m.ID;
                         }
-
+                        // delete previous file, when the new modified date file is newest
+                        if (savedFile != null)
+                        {
+                            await itemDeleteAsync(dbName, savedFile.FilterPath, savedFile.Name, savedFile.ParentId, savedFile.FilePath);
+                        }
                     }
                     BsonFileManagerModel parent = await _db.getParentDirectoryByPath(dbName, currentPath);
                     model.Name = file.IsFile ? fileInfo.Name : file.Name;
@@ -1764,6 +1773,26 @@ namespace TelegramDownloader.Data
                     return BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
                 }
             }
+        }
+
+        private string ComputeXXHash64(string filePath)
+        {
+            XxHashModel _xxHash = new XxHashModel();
+            _xxHash.path = filePath;
+            var hashAlgorithm = new XxHash64();
+            var buffer = new Span<byte>(new byte[512]);
+            using (Stream entryStream = File.OpenRead(filePath))
+            {
+                _tis.addToUploadList(_xxHash);
+                _xxHash.Init(entryStream.Length, Path.GetFileName(filePath));
+                while (entryStream.Read(buffer) > 0)
+                {
+                    hashAlgorithm.Append(buffer);
+                }
+            }
+
+            return BitConverter.ToString(hashAlgorithm.GetHashAndReset()).Replace("-", string.Empty);
+
         }
 
         private async Task<List<Stream>> splitFileAsync(Stream s, int size)

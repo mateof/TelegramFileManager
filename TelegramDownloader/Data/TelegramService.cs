@@ -316,6 +316,37 @@ namespace TelegramDownloader.Data
             //return m;
         }
 
+        public async Task<List<ChatMessages>> getAllMessages(long id)
+        {
+            List<ChatMessages> cm = new List<ChatMessages>();
+            InputPeer peer = chats.chats[id];
+            for (int offset_id = 0; ;)
+            {
+                var messages = await client.Messages_GetHistory(peer, offset_id);
+                if (messages.Messages.Length == 0) break;
+                foreach (MessageBase msgBase in messages.Messages)
+                {
+                    if (msgBase is Message msg)
+                    {
+                        ChatMessages cm2 = new ChatMessages();
+                        cm2.htmlMessage = client.EntitiesToHtml(msg.message, msg.entities);
+                        cm2.message = msg;
+
+                        cm2.user = messages.UserOrChat(msg.From ?? msg.Peer);
+                        cm2.isDocument = false;
+                        if (msg.media is MessageMediaDocument { document: Document document })
+                        {
+                            cm2.isDocument = true;
+                        }
+
+                        cm.Add(cm2);
+                    }
+                }
+                offset_id = messages.Messages[^1].ID;
+            }
+            return cm;
+        }
+
         public async Task<List<ChatMessages>> getChatHistory(long id, int limit = 30, int addOffset = 0)
         {
             List<ChatMessages> cm = new List<ChatMessages>();
@@ -478,5 +509,6 @@ namespace TelegramDownloader.Data
             }
             return null;
         }
+
     }
 }

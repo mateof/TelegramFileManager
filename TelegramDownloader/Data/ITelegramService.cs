@@ -22,6 +22,7 @@ namespace TelegramDownloader.Data
         Task RemoveFavouriteChannel(long id);
         Task<List<ChatViewBase>> getAllChats();
         Task<List<ChatViewBase>> getAllSavedChats();
+        Task<List<ChatMessages>> getAllMessages(long id);
         Task<List<ChatMessages>> getChatHistory(long id, int limit = 30, int addOffset = 0);
         string getChatName(long id);
         Task<Message> getMessageFile(string chatId, int idMessage);

@@ -36,6 +36,15 @@
 
         <div>
             <div class="form-check form-switch">
+                <InputCheckbox @bind-Value="Model!.CheckHash" class="form-check-input" type="checkbox" id="CheckHash" />
+                <label class="form-check-label" for="ShouldShowNotifications">Check Hash</label>
+            </div>
+
+
+        </div>
+
+        <div>
+            <div class="form-check form-switch">
                 <InputCheckbox @bind-Value="Model!.ShouldNotify" class="form-check-input" type="checkbox" id="ShouldShowNotifications" />
                 <label class="form-check-label" for="ShouldShowNotifications">Should show Notifications</label>
             </div>

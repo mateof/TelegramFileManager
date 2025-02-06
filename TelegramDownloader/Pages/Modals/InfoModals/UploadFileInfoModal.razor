@@ -1,0 +1,38 @@
+﻿@using TelegramDownloader.Models
+
+<Modal @ref="Modal" title="File Info" Size="ModalSize.ExtraLarge">
+    <BodyTemplate>
+        <table class="table">
+            <tbody>
+                <tr>
+                    <td>Path</td>
+                    <td>@uploadModel.path</td>
+                </tr>
+                <tr>
+                    <td>Channel</td>
+                    <td>@uploadModel.chatName</td>
+                </tr>
+                <tr>
+                    <td>Size</td>
+                    <td>@uploadModel._sizeString</td>
+                </tr>
+            </tbody>
+        </table>
+    </BodyTemplate>
+</Modal>
+
+@code {
+    [Parameter]
+    public UploadModel uploadModel { get; set; }
+    private Modal Modal = default!;
+
+    public async Task ShowModal(UploadModel uploadModel)
+    {
+        this.uploadModel = uploadModel;
+        if (this.uploadModel != null)
+        {
+            await Modal.ShowAsync();
+        }
+        
+    }
+}

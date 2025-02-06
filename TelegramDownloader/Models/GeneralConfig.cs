@@ -71,6 +71,7 @@ namespace TelegramDownloader.Models
         public int TimeSleepBetweenTransactions { get; set; } = 2000;
         public int SplitSize { get; set; } = 0;
         public int MaxSimultaneousDownloads = 1;
+        public bool CheckHash { get; set; } = false;
         public bool ShouldShowLogInTerminal { get; set; } = false;
         public List<long> FavouriteChannels { get; set; } = new List<long>();
         
