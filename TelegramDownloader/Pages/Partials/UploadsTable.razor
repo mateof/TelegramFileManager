@@ -6,19 +6,19 @@
 @inject TransactionInfoService tis
 
 <Grid @ref="grid"
-TItem="UploadModel"
-Class="table table-hover table-bordered table-striped"
-DataProvider="UploadsDataProvider"
-AllowFiltering="false"
-AllowPaging="true"
-AllowSorting="false"
-Responsive="true">
+      TItem="UploadModel"
+      Class="table table-hover table-bordered table-striped"
+      DataProvider="UploadsDataProvider"
+      AllowFiltering="false"
+      AllowPaging="true"
+      AllowSorting="false"
+      Responsive="true">
 
     <GridColumn TItem="UploadModel" Class="d-none d-md-table-cell" HeaderText="ID" PropertyName="id" SortString="id" SortKeySelector="item => item.id" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
         @context.id
     </GridColumn>
     <GridColumn TItem="UploadModel" HeaderText="File" PropertyName="name" SortString="name" SortKeySelector="item => item.name" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
-        @context.name
+        <Tooltip Class="me-4" Title="@context.path">@context.name</Tooltip>
     </GridColumn>
     <GridColumn TItem="UploadModel" HeaderText="State" PropertyName="state" SortString="state" SortKeySelector="item => item.state" FilterTextboxWidth="80">
         @context.state
@@ -35,26 +35,37 @@ Responsive="true">
         @context._transmittedString of @context._sizeString
     </GridColumn>
     <GridColumn TItem="UploadModel" HeaderText="Actions">
-        @if (context.state == StateTask.Working)
-        {
-            <td>
-                <div class="btn-group" role="group">
-                    <button class="btn btn-danger" @onclick="() => cancel(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Cancel task"><i class="bi bi-x"></i></button>
-                    <button class="btn btn-info" @onclick="() => infoModal.ShowModal(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Show Info"><i class="bi bi-info"></i></button>
-                </div>
-            </td>
+        @{
+            switch (context.state)
+            {
+                case StateTask.Working:
+                    <td>
+                        <div class="btn-group" role="group">
+                            <button class="btn btn-danger" @onclick="() => cancel(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Cancel task"><i class="bi bi-x"></i></button>
+                            <button class="btn btn-info" @onclick="() => infoModal.ShowModal(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Show Info"><i class="bi bi-info"></i></button>
+                        </div>
+                    </td>
+                    break;
+                case StateTask.Canceled:
+                case StateTask.Error:
+                    <td>
+                        <div class="btn-group" role="group">
+                            <button class="btn btn-info" @onclick="() => retry(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="retry task"><i class="bi bi-arrow-clockwise"></i></button>
+                            <button class="btn btn-danger" @onclick="() => deleteUpload(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="delete task"><i class="bi bi-trash"></i></button>
+                            <button class="btn btn-info" @onclick="() => infoModal.ShowModal(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Show Info"><i class="bi bi-info"></i></button>
+                        </div>
+                    </td>
+                    break;
+                default:
+                    <td>
+                        <div class="btn-group" role="group">
+                            <button class="btn btn-info" @onclick="() => infoModal.ShowModal(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Show Info"><i class="bi bi-info"></i></button>
+                        </div>
+                    </td>
+                    break;
+            }
         }
 
-        @if (context.state == StateTask.Canceled || context.state == StateTask.Error)
-        {
-            <td>
-                <div class="btn-group" role="group">
-                    <button class="btn btn-info" @onclick="() => retry(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="retry task"><i class="bi bi-arrow-clockwise"></i></button>
-                    <button class="btn btn-danger" @onclick="() => deleteUpload(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="delete task"><i class="bi bi-trash"></i></button>
-                    <button class="btn btn-info" @onclick="() => infoModal.ShowModal(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Show Info"><i class="bi bi-info"></i></button>
-                </div>
-            </td>
-        }
     </GridColumn>
 
 </Grid>
