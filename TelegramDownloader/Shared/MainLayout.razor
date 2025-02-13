@@ -2,6 +2,7 @@
 @using TelegramDownloader.Data
 @using TelegramDownloader.Models
 @using TelegramDownloader.Models.GitHub
+@using TelegramDownloader.Services
 @using TelegramDownloader.Services.GitHub
 @using TelegramDownloader.Shared
 @inject ITelegramService ts
@@ -9,16 +10,17 @@
 @inject IJSRuntime JS
 @inject ModalService ModalService
 @inject GHService ghService;
+@inject TransactionInfoService tis;
 
 <PageTitle>TelegramFileManager</PageTitle>
 
 <style>
     .modalshow {
-        display: block
+    display: block
     }
 
     .modalhide {
-        display: none
+    display: none
     }
 </style>
 
@@ -32,13 +34,18 @@
 
     <main>
         <div class="top-row px-4">
+            @if(active) {
+                <Button Color="ButtonColor.None" Size="ButtonSize.Small" @onclick='() => Navigateto("/downloads")'>
+                    <Spinner Type="SpinnerType.Border" />
+                </Button>
+            }
             <Button Color="ButtonColor.None" Size="ButtonSize.Small" @onclick="() => ShowModalVersion(ModalType.Info)">
                 <Icon Name="IconName.InfoCircleFill" Size="IconSize.x2" Color="IconColor.Info" />
             </Button>
             <button class="btn" type="button" @onclick="openOffCanvasMenu"><i class="bi bi-three-dots"></i></button>
         </div>
         <TelegramDownloader.Pages.Modals.ToastNotify></TelegramDownloader.Pages.Modals.ToastNotify>
-        
+
         <article class="content px-4">
             <div id="modalFileUploadVue">
                 <TelegramDownloader.Pages.Modals.FileUploadModalTemplate></TelegramDownloader.Pages.Modals.FileUploadModalTemplate>
@@ -48,7 +55,7 @@
         </article>
 
         <Offcanvas @ref="offcanvas"
-                   title="Menu">
+        title="Menu">
             <BodyTemplate>
                 <div class="list-group list-group-flush">
                     <button @onclick=' () => Navigateto("/config")' class="list-group-item list-group-item-action"><i class="bi bi-gear"></i> Configuration</button>
@@ -59,7 +66,7 @@
             </BodyTemplate>
         </Offcanvas>
         <TelegramDownloader.Pages.Modals.ImportDataModal isShared=true @ref="ImportModal" OnCloseCallback="reloadMenu"></TelegramDownloader.Pages.Modals.ImportDataModal>
-        
+
         <Modal IsServiceModal="true" />
         <Toasts class="p-3" AutoHide="true" Delay="4000" Placement="ToastsPlacement.TopRight" />
     </main>
@@ -72,6 +79,7 @@
     private Pages.Modals.ImportDataModal ImportModal { get; set; }
     private GithubVersionModel LastVersion { get; set; }
     private NavMenu menu { get; set; }
+    private bool active { get; set; } = true;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -86,9 +94,13 @@
             {
                 Console.WriteLine(e);
             }
-
         }
+    }
 
+    protected override async Task OnInitializedAsync()
+    {
+        checkWorkingTasks();
+        TransactionInfoService.TaskEventChanged += eventChangedWorkingTasks;
     }
 
     private async Task reloadMenu()
@@ -144,5 +156,15 @@
         await ts.logOff();
         NavManager.NavigateTo("/");
         StateHasChanged();
+    }
+
+    private async Task checkWorkingTasks() {
+        active = tis.isWorking();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void eventChangedWorkingTasks(object sender, System.EventArgs e)
+    {
+        checkWorkingTasks();
     }
 }
