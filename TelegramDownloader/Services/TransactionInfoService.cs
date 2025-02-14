@@ -8,6 +8,7 @@ namespace TelegramDownloader.Services
     {
         public static bool isPauseDownloads = false;
         public static event EventHandler<EventArgs> EventChanged;
+        public static event EventHandler TaskEventChanged;
         public static List<DownloadModel> downloadModels = new List<DownloadModel>();
         public static List<DownloadModel> pendingDownloadModels = new List<DownloadModel>();
         public static List<UploadModel> uploadModels = new List<UploadModel>();
@@ -16,12 +17,19 @@ namespace TelegramDownloader.Services
         private static Mutex PendingDownloadMutex = new Mutex();
         private static Mutex PendingUploadInfoTaskMutex = new Mutex();
 
+        public bool isWorking()
+        {
+            return downloadModels.Where(x => x.state == StateTask.Working).Count() > 0
+                || uploadModels.Where(x => x.state == StateTask.Working).Count() > 0;
+        }
+
         public void addToDownloadList(DownloadModel downloadModel)
         {
             PendingDownloadMutex.WaitOne(10000);
             downloadModels.Insert(0, downloadModel);
             PendingDownloadMutex.ReleaseMutex();
             EventChanged?.Invoke(this, new EventArgs());
+            TaskEventChanged.Invoke(null, EventArgs.Empty);
         }
 
         public void addToPendingDownloadList(DownloadModel downloadModel, bool atFirst = false, bool chekDownloads = true)
@@ -46,6 +54,7 @@ namespace TelegramDownloader.Services
                 dm.Pause();
             }
             PendingDownloadMutex.ReleaseMutex();
+            TaskEventChanged.Invoke(null, EventArgs.Empty);
         }
 
         public void PlayDownloads()
@@ -66,6 +75,7 @@ namespace TelegramDownloader.Services
             }
             pendingDownloadModels.Clear();
             PendingDownloadMutex.ReleaseMutex();
+            TaskEventChanged.Invoke(null, EventArgs.Empty);
         }
 
         public async Task CheckPendingDownloads()
@@ -82,6 +92,7 @@ namespace TelegramDownloader.Services
             }
             PendingDownloadMutex.ReleaseMutex();
             EventChanged?.Invoke(this, new EventArgs());
+            TaskEventChanged.Invoke(null, EventArgs.Empty);
         }
 
         public async Task CheckPendingUploadInfoTasks()
@@ -96,18 +107,21 @@ namespace TelegramDownloader.Services
             }
             PendingUploadInfoTaskMutex.ReleaseMutex();
             EventChanged?.Invoke(this, new EventArgs());
+            TaskEventChanged.Invoke(null, EventArgs.Empty);
         }
 
         public void addToUploadList(UploadModel uploadModel)
         {
             uploadModels.Insert(0, uploadModel);
             EventChanged?.Invoke(this, new EventArgs());
+            TaskEventChanged.Invoke(null, EventArgs.Empty);
         }
 
         public void deleteUploadInList(UploadModel uploadModel)
         {
             uploadModels.Remove(uploadModel);
             EventChanged?.Invoke(this, new EventArgs());
+            TaskEventChanged.Invoke(null, EventArgs.Empty);
         }
 
         public void addToInfoDownloadTaskList(InfoDownloadTaksModel infoDownloadModel)
@@ -155,6 +169,7 @@ namespace TelegramDownloader.Services
                 downloadModels.Remove(downloadModel);
             PendingDownloadMutex.ReleaseMutex();
             EventChanged?.Invoke(this, new EventArgs());
+            TaskEventChanged.Invoke(null, EventArgs.Empty);
         }
 
         public void deletePendingDownloadInList(DownloadModel downloadModel)
@@ -163,6 +178,7 @@ namespace TelegramDownloader.Services
             pendingDownloadModels.Remove(downloadModel);
             PendingDownloadMutex.ReleaseMutex();
             EventChanged?.Invoke(this, new EventArgs());
+            TaskEventChanged.Invoke(null, EventArgs.Empty);
         }
 
         public void deleteInfoDownloadTaskFromList(InfoDownloadTaksModel idt)
@@ -171,6 +187,7 @@ namespace TelegramDownloader.Services
             infoDownloadTaksModel.Remove(idt);
             PendingUploadInfoTaskMutex.ReleaseMutex();
             EventChanged?.Invoke(this, new EventArgs());
+            TaskEventChanged.Invoke(null, EventArgs.Empty);
         }
 
         public List<InfoDownloadTaksModel> getInfoDownloadTaksModel(int pageNumber, int pageSize)
