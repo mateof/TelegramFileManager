@@ -6,13 +6,13 @@
 @inject TransactionInfoService tis
 
 <Grid @ref="grid"
-      TItem="UploadModel"
-      Class="table table-hover table-bordered table-striped"
-      DataProvider="UploadsDataProvider"
-      AllowFiltering="false"
-      AllowPaging="true"
-      AllowSorting="false"
-      Responsive="true">
+TItem="UploadModel"
+Class="table table-hover table-bordered table-striped"
+DataProvider="UploadsDataProvider"
+AllowFiltering="false"
+AllowPaging="true"
+AllowSorting="false"
+Responsive="true">
 
     <GridColumn TItem="UploadModel" Class="d-none d-md-table-cell" HeaderText="ID" PropertyName="id" SortString="id" SortKeySelector="item => item.id" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
         @context.id
