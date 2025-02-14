@@ -88,3 +88,15 @@ jobs:
             env:
               GH_TOKEN: ${{ secrets.TOKENBuild }}
             shell: bash
+
+          - name: '📦 Package mac OS arm64'
+            run: |
+                TAG=${{github.event.release.tag_name}}
+                TAG=${TAG:1}
+                cd ${{github.workspace}}
+                dotnet publish TelegramDownloader/TelegramDownloader.csproj -r osx-arm64 -c Release -o bin/osx-arm64 -p:PublishSingleFile=true,Version=$TAG --self-contained
+                zip -r TelegramFileManager-${{github.event.release.tag_name}}-osx-arm64.zip bin/osx-arm64
+                gh release upload ${{github.event.release.tag_name}} TelegramFileManager-${{github.event.release.tag_name}}-osx-arm64.zip
+            env:
+              GH_TOKEN: ${{ secrets.TOKENBuild }}
+            shell: bash
