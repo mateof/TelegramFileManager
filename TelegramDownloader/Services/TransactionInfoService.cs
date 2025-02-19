@@ -1,11 +1,15 @@
-﻿using TelegramDownloader.Models;
+﻿using System.Timers;
+using TelegramDownloader.Models;
 using TelegramDownloader.Pages.Modals;
 using TL;
+using Timer = System.Timers.Timer;
 
 namespace TelegramDownloader.Services
 {
     public class TransactionInfoService
     {
+        private static Timer aTimer;
+
         public static bool isPauseDownloads = false;
         public static event EventHandler<EventArgs> EventChanged;
         public static event EventHandler TaskEventChanged;
@@ -13,14 +17,111 @@ namespace TelegramDownloader.Services
         public static List<DownloadModel> pendingDownloadModels = new List<DownloadModel>();
         public static List<UploadModel> uploadModels = new List<UploadModel>();
         public static List<InfoDownloadTaksModel> infoDownloadTaksModel = new List<InfoDownloadTaksModel>();
+        public static String downloadSpeed = "0 KB/s";
+        public static String uploadSpeed = "0 KB/s";
+        public static long bytesUploaded = 0;
+        public static long bytesDownloaded = 0;
 
         private static Mutex PendingDownloadMutex = new Mutex();
         private static Mutex PendingUploadInfoTaskMutex = new Mutex();
+        private static Mutex DownloadBytesMutex = new Mutex();
+        private static Mutex UploadBytesMutex = new Mutex();
 
         public bool isWorking()
         {
-            return downloadModels.Where(x => x.state == StateTask.Working).Count() > 0
-                || uploadModels.Where(x => x.state == StateTask.Working).Count() > 0;
+            if (!(downloadModels.Where(x => x.state == StateTask.Working).Count() > 0
+                || uploadModels.Where(x => x.state == StateTask.Working).Count() > 0))
+            {
+                stopTimer();
+                return false;
+            }
+            return true;
+        }
+
+        public bool isUploading()
+        {
+            return uploadModels.Where(x => x.state == StateTask.Working).Count() > 0;
+        }
+
+        public bool isDownloading()
+        {
+            return downloadModels.Where(x => x.state == StateTask.Working).Count() > 0;
+        }
+
+        public static void startTimer()
+        {
+            if (aTimer == null || !aTimer.Enabled)
+            {
+                if (aTimer != null)
+                {
+                    aTimer.Start();
+                    return;
+                }
+                aTimer = new Timer(1000);
+                aTimer.Elapsed += OnTimedEvent;
+                aTimer.AutoReset = true;
+                aTimer.Enabled = true;
+            }
+        }
+
+        public static void stopTimer()
+        {
+            if (aTimer != null && aTimer.Enabled)
+            {
+                aTimer.Stop();
+                resetUploadBytes();
+                resetDownloadBytes();
+            }
+        }
+
+        private static void OnTimedEvent(Object source, ElapsedEventArgs e)
+        {
+            Console.WriteLine("El evento Elapsed se disparó a las {0:HH:mm:ss.fff}", e.SignalTime);
+            if (bytesDownloaded > 0)
+                setDownloadSpeed(HelperService.SizeSuffixPerTime(bytesDownloaded));
+            if (bytesUploaded > 0)
+                setUploadSpeed(HelperService.SizeSuffixPerTime(bytesUploaded));
+            resetDownloadBytes();
+        }
+
+        public static async Task addDownloadBytes(long bytes)
+        {
+            DownloadBytesMutex.WaitOne();
+            bytesDownloaded += bytes;
+            DownloadBytesMutex.ReleaseMutex();
+        }
+
+        public static async Task addUploadBytes(long bytes)
+        {
+            UploadBytesMutex.WaitOne();
+            bytesUploaded += bytes;
+            UploadBytesMutex.ReleaseMutex();
+        }
+
+        public static async Task resetDownloadBytes()
+        {
+            DownloadBytesMutex.WaitOne();
+            bytesDownloaded = 0;
+            DownloadBytesMutex.ReleaseMutex();
+        }
+
+        public static async Task resetUploadBytes()
+        {
+            UploadBytesMutex.WaitOne();
+            bytesUploaded = 0;
+            UploadBytesMutex.ReleaseMutex();
+        }
+
+        public static void setDownloadSpeed(String speed)
+        {
+            downloadSpeed = speed;
+            TaskEventChanged.Invoke(null, EventArgs.Empty);
+        }
+
+        public static void setUploadSpeed(String speed)
+        {
+            uploadSpeed = speed;
+            TaskEventChanged.Invoke(null, EventArgs.Empty);
         }
 
         public void addToDownloadList(DownloadModel downloadModel)
@@ -89,6 +190,7 @@ namespace TelegramDownloader.Services
                 downloadModels.Insert(0, dm);
                 pendingDownloadModels.Remove(dm);
                 dm.RetryCallback();
+                startTimer();
             }
             PendingDownloadMutex.ReleaseMutex();
             EventChanged?.Invoke(this, new EventArgs());
@@ -104,6 +206,7 @@ namespace TelegramDownloader.Services
                 InfoDownloadTaksModel idt = infoDownloadTaksModel.Where(x => x.state == StateTask.Pending).OrderBy(x => x.creationDate).FirstOrDefault();
                 idt.state = StateTask.Working;
                 idt.RetryCallback();
+                startTimer();
             }
             PendingUploadInfoTaskMutex.ReleaseMutex();
             EventChanged?.Invoke(this, new EventArgs());
