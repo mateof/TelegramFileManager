@@ -119,6 +119,7 @@ namespace TelegramDownloader.Models
     }
     public class DownloadModel
     {
+        public Mutex mutex = new Mutex();
         public event EventHandler<DownloadEventArgs> EventChanged;
         public string id = Guid.NewGuid().ToString();
         public string action { get; set; } = "Download";
@@ -137,6 +138,7 @@ namespace TelegramDownloader.Models
         public IPeerInfo channel { get; set; }
         public string channelName { get; set; }
         public int progress { get; set; }
+        public long accumulatedSize { get; set; } = 0;
 
         public DownloadModel(string? name = null)
         {
@@ -155,6 +157,8 @@ namespace TelegramDownloader.Models
                 tis.deleteDownloadInList(this);
                 throw new Exception($"Paused {name}");
             }
+            TransactionInfoService.addDownloadBytes(transmitted - accumulatedSize);
+            accumulatedSize = transmitted;
             _transmitted = transmitted;
             _sizeString = HelperService.SizeSuffix(totalSize);
             _transmittedString = HelperService.SizeSuffix(transmitted);
@@ -210,11 +214,14 @@ namespace TelegramDownloader.Models
         public IPeerInfo channel { get; set; }
         public int progress { get; set; }
         public Thread thread { get; set; }
+        public long accumulatedSize { get; set; } = 0;
 
         public virtual void ProgressCallback(long transmitted, long totalSize)
         {
             if (state == StateTask.Canceled)
                 throw new Exception($"Canceled {name}");
+            TransactionInfoService.addUploadBytes(transmitted - accumulatedSize);
+            accumulatedSize = transmitted;
             _transmitted = transmitted;
             _sizeString = HelperService.SizeSuffix(totalSize);
             _transmittedString = HelperService.SizeSuffix(transmitted);

@@ -24,6 +24,8 @@
     }
 </style>
 
+<link href="css/custombuttons.css" rel="stylesheet" />
+
 <Preload LoadingText="Loading..." />
 
 
@@ -35,6 +37,19 @@
     <main>
         <div class="top-row px-4">
             @if(active) {
+                @if (tis.isUploading())
+                {
+                    <button class="btn btn-primary download-button" @onclick='() => Navigateto("/downloads")'>
+                        <Icon Class="arrow" Name="IconName.ArrowUp"></Icon>
+                        <span>@TransactionInfoService.uploadSpeed</span>
+                    </button>
+                }
+                @if(tis.isDownloading()) {
+                    <button class="btn btn-primary download-button" @onclick='() => Navigateto("/downloads")'>
+                        <Icon Class="arrow" Name="IconName.ArrowDown"></Icon>
+                        <span>@TransactionInfoService.downloadSpeed</span>
+                    </button>
+                }
                 <Button Color="ButtonColor.None" Size="ButtonSize.Small" @onclick='() => Navigateto("/downloads")'>
                     <Spinner Type="SpinnerType.Border" />
                 </Button>

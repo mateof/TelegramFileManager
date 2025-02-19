@@ -23,6 +23,11 @@ namespace TelegramDownloader.Services
             return string.Format("{0:n" + decimalPlaces + "} {1}", dValue, SizeSuffixes[i]);
         }
 
+        public static string SizeSuffixPerTime(Int64 value, String time = "s", int decimalPlaces = 1)
+        {
+            return SizeSuffix(value, decimalPlaces) + "/" + time;
+        }
+
         public static async Task<DirectorySizeModel> GetDirecctorySizeAsync(string path)
         {
             DirectoryInfo dirInfo = new DirectoryInfo(path);
