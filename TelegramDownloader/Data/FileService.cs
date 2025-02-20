@@ -1225,6 +1225,7 @@ namespace TelegramDownloader.Data
                     BsonFileManagerModel model = new BsonFileManagerModel();
                     if (file.IsFile)
                     {
+                        _tis.startTimer();
                         if (idt.executed > idt.currentUpload)
                         {
                             idt.currentUpload++;
