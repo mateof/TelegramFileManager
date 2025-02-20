@@ -92,6 +92,7 @@ namespace TelegramDownloader.Services
             if (bytesUploaded > 0)
                 setUploadSpeed(HelperService.SizeSuffixPerTime(bytesUploaded));
             resetDownloadBytes();
+            resetUploadBytes();
         }
 
         public async Task addDownloadBytes(long bytes)
