@@ -68,7 +68,7 @@
     protected override async Task OnInitializedAsync()
     {
         checkNewEventsHandler();
-        TransactionInfoService.EventChanged += eventChangedNew;
+        tis.EventChanged += eventChangedNew;
     }
 
     private async Task<GridDataProviderResult<InfoDownloadTaksModel>> TasksDataProvider(GridDataProviderRequest<InfoDownloadTaksModel> request)

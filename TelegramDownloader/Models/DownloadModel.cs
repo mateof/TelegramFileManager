@@ -32,6 +32,7 @@ namespace TelegramDownloader.Models
         public int progress { get; set; }
         public List<UploadModel> currentUploads { get; set; } = new List<UploadModel>();
         public List<DownloadModel> currentDownloads { get; set; } = new List<DownloadModel>();
+        public  TransactionInfoService tis { get; set; }
 
         public async void AddOne(long size)
         {
@@ -48,7 +49,6 @@ namespace TelegramDownloader.Models
         public async void markAsCompleted()
         {
             state = StateTask.Completed;
-            TransactionInfoService tis = new TransactionInfoService();
             tis.CheckPendingUploadInfoTasks();
             EventChanged?.Invoke(this, new InfoTaskEventArgs());
 
@@ -82,7 +82,6 @@ namespace TelegramDownloader.Models
         {
             state = StateTask.Pending;
             currentUpload = 0;
-            TransactionInfoService tis = new TransactionInfoService();
             tis.CheckPendingUploadInfoTasks();
         }
 
@@ -107,7 +106,6 @@ namespace TelegramDownloader.Models
                     um.Cancel();
                 }
             }
-            TransactionInfoService tis = new TransactionInfoService();
             tis.CheckPendingUploadInfoTasks();
         }
 
@@ -139,6 +137,8 @@ namespace TelegramDownloader.Models
         public string channelName { get; set; }
         public int progress { get; set; }
         public long accumulatedSize { get; set; } = 0;
+        public TransactionInfoService tis { get; set; }
+
 
         public DownloadModel(string? name = null)
         {
@@ -152,12 +152,12 @@ namespace TelegramDownloader.Models
                 throw new Exception($"Canceled {name}");
             if (state == StateTask.Paused)
             {
-                TransactionInfoService tis = new TransactionInfoService();
+                
                 state = StateTask.Working;
                 tis.deleteDownloadInList(this);
                 throw new Exception($"Paused {name}");
             }
-            TransactionInfoService.addDownloadBytes(transmitted - accumulatedSize);
+            tis.addDownloadBytes(transmitted - accumulatedSize);
             accumulatedSize = transmitted;
             _transmitted = transmitted;
             _sizeString = HelperService.SizeSuffix(totalSize);
@@ -169,7 +169,6 @@ namespace TelegramDownloader.Models
                 state = StateTask.Completed;
                 NotificationModel nm = new NotificationModel();
                 nm.sendEvent(new Notification($"Download {name} completed", "Download Completed", NotificationTypes.Success));
-                TransactionInfoService tis = new TransactionInfoService();
                 tis.CheckPendingDownloads();
             }
 
@@ -178,7 +177,6 @@ namespace TelegramDownloader.Models
         public void Cancel()
         {
             state = StateTask.Canceled;
-            TransactionInfoService tis = new TransactionInfoService();
             tis.CheckPendingDownloads();
             EventChanged?.Invoke(this, new DownloadEventArgs());
         }
@@ -215,12 +213,13 @@ namespace TelegramDownloader.Models
         public int progress { get; set; }
         public Thread thread { get; set; }
         public long accumulatedSize { get; set; } = 0;
+        public TransactionInfoService tis { get; set; }
 
         public virtual void ProgressCallback(long transmitted, long totalSize)
         {
             if (state == StateTask.Canceled)
                 throw new Exception($"Canceled {name}");
-            TransactionInfoService.addUploadBytes(transmitted - accumulatedSize);
+            tis.addUploadBytes(transmitted - accumulatedSize);
             accumulatedSize = transmitted;
             _transmitted = transmitted;
             _sizeString = HelperService.SizeSuffix(totalSize);

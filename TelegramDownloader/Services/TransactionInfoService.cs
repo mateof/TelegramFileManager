@@ -8,19 +8,19 @@ namespace TelegramDownloader.Services
 {
     public class TransactionInfoService
     {
-        private static Timer aTimer;
+        private Timer aTimer;
 
-        public static bool isPauseDownloads = false;
-        public static event EventHandler<EventArgs> EventChanged;
-        public static event EventHandler TaskEventChanged;
-        public static List<DownloadModel> downloadModels = new List<DownloadModel>();
-        public static List<DownloadModel> pendingDownloadModels = new List<DownloadModel>();
-        public static List<UploadModel> uploadModels = new List<UploadModel>();
-        public static List<InfoDownloadTaksModel> infoDownloadTaksModel = new List<InfoDownloadTaksModel>();
-        public static String downloadSpeed = "0 KB/s";
-        public static String uploadSpeed = "0 KB/s";
-        public static long bytesUploaded = 0;
-        public static long bytesDownloaded = 0;
+        public bool isPauseDownloads = false;
+        public event EventHandler<EventArgs> EventChanged;
+        public event EventHandler TaskEventChanged;
+        public List<DownloadModel> downloadModels = new List<DownloadModel>();
+        public List<DownloadModel> pendingDownloadModels = new List<DownloadModel>();
+        public List<UploadModel> uploadModels = new List<UploadModel>();
+        public List<InfoDownloadTaksModel> infoDownloadTaksModel = new List<InfoDownloadTaksModel>();
+        public String downloadSpeed = "0 KB/s";
+        public String uploadSpeed = "0 KB/s";
+        public long bytesUploaded = 0;
+        public long bytesDownloaded = 0;
 
         private static Mutex PendingDownloadMutex = new Mutex();
         private static Mutex PendingUploadInfoTaskMutex = new Mutex();
@@ -48,7 +48,7 @@ namespace TelegramDownloader.Services
             return downloadModels.Where(x => x.state == StateTask.Working).Count() > 0;
         }
 
-        public static void startTimer()
+        public void startTimer()
         {
             if (aTimer == null || !aTimer.Enabled)
             {
@@ -64,7 +64,7 @@ namespace TelegramDownloader.Services
             }
         }
 
-        public static void stopTimer()
+        public void stopTimer()
         {
             if (aTimer != null && aTimer.Enabled)
             {
@@ -74,7 +74,7 @@ namespace TelegramDownloader.Services
             }
         }
 
-        private static void OnTimedEvent(Object source, ElapsedEventArgs e)
+        private void OnTimedEvent(Object source, ElapsedEventArgs e)
         {
             Console.WriteLine("El evento Elapsed se disparó a las {0:HH:mm:ss.fff}", e.SignalTime);
             if (bytesDownloaded > 0)
@@ -84,41 +84,41 @@ namespace TelegramDownloader.Services
             resetDownloadBytes();
         }
 
-        public static async Task addDownloadBytes(long bytes)
+        public async Task addDownloadBytes(long bytes)
         {
             DownloadBytesMutex.WaitOne();
             bytesDownloaded += bytes;
             DownloadBytesMutex.ReleaseMutex();
         }
 
-        public static async Task addUploadBytes(long bytes)
+        public async Task addUploadBytes(long bytes)
         {
             UploadBytesMutex.WaitOne();
             bytesUploaded += bytes;
             UploadBytesMutex.ReleaseMutex();
         }
 
-        public static async Task resetDownloadBytes()
+        public async Task resetDownloadBytes()
         {
             DownloadBytesMutex.WaitOne();
             bytesDownloaded = 0;
             DownloadBytesMutex.ReleaseMutex();
         }
 
-        public static async Task resetUploadBytes()
+        public async Task resetUploadBytes()
         {
             UploadBytesMutex.WaitOne();
             bytesUploaded = 0;
             UploadBytesMutex.ReleaseMutex();
         }
 
-        public static void setDownloadSpeed(String speed)
+        public void setDownloadSpeed(String speed)
         {
             downloadSpeed = speed;
             TaskEventChanged.Invoke(null, EventArgs.Empty);
         }
 
-        public static void setUploadSpeed(String speed)
+        public void setUploadSpeed(String speed)
         {
             uploadSpeed = speed;
             TaskEventChanged.Invoke(null, EventArgs.Empty);

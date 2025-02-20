@@ -247,6 +247,7 @@ namespace TelegramDownloader.Controllers
                 cm.message = idM;
                 file = new FileStream(System.IO.Path.Combine(FileService.TEMPDIR, "_temp", $"{idChannel}-{idFile}-{id}"), FileMode.Create, FileAccess.ReadWrite);
                 DownloadModel dm = new DownloadModel();
+                dm.tis = _tis;
                 dm.channelName = _ts.getChatName(Convert.ToInt64(idChannel));
                 _tis.addToDownloadList(dm);
                 await _ts.DownloadFileAndReturn(cm, file, model: dm);

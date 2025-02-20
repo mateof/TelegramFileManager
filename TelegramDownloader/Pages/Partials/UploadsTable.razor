@@ -80,7 +80,7 @@ Responsive="true">
     protected override async Task OnInitializedAsync()
     {
         checkNewEventsHandler();
-        TransactionInfoService.EventChanged += eventChangedNew;
+        tis.EventChanged += eventChangedNew;
     }
 
     private async Task cancel(UploadModel um)

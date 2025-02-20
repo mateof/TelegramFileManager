@@ -41,13 +41,13 @@
                 {
                     <button class="btn btn-primary download-button" @onclick='() => Navigateto("/downloads")'>
                         <Icon Class="arrow" Name="IconName.ArrowUp"></Icon>
-                        <span>@TransactionInfoService.uploadSpeed</span>
+                        <span>@tis.uploadSpeed</span>
                     </button>
                 }
                 @if(tis.isDownloading()) {
                     <button class="btn btn-primary download-button" @onclick='() => Navigateto("/downloads")'>
                         <Icon Class="arrow" Name="IconName.ArrowDown"></Icon>
-                        <span>@TransactionInfoService.downloadSpeed</span>
+                        <span>@tis.downloadSpeed</span>
                     </button>
                 }
                 <Button Color="ButtonColor.None" Size="ButtonSize.Small" @onclick='() => Navigateto("/downloads")'>
@@ -115,7 +115,7 @@
     protected override async Task OnInitializedAsync()
     {
         checkWorkingTasks();
-        TransactionInfoService.TaskEventChanged += eventChangedWorkingTasks;
+        tis.TaskEventChanged += eventChangedWorkingTasks;
     }
 
     private async Task reloadMenu()

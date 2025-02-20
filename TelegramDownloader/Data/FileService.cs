@@ -796,6 +796,7 @@ namespace TelegramDownloader.Data
         private async Task downloadFromTelegram(string dbName, int messageId, string destPath, BsonFileManagerModel file = null)
         {
             DownloadModel model = new DownloadModel();
+            model.tis = _tis;
             if (file != null)
             {
                 model.name = file.Name;
@@ -817,7 +818,11 @@ namespace TelegramDownloader.Data
         public async Task DownloadFileFromChat(ChatMessages message, string fileName = null, string folder = null, DownloadModel model = null)
         {
             if (model == null)
+            {
                 model = new DownloadModel();
+                model.tis = _tis;
+            }
+                
             model.name = fileName;
             if (message.message.media is MessageMediaDocument { document: Document document })
             {
@@ -1099,6 +1104,7 @@ namespace TelegramDownloader.Data
         public async Task AddUploadFileFromServer(string dbName, string currentPath, List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files, InfoDownloadTaksModel idt = null) // ItemsUploadedEventArgs<FileManagerDirectoryContent> args)
         {
             idt = new InfoDownloadTaksModel();
+            idt.tis = _tis;
             idt.id = Guid.NewGuid().ToString();
             idt.total = 0;
             idt.totalSize = 0;
@@ -1135,9 +1141,8 @@ namespace TelegramDownloader.Data
             }
             idt.callbacks = new Callbacks();
             idt.callbacks.callback = async () => await UploadFileFromServer(dbName, currentPath, files, idt);
-            TransactionInfoService ti = new TransactionInfoService();
-            ti.addToInfoDownloadTaskList(idt);
-            ti.CheckPendingUploadInfoTasks();
+            _tis.addToInfoDownloadTaskList(idt);
+            _tis.CheckPendingUploadInfoTasks();
         }
 
 
@@ -1254,6 +1259,7 @@ namespace TelegramDownloader.Data
                                 int attempts = 3;
                                 int waitForNextAttempt = 1000;
                                 UploadModel um = new UploadModel();
+                                um.tis = _tis;
                                 um.path = currentFilePath;
                                 um.chatName = _ts.getChatName(Convert.ToInt64(dbName));
                                 // add upload to task list
@@ -1303,6 +1309,7 @@ namespace TelegramDownloader.Data
                             int attempts = 3;
                             int waitForNextAttempt = 60000;
                             UploadModel um = new UploadModel();
+                            um.tis = _tis;
                             um.path = currentFilePath;
                             um.chatName = _ts.getChatName(Convert.ToInt64(dbName));
                             // add upload to task list

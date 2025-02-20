@@ -57,12 +57,14 @@ builder.Logging.AddLog4Net("log4net.config");
 // Add services to the container.
 builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
-builder.Services.AddTransient<ITelegramService, TelegramService>();
+builder.Services.AddSingleton<ITelegramService, TelegramService>();
 builder.Services.AddSingleton<IDbService, DbService>();
 builder.Services.AddTransient<IFileService, FileService>();
-builder.Services.AddTransient<TransactionInfoService>();
+builder.Services.AddSingleton<TransactionInfoService>();
 builder.Services.AddSingleton<FileManagerService>();
 builder.Services.AddSingleton<GHService>();
+
+ServiceLocator.ServiceProvider = builder.Services.BuildServiceProvider();
 builder.Services.AddBlazorBootstrap();
 
 
