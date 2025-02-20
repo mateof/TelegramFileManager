@@ -43,6 +43,7 @@ namespace TelegramDownloader.Services
                 stopTimer();
                 return false;
             }
+            startTimer();
             return true;
         }
 
