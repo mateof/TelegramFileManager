@@ -29,7 +29,7 @@ namespace TelegramDownloader.Data
         Task<string> getPhotoThumb(ChatBase chat);
         Task logOff();
         Task sendVerificationCode(string vc);
-        Task<Message> uploadFile(string chatId, Stream file, string fileName, string mimeType = null, UploadModel um = null);
+        Task<Message> uploadFile(string chatId, Stream file, string fileName, string mimeType = null, UploadModel um = null, string caption = null);
 
     }
 }

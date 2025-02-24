@@ -1270,7 +1270,7 @@ namespace TelegramDownloader.Data
                                     {
                                         wt = new WaitingTime();
                                         using (FileStream fs = new FileStream(s, FileMode.Open, FileAccess.Read, FileShare.Read))
-                                            m = await _ts.uploadFile(dbName, fs, $"({i} of {filesSplit.Count}) - " + file.Name, um: um);
+                                            m = await _ts.uploadFile(dbName, fs, $"({i} of {filesSplit.Count}) - " + file.Name, um: um, caption: getCaption(filePath));
                                         attempts = 0;
                                         await wt.Sleep(); // sleep 1 second to avoid 420 flood_wait_x
                                     }
@@ -1324,17 +1324,17 @@ namespace TelegramDownloader.Data
                                         using (FileStream ms = new FileStream(System.IO.Path.Combine(currentFilePath), FileMode.Open))
                                             if (ImageExtensions.Any(x => file.Name.ToUpper().EndsWith(x)) && file.Size >= MAXIMAGESIZE)
                                             {
-                                                m = await _ts.uploadFile(dbName, ms, file.Name, "application/octet-stream", um);
+                                                m = await _ts.uploadFile(dbName, ms, file.Name, "application/octet-stream", um, caption: getCaption(filePath));
                                             }
                                             else
-                                                m = await _ts.uploadFile(dbName, ms, file.Name, um: um);
+                                                m = await _ts.uploadFile(dbName, ms, file.Name, um: um, caption: getCaption(filePath));
                                     }
                                     catch (Exception ex)
                                     {
                                         if (new List<string> { "IMAGE", "PHOTO" }.Any(x => ex.Message.Contains(x)))
                                         {
                                             using (FileStream ms = new FileStream(System.IO.Path.Combine(currentFilePath), FileMode.Open))
-                                                m = await _ts.uploadFile(dbName, ms, file.Name, "application/octet-stream", um);
+                                                m = await _ts.uploadFile(dbName, ms, file.Name, "application/octet-stream", um, caption: getCaption(filePath));
                                         }
                                         else
                                         {
@@ -1515,7 +1515,7 @@ namespace TelegramDownloader.Data
                     foreach (string s in files)
                     {
                         using (FileStream fs = new FileStream(s, FileMode.Open, FileAccess.Read, FileShare.Read))
-                            m = await _ts.uploadFile(dbName, fs, $"({i} of {files.Count}) - " + file.File.Name);
+                            m = await _ts.uploadFile(dbName, fs, $"({i} of {files.Count}) - " + file.File.Name, caption: getCaption(currentPath));
                         model.ListMessageId.Add(m.ID);
                         File.Delete(s);
                         i++;
@@ -1526,7 +1526,7 @@ namespace TelegramDownloader.Data
                 {
                     using (FileStream ms = new FileStream(System.IO.Path.Combine(currentFilePath, file.File.Name), FileMode.Open))
                     {
-                        m = await _ts.uploadFile(dbName, ms, file.File.Name);
+                        m = await _ts.uploadFile(dbName, ms, file.File.Name, caption: getCaption(currentPath));
                     }
                     model.MessageId = m.ID;
                 }
@@ -1756,6 +1756,11 @@ namespace TelegramDownloader.Data
             }
             await Task.Yield();
             return response;
+        }
+
+        private string? getCaption(string filePath)
+        {
+            return GeneralConfigStatic.config.ShouldShowCaptionPath ? filePath : null;
         }
 
         private async Task<MemoryStream> ToMemoryStreamAsync(Stream stream)

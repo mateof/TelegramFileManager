@@ -10,76 +10,92 @@
 <h3>Config</h3>
 @if(Model != null)
 {
-    <EditForm Model="Model" OnValidSubmit="Submit">
-        <AntiforgeryToken />
-        <div>
-            <div class="input-group mb-3">
-            <span class="input-group-text"><i class="bi bi-hourglass-split"></i></span>
-                <div class="form-floating">
-                    <InputNumber type="number" @bind-Value="Model!.TimeSleepBetweenTransactions"  class="form-control" id="TimeSleepBetweenTransactions" placeholder="Sleep Time (ms)"/>
-                    <label for="TimeSleepBetweenTransactions">Sleep Time(ms)</label>
-                </div>
-            
-            </div>
-        </div>
+    <div class="card text-dark bg-light mb-2" style="max-width: 45rem;">
+        <div class="card-header">Configuration</div>
+        <div class="card-body">
+            <EditForm Model="Model" OnValidSubmit="Submit">
+                <AntiforgeryToken />
+                <div>
+                    <div class="input-group mb-3">
+                        <span class="input-group-text"><i class="bi bi-hourglass-split"></i></span>
+                        <div class="form-floating">
+                            <InputNumber type="number" @bind-Value="Model!.TimeSleepBetweenTransactions" class="form-control" id="TimeSleepBetweenTransactions" placeholder="Sleep Time (ms)" />
+                            <label for="TimeSleepBetweenTransactions">Sleep Time(ms)</label>
+                        </div>
 
-        <div>
-            <div class="input-group mb-3">
-                <span class="input-group-text"><i class="bi bi-download"></i></span>
-                <div class="form-floating">
-                    <NumberInput TValue="int" @bind-Value="Model!.MaxSimultaneousDownloads" Min="1" Max="3" EnableMinMax="true" class="form-control" id="MaxSimultaneousDownloads" placeholder="Sleep Time (ms)" />
-                    <label for="MaxSimultaneousDownloads">Max. Simultaneous Downloads</label>
+                    </div>
                 </div>
 
-            </div>
+                <div>
+                    <div class="input-group mb-3">
+                        <span class="input-group-text"><i class="bi bi-download"></i></span>
+                        <div class="form-floating">
+                            <NumberInput TValue="int" @bind-Value="Model!.MaxSimultaneousDownloads" Min="1" Max="3" EnableMinMax="true" class="form-control" id="MaxSimultaneousDownloads" placeholder="Sleep Time (ms)" />
+                            <label for="MaxSimultaneousDownloads">Max. Simultaneous Downloads</label>
+                        </div>
+
+                    </div>
+                </div>
+
+                <div>
+                    <div class="form-check form-switch">
+                        <InputCheckbox @bind-Value="Model!.CheckHash" class="form-check-input" type="checkbox" id="CheckHash" />
+                        <label class="form-check-label" for="ShouldShowNotifications">Check Hash</label>
+                    </div>
+
+
+                </div>
+
+                <div>
+                    <div class="form-check form-switch">
+                        <InputCheckbox @bind-Value="Model!.ShouldNotify" class="form-check-input" type="checkbox" id="ShouldShowNotifications" />
+                        <label class="form-check-label" for="ShouldShowNotifications">Should show Notifications</label>
+                    </div>
+
+
+                </div>
+
+                <div>
+                    <div class="form-check form-switch">
+                        <InputCheckbox @bind-Value="Model!.ShouldShowLogInTerminal" class="form-check-input" type="checkbox" id="ShouldShowLogInTerminal" />
+                        <label class="form-check-label" for="ShouldShowLogInTerminal">Should show log in terminal</label>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="form-check form-switch">
+                        <InputCheckbox @bind-Value="Model!.ShouldShowCaptionPath" class="form-check-input" type="checkbox" id="CheckHash" />
+                        <label class="form-check-label" for="ShouldShowCaptionPath">Should show caption relative path</label>
+                    </div>
+
+
+                </div>
+
+
+                <div>
+                    <div class="d-flex flex-row mb-3">
+                        @if (TelegramService.isPremium)
+                        {
+                            <RangeInput TValue="int" Id="splitsize" @bind-Value="Model.SplitSize" Min="0" Max="4" />
+                        }
+                        else
+                        {
+                            <RangeInput TValue="int" @bind-Value="Model.SplitSize" Min="0" Max="2" />
+                        }
+                        <Badge Color="BadgeColor.Primary" Class="ms-2" VisuallyHiddenText="splitsize">@Model.SplitSize</Badge>
+
+                        <label class="form-check-label" for="splitsize">Split in GB</label>
+                    </div>
+
+
+                </div>
+                <div>
+                    <button class="btn btn-info" type="submit">Save</button>
+                </div>
+            </EditForm>
         </div>
-
-        <div>
-            <div class="form-check form-switch">
-                <InputCheckbox @bind-Value="Model!.CheckHash" class="form-check-input" type="checkbox" id="CheckHash" />
-                <label class="form-check-label" for="ShouldShowNotifications">Check Hash</label>
-            </div>
-
-
-        </div>
-
-        <div>
-            <div class="form-check form-switch">
-                <InputCheckbox @bind-Value="Model!.ShouldNotify" class="form-check-input" type="checkbox" id="ShouldShowNotifications" />
-                <label class="form-check-label" for="ShouldShowNotifications">Should show Notifications</label>
-            </div>
-
-
-        </div>
-
-        <div>
-            <div class="form-check form-switch">
-                <InputCheckbox @bind-Value="Model!.ShouldShowLogInTerminal" class="form-check-input" type="checkbox" id="ShouldShowLogInTerminal" />
-                <label class="form-check-label" for="ShouldShowLogInTerminal">Should show log in terminal</label>
-            </div>
-        </div>
-
-
-        <div>
-            <div class="d-flex flex-row mb-3">
-                @if(TelegramService.isPremium)
-                {
-                    <RangeInput TValue="int" Id="splitsize" @bind-Value="Model.SplitSize" Min="0" Max="4" />
-                } else
-                {
-                    <RangeInput TValue="int" @bind-Value="Model.SplitSize" Min="0" Max="2" />
-                }
-                <Badge Color="BadgeColor.Primary" Class="ms-2" VisuallyHiddenText="splitsize">@Model.SplitSize</Badge>
-
-                <label class="form-check-label" for="splitsize">Split in GB</label>
-            </div>
-
-
-        </div>
-        <div>
-            <button class="btn btn-info" type="submit">Save</button>
-        </div>
-    </EditForm>
+    </div>
+    
 }
 
 @code {

@@ -282,7 +282,7 @@ namespace TelegramDownloader.Data
             return allChats;
         }
 
-        public async Task<Message> uploadFile(string chatId, Stream file, string fileName, string mimeType = null, UploadModel um = null)
+        public async Task<Message> uploadFile(string chatId, Stream file, string fileName, string mimeType = null, UploadModel um = null, string caption = null)
         {
             um = um ?? new UploadModel();
             um.tis = _tis;
@@ -293,7 +293,7 @@ namespace TelegramDownloader.Data
             um._transmitted = 0;
             _tis.addToUploadList(um);
             var inputFile = await client.UploadFileAsync(file, fileName, um.ProgressCallback);
-            return await client.SendMediaAsync(peer, fileName, inputFile, mimeType);
+            return await client.SendMediaAsync(peer, caption ?? fileName, inputFile, mimeType);
         }
 
         public async Task deleteFile(string chatId, int idMessage)
