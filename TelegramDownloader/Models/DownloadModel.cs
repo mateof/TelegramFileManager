@@ -128,7 +128,7 @@ namespace TelegramDownloader.Models
         public Callbacks callbacks { get; set; }
 
         public long _size { get; set; }
-        public long _transmitted {  get; set; }
+        public long _transmitted { get; set; } = 0;
 
         public string _sizeString { get; set; }
         public string _transmittedString { get; set; }
@@ -136,7 +136,6 @@ namespace TelegramDownloader.Models
         public IPeerInfo channel { get; set; }
         public string channelName { get; set; }
         public int progress { get; set; }
-        public long accumulatedSize { get; set; } = 0;
         public TransactionInfoService tis { get; set; }
 
 
@@ -157,8 +156,7 @@ namespace TelegramDownloader.Models
                 tis.deleteDownloadInList(this);
                 throw new Exception($"Paused {name}");
             }
-            tis.addDownloadBytes(transmitted - accumulatedSize);
-            accumulatedSize = transmitted;
+            tis.addDownloadBytes(transmitted - _transmitted);
             _transmitted = transmitted;
             _sizeString = HelperService.SizeSuffix(totalSize);
             _transmittedString = HelperService.SizeSuffix(transmitted);
@@ -204,7 +202,7 @@ namespace TelegramDownloader.Models
         public string path { get; set; }
 
         public long _size { get; set; }
-        public long _transmitted { get; set; }
+        public long _transmitted { get; set; } = 0;
 
         public string _sizeString { get; set; }
         public string _transmittedString { get; set; }
@@ -212,15 +210,13 @@ namespace TelegramDownloader.Models
         public IPeerInfo channel { get; set; }
         public int progress { get; set; }
         public Thread thread { get; set; }
-        public long accumulatedSize { get; set; } = 0;
         public TransactionInfoService tis { get; set; }
 
         public virtual void ProgressCallback(long transmitted, long totalSize)
         {
             if (state == StateTask.Canceled)
                 throw new Exception($"Canceled {name}");
-            tis.addUploadBytes(transmitted - accumulatedSize);
-            accumulatedSize = transmitted;
+            tis.addUploadBytes(transmitted - _transmitted);
             _transmitted = transmitted;
             _sizeString = HelperService.SizeSuffix(totalSize);
             _transmittedString = HelperService.SizeSuffix(transmitted);

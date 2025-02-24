@@ -1,4 +1,5 @@
 ﻿using System.Timers;
+using TelegramDownloader.Data;
 using TelegramDownloader.Models;
 using TelegramDownloader.Pages.Modals;
 using TL;
@@ -8,7 +9,7 @@ namespace TelegramDownloader.Services
 {
     public class TransactionInfoService
     {
-        private Timer aTimer;
+        
 
         public bool isPauseDownloads = false;
         public event EventHandler<EventArgs> EventChanged;
@@ -27,6 +28,13 @@ namespace TelegramDownloader.Services
         private static Mutex DownloadBytesMutex = new Mutex();
         private static Mutex UploadBytesMutex = new Mutex();
 
+        private Timer aTimer;
+        private readonly ILogger<IFileService> _logger;
+
+        public TransactionInfoService(ILogger<IFileService> logger)
+        {
+            _logger = logger;
+        }
         public bool isWorking()
         {
             if (!(downloadModels.Where(x => x.state == StateTask.Working).Count() > 0
@@ -35,6 +43,7 @@ namespace TelegramDownloader.Services
                 stopTimer();
                 return false;
             }
+            startTimer();
             return true;
         }
 
@@ -76,12 +85,14 @@ namespace TelegramDownloader.Services
 
         private void OnTimedEvent(Object source, ElapsedEventArgs e)
         {
-            Console.WriteLine("El evento Elapsed se disparó a las {0:HH:mm:ss.fff}", e.SignalTime);
+            _logger.LogInformation("El evento Elapsed se disparó a las {0:HH:mm:ss.fff}", e.SignalTime);
+            _logger.LogInformation("Upload: {0}, download: {1}", bytesUploaded, bytesDownloaded);
             if (bytesDownloaded > 0)
                 setDownloadSpeed(HelperService.SizeSuffixPerTime(bytesDownloaded));
             if (bytesUploaded > 0)
                 setUploadSpeed(HelperService.SizeSuffixPerTime(bytesUploaded));
             resetDownloadBytes();
+            resetUploadBytes();
         }
 
         public async Task addDownloadBytes(long bytes)
@@ -93,6 +104,7 @@ namespace TelegramDownloader.Services
 
         public async Task addUploadBytes(long bytes)
         {
+            _logger.LogInformation("Add bytes to upload {0}", bytes);
             UploadBytesMutex.WaitOne();
             bytesUploaded += bytes;
             UploadBytesMutex.ReleaseMutex();
@@ -120,6 +132,7 @@ namespace TelegramDownloader.Services
 
         public void setUploadSpeed(String speed)
         {
+            _logger.LogInformation("Set bytes speed upload {0}", speed);
             uploadSpeed = speed;
             TaskEventChanged.Invoke(null, EventArgs.Empty);
         }
@@ -189,8 +202,8 @@ namespace TelegramDownloader.Services
                 DownloadModel dm = pendingDownloadModels.FirstOrDefault();
                 downloadModels.Insert(0, dm);
                 pendingDownloadModels.Remove(dm);
-                dm.RetryCallback();
                 startTimer();
+                dm.RetryCallback();
             }
             PendingDownloadMutex.ReleaseMutex();
             EventChanged?.Invoke(this, new EventArgs());
@@ -205,8 +218,8 @@ namespace TelegramDownloader.Services
             {
                 InfoDownloadTaksModel idt = infoDownloadTaksModel.Where(x => x.state == StateTask.Pending).OrderBy(x => x.creationDate).FirstOrDefault();
                 idt.state = StateTask.Working;
-                idt.RetryCallback();
                 startTimer();
+                idt.RetryCallback();
             }
             PendingUploadInfoTaskMutex.ReleaseMutex();
             EventChanged?.Invoke(this, new EventArgs());
