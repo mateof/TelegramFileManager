@@ -21,7 +21,7 @@
             <div style="padding: 1em">
                 <div class="btn-group" role="group" aria-label="Basic outlined example">
                     <button class="btn btn-success" @onclick="clearDownloads" data-bs-toggle="tooltip" data-bs-placement="top" title="Clear completed and error"><i class="bi bi-trash"></i> Clear</button>
-                    @if (TransactionInfoService.isPauseDownloads)
+                    @if (tis.isPauseDownloads)
                     {
                         <button type="button" @onclick="() => tis.PlayDownloads()" class="btn btn-outline-primary"><i class="bi bi-play"></i></button>
                     } else
@@ -59,7 +59,6 @@
 
 
 @code {
-    TransactionInfoService ts = new TransactionInfoService();
     protected override async Task OnInitializedAsync()
     {
     }
@@ -67,17 +66,17 @@
     
     async Task clearUploads()
     {
-        ts.clearUploadCompleted();
+        tis.clearUploadCompleted();
     }
 
     async Task clearDownloads()
     {
-        ts.clearDownloadCompleted();
+        tis.clearDownloadCompleted();
     }
 
     async Task clearTasks()
     {
-        ts.clearTasksCompleted();
+        tis.clearTasksCompleted();
     }
 
     

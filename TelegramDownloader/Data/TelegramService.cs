@@ -282,9 +282,10 @@ namespace TelegramDownloader.Data
             return allChats;
         }
 
-        public async Task<Message> uploadFile(string chatId, Stream file, string fileName, string mimeType = null, UploadModel um = null)
+        public async Task<Message> uploadFile(string chatId, Stream file, string fileName, string mimeType = null, UploadModel um = null, string caption = null)
         {
             um = um ?? new UploadModel();
+            um.tis = _tis;
 
             InputPeer peer = chats.chats[Convert.ToInt64(chatId)];
             um.name = fileName;
@@ -292,7 +293,7 @@ namespace TelegramDownloader.Data
             um._transmitted = 0;
             _tis.addToUploadList(um);
             var inputFile = await client.UploadFileAsync(file, fileName, um.ProgressCallback);
-            return await client.SendMediaAsync(peer, fileName, inputFile, mimeType);
+            return await client.SendMediaAsync(peer, caption ?? fileName, inputFile, mimeType);
         }
 
         public async Task deleteFile(string chatId, int idMessage)
@@ -417,7 +418,11 @@ namespace TelegramDownloader.Data
         public async Task<Stream> DownloadFileAndReturn(ChatMessages message, Stream ms = null, string fileName = null, string folder = null, DownloadModel model = null)
         {
             if (model == null)
+            {
                 model = new DownloadModel();
+                model.tis = _tis;
+            }
+                
             model.m = message;
             model.channel = message.user;
 
@@ -466,7 +471,11 @@ namespace TelegramDownloader.Data
         public async Task<string> DownloadFile(ChatMessages message, string fileName = null, string folder = null, DownloadModel model = null, bool shouldAddToList = false)
         {
             if (model == null)
+            {
                 model = new DownloadModel();
+                model.tis = _tis;
+            }
+                
             model.m = message;
             model.channel = message.user;
 

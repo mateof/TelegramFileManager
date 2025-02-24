@@ -796,6 +796,7 @@ namespace TelegramDownloader.Data
         private async Task downloadFromTelegram(string dbName, int messageId, string destPath, BsonFileManagerModel file = null)
         {
             DownloadModel model = new DownloadModel();
+            model.tis = _tis;
             if (file != null)
             {
                 model.name = file.Name;
@@ -817,7 +818,11 @@ namespace TelegramDownloader.Data
         public async Task DownloadFileFromChat(ChatMessages message, string fileName = null, string folder = null, DownloadModel model = null)
         {
             if (model == null)
+            {
                 model = new DownloadModel();
+                model.tis = _tis;
+            }
+                
             model.name = fileName;
             if (message.message.media is MessageMediaDocument { document: Document document })
             {
@@ -1099,6 +1104,7 @@ namespace TelegramDownloader.Data
         public async Task AddUploadFileFromServer(string dbName, string currentPath, List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files, InfoDownloadTaksModel idt = null) // ItemsUploadedEventArgs<FileManagerDirectoryContent> args)
         {
             idt = new InfoDownloadTaksModel();
+            idt.tis = _tis;
             idt.id = Guid.NewGuid().ToString();
             idt.total = 0;
             idt.totalSize = 0;
@@ -1135,9 +1141,8 @@ namespace TelegramDownloader.Data
             }
             idt.callbacks = new Callbacks();
             idt.callbacks.callback = async () => await UploadFileFromServer(dbName, currentPath, files, idt);
-            TransactionInfoService ti = new TransactionInfoService();
-            ti.addToInfoDownloadTaskList(idt);
-            ti.CheckPendingUploadInfoTasks();
+            _tis.addToInfoDownloadTaskList(idt);
+            _tis.CheckPendingUploadInfoTasks();
         }
 
 
@@ -1254,6 +1259,7 @@ namespace TelegramDownloader.Data
                                 int attempts = 3;
                                 int waitForNextAttempt = 1000;
                                 UploadModel um = new UploadModel();
+                                um.tis = _tis;
                                 um.path = currentFilePath;
                                 um.chatName = _ts.getChatName(Convert.ToInt64(dbName));
                                 // add upload to task list
@@ -1264,7 +1270,7 @@ namespace TelegramDownloader.Data
                                     {
                                         wt = new WaitingTime();
                                         using (FileStream fs = new FileStream(s, FileMode.Open, FileAccess.Read, FileShare.Read))
-                                            m = await _ts.uploadFile(dbName, fs, $"({i} of {filesSplit.Count}) - " + file.Name, um: um);
+                                            m = await _ts.uploadFile(dbName, fs, $"({i} of {filesSplit.Count}) - " + file.Name, um: um, caption: getCaption(filePath));
                                         attempts = 0;
                                         await wt.Sleep(); // sleep 1 second to avoid 420 flood_wait_x
                                     }
@@ -1303,6 +1309,7 @@ namespace TelegramDownloader.Data
                             int attempts = 3;
                             int waitForNextAttempt = 60000;
                             UploadModel um = new UploadModel();
+                            um.tis = _tis;
                             um.path = currentFilePath;
                             um.chatName = _ts.getChatName(Convert.ToInt64(dbName));
                             // add upload to task list
@@ -1317,17 +1324,17 @@ namespace TelegramDownloader.Data
                                         using (FileStream ms = new FileStream(System.IO.Path.Combine(currentFilePath), FileMode.Open))
                                             if (ImageExtensions.Any(x => file.Name.ToUpper().EndsWith(x)) && file.Size >= MAXIMAGESIZE)
                                             {
-                                                m = await _ts.uploadFile(dbName, ms, file.Name, "application/octet-stream", um);
+                                                m = await _ts.uploadFile(dbName, ms, file.Name, "application/octet-stream", um, caption: getCaption(filePath));
                                             }
                                             else
-                                                m = await _ts.uploadFile(dbName, ms, file.Name, um: um);
+                                                m = await _ts.uploadFile(dbName, ms, file.Name, um: um, caption: getCaption(filePath));
                                     }
                                     catch (Exception ex)
                                     {
                                         if (new List<string> { "IMAGE", "PHOTO" }.Any(x => ex.Message.Contains(x)))
                                         {
                                             using (FileStream ms = new FileStream(System.IO.Path.Combine(currentFilePath), FileMode.Open))
-                                                m = await _ts.uploadFile(dbName, ms, file.Name, "application/octet-stream", um);
+                                                m = await _ts.uploadFile(dbName, ms, file.Name, "application/octet-stream", um, caption: getCaption(filePath));
                                         }
                                         else
                                         {
@@ -1508,7 +1515,7 @@ namespace TelegramDownloader.Data
                     foreach (string s in files)
                     {
                         using (FileStream fs = new FileStream(s, FileMode.Open, FileAccess.Read, FileShare.Read))
-                            m = await _ts.uploadFile(dbName, fs, $"({i} of {files.Count}) - " + file.File.Name);
+                            m = await _ts.uploadFile(dbName, fs, $"({i} of {files.Count}) - " + file.File.Name, caption: getCaption(currentPath));
                         model.ListMessageId.Add(m.ID);
                         File.Delete(s);
                         i++;
@@ -1519,7 +1526,7 @@ namespace TelegramDownloader.Data
                 {
                     using (FileStream ms = new FileStream(System.IO.Path.Combine(currentFilePath, file.File.Name), FileMode.Open))
                     {
-                        m = await _ts.uploadFile(dbName, ms, file.File.Name);
+                        m = await _ts.uploadFile(dbName, ms, file.File.Name, caption: getCaption(currentPath));
                     }
                     model.MessageId = m.ID;
                 }
@@ -1749,6 +1756,11 @@ namespace TelegramDownloader.Data
             }
             await Task.Yield();
             return response;
+        }
+
+        private string? getCaption(string filePath)
+        {
+            return GeneralConfigStatic.config.ShouldShowCaptionPath ? filePath : null;
         }
 
         private async Task<MemoryStream> ToMemoryStreamAsync(Stream stream)
