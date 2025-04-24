@@ -45,7 +45,10 @@
     [Parameter]
     public BsonSharedInfoModel bsi { get; set; }
     public string filePath { get; set; }
+
     public List<FileManagerDirectoryContent> fileList { get; set; }
+    public List<ChatMessages> chatMessages { get; set; }
+    public bool isDownloadingChatMessages { get; set; } = false;
 
     public string filename = "";
     public string size = "";
@@ -79,6 +82,11 @@
 
     private async Task Submit()
     {
+        if (isDownloadingChatMessages)
+        {
+            chatMessages.ForEach(message => fs.DownloadFileFromChat(message, null, ddtree.selectedNode == null ? null : ddtree.selectedNode.FirstOrDefault(), null));
+            return;
+        }
         // ts.
         if (isShare)
             fs.downloadFile(DbService.SHARED_DB_NAME, fileList.ToList(), ddtree.selectedNode == null ? null : ddtree.selectedNode.FirstOrDefault(), bsi.CollectionId, bsi.ChannelId);

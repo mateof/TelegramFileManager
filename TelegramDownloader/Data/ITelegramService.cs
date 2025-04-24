@@ -22,11 +22,12 @@ namespace TelegramDownloader.Data
         Task RemoveFavouriteChannel(long id);
         Task<List<ChatViewBase>> getAllChats();
         Task<List<ChatViewBase>> getAllSavedChats();
-        Task<List<ChatMessages>> getAllMessages(long id);
+        Task<List<ChatMessages>> getAllMessages(long id, Boolean onlyFiles = false);
         Task<List<ChatMessages>> getChatHistory(long id, int limit = 30, int addOffset = 0);
         string getChatName(long id);
         Task<Message> getMessageFile(string chatId, int idMessage);
         Task<string> getPhotoThumb(ChatBase chat);
+        Task<string> downloadPhotoThumb(Photo thumb);
         Task logOff();
         Task sendVerificationCode(string vc);
         Task<Message> uploadFile(string chatId, Stream file, string fileName, string mimeType = null, UploadModel um = null, string caption = null);

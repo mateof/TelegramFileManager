@@ -317,7 +317,46 @@ namespace TelegramDownloader.Data
             //return m;
         }
 
-        public async Task<List<ChatMessages>> getAllMessages(long id)
+        public async Task<List<ChatMessages>> getAllMessages(long id, Boolean onlyFiles = false)
+        {
+            List<ChatMessages> cm = new List<ChatMessages>();
+            InputPeer peer = chats.chats[id];
+            for (int offset_id = 0; ;)
+            {
+                var messages = await client.Messages_GetHistory(peer, offset_id);
+                if (messages.Messages.Length == 0) break;
+                foreach (MessageBase msgBase in messages.Messages)
+                {
+                    if (msgBase is Message msg)
+                    {
+                        ChatMessages cm2 = new ChatMessages();
+                        cm2.htmlMessage = client.EntitiesToHtml(msg.message, msg.entities);
+                        cm2.message = msg;
+
+                        cm2.user = messages.UserOrChat(msg.From ?? msg.Peer);
+                        cm2.isDocument = false;
+                        if (msg.media is MessageMediaDocument { document: Document document })
+                        {
+                            cm2.isDocument = true;
+                        }
+                        if (onlyFiles)
+                        {
+                            if (cm2.isDocument)
+                                cm.Add(cm2);
+                        } else
+                        {
+                            cm.Add(cm2);
+                        }
+                            
+                        
+                    }
+                }
+                offset_id = messages.Messages[^1].ID;
+            }
+            return cm;
+        }
+
+        public async Task<List<ChatMessages>> getAllFileMessages(long id)
         {
             List<ChatMessages> cm = new List<ChatMessages>();
             InputPeer peer = chats.chats[id];
@@ -390,6 +429,17 @@ namespace TelegramDownloader.Data
             if (await client.DownloadProfilePhotoAsync(chat, ms, false, true) != 0)
             {
                 return Convert.ToBase64String(ms.ToArray());
+            };
+            return "";
+
+        }
+
+        public async Task<string> downloadPhotoThumb(Photo thumb)
+        {
+            MemoryStream ms = new MemoryStream();
+            if (await client.DownloadFileAsync(thumb, ms) != 0)
+            {
+                return $"data:image/jpeg;base64,{Convert.ToBase64String(ms.ToArray())}";
             };
             return "";
 

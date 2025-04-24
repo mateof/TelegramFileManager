@@ -103,3 +103,6 @@ a, .btn-link {
     padding-bottom: 5%;
 }
 
+.download-btn {
+    margin-bottom: 2% !important;
+}
