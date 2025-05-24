@@ -74,6 +74,7 @@ namespace TelegramDownloader.Models
         public bool CheckHash { get; set; } = false;
         public bool ShouldShowCaptionPath { get; set; } = false;
         public bool ShouldShowLogInTerminal { get; set; } = false;
+        public bool ShouldShowPaginatedFileChannel { get; set; } = false;
         public List<long> FavouriteChannels { get; set; } = new List<long>();
         
     }

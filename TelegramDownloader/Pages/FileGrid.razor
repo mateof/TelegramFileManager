@@ -19,48 +19,49 @@
 Class="table table-hover table-bordered table-striped"
 DataProvider="ChatsDataProvider"
 AllowPaging="true"
-PageSize="25"
+PageSize="@pageSize"
 AllowSelection="true"
 SelectionMode="GridSelectionMode.Multiple"
 @bind-SelectedItems="@SelectedItems"
-PageSizeSelectorVisible="true"
+PageSizeSelectorVisible="false"
 PageSizeSelectorItems="@(new int[] { 25, 50, 100 })"
+AllowFiltering="true"
 Responsive="true">
 
     <GridColumns>
-        <GridColumn TItem="ChatMessages" HeaderText="Id">
+        <GridColumn TItem="ChatMessages" PropertyName="message.id" HeaderText="Id">
             @context.message.id
         </GridColumn>
-        <GridColumn TItem="ChatMessages" HeaderText="Name">
+        <GridColumn TItem="ChatMessages" HeaderText="Name" PropertyName="message.message" StringComparison="StringComparison.Ordinal">
             @context.message.message
         </GridColumn>
-        <GridColumn TItem="ChatMessages" HeaderText="Created">
+        <GridColumn TItem="ChatMessages" HeaderText="Created" PropertyName="message.Date" Filterable="false">
             @context.message.Date.ToString("dd/MM/yyyy HH:mm:ss")
         </GridColumn>
-        <GridColumn TItem="ChatMessages" HeaderText="Edited">
+        <GridColumn TItem="ChatMessages" HeaderText="Edited" PropertyName="message.edit_date" Filterable="false">
             @(context.message.edit_date.Year > 1900 
-                ? context.message.edit_date.ToString("dd/MM/yyyy HH:mm:ss") 
-                : "")
+                    ? context.message.edit_date.ToString("dd/MM/yyyy HH:mm:ss") 
+                    : "")
         </GridColumn>
-        <GridColumn TItem="ChatMessages" HeaderText="File Name">
+        <GridColumn TItem="ChatMessages" HeaderText="File Name" PropertyName="message.media.Filename" StringComparison="StringComparison.Ordinal" Filterable="false">
             @if (context.message.media is MessageMediaDocument { document: Document document })
             {
                 <span>@document.Filename</span>
             }
         </GridColumn>
-        <GridColumn TItem="ChatMessages" HeaderText="Size">
+        <GridColumn TItem="ChatMessages" HeaderText="Size" PropertyName="message.media.size" Filterable="false">
             @if (context.message.media is MessageMediaDocument { document: Document document })
             {
                 <span>@HelperService.SizeSuffix(document.size)</span>
             }
         </GridColumn>
-        <GridColumn TItem="ChatMessages" HeaderText="Extension">
+        <GridColumn TItem="ChatMessages" HeaderText="Extension" PropertyName="message.media.mime_type" Filterable=" false">
             @if (context.message.media is MessageMediaDocument { document: Document document })
             {
                 <span>@document.mime_type</span>
             }
         </GridColumn>
-        <GridColumn TItem="ChatMessages" HeaderText="Preview">
+        <GridColumn TItem="ChatMessages" HeaderText="Preview" PropertyName="message.media.videoThumb" Filterable="false">
             @context.videoThumb
             @if (context.message.media is MessageMediaPhoto { photo: Photo photo })
             {
@@ -84,15 +85,17 @@ Responsive="true">
     [Parameter]
     public string id { get; set; }
     public List<ChatMessages> messages = default!;
+    private int pageSize = 100;
 
     private Modals.DowloadFromTelegram Modal { get; set; }
     private HashSet<ChatMessages> SelectedItems { get; set; } = new();
 
     private async Task<GridDataProviderResult<ChatMessages>> ChatsDataProvider(GridDataProviderRequest<ChatMessages> request)
     {
-        if (messages is null) {
+        if (messages is null)
+        {
             PreloadService.Show(SpinnerColor.Light, "Loading data...");
-            messages = await ts.getAllMessages(Convert.ToInt64(id), true);
+            messages = await ts.getAllMediaMessages(Convert.ToInt64(id), true);
             PreloadService.Hide();
         }
 

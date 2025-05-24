@@ -1,4 +1,7 @@
-﻿using Microsoft.AspNetCore.Components;
+﻿using BlazorBootstrap;
+using Microsoft.AspNetCore.Components;
+using System.Collections.Generic;
+using System.Threading.Tasks;
 using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
 using TelegramDownloader.Services;
@@ -330,10 +333,7 @@ namespace TelegramDownloader.Data
                     if (msgBase is Message msg)
                     {
                         ChatMessages cm2 = new ChatMessages();
-                        cm2.htmlMessage = client.EntitiesToHtml(msg.message, msg.entities);
                         cm2.message = msg;
-
-                        cm2.user = messages.UserOrChat(msg.From ?? msg.Peer);
                         cm2.isDocument = false;
                         if (msg.media is MessageMediaDocument { document: Document document })
                         {
@@ -345,6 +345,8 @@ namespace TelegramDownloader.Data
                                 cm.Add(cm2);
                         } else
                         {
+                            cm2.htmlMessage = client.EntitiesToHtml(msg.message, msg.entities);
+                            cm2.user = messages.UserOrChat(msg.From ?? msg.Peer);
                             cm.Add(cm2);
                         }
                             
@@ -354,6 +356,141 @@ namespace TelegramDownloader.Data
                 offset_id = messages.Messages[^1].ID;
             }
             return cm;
+        }
+
+        public async Task<List<ChatMessages>> getAllMediaMessages(long id, Boolean onlyFiles = false)
+        {
+            List<ChatMessages> cm = new List<ChatMessages>();
+            InputPeer peer = chats.chats[id];
+            int size = 100;
+            int page = 1;
+
+            var messages = await client.Messages_GetHistory(peer, add_offset: page -1, limit: size);
+            if (messages.Messages.Length == 0) return await Task.FromResult(cm);
+            foreach (MessageBase msgBase in messages.Messages)
+            {
+                if (msgBase is Message msg)
+                {
+                    ChatMessages cm2 = new ChatMessages();
+                    cm2.message = msg;
+                    cm2.isDocument = false;
+                    if (msg.media is MessageMediaDocument { document: Document document })
+                    {
+                        cm2.isDocument = true;
+                    }
+                    if (onlyFiles)
+                    {
+                        if (cm2.isDocument)
+                            cm.Add(cm2);
+                    }
+                    else
+                    {
+                        cm2.htmlMessage = client.EntitiesToHtml(msg.message, msg.entities);
+                        cm2.user = messages.UserOrChat(msg.From ?? msg.Peer);
+                        cm.Add(cm2);
+                    }
+                }
+            }
+
+            int totalMessages = messages.Count;
+            int gettedMessages = messages.Messages.Length;
+            int maxParalellTasks = 50;
+            int totalTasks = 0;
+            page++;
+            List<Task<List<ChatMessages>>> tasks = new List<Task<List<ChatMessages>>>();
+
+            while (gettedMessages < totalMessages)
+            {
+                int sizeGetted = gettedMessages + size >= totalMessages ? totalMessages - gettedMessages : size;
+
+                tasks.Add(getPaginatedMessagesAsync(peer, page, sizeGetted, onlyFiles));
+                page++;
+                totalTasks++;
+                gettedMessages += sizeGetted;
+
+                if (totalTasks == maxParalellTasks || gettedMessages == totalMessages)
+                {
+                    var results = await Task.WhenAll(tasks);
+                    totalTasks = 0;
+
+                    foreach (var result in results)
+                    {
+                        cm.AddRange(result);
+                    }
+                }
+            }
+
+            return await Task.FromResult(cm);
+        }
+
+        private async Task<List<ChatMessages>> getPaginatedMessagesAsync(InputPeer peer, int page, int size, Boolean onlyFiles = false)
+        {
+            List<ChatMessages> cm = new List<ChatMessages>();
+            var messages = await client.Messages_GetHistory(peer, add_offset: (page - 1) * 100, limit: size);
+            if (messages.Messages.Length == 0) return cm;
+            foreach (MessageBase msgBase in messages.Messages)
+            {
+                if (msgBase is Message msg)
+                {
+                    ChatMessages cm2 = new ChatMessages();
+                    cm2.message = msg;
+                    cm2.isDocument = false;
+                    if (msg.media is MessageMediaDocument { document: Document document })
+                    {
+                        cm2.isDocument = true;
+                    }
+                    if (onlyFiles)
+                    {
+                        if (cm2.isDocument)
+                            cm.Add(cm2);
+                    }
+                    else
+                    {
+                        cm2.htmlMessage = client.EntitiesToHtml(msg.message, msg.entities);
+                        cm2.user = messages.UserOrChat(msg.From ?? msg.Peer);
+                        cm.Add(cm2);
+                    }
+
+
+                }
+            }
+            return cm;
+        }
+
+        public async Task<GridDataProviderResult<ChatMessages>> getPaginatedMessages(long id, int page, int size, Boolean onlyFiles = false)
+        {
+            List<ChatMessages> cm = new List<ChatMessages>();
+            InputPeer peer = chats.chats[id];
+
+            var messages = await client.Messages_GetHistory(peer, add_offset: (page - 1) * 100, limit: size);
+            if (messages.Messages.Length == 0) return await Task.FromResult(new GridDataProviderResult<ChatMessages> { Data = cm, TotalCount = messages.Count });
+            foreach (MessageBase msgBase in messages.Messages)
+            {
+                if (msgBase is Message msg)
+                {
+                    ChatMessages cm2 = new ChatMessages();
+                    cm2.message = msg;
+                    cm2.isDocument = false;
+                    if (msg.media is MessageMediaDocument { document: Document document })
+                    {
+                        cm2.isDocument = true;
+                    }
+                    if (onlyFiles)
+                    {
+                        if (cm2.isDocument)
+                            cm.Add(cm2);
+                    }
+                    else
+                    {
+                        cm2.htmlMessage = client.EntitiesToHtml(msg.message, msg.entities);
+                        cm2.user = messages.UserOrChat(msg.From ?? msg.Peer);
+                        cm.Add(cm2);
+                    }
+
+
+                }
+            }
+            return await Task.FromResult(new GridDataProviderResult<ChatMessages> { Data = cm, TotalCount = messages.Count });
         }
 
         public async Task<List<ChatMessages>> getAllFileMessages(long id)

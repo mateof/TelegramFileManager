@@ -1,4 +1,5 @@
-﻿using TelegramDownloader.Models;
+﻿using BlazorBootstrap;
+using TelegramDownloader.Models;
 using TL;
 using WTelegram;
 
@@ -23,6 +24,8 @@ namespace TelegramDownloader.Data
         Task<List<ChatViewBase>> getAllChats();
         Task<List<ChatViewBase>> getAllSavedChats();
         Task<List<ChatMessages>> getAllMessages(long id, Boolean onlyFiles = false);
+        Task<GridDataProviderResult<ChatMessages>> getPaginatedMessages(long id, int page, int size, Boolean onlyFiles = false);
+        Task<List<ChatMessages>> getAllMediaMessages(long id, Boolean onlyFiles = false);
         Task<List<ChatMessages>> getChatHistory(long id, int limit = 30, int addOffset = 0);
         string getChatName(long id);
         Task<Message> getMessageFile(string chatId, int idMessage);

@@ -11,7 +11,7 @@
 @inject IJSRuntime JS;
 
 <style>
-    
+
 </style>
 
 <div class="top-row ps-3 navbar navbar-dark">
@@ -41,7 +41,7 @@
                 <button type="button" class="btn btn-outline-primary groupbtnactionclass" @onclick="showPlayer"><i class="bi bi-boombox"></i></button>
                 <button class="btn groupbtnactionclass" type="button" @onclick="HandleThreeDots"><i class="bi bi-three-dots"></i></button>
             </div>
-           
+
 
             <Tabs EnableFadeEffect="true" @ref="tabs" Id="menutab" OnShowing="@(args => OnTabShowingAsync(args))">
                 <Tab Active="true" Title="Mine" Name="Mine">
@@ -76,9 +76,12 @@
                                     </div>
                                 </div>
                                 <div class="col-2" style="position: relative; padding-top: 2%; padding-left: 0;">
-                                    <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false" @onclick="@(async () => await goTo($"/filegrid/{cb.chat.ID}"))">
-                                        <span style="color:white" class="bi bi-table"></span>
-                                    </button>
+                                    @if (GeneralConfigStatic.config.ShouldShowPaginatedFileChannel)
+                                    {
+                                        <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false" @onclick="@(async () => await goTo($"/filegrid/{cb.chat.ID}"))">
+                                            <span style="color:white" class="bi bi-table"></span>
+                                        </button>
+                                    }
                                     <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false" @onclick="@(async () => await goTo($"/fm/{cb.chat.ID}"))">
                                         <span style="color:white" class="bi bi-folder"></span>
                                     </button>
@@ -112,9 +115,13 @@
                                     </div>
                                 </div>
                                 <div class="col-2" style="position: relative; padding-top: 2%; padding-left: 0;">
-                                    <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false" @onclick="@(async () => await goTo($"/filegrid/{cb.chat.ID}"))">
-                                        <span style="color:white" class="bi bi-table"></span>
-                                    </button>
+                                    @if(GeneralConfigStatic.config.ShouldShowPaginatedFileChannel)
+                                    {
+                                        <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false" @onclick="@(async () => await goTo($"/filegrid/{cb.chat.ID}"))">
+                                            <span style="color:white" class="bi bi-table"></span>
+                                        </button>
+                                    }
+
                                     <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false" @onclick="@(async () => await goTo($"/fm/{cb.chat.ID}"))">
                                         <span style="color:white" class="bi bi-folder"></span>
                                     </button>
@@ -197,9 +204,12 @@
                                     </div>
                                 </div>
                                 <div class="col-2" style="position: relative; padding-top: 2%; padding-left: 0;">
-                                    <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false" @onclick="@(async () => await goTo($"/filegrid/{cb.chat.ID}"))">
-                                        <span style="color:white" class="bi bi-table"></span>
-                                    </button>
+                                    @if (GeneralConfigStatic.config.ShouldShowPaginatedFileChannel)
+                                    {
+                                        <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false" @onclick="@(async () => await goTo($"/filegrid/{cb.chat.ID}"))">
+                                            <span style="color:white" class="bi bi-table"></span>
+                                        </button>
+                                    }
                                     <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false" @onclick="@(async () => await goTo($"/fm/{cb.chat.ID}"))">
                                         <span style="color:white" class="bi bi-folder"></span>
                                     </button>

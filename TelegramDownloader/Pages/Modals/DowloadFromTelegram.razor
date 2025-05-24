@@ -85,6 +85,7 @@
         if (isDownloadingChatMessages)
         {
             chatMessages.ForEach(message => fs.DownloadFileFromChat(message, null, ddtree.selectedNode == null ? null : ddtree.selectedNode.FirstOrDefault(), null));
+            Close();
             return;
         }
         // ts.
