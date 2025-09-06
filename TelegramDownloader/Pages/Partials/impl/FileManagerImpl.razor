@@ -6,6 +6,8 @@
 @using TelegramDownloader.Data
 @using TelegramDownloader.Data.db
 @using TelegramDownloader.Models
+@using TelegramDownloader.Pages.Modals.InfoModals
+@using TelegramDownloader.Pages.Modals
 @using TelegramDownloader.Pages.Partials
 @inject IFileService fs
 @inject ITelegramService ts
@@ -18,18 +20,18 @@
 
 
     <FileManagerEvents TValue="FileManagerDirectoryContent"
-                       ToolbarItemClicked="toolBarClicked"
-                       ItemsMoving="ItemsMovingAsync"
-                       ItemRenaming="ItemRenamingAsync"
-                       Searching="SearchingAsync"
-                       OnFileOpen="FileOpen"
-                       FileSelection="FileSelectionAsync"
-                       FileSelected="FileSelectedAsync"
-                       OnRead="OnReadAsync"
-                       FolderCreating="FolderCreatingAsync"
-                       BeforeDownload="BeforeDownload"
-                       ItemsDeleting="ItemsDeletingAsync"
-                       ItemsUploaded="ItemsUploadedAsync"></FileManagerEvents>
+    ToolbarItemClicked="toolBarClicked"
+    ItemsMoving="ItemsMovingAsync"
+    ItemRenaming="ItemRenamingAsync"
+    Searching="SearchingAsync"
+    OnFileOpen="fileOpen"
+    FileSelection="FileSelectionAsync"
+    FileSelected="FileSelectedAsync"
+    OnRead="OnReadAsync"
+    FolderCreating="FolderCreatingAsync"
+    BeforeDownload="BeforeDownload"
+    ItemsDeleting="ItemsDeletingAsync"
+    ItemsUploaded="ItemsUploadedAsync"></FileManagerEvents>
     <FileManagerUploadSettings MaxFileSize="@(long.MaxValue)" AutoUpload="true"></FileManagerUploadSettings>
     <FileManagerToolbarSettings ToolbarItems="@Items"></FileManagerToolbarSettings>
     <FileManagerContextMenuSettings Visible="@(!isShared)" File="@ContextItems"></FileManagerContextMenuSettings>
@@ -37,6 +39,8 @@
 </SfFileManager>
 <TelegramDownloader.Pages.Modals.DowloadFromTelegram @ref="Modal" isShare="@isShared" bsi="@bsi"></TelegramDownloader.Pages.Modals.DowloadFromTelegram>
 
+<TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal @ref="mediaUrlModal"></TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal>
+<TelegramDownloader.Pages.Modals.VideoPlayerModal @ref="videoPlayer"></TelegramDownloader.Pages.Modals.VideoPlayerModal>
 
 
 
@@ -53,6 +57,9 @@
     public static string[] selectedItems = new string[] { "" };
     public static bool downloadToServer = true;
     LocalFileManager lfm { get; set; }
+    private VideoPlayerModal videoPlayer { get; set; } = default!;
+
+    private MediaUrlModal mediaUrlModal { get; set; } = default!;
 
     public string[] ContextItems = new string[] { "Open", "Delete", "Download", "Rename", "Details"};
 
@@ -68,6 +75,8 @@
         new ToolBarItemModel() { Name = "Selection" },
         new ToolBarItemModel() { Name = "View" },
         new ToolBarItemModel() { Name = "Details" },
+        new ToolBarItemModel() { Name = "UrlMedia", Text = "Url Media", TooltipText = "Url Media", PrefixIcon = "bi bi-collection-play-fill", Visible = false }
+
     };
 
     // protected override async Task OnParametersSetAsync()
@@ -80,6 +89,7 @@
     {
 
     }
+
 
     protected override async Task OnInitializedAsync()
     {
@@ -121,23 +131,24 @@
         // args.Response = await FileManagerService.Rename(args.Path, args.File.Name, args.NewName, false, args.ShowFileExtension, args.File);
     }
 
-    public async Task FileOpen(FileOpenEventArgs<FileManagerDirectoryContent> args)
+    public async Task fileOpen(FileOpenEventArgs<FileManagerDirectoryContent> args)
     {
-        if (!isShared && args != null && args.FileDetails != null && args.FileDetails.IsFile && new List<string> { ".mp3", ".ogg", ".flac", ".aac", ".wav" }.Contains(args.FileDetails.Type.ToLower()))
+        if (args != null && args.FileDetails != null && args.FileDetails.IsFile && new List<string> { ".mp3", ".ogg", ".flac", ".aac", ".wav" }.Contains(args.FileDetails.Type.ToLower()))
         {
             await playAudio(args);
-            // string localdir = "/" + FileService.STATICRELATIVELOCALDIR.Replace("\\", "/");
-            // string path = Path.Combine(localdir, args.FileDetails.FilterPath.Substring(1).Replace("\\", "/"), args.FileDetails.Name);
-            // await JSRuntime.InvokeVoidAsync("open", path, "_blank");
+        }
+        else
+        {
+            if (args != null && args.FileDetails != null && args.FileDetails.IsFile && new List<string> { ".mov", ".mp4", ".m4v", ".ogv", ".webm", ".flv", ".f4v" }.Contains(args.FileDetails.Type.ToLower()))
+            {
+                videoPlayer.ShowModal(getMediaUrl(args.FileDetails.Id, args.FileDetails.Name));
+            }
         }
     }
 
     private async Task playAudio(FileOpenEventArgs<FileManagerDirectoryContent> args)
     {
-        var file = await fs.getItemById(id, args.FileDetails.Id);
-        string path = MyNavigationManager.BaseUri + "api/file/getfile/" + args.FileDetails.Name + $"?idChannel={id}&idFile={file.MessageId}";
-        // string path = new System.Uri((Path.Combine(localdir, args.FileDetails.FilterPath.Substring(1).Replace("\\", "/"), args.FileDetails.Name)).Replace("\\", "/")).AbsoluteUri;
-        await JSRuntime.InvokeVoidAsync("openAudioPlayerModal", path, FileService.getMimeType(args.FileDetails.Name.Split(".").Last()), args.FileDetails.Name);
+        await JSRuntime.InvokeVoidAsync("openAudioPlayerModal", getMediaUrl(args.FileDetails.Id, args.FileDetails.Name), null, args.FileDetails.Name);
     }
 
     public async Task SearchingAsync(SearchEventArgs<FileManagerDirectoryContent> args)
@@ -188,6 +199,18 @@
         Console.WriteLine("");
     }
 
+    private async Task ShowMediaURLModal(string idFile, String name)
+    {
+        mediaUrlModal.url = getMediaUrl(idFile, name);
+        await mediaUrlModal.OnShowModalClick();
+    }
+
+    private string getMediaUrl(string idFile, String name)
+    {
+        string localdir = MyNavigationManager.BaseUri;
+        return new System.Uri(Path.Combine(localdir, "api/file/GetFileStream", id, idFile, name).Replace("\\", "/")).AbsoluteUri;
+    }
+
     public async Task toolBarClicked(ToolbarClickEventArgs<FileManagerDirectoryContent> args)
     {
         if (args.Item.Text == "Download To Local")
@@ -206,6 +229,10 @@
         if (args.Item.Text == "Share File")
         {
             MyNavigationManager.NavigateTo("/api/file/share/" + id + $"?bsonId={args.FileDetails.FirstOrDefault().Id}&fileName={args.FileDetails.FirstOrDefault().Name}", true);
+        }
+        if (args.Item.Text == "Url Media" && args.FileDetails.Count() > 0)
+        {
+            await ShowMediaURLModal(args.FileDetails[0].Id, args.FileDetails[0].Name);
         }
         Console.WriteLine("");
     }
@@ -226,7 +253,17 @@
 
     public async Task FileSelectionAsync(FileSelectionEventArgs<FileManagerDirectoryContent> args)
     {
-        Console.WriteLine("");
+        List<FileManagerDirectoryContent> selectedList = fm.GetSelectedFiles();
+        if ((selectedList.Count() + (args.Action == "UnSelect" ? -1 : 1)) == 1)
+        {
+            if (args.FileDetails.IsFile)
+            {
+                Items.Where(x => x.Name == "UrlMedia").FirstOrDefault().Visible = true;
+                return;
+            }
+
+        }
+        Items.Where(x => x.Name == "UrlMedia").FirstOrDefault().Visible = false;
     }
 
     public async Task FileSelectedAsync(FileSelectEventArgs<FileManagerDirectoryContent> args)

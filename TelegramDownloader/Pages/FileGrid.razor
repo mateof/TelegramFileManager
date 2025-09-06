@@ -1,0 +1,117 @@
+﻿@page "/filegrid/{id}"
+
+@using TL
+@using TelegramDownloader.Data;
+@using TelegramDownloader.Models;
+@using TelegramDownloader.Services;
+
+@inject ITelegramService ts;
+@inject PreloadService PreloadService;
+
+<h3>File Grid</h3>
+
+@if (SelectedItems.Any())
+{
+    <button class="btn btn-primary mt-3 download-btn" @onclick="GetSelectedItems">Download Selected</button>
+}
+
+<Grid TItem="ChatMessages"
+Class="table table-hover table-bordered table-striped"
+DataProvider="ChatsDataProvider"
+AllowPaging="true"
+PageSize="@pageSize"
+AllowSelection="true"
+SelectionMode="GridSelectionMode.Multiple"
+@bind-SelectedItems="@SelectedItems"
+PageSizeSelectorVisible="false"
+PageSizeSelectorItems="@(new int[] { 25, 50, 100 })"
+AllowFiltering="true"
+Responsive="true">
+
+    <GridColumns>
+        <GridColumn TItem="ChatMessages" PropertyName="message.id" HeaderText="Id">
+            @context.message.id
+        </GridColumn>
+        <GridColumn TItem="ChatMessages" HeaderText="Name" PropertyName="message.message" StringComparison="StringComparison.Ordinal">
+            @context.message.message
+        </GridColumn>
+        <GridColumn TItem="ChatMessages" HeaderText="Created" PropertyName="message.Date" Filterable="false">
+            @context.message.Date.ToString("dd/MM/yyyy HH:mm:ss")
+        </GridColumn>
+        <GridColumn TItem="ChatMessages" HeaderText="Edited" PropertyName="message.edit_date" Filterable="false">
+            @(context.message.edit_date.Year > 1900 
+                    ? context.message.edit_date.ToString("dd/MM/yyyy HH:mm:ss") 
+                    : "")
+        </GridColumn>
+        <GridColumn TItem="ChatMessages" HeaderText="File Name" PropertyName="message.media.Filename" StringComparison="StringComparison.Ordinal" Filterable="false">
+            @if (context.message.media is MessageMediaDocument { document: Document document })
+            {
+                <span>@document.Filename</span>
+            }
+        </GridColumn>
+        <GridColumn TItem="ChatMessages" HeaderText="Size" PropertyName="message.media.size" Filterable="false">
+            @if (context.message.media is MessageMediaDocument { document: Document document })
+            {
+                <span>@HelperService.SizeSuffix(document.size)</span>
+            }
+        </GridColumn>
+        <GridColumn TItem="ChatMessages" HeaderText="Extension" PropertyName="message.media.mime_type" Filterable=" false">
+            @if (context.message.media is MessageMediaDocument { document: Document document })
+            {
+                <span>@document.mime_type</span>
+            }
+        </GridColumn>
+        <GridColumn TItem="ChatMessages" HeaderText="Preview" PropertyName="message.media.videoThumb" Filterable="false">
+            @context.videoThumb
+            @if (context.message.media is MessageMediaPhoto { photo: Photo photo })
+            {
+                <img src="@ts.downloadPhotoThumb(photo)" style="max-width:-webkit-fill-available;" />
+            } else {
+                <img src="@context.videoThumb" style="max-width:-webkit-fill-available;" />
+            }
+        </GridColumn>
+    </GridColumns>
+</Grid>
+
+<div class="mt-3">
+    Selected Items Count: @SelectedItems.Count
+</div>
+
+<TelegramDownloader.Pages.Modals.DowloadFromTelegram @ref="Modal"></TelegramDownloader.Pages.Modals.DowloadFromTelegram>
+
+
+
+@code {
+    [Parameter]
+    public string id { get; set; }
+    public List<ChatMessages> messages = default!;
+    private int pageSize = 100;
+
+    private Modals.DowloadFromTelegram Modal { get; set; }
+    private HashSet<ChatMessages> SelectedItems { get; set; } = new();
+
+    private async Task<GridDataProviderResult<ChatMessages>> ChatsDataProvider(GridDataProviderRequest<ChatMessages> request)
+    {
+        if (messages is null)
+        {
+            PreloadService.Show(SpinnerColor.Light, "Loading data...");
+            messages = await ts.getAllMediaMessages(Convert.ToInt64(id), true);
+            PreloadService.Hide();
+        }
+
+        return await Task.FromResult(request.ApplyTo(messages));
+    }
+
+    private void GetSelectedItems()
+    {
+        Modal.chatMessages = SelectedItems.ToList();
+        Modal.isDownloadingChatMessages = true;
+        Modal.Open();
+        // Aquí puedes manejar los elementos seleccionados
+        // Console.WriteLine($"Elementos seleccionados: {SelectedItems.Count}");
+        // foreach (var item in SelectedItems)
+        // {
+        //     Console.WriteLine($"Id: {item.message.id}, Name: {item.message.message}");
+        // }
+    }
+}

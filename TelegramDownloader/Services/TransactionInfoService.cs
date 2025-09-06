@@ -85,8 +85,8 @@ namespace TelegramDownloader.Services
 
         private void OnTimedEvent(Object source, ElapsedEventArgs e)
         {
-            _logger.LogInformation("El evento Elapsed se disparó a las {0:HH:mm:ss.fff}", e.SignalTime);
-            _logger.LogInformation("Upload: {0}, download: {1}", bytesUploaded, bytesDownloaded);
+            //_logger.LogInformation("El evento Elapsed se disparó a las {0:HH:mm:ss.fff}", e.SignalTime);
+            //_logger.LogInformation("Upload: {0}, download: {1}", bytesUploaded, bytesDownloaded);
             if (bytesDownloaded > 0)
                 setDownloadSpeed(HelperService.SizeSuffixPerTime(bytesDownloaded));
             if (bytesUploaded > 0)
@@ -104,7 +104,6 @@ namespace TelegramDownloader.Services
 
         public async Task addUploadBytes(long bytes)
         {
-            _logger.LogInformation("Add bytes to upload {0}", bytes);
             UploadBytesMutex.WaitOne();
             bytesUploaded += bytes;
             UploadBytesMutex.ReleaseMutex();
@@ -132,7 +131,7 @@ namespace TelegramDownloader.Services
 
         public void setUploadSpeed(String speed)
         {
-            _logger.LogInformation("Set bytes speed upload {0}", speed);
+            //_logger.LogInformation("Set bytes speed upload {0}", speed);
             uploadSpeed = speed;
             TaskEventChanged.Invoke(null, EventArgs.Empty);
         }
