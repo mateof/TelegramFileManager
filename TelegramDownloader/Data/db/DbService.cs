@@ -333,7 +333,7 @@ namespace TelegramDownloader.Data.db
         {
             if (collectionName == null)
                 collectionName = "directory";
-            var result = await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Where(x => x.FilePath + "/" == path || x.FilterPath == path))).ToListAsync();
+            var result = await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Where(x => x.FilterId == path || x.FilePath + "/" == path || x.FilterPath == path))).ToListAsync();
             return result;
         }
 

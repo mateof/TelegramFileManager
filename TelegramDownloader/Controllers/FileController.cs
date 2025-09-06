@@ -9,13 +9,16 @@ using Syncfusion.Blazor.FileManager;
 using Syncfusion.Blazor.Inputs;
 using Syncfusion.EJ2.FileManager.Base;
 using Syncfusion.EJ2.FileManager.PhysicalFileProvider;
+using Syncfusion.EJ2.Notifications;
 using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Runtime.Serialization.Formatters.Binary;
+using System.Web;
 using System.Xml.Linq;
 using TelegramDownloader.Data;
 using TelegramDownloader.Data.db;
@@ -234,7 +237,7 @@ namespace TelegramDownloader.Controllers
         }
 
         [Route("GetFile/{id}")]
-        public async Task<IActionResult> GetFile(string id, string? idChannel, string? idFile )
+        public async Task<IActionResult> GetFile(string id, string? idChannel, string? idFile)
         {
             var fileName = id;
             var mimeType = FileService.getMimeType(id.Split(".").Last());
@@ -242,7 +245,7 @@ namespace TelegramDownloader.Controllers
             if ( file == null )
             {
                 // HttpResponseMessage fullResponse = new HttpResponseMessage(HttpStatusCode.OK); // Request.CreateResponse(HttpStatusCode.OK);
-                Message idM = await _ts.getMessageFile(idChannel, Convert.ToInt32(idFile));
+                TL.Message idM = await _ts.getMessageFile(idChannel, Convert.ToInt32(idFile));
                 ChatMessages cm = new ChatMessages();
                 cm.message = idM;
                 file = new FileStream(System.IO.Path.Combine(FileService.TEMPDIR, "_temp", $"{idChannel}-{idFile}-{id}"), FileMode.Create, FileAccess.ReadWrite);
@@ -253,6 +256,8 @@ namespace TelegramDownloader.Controllers
                 await _ts.DownloadFileAndReturn(cm, file, model: dm);
                 file.Position = 0; 
             }
+            var request = HttpContext.Request;
+            var rangeHeader = request.Headers["Range"].ToString();
 
             return new FileStreamResult(file, mimeType)
             {
@@ -260,6 +265,231 @@ namespace TelegramDownloader.Controllers
                 EnableRangeProcessing = true
                 
             };
+        }
+
+        [Route("GetFileStream/{idChannel}/{idFile}/{name}")]
+        public async Task<IActionResult> GetFileStream(string idChannel, string idFile, string name)
+        {
+            var fileName = name;
+            var mimeType = FileService.getMimeType(name.Split(".").Last());
+
+            var request = HttpContext.Request;
+            var rangeHeader = request.Headers["Range"].ToString();
+
+            var file = await _fs.getItemById(idChannel, idFile);
+
+            TL.Message idM = await _ts.getMessageFile(idChannel, file.MessageId ?? file.ListMessageId.FirstOrDefault());
+
+            long totalLength = 0; // (await _fs.getItemById(idChannel, idFile)).Size;
+
+            if(idM.media is MessageMediaDocument { document: Document document })
+            {
+                totalLength = document.size;
+            }
+
+            long from = 0;
+            long initialFrom = 0;
+            long to = 0;
+
+            if (!string.IsNullOrEmpty(rangeHeader) && rangeHeader.StartsWith("bytes="))
+            {
+                var range = rangeHeader.Replace("bytes=", "").Split('-');
+                from = long.Parse(range[0]);
+                initialFrom = from;
+                if (range.Length > 1 && !string.IsNullOrEmpty(range[1]))
+                    to = long.Parse(range[1]);
+            }
+
+            if (from > 0)
+            {
+                from = (from / 524288) * 524288;
+            }
+
+            Console.WriteLine("Fom:" + from);
+
+            if (to == 0)
+                if (string.IsNullOrEmpty(rangeHeader) || from == 0)
+                    to = (12 * 524288) + from;
+                else
+                    to = (5 * 524288) + from;
+            else
+                    to = ((to + 524288) / 524288) * 524288;
+
+            if (to > totalLength)
+            {
+                to = totalLength;
+            }
+
+            if (totalLength == initialFrom)
+            {
+                Response.StatusCode = 416; // Range Not Satisfiable
+                Response.Headers["Content-Range"] = $"bytes */{totalLength}";
+                return new EmptyResult();
+            }
+
+            long length = to - from;
+            //Console.WriteLine("To length: " + to);
+            //Console.WriteLine("future download length: " + length);
+
+            byte[] data = await _ts.DownloadFileStream(idM, from, (int)length);
+
+            //Console.WriteLine("Total download length: " + data.Length);
+
+            long skipedBytes = initialFrom - from - (length - data.Length);
+
+            if (skipedBytes < 0) skipedBytes = 0;
+
+            if (skipedBytes > data.Length)
+                return StatusCode(500, "No hay suficientes bytes en el bloque descargado");
+
+            long dataLength = data.Length - skipedBytes;
+            Response.ContentLength = dataLength; //(dataLength + initialFrom) >= totalLength ? totalLength - initialFrom : dataLength;
+            // Response.StatusCode = (int)HttpStatusCode.PartialContent; // 206
+            Response.StatusCode = StatusCodes.Status206PartialContent; // StatusCodes.Status206PartialContent;
+            Response.ContentType = mimeType;
+            Response.Headers["Content-Disposition"] = $"inline; filename=\"{HttpUtility.UrlEncode(fileName)}\"";
+            Response.Headers.Add("Content-Range", $"bytes {(initialFrom >= totalLength ? totalLength - 1 : initialFrom)}-{(initialFrom >= totalLength ? totalLength - 1 : initialFrom + Response.ContentLength - 1)}/{totalLength}");
+            Response.Headers.Add("Accept-Ranges", "bytes");
+
+            //if (Request.Headers.ContainsKey("Range"))
+            //{
+            //    Console.WriteLine("Range header recibido:");
+            //    Console.WriteLine(Request.Headers["Range"]);
+            //}
+
+            //foreach (var header in Response.Headers)
+            //{
+            //    Console.WriteLine($"{header.Key}: {header.Value}");
+            //}
+
+
+            // Console.WriteLine("Skiped bytes: " + skipedBytes);
+
+            var stream = new MemoryStream(data, (int)skipedBytes, (int)Response.ContentLength);
+            stream.Position = 0;
+
+            //  Console.WriteLine("Real Data length: " + stream.Length);
+
+            // Console.WriteLine("---------------------------------------------------");
+
+            var cancellationToken = HttpContext.RequestAborted;
+
+            try
+            {
+                await stream.CopyToAsync(Response.Body, 64 * 1024, cancellationToken);
+                await Response.Body.FlushAsync(cancellationToken);
+
+                return new EmptyResult();
+            }
+            catch (OperationCanceledException)
+            {
+                Console.WriteLine("❌ El cliente cerró la conexión.");
+            }
+
+            return new EmptyResult();
+
+        }
+
+        [Route("GetFileStream2/{idChannel}/{idFile}/{name}")]
+        public async Task<IActionResult> GetFileStream2(string idChannel, string idFile, string name)
+        {
+            var fileName = name;
+            var mimeType = FileService.getMimeType(name.Split(".").Last());
+
+            var request = HttpContext.Request;
+            var rangeHeader = request.Headers["Range"].ToString();
+
+            var file = await _fs.getItemById(idChannel, idFile);
+
+            // HttpResponseMessage fullResponse = new HttpResponseMessage(HttpStatusCode.OK); // Request.CreateResponse(HttpStatusCode.OK);
+            TL.Message idM = await _ts.getMessageFile(idChannel, file.MessageId ?? file.ListMessageId.FirstOrDefault());
+            //byte[] data = await _ts.DownloadFileStream(idM, 0, 512);
+            //var stream = new MemoryStream(data);
+
+            // Supón que puedes obtener el tamaño total del archivo remoto
+            long totalLength = (await _fs.getItemById(idChannel, idFile)).Size;
+
+            long from = 0;
+            long initialFrom = 0;
+            long to = 0;
+
+
+
+            if (!string.IsNullOrEmpty(rangeHeader) && rangeHeader.StartsWith("bytes="))
+            {
+                var range = rangeHeader.Replace("bytes=", "").Split('-');
+                from = long.Parse(range[0]);
+                initialFrom = from;
+                if (range.Length > 1 && !string.IsNullOrEmpty(range[1]))
+                    to = long.Parse(range[1]);
+            }
+
+            if (from > 0)
+            {
+                from = (from / 524288) * 524288;
+            }
+
+            if (to == 0)
+                to = (25 * 524288) + from;
+            else
+                to = ((to + 524288) / 524288) * 524288;
+
+            if (to > totalLength)
+            {
+                to = totalLength - 1;
+            }
+
+            long length = to - from;
+
+            byte[] data = await _ts.DownloadFileStream(idM, from, (int)length);
+
+            long skipedBytes = initialFrom - from; // (data.Length + initialFrom) >= totalLength ? data.Length - (totalLength - initialFrom) : initialFrom - from;
+
+            if (skipedBytes < 0) skipedBytes = 0;
+
+            if (skipedBytes >= data.Length)
+                return StatusCode(500, "No hay suficientes bytes en el bloque descargado");
+
+            long dataLength = data.Length - skipedBytes;
+            Response.ContentLength = (dataLength + initialFrom) >= totalLength ? totalLength - initialFrom : dataLength;
+            // Response.StatusCode = (int)HttpStatusCode.PartialContent; // 206
+            Response.StatusCode = StatusCodes.Status206PartialContent;
+            Response.ContentType = mimeType;
+            Response.Headers.Add("Content-Range", $"bytes {initialFrom}-{(initialFrom + Response.ContentLength - 1)}/{totalLength}");
+            Response.Headers.Add("Accept-Ranges", "bytes");
+
+            if (Request.Headers.ContainsKey("Range"))
+            {
+                Console.WriteLine("Range header recibido:");
+                Console.WriteLine(Request.Headers["Range"]);
+            }
+
+            foreach (var header in Response.Headers)
+            {
+                Console.WriteLine($"{header.Key}: {header.Value}");
+            }
+
+
+
+
+            var stream = new MemoryStream(data, (int)skipedBytes, (int)Response.ContentLength);
+
+            Console.WriteLine("Real Data length: " + stream.Length);
+
+            Console.WriteLine("---------------------------------------------------");
+
+            //return new FileStreamResult(stream, mimeType);
+            var cancellationToken = HttpContext.RequestAborted;
+
+            await stream.CopyToAsync(Response.Body, 64 * 1024, cancellationToken);
+            await Response.Body.FlushAsync(cancellationToken);
+
+            return new EmptyResult();
+            // return File(stream, mimeType, enableRangeProcessing: false);
+            //return new FileStreamResult(stream, mimeType)
+            //{
+            //    EnableRangeProcessing = false
+            //};
 
         }
 

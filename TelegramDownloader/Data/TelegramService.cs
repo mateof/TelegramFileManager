@@ -1,11 +1,19 @@
 ﻿using BlazorBootstrap;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Forms;
+using Syncfusion.Blazor.Inputs;
+using Syncfusion.Blazor.Kanban.Internal;
+using Syncfusion.Blazor.Sparkline.Internal;
 using System.Collections.Generic;
+using System.Reflection.Metadata;
 using System.Threading.Tasks;
 using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
 using TelegramDownloader.Services;
 using TL;
+using TL.Layer23;
+using TL.Methods;
+using WTelegram;
 
 namespace TelegramDownloader.Data
 {
@@ -13,6 +21,7 @@ namespace TelegramDownloader.Data
     {
         public static bool isPremium = false;
         public static int splitSizeGB = 2;
+        private const int FILESPLITSIZE = 524288; // 512 * 1024;
         private TransactionInfoService _tis { get; set; }
         private IDbService _db { get; set; }
         private static WTelegram.Client client = null;
@@ -335,7 +344,7 @@ namespace TelegramDownloader.Data
                         ChatMessages cm2 = new ChatMessages();
                         cm2.message = msg;
                         cm2.isDocument = false;
-                        if (msg.media is MessageMediaDocument { document: Document document })
+                        if (msg.media is MessageMediaDocument { document: TL.Document document })
                         {
                             cm2.isDocument = true;
                         }
@@ -374,7 +383,7 @@ namespace TelegramDownloader.Data
                     ChatMessages cm2 = new ChatMessages();
                     cm2.message = msg;
                     cm2.isDocument = false;
-                    if (msg.media is MessageMediaDocument { document: Document document })
+                    if (msg.media is MessageMediaDocument { document: TL.Document document })
                     {
                         cm2.isDocument = true;
                     }
@@ -435,7 +444,7 @@ namespace TelegramDownloader.Data
                     ChatMessages cm2 = new ChatMessages();
                     cm2.message = msg;
                     cm2.isDocument = false;
-                    if (msg.media is MessageMediaDocument { document: Document document })
+                    if (msg.media is MessageMediaDocument { document: TL.Document document })
                     {
                         cm2.isDocument = true;
                     }
@@ -471,7 +480,7 @@ namespace TelegramDownloader.Data
                     ChatMessages cm2 = new ChatMessages();
                     cm2.message = msg;
                     cm2.isDocument = false;
-                    if (msg.media is MessageMediaDocument { document: Document document })
+                    if (msg.media is MessageMediaDocument { document: TL.Document document })
                     {
                         cm2.isDocument = true;
                     }
@@ -511,7 +520,7 @@ namespace TelegramDownloader.Data
 
                         cm2.user = messages.UserOrChat(msg.From ?? msg.Peer);
                         cm2.isDocument = false;
-                        if (msg.media is MessageMediaDocument { document: Document document })
+                        if (msg.media is MessageMediaDocument { document: TL.Document document })
                         {
                             cm2.isDocument = true;
                         }
@@ -547,7 +556,7 @@ namespace TelegramDownloader.Data
 
                     cm2.user = mess.UserOrChat(mb.From ?? mb.Peer);
                     cm2.isDocument = false;
-                    if (msg.media is MessageMediaDocument { document: Document document })
+                    if (msg.media is MessageMediaDocument { document: TL.Document document })
                     {
                         cm2.isDocument = true;
                     }
@@ -601,6 +610,84 @@ namespace TelegramDownloader.Data
                 await GetFouriteChannels();
             }
         }
+        public async Task<Byte[]> DownloadFileStream(Message message, long offset, int limit)
+        {
+            int totalLimit = limit;
+            long currentOffset = offset;
+            Byte[] response;
+            if (message is Message msg && msg.media is MessageMediaDocument doc)
+            {
+                try
+                {
+                    using (var memoryStream = new MemoryStream())
+                    {
+                        while (totalLimit > 0)
+                        {
+                            int totalDownloadBytes = FILESPLITSIZE;
+                            if (totalLimit >= FILESPLITSIZE)
+                            {
+                                totalDownloadBytes = FILESPLITSIZE;
+                               
+                            }
+                            //else if (totalLimit >= 4096)
+                            //{
+                            //    // Busca el mayor múltiplo de 4096 menor o igual a totalLimit
+                            //    totalDownloadBytes = (totalLimit / 4096) * 4096;
+                            //}
+                            else
+                            {
+                                // Último trozo, menor de 4096
+                                totalDownloadBytes = FILESPLITSIZE; // totalLimit;
+                                //totalDownloadBytes = totalLimit;
+                            }
+
+                            InputDocument inputFile = doc.document;
+                            var location = new InputDocumentFileLocation
+                            {
+                                id = inputFile.id,
+                                access_hash = inputFile.access_hash,
+                                file_reference = inputFile.file_reference,
+                                thumb_size = ""
+                            };
+
+                            //var file = await client.Invoke(new Upload_GetFile
+                            //{
+                            //    location = new InputDocumentFileLocation
+                            //    {
+                            //        id = inputFile.id,
+                            //        access_hash = inputFile.access_hash,
+                            //        file_reference = inputFile.file_reference,
+                            //        thumb_size = ""
+                            //    },
+                            //    offset = currentOffset,
+                            //    limit = totalDownloadBytes
+                            //});
+
+                            var file = await client.Upload_GetFile(location, currentOffset, limit: totalDownloadBytes);
+
+                            if (file is Upload_File uploadFile)
+                            {
+                                //uploadFile.WriteTL(new BinaryWriter(memoryStream));
+                                var fileBytes = uploadFile.bytes;
+                                memoryStream.Write(fileBytes, 0, fileBytes.Length);
+                                currentOffset += (totalDownloadBytes);
+                                totalLimit -= (totalDownloadBytes);
+                                continue;
+                            }
+                            throw new InvalidOperationException("Unexpected file type returned.");
+                        }
+
+                        return memoryStream.ToArray();
+                    }
+                }
+                catch (Exception e)
+                {
+                    throw new InvalidOperationException("Unexpected file type returned.");
+                }
+            }
+                
+            throw new ArgumentException("Invalid message or media type.");
+        }
 
         public async Task<Stream> DownloadFileAndReturn(ChatMessages message, Stream ms = null, string fileName = null, string folder = null, DownloadModel model = null)
         {
@@ -613,7 +700,7 @@ namespace TelegramDownloader.Data
             model.m = message;
             model.channel = message.user;
 
-            if (message.message.media is MessageMediaDocument { document: Document document })
+            if (message.message.media is MessageMediaDocument { document: TL.Document document })
             {
 
                 model._transmitted = 0;
@@ -628,6 +715,7 @@ namespace TelegramDownloader.Data
                 MemoryStream dest = new MemoryStream();
                 // using var dest = new FileStream($"{Path.Combine(folder != null ? folder : Path.Combine(Environment.CurrentDirectory, "download"), filename)}", FileMode.Create, FileAccess.Write);
                 await client.DownloadFileAsync(document, ms ?? dest, null, model.ProgressCallback);
+                   
                 return ms ?? dest;
                 // fileStream.CopyTo(dest);
                 Console.WriteLine("Download finished");
@@ -640,7 +728,7 @@ namespace TelegramDownloader.Data
                 Console.WriteLine("Downloading " + filename);
                 MemoryStream dest = new MemoryStream();
                 // using var dest = new FileStream($"{Path.Combine(Environment.CurrentDirectory!, "wwwroot", "img", "telegram", filename)}", FileMode.Create, FileAccess.Write);
-                var type = await client.DownloadFileAsync(photo, ms ?? dest, null, model.ProgressCallback);
+                var type = await client.DownloadFileAsync(photo, ms ?? dest, (PhotoSizeBase)null, model.ProgressCallback);
                 dest.Close(); // necessary for the renaming
                 Console.WriteLine("Download finished");
                 //if (type is not Storage_FileType.unknown and not Storage_FileType.partial)
@@ -666,7 +754,7 @@ namespace TelegramDownloader.Data
             model.m = message;
             model.channel = message.user;
 
-            if (message.message.media is MessageMediaDocument { document: Document document })
+            if (message.message.media is MessageMediaDocument { document: TL.Document document })
             {
 
                 model._transmitted = 0;

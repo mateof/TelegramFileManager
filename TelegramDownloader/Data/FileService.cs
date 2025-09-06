@@ -117,7 +117,7 @@ namespace TelegramDownloader.Data
     {"mid", "audio/midi"},
     {"midi", "audio/midi"},
     {"mif", "application/vnd.mif"},
-    {"mkv", "video/webm" },
+    {"mkv", "video/x-matroska" },
     {"mov", "video/quicktime"},
     {"movie", "video/x-sgi-movie"},
     {"mp2", "audio/mpeg"},
