@@ -292,7 +292,6 @@ namespace TelegramDownloader.Controllers
             long initialFrom = 0;
             long initialPartFrom = 0;
             long to = 0;
-            long accumulatePart = 0;
 
             if (!string.IsNullOrEmpty(rangeHeader) && rangeHeader.StartsWith("bytes="))
             {
