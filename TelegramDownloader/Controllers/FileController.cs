@@ -277,27 +277,48 @@ namespace TelegramDownloader.Controllers
             var rangeHeader = request.Headers["Range"].ToString();
 
             var file = await _fs.getItemById(idChannel, idFile);
+            long totalLength = file.Size;
 
             TL.Message idM = await _ts.getMessageFile(idChannel, file.MessageId ?? file.ListMessageId.FirstOrDefault());
 
-            long totalLength = 0; // (await _fs.getItemById(idChannel, idFile)).Size;
+            long totalPartialFileLength = 0;
 
-            if(idM.media is MessageMediaDocument { document: Document document })
+            if (idM.media is MessageMediaDocument { document: Document document })
             {
-                totalLength = document.size;
+                totalPartialFileLength = document.size;
             }
 
             long from = 0;
             long initialFrom = 0;
+            long initialPartFrom = 0;
             long to = 0;
+            long accumulatePart = 0;
 
             if (!string.IsNullOrEmpty(rangeHeader) && rangeHeader.StartsWith("bytes="))
             {
                 var range = rangeHeader.Replace("bytes=", "").Split('-');
                 from = long.Parse(range[0]);
                 initialFrom = from;
+                initialPartFrom = from;
                 if (range.Length > 1 && !string.IsNullOrEmpty(range[1]))
                     to = long.Parse(range[1]);
+            }
+
+            if (from >= totalPartialFileLength)
+            {
+                Console.WriteLine("Take a file part: from: " + from + ", totalPartialFileLength: " + totalPartialFileLength);
+                int filePart = 0;
+                while(from >= totalPartialFileLength)
+                {
+                    filePart++;
+                    from -= totalPartialFileLength;
+                }
+                idM = await _ts.getMessageFile(idChannel, file.ListMessageId[filePart]);
+                if (idM.media is MessageMediaDocument { document: Document document2 })
+                {
+                    totalPartialFileLength = document2.size;
+                }
+                initialPartFrom = from;
             }
 
             if (from > 0)
@@ -315,12 +336,12 @@ namespace TelegramDownloader.Controllers
             else
                     to = ((to + 524288) / 524288) * 524288;
 
-            if (to > totalLength)
+            if (to > totalPartialFileLength)
             {
-                to = totalLength;
+                to = totalPartialFileLength;
             }
 
-            if (totalLength == initialFrom)
+            if (totalPartialFileLength == initialPartFrom)
             {
                 Response.StatusCode = 416; // Range Not Satisfiable
                 Response.Headers["Content-Range"] = $"bytes */{totalLength}";
@@ -335,7 +356,7 @@ namespace TelegramDownloader.Controllers
 
             //Console.WriteLine("Total download length: " + data.Length);
 
-            long skipedBytes = initialFrom - from - (length - data.Length);
+            long skipedBytes = initialPartFrom - from - (length - data.Length);
 
             if (skipedBytes < 0) skipedBytes = 0;
 
