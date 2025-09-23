@@ -29,7 +29,7 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Copia y instala los requirements de WebDav
-# COPY WebDav /app/WebDav
+COPY ./WebDav /app/WebDav
 RUN ls -l /app/WebDav
 RUN python3 -m pip install --upgrade pip && \
     python3 -m pip install -r /app/WebDav/requirements.txt
