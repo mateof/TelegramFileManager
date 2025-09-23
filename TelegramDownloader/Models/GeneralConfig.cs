@@ -7,6 +7,8 @@ using Syncfusion.Blazor.RichTextEditor;
 using Newtonsoft.Json;
 using Syncfusion.Blazor.Charts;
 using TelegramDownloader.Data;
+using System.Diagnostics;
+using TelegramDownloader.Services;
 
 namespace TelegramDownloader.Models
 {
@@ -72,10 +74,15 @@ namespace TelegramDownloader.Models
         public int SplitSize { get; set; } = 0;
         public int MaxSimultaneousDownloads = 1;
         public bool CheckHash { get; set; } = false;
+        /// <summary>
+        /// Maximum image upload size in megabytes. if 0, All images will be sent as a file
+        /// </summary>
+        public int MaxImageUploadSizeInMb { get; set; } = 10;
         public bool ShouldShowCaptionPath { get; set; } = false;
         public bool ShouldShowLogInTerminal { get; set; } = false;
         public bool ShouldShowPaginatedFileChannel { get; set; } = false;
         public List<long> FavouriteChannels { get; set; } = new List<long>();
+        public WebDavModel webDav { get; set; } = new WebDavModel();
         
     }
 
@@ -85,5 +92,24 @@ namespace TelegramDownloader.Models
         public string? hash_id { get; set;}
         public string? mongo_connection_string { get; set; }
         public bool? avoid_checking_certificate { get; set; }
+    }
+
+    public class WebDavModel
+    {
+        public string Host { get; set; } = "127.0.0.1";
+        public int PuertoEntrada { get; set; } = 8080;
+        public int PuertoSalida { get; set; } = 9081;
+        [BsonIgnore]
+        public WebbDavService? webDavService { get; set; } = new WebbDavService();
+
+        public void start()
+        {
+            webDavService.Start(port: PuertoEntrada, externalPort: PuertoSalida, host: Host);
+        }
+
+        public void stop()
+        {
+            webDavService.Stop();
+        }
     }
 }

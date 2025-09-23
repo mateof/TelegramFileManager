@@ -21,5 +21,17 @@ RUN dotnet publish "./TelegramDownloader.csproj" -c $BUILD_CONFIGURATION -o /app
 
 FROM base AS final
 WORKDIR /app
+
+# Instala Python y pip
+RUN apt-get update && \
+    apt-get install -y python3 python3-pip && \
+    ln -s /usr/bin/python3 /usr/bin/python && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copia y instala los requirements de WebDav
+COPY WebDav /app/WebDav
+RUN python3 -m pip install --upgrade pip && \
+    python3 -m pip install -r /app/WebDav/requirements.txt
+
 COPY --from=publish /app/publish .
 ENTRYPOINT ["dotnet", "TelegramDownloader.dll"]

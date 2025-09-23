@@ -81,6 +81,17 @@
                 </div>
 
                 <div>
+                    <div class="input-group mb-3">
+                        <span class="input-group-text"><i class="bi bi-upload"></i></span>
+                        <div class="form-floating">
+                            <NumberInput TValue="int" @bind-Value="Model!.MaxImageUploadSizeInMb" Min="0" Max="10" EnableMinMax="true" class="form-control" id="MaxImageUploadSizeInMb" placeholder="Max. Image Size" />
+                            <label for="MaxImageUploadSizeInMb">Max. Image File Size to send as Image (if 0, All images will be sent as a file)</label>
+                        </div>
+
+                    </div>
+                </div>
+
+                <div>
                     <div class="d-flex flex-row mb-3">
                         @if (TelegramService.isPremium)
                         {
