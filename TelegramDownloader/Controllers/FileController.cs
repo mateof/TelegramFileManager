@@ -267,6 +267,19 @@ namespace TelegramDownloader.Controllers
             };
         }
 
+        [Route("strm")]
+        public async Task<IActionResult> GetStrm([FromQuery] string idChannel, [FromQuery] string path, [FromQuery] string host)
+        {
+            String zip = await _fs.CreateStrmFiles(path, idChannel, host);
+
+            FileStream fs = new FileStream(zip, FileMode.Open);
+
+            return new FileStreamResult(fs, "application/octet-stream")
+            {
+                FileDownloadName = Path.GetFileName(zip)
+            };
+        }
+
         [Route("GetFileStream/{idChannel}/{idFile}/{name}")]
         public async Task<IActionResult> GetFileStream(string idChannel, string idFile, string name)
         {
@@ -275,6 +288,7 @@ namespace TelegramDownloader.Controllers
 
             var request = HttpContext.Request;
             var rangeHeader = request.Headers["Range"].ToString();
+            Console.WriteLine("range: ", rangeHeader);
 
             var file = await _fs.getItemById(idChannel, idFile);
             long totalLength = file.Size;

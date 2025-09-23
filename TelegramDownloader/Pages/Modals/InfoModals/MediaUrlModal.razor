@@ -1,6 +1,6 @@
 ﻿@inject IJSRuntime JS
 
-<Modal @ref="modal" Title="Media URL">
+<Modal @ref="modal" Title="@title">
     <BodyTemplate>
         <div class=" input-group mb-3">
             <span class=" input-group-text">URL</span>
@@ -17,6 +17,8 @@
 
 @code {
     [Parameter] public string url { get; set; }
+    [Parameter]
+    public string title { get; set; } = "Media URL";
     private Modal modal = default!;
     [Inject] protected ToastService ToastService { get; set; } = default!;
 

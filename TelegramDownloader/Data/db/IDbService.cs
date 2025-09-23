@@ -17,6 +17,7 @@ namespace TelegramDownloader.Data.db
         Task<BsonFileManagerModel> copyItem(string dbName, string sourceId, FileManagerDirectoryContent target, string targetPath, bool isFile, string collectionName = "directory");
         Task CreateDatabase(string dbName = "default", string collection = "directory", bool CreateDefaultEntry = true);
         Task<List<BsonFileManagerModel>> createEntry(string dbName, BsonFileManagerModel file, string collectionName = "directory", IClientSessionHandle? session = null);
+        Task<BsonFileManagerModel> getRootFolder(string dbName, string collectionName = "directory");
         Task createIndex(string dbName, string collectionName = "directory");
         Task deleteDatabase(string dbName = "default");
         Task deleteEntry(string dbName, string id, string collectionName = "directory");
@@ -30,6 +31,7 @@ namespace TelegramDownloader.Data.db
         Task<List<BsonFileManagerModel>> getAllFilesInDirectoryPath(string dbName, string path, string collectionName = "directory");
         Task<List<BsonFileManagerModel>> getAllFilesInDirectoryPath2(string dbName, string path, string collectionName = "directory");
         Task<List<BsonFileManagerModel>> getAllFolders(string dbName, string? parentId = null, string collectionName = "directory");
+        Task<List<int>> getAllIdsFromChannel(string dbName, string collectionName = "directory");
         IMongoDatabase getDatabase(string dbName);
         Task<BsonFileManagerModel> getEntry(string dbName, string filterId, string name, string collectionName = "directory");
         Task<BsonFileManagerModel> getFileById(string dbName, string id, string collectionName = "directory");

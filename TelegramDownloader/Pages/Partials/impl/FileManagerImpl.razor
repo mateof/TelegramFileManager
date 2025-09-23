@@ -62,6 +62,7 @@
     private MediaUrlModal mediaUrlModal { get; set; } = default!;
 
     public string[] ContextItems = new string[] { "Open", "Delete", "Download", "Rename", "Details"};
+    private bool isMyChannel = false;
 
     SfFileManager<FileManagerDirectoryContent> fm { get; set; }
     NotificationModel nm = new NotificationModel();
@@ -75,7 +76,8 @@
         new ToolBarItemModel() { Name = "Selection" },
         new ToolBarItemModel() { Name = "View" },
         new ToolBarItemModel() { Name = "Details" },
-        new ToolBarItemModel() { Name = "UrlMedia", Text = "Url Media", TooltipText = "Url Media", PrefixIcon = "bi bi-collection-play-fill", Visible = false }
+        new ToolBarItemModel() { Name = "UrlMedia", Text = "Url Media", TooltipText = "Url Media", PrefixIcon = "bi bi-collection-play-fill", Visible = false },
+        new ToolBarItemModel() { Name = "Strm", Text = "Strm", TooltipText = "Strm folder", PrefixIcon = "bi bi-collection-play-fill", Visible = false }
 
     };
 
@@ -95,19 +97,33 @@
     {
         if (!isShared)
         {
+            isMyChannel = ts.isMyChat(Convert.ToInt64(id));
+            if (isMyChannel)
             // Items = Items.Prepend(new ToolBarItemModel() { Name = "NewFolder" }).ToList();
-            Items.AddRange(new List<ToolBarItemModel>(){
-                    new ToolBarItemModel() { Name = "NewFolder" },
-                    new ToolBarItemModel() { Name = "Cut" },
-                    new ToolBarItemModel() { Name = "Copy" },
-                    new ToolBarItemModel() { Name = "Paste" },
-                    new ToolBarItemModel() { Name = "Delete" },
-                    new ToolBarItemModel() { Name = "Upload" },
-                    new ToolBarItemModel() { Name = "Rename" },
-                    new ToolBarItemModel() { Name = "ShowApp", Text="Show in APP", TooltipText="Show in Telegram APP", PrefixIcon="bi bi-telegram" },
-                    new ToolBarItemModel() { Name = "Share", Text="Share File", TooltipText="Share file or folder", PrefixIcon="bi bi-share" }
-                }
-            );
+                Items.AddRange(new List<ToolBarItemModel>(){
+                        new ToolBarItemModel() { Name = "NewFolder" },
+                        new ToolBarItemModel() { Name = "Cut" },
+                        new ToolBarItemModel() { Name = "Copy" },
+                        new ToolBarItemModel() { Name = "Paste" },
+                        new ToolBarItemModel() { Name = "Delete" },
+                        new ToolBarItemModel() { Name = "Upload" },
+                        new ToolBarItemModel() { Name = "Rename" },
+                        new ToolBarItemModel() { Name = "ShowApp", Text="Show in APP", TooltipText="Show in Telegram APP", PrefixIcon="bi bi-telegram" },
+                        new ToolBarItemModel() { Name = "Share", Text="Share File", TooltipText="Share file or folder", PrefixIcon="bi bi-share" }
+                    }
+                );
+            else
+                Items.AddRange(new List<ToolBarItemModel>(){
+                        new ToolBarItemModel() { Name = "NewFolder" },
+                        new ToolBarItemModel() { Name = "Cut" },
+                        new ToolBarItemModel() { Name = "Copy" },
+                        new ToolBarItemModel() { Name = "Paste" },
+                        new ToolBarItemModel() { Name = "Delete" },
+                        new ToolBarItemModel() { Name = "Rename" },
+                        new ToolBarItemModel() { Name = "ShowApp", Text="Show in APP", TooltipText="Show in Telegram APP", PrefixIcon="bi bi-telegram" },
+                        new ToolBarItemModel() { Name = "Share", Text="Share File", TooltipText="Share file or folder", PrefixIcon="bi bi-share" }
+                    }
+                );
             try
             {
                 await fs.CreateDatabase(id);
@@ -208,7 +224,7 @@
     private string getMediaUrl(string idFile, String name)
     {
         string localdir = MyNavigationManager.BaseUri;
-        return new System.Uri(Path.Combine(localdir, "api/file/GetFileStream", id, idFile, name).Replace("\\", "/")).AbsoluteUri;
+        return new System.Uri(Path.Combine(localdir, "api/file/GetFileStream", isShared ? bsi.ChannelId : id, idFile, name).Replace("\\", "/")).AbsoluteUri;
     }
 
     public async Task toolBarClicked(ToolbarClickEventArgs<FileManagerDirectoryContent> args)
@@ -234,6 +250,12 @@
         {
             await ShowMediaURLModal(args.FileDetails[0].Id, args.FileDetails[0].Name);
         }
+        if (args.Item.Text == "Strm" && args.FileDetails.Count() > 0)
+        {
+            var file = args.FileDetails.FirstOrDefault();
+            MyNavigationManager.NavigateTo($"/api/file/strm?idChannel={id}&path={file.FilterPath + file.Name + "/"}&host={MyNavigationManager.BaseUri}", true);
+            // await JSRuntime.InvokeVoidAsync("open", $"{MyNavigationManager.BaseUri}?idChannel={id}&path={args.FileDetails.FirstOrDefault().FilterPath}&host={MyNavigationManager.BaseUri}", "_blank");
+        }
         Console.WriteLine("");
     }
 
@@ -254,16 +276,24 @@
     public async Task FileSelectionAsync(FileSelectionEventArgs<FileManagerDirectoryContent> args)
     {
         List<FileManagerDirectoryContent> selectedList = fm.GetSelectedFiles();
-        if ((selectedList.Count() + (args.Action == "UnSelect" ? -1 : 1)) == 1)
+        if ((selectedList.Count() + (args.Action == "UnSelect" ? -1 : selectedList.Count() == 0 ? 1 : 0)) == 1)
         {
             if (args.FileDetails.IsFile)
             {
+                Items.Where(x => x.Name == "Strm").FirstOrDefault().Visible = false;
                 Items.Where(x => x.Name == "UrlMedia").FirstOrDefault().Visible = true;
+                return;
+            } else
+            {
+                Items.Where(x => x.Name == "UrlMedia").FirstOrDefault().Visible = false;
+                Items.Where(x => x.Name == "Strm").FirstOrDefault().Visible = true;
                 return;
             }
 
         }
         Items.Where(x => x.Name == "UrlMedia").FirstOrDefault().Visible = false;
+        Items.Where(x => x.Name == "Strm").FirstOrDefault().Visible = false;
+
     }
 
     public async Task FileSelectedAsync(FileSelectEventArgs<FileManagerDirectoryContent> args)
@@ -382,5 +412,10 @@
             nm.sendMessage("Error", "Error on OnReadAsync", NotificationTypes.Error);
         }
 
+    }
+
+    private void doToolbarItemInvisible(String name)
+    {
+        Items.Where(x => name.Equals(x.Name)).ToList().ForEach(x => x.Visible = false);
     }
 }

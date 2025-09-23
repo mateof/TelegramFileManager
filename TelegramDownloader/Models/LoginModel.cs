@@ -32,4 +32,23 @@ namespace TelegramDownloader.Models
         public string videoThumb { get; set; }
         public bool isDocument {  get; set; }
     }
+
+    public class TelegramChatDocuments
+    {
+        public int id { get; set; }
+        public string name { get; set; }
+        public string extension { get; set; }
+        public DateTime creationDate { get; set; }
+        public DateTime modifiedDate { get; set; }
+        public long fileSize { get; set; }
+        public DocumentType documentType { get; set; }
+    }
+
+    public enum DocumentType
+    {
+        Photo,
+        Video,
+        Audio,
+        Document
+    }
 }

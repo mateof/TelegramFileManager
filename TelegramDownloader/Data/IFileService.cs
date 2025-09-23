@@ -25,6 +25,7 @@ namespace TelegramDownloader.Data
         Task<BsonFileManagerModel> getItemById(string dbName, string id);
         Task<List<BsonFileManagerModel>> getTelegramFolders(string dbName, string? parentId = null);
         Task<List<ExpandoObject>> GetTelegramFoldersExpando(string id, string parentId);
+        Task<String> CreateStrmFiles(string path, string dbName, string host);
         Task importData(string dbName, string path, GenericNotificationProgressModel gnp);
         Task importSharedData(ShareFilesModel sfm, GenericNotificationProgressModel gnp);
         Task<FileManagerResponse<FileManagerDirectoryContent>> itemDeleteAsync(string dbName, ItemsDeleteEventArgs<FileManagerDirectoryContent> args);
@@ -34,5 +35,7 @@ namespace TelegramDownloader.Data
         Task UploadFile(string dbName, string currentPath, UploadFiles file);
         Task UploadFileFromServer(string dbName, string currentPath, List<FileManagerDirectoryContent> files, InfoDownloadTaksModel dm = null);
         Task AddUploadFileFromServer(string dbName, string currentPath, List<FileManagerDirectoryContent> files, InfoDownloadTaksModel idt = null);
+        Task refreshChannelFIles(string channelId);
+        bool isChannelRefreshing(string channelId);
     }
 }

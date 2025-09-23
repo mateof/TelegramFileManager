@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using Newtonsoft.Json;
+using SharpCompress.Archives;
 using SharpCompress.Common;
 using Syncfusion.Blazor.FileManager;
 using Syncfusion.Blazor.Inputs;
@@ -17,6 +18,8 @@ using System.IO.Compression;
 using System.IO.Hashing;
 using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.RegularExpressions;
+using System.Threading.Channels;
 using System.Xml.Linq;
 using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
@@ -28,7 +31,6 @@ namespace TelegramDownloader.Data
     public class FileService : IFileService
     {
         public static readonly List<string> ImageExtensions = new List<string> { ".JPG", ".JPEG", ".JPE", ".BMP", ".GIF", ".PNG" };
-        public static readonly long MAXIMAGESIZE = 1024 * 1024 * 10;
         public static string IMGDIR = System.IO.Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "img", "telegram");
         public static string LOCALDIR = System.IO.Path.Combine(Directory.GetCurrentDirectory(), "local");
         public static string RELATIVELOCALDIR = System.IO.Path.Combine("local");
@@ -230,6 +232,7 @@ namespace TelegramDownloader.Data
     {"xyz", "chemical/x-xyz"},
     {"zip", "application/zip"}
   };
+        public static List<string> refreshChannelList = new List<string>();
 
         private PhysicalFileProvider operation = new PhysicalFileProvider();
         private ITelegramService _ts { get; set; }
@@ -237,6 +240,7 @@ namespace TelegramDownloader.Data
         private ILogger<IFileService> _logger { get; set; }
         private TransactionInfoService _tis { get; set; }
         private ToastService _toastService { get; set;  }
+        private static Mutex refreshMutex = new Mutex();
 
         const int MaxSize = 1024 * 1024 * 1000; // 1GB 
 
@@ -321,6 +325,7 @@ namespace TelegramDownloader.Data
         public async Task<FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>> itemDeleteAsync(string dbName, ItemsDeleteEventArgs<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> args)
         {
             string[] names = args.Files.Select(x => x.Name).ToArray();
+            bool isMyChannel = _ts.isMyChat(Convert.ToInt64(dbName));
             // args.Response = await FileManagerService.Delete(args.Path, names, args.Files.ToArray());
             foreach (Syncfusion.Blazor.FileManager.FileManagerDirectoryContent File in args.Files)
             {
@@ -339,13 +344,13 @@ namespace TelegramDownloader.Data
                             {
                                 foreach (int id in child.ListMessageId)
                                 {
-                                    if (!await _db.existItemByTelegramId(dbName, id))
+                                    if (isMyChannel && !await _db.existItemByTelegramId(dbName, id))
                                         await _ts.deleteFile(dbName, id);
                                 }
                             }
                             else
                             {
-                                if (!await _db.existItemByTelegramId(dbName, (int)child.MessageId))
+                                if (isMyChannel && !await _db.existItemByTelegramId(dbName, (int)child.MessageId))
                                     await _ts.deleteFile(dbName, (int)child.MessageId);
                             }
                         }
@@ -364,13 +369,13 @@ namespace TelegramDownloader.Data
                     {
                         foreach (int id in entry.ListMessageId)
                         {
-                            if (!await _db.existItemByTelegramId(dbName, id))
+                            if (isMyChannel && !await _db.existItemByTelegramId(dbName, id))
                                 await _ts.deleteFile(dbName, id);
                         }
                     }
                     else
                     {
-                        if (!await _db.existItemByTelegramId(dbName, (int)entry.MessageId))
+                        if (isMyChannel && !await _db.existItemByTelegramId(dbName, (int)entry.MessageId))
                             await _ts.deleteFile(dbName, (int)entry.MessageId);
                     }
                 }
@@ -712,8 +717,8 @@ namespace TelegramDownloader.Data
                 // if (targetPath == null) targetPath = "/"; //path.Replace("\\", "/");
                 foreach (var itemFile in files)
                 {
-
-                    BsonFileManagerModel file = collectionId == null ? _db.getFileByPathSync(dbName, itemFile.FilterPath.Replace("\\", "/") + itemFile.Name) : _db.getFileByPathSync(dbName, itemFile.FilterPath.Replace("\\", "/") + itemFile.Name, collectionId);
+                    var filterPath = itemFile.FilterPath == "Files/" ? "/" : itemFile.FilterPath;
+                    BsonFileManagerModel file = collectionId == null ? _db.getFileByPathSync(dbName, filterPath.Replace("\\", "/") + itemFile.Name) : _db.getFileByPathSync(dbName, filterPath.Replace("\\", "/") + itemFile.Name, collectionId);
                     string currentFilePath = currentTargetPath;
                     if (!itemFile.IsFile)
                     {
@@ -732,20 +737,7 @@ namespace TelegramDownloader.Data
                             throw new Exception($"{currentTargetPath} does not exist");
                         if (file.isSplit)
                         {
-                            int i = 1;
-                            List<string> splitPaths = new List<string>();
-                            foreach (int messageId in file.ListMessageId)
-                            {
-                                string filePathPart = System.IO.Path.Combine(currentFilePath, $"({i})" + itemFile.Name);
-                                await downloadFromTelegram(channelId == null ? dbName : channelId, messageId, filePathPart, file);
-                                splitPaths.Add(filePathPart);
-                                i++;
-                            }
-                            await mergeFileStreamAsync(splitPaths, System.IO.Path.Combine(currentFilePath, itemFile.Name));
-                            foreach (string filePath in splitPaths)
-                            {
-                                File.Delete(filePath);
-                            }
+                            downloadSplitFiles(itemFile, file, currentFilePath, channelId == null ? dbName : channelId);
                         }
                         else
                         {
@@ -766,6 +758,24 @@ namespace TelegramDownloader.Data
                 throw ex;
             }
 
+        }
+
+        private async Task downloadSplitFiles(FileManagerDirectoryContent itemFile, BsonFileManagerModel file, string currentFilePath, string dbName)
+        {
+            int i = 1;
+            List<string> splitPaths = new List<string>();
+            foreach (int messageId in file.ListMessageId)
+            {
+                string filePathPart = System.IO.Path.Combine(currentFilePath, $"({i})" + itemFile.Name);
+                await downloadFromTelegram(dbName, messageId, filePathPart, file, true);
+                splitPaths.Add(filePathPart);
+                i++;
+            }
+            await mergeFileStreamAsync(splitPaths, System.IO.Path.Combine(currentFilePath, itemFile.Name));
+            foreach (string filePath in splitPaths)
+            {
+                File.Delete(filePath);
+            }
         }
 
         private async Task<MemoryStream> downloadFromTelegramAndReturn(string dbName, int messageId, string destPath, MemoryStream ms = null)
@@ -793,7 +803,7 @@ namespace TelegramDownloader.Data
         {
 
         }
-        private async Task downloadFromTelegram(string dbName, int messageId, string destPath, BsonFileManagerModel file = null)
+        private async Task downloadFromTelegram(string dbName, int messageId, string destPath, BsonFileManagerModel file = null, bool shouldWait = false)
         {
             DownloadModel model = new DownloadModel();
             model.tis = _tis;
@@ -810,9 +820,24 @@ namespace TelegramDownloader.Data
             } catch(Exception ex) {
                 model.channelName = "Public or Shared";
             }
-            
+            var tcs = new TaskCompletionSource<bool>();
+
+            EventHandler handler = null;
+            handler = (sender, args) =>
+            {
+                if (model.state == StateTask.Completed)
+                {
+                    model.EventStatechanged -= handler;
+                    tcs.SetResult(true);
+                }
+            };
+
+            model.EventStatechanged += handler;
             model.callbacks.callback = async () => await DownloadFileNow(dbName, messageId, destPath, model);
-            _tis.addToPendingDownloadList(model);
+            _tis.addToPendingDownloadList(model, atFirst: shouldWait);
+            // Espera hasta que el estado sea "Completed"
+            if (shouldWait)
+                await tcs.Task;
         }
 
         public async Task DownloadFileFromChat(ChatMessages message, string fileName = null, string folder = null, DownloadModel model = null)
@@ -828,7 +853,7 @@ namespace TelegramDownloader.Data
             {
                 model._size = document.size;
             }
-            if (message.user is Channel channel)
+            if (message.user is TL.Channel channel)
             {
                 model.channelName = channel.Title;
             }
@@ -1145,7 +1170,43 @@ namespace TelegramDownloader.Data
             _tis.CheckPendingUploadInfoTasks();
         }
 
+        public async Task<String> CreateStrmFiles(string path, string dbName, string host)
+        {
+            String basePath = Path.Combine(TEMPDIR, "Strm", dbName);
+            try
+            {
+                Directory.Delete(basePath, true);
+            }
+            catch (Exception ex)
+            {
+            }
+            
+            Directory.CreateDirectory(basePath);
+            List<BsonFileManagerModel> filesAndFolders = await _db.getAllChildFilesInDirectory(dbName, path);
+            foreach (BsonFileManagerModel file in filesAndFolders)
+            {
+                String filePath = Path.Combine(basePath, file.FilePath.Substring(path.Length));
+                if (file.IsFile)
+                {
+                    if (FileExtensionTypeTest.isVideoExtension(file.Type) || FileExtensionTypeTest.isAudioExtension(file.Type))
+                    {
+                        string contenido = Path.Combine(host, "api/file/GetFileStream", dbName, file.Id, "file" + file.Type).Replace("\\", "/");
+                        string pattern = $@"\.({file.Type.Replace(".", "")})$";
+                        File.WriteAllText(Regex.Replace(filePath, pattern, ".strm"), contenido);
+                    }
+                } else
+                {
+                    Directory.CreateDirectory(filePath);
+                } 
+            }
 
+            string zipPath = $"{basePath}.zip";
+
+            File.Delete(zipPath);
+            ZipFile.CreateFromDirectory(basePath, zipPath, CompressionLevel.Fastest, true);
+            Directory.Delete(basePath, true);
+            return zipPath;
+        }
         public async Task UploadFileFromServer(string dbName, string currentPath, List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files, InfoDownloadTaksModel dm = null) // ItemsUploadedEventArgs<FileManagerDirectoryContent> args)
         {
 
@@ -1155,44 +1216,6 @@ namespace TelegramDownloader.Data
 
             try
             {
-                //if (dm == null)
-                //{
-                    
-                //    idt = new InfoDownloadTaksModel();
-                //    idt.id = Guid.NewGuid().ToString();
-                //    idt.total = 0;
-                //    idt.totalSize = 0;
-                //    idt.isUpload = true;
-                //    idt.toPath = currentPath;
-                //    idt.executed = 0;
-                //    idt.executedSize = 0;
-                //    idt.isUpload = true;
-                //    idt.files = files;
-                //    idt.callbacks = new Callbacks();
-                //    idt.callbacks.callback = async () => await UploadFileFromServer(dbName, currentPath, files);
-                //    foreach (var file in files)
-                //    {
-                //        var filePath = file.IsFile ? file.FilterPath.Replace("\\", "/") + file.Name : file.FilterPath.Replace("\\", "/") + file.Name + "/";
-                //        string currentFilePath = System.IO.Path.Combine(LOCALDIR, filePath[0] == '/' ? filePath.Substring(1) : filePath).Replace("\\", "/");
-                        
-                //        var fileInfo = new System.IO.FileInfo(currentFilePath);
-                //        if (!file.IsFile)
-                //        {
-                //            var allFiles = new DirectoryInfo(currentFilePath).GetFiles("*.*", SearchOption.AllDirectories).Where(x => !x.Attributes.HasFlag(FileAttributes.Hidden));
-                //            idt.total = allFiles.Count();
-                //            idt.totalSize += allFiles.Sum(x => x.Length);
-                //        } else
-                //        {
-                //            idt.total++;
-                //            idt.totalSize += fileInfo.Length;
-                //        }
-
-                //    }
-                //    TransactionInfoService ti = new TransactionInfoService();
-                //    ti.addToInfoDownloadTaskList(idt);
-
-
-                //}
                 nm.sendEvent(new Notification($"Uploading files from folder {currentPath} to Telegram", "Telegram Upload", NotificationTypes.Info));
                 foreach (var file in files)
                 {
@@ -1203,24 +1226,6 @@ namespace TelegramDownloader.Data
                     string currentFilePath = System.IO.Path.Combine(LOCALDIR, filePath[0] == '/' ? filePath.Substring(1) : filePath).Replace("\\", "/");
                     var fileInfo = new System.IO.FileInfo(currentFilePath);
 
-                    //if (!file.IsFile)
-                        //if (dm == null)
-                        //{
-                        //    idt = new InfoDownloadTaksModel();
-                        //    idt.id = Guid.NewGuid().ToString();
-                        //    var allFiles = new DirectoryInfo(currentFilePath).GetFiles("*.*", SearchOption.AllDirectories).Where(x => !x.Attributes.HasFlag(FileAttributes.Hidden));
-                        //    idt.total = allFiles.Count();
-                        //    idt.totalSize = allFiles.Sum(x => x.Length);
-                        //    idt.fromPath = currentFilePath;
-                        //    idt.toPath = Path.Combine(currentPath, file.Name);
-                        //    idt.executed = 0;
-                        //    idt.executedSize = 0;
-                        //    idt.isUpload = true;
-                        //    idt.file = file;
-                        //    idt.thread = Thread.CurrentThread;
-                        //    TransactionInfoService ti = new TransactionInfoService();
-                        //    ti.addToInfoDownloadTaskList(idt);
-                        //}
 
                     BsonFileManagerModel model = new BsonFileManagerModel();
                     if (file.IsFile)
@@ -1322,7 +1327,7 @@ namespace TelegramDownloader.Data
                                     {
                                         wt = new WaitingTime();
                                         using (FileStream ms = new FileStream(System.IO.Path.Combine(currentFilePath), FileMode.Open))
-                                            if (ImageExtensions.Any(x => file.Name.ToUpper().EndsWith(x)) && file.Size >= MAXIMAGESIZE)
+                                            if (ImageExtensions.Any(x => file.Name.ToUpper().EndsWith(x)) && file.Size >= (1024 * 1024 * GeneralConfigStatic.config.MaxImageUploadSizeInMb))
                                             {
                                                 m = await _ts.uploadFile(dbName, ms, file.Name, "application/octet-stream", um, caption: getCaption(filePath));
                                             }
@@ -1384,7 +1389,7 @@ namespace TelegramDownloader.Data
                     model.HasChild = false;
                     model.DateCreated = DateTime.Now;
                     model.DateModified = DateTime.Now;
-                    model.FilterPath = currentPath == "/" ? currentPath : string.Concat(parent.FilterPath, parent.Name, "/");
+                    model.FilterPath = (currentPath == "/" || currentPath == "File/") ? currentPath : string.Concat(parent.FilterPath, parent.Name, "/");
                     model.FilterId = string.Concat(parent.FilterId, parent.Id.ToString(), "/");
                     model.ParentId = parent.Id;
                     model.FilePath = System.IO.Path.Combine(currentPath, file.IsFile ? fileInfo.Name : file.Name);
@@ -1482,21 +1487,69 @@ namespace TelegramDownloader.Data
             return contentType;
         }
 
+        public async Task refreshChannelFIles(string channelId)
+        {
+            refreshMutex.WaitOne();
+            refreshChannelList.Add(channelId);
+            refreshMutex.ReleaseMutex();
+            List<TelegramChatDocuments> telegramChatDocuments = (await _ts.searchAllChannelFiles(Convert.ToInt64(channelId))).Where(x => x.name != null).ToList();
+            var nameCount = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var doc in telegramChatDocuments)
+            {
+                var baseName = doc.name;
+                var name = baseName;
+                int count = 0;
+
+                while (nameCount.ContainsKey(name))
+                {
+                    count++;
+                    name = $"{baseName}({count})";
+                }
+
+                doc.name = name;
+                nameCount[name] = 1;
+                if (count == 0)
+                    nameCount[baseName] = 1;
+            }
+            List<int> presentIds = await _db.getAllIdsFromChannel(channelId);
+            var rootFolder = await _db.getRootFolder(channelId);
+            foreach (TelegramChatDocuments tcd in telegramChatDocuments)
+            {
+                if (!presentIds.Contains(tcd.id))
+                {
+                    BsonFileManagerModel model = new BsonFileManagerModel();
+                    model.Size = tcd.fileSize;
+                    model.MessageId = tcd.id;
+                    model.Name = tcd.name;
+                    model.IsFile = true;
+                    model.HasChild = false;
+                    model.DateCreated = tcd.creationDate;
+                    model.DateModified = tcd.modifiedDate;
+                    model.FilterPath = "/";
+                    model.FilterId = rootFolder.Id + "/";
+                    model.ParentId = rootFolder.Id;
+                    model.FilePath = "/" + tcd.name;
+                    model.Type = tcd.extension;
+                    model.isSplit = false;
+                    model.isEncrypted = false;
+                    await _db.createEntry(channelId, model);
+                }
+            }
+            refreshMutex.WaitOne();
+            refreshChannelList.Remove(channelId);
+            refreshMutex.ReleaseMutex();
+        }
+
+        public bool isChannelRefreshing(string channelId)
+        {
+            return refreshChannelList.Contains(channelId);
+        }
+
         public async Task UploadFile(string dbName, string currentPath, UploadFiles file) // ItemsUploadedEventArgs<FileManagerDirectoryContent> args)
         {
-            // string currentPath = args.Path;
             try
             {
-                //foreach (var file in args.Files)
-                //{
-
-                //using (var filestream = new FileStream(Path.Combine(Environment.CurrentDirectory, "download","assss.jpg"), FileMode.Create, FileAccess.Write))
-                //{
-                //    await file.File.OpenReadStream(maxAllowedSize: long.MaxValue).CopyToAsync(filestream);
-                //}
-                //MemoryStream ms = new MemoryStream(file.File.OpenReadStream(maxAllowedSize: long.MaxValue));
-                //await file.File.OpenReadStream().CopyToAsync(ms);
-
                 string currentFilePath = System.IO.Path.Combine(TEMPDIR, dbName + currentPath);
                 await SaveToFile(file.File, currentFilePath);
 
@@ -1547,33 +1600,6 @@ namespace TelegramDownloader.Data
                 await _db.addBytesToFolder(dbName, model.ParentId, model.Size);
 
                 GC.Collect();
-
-
-
-
-                // var folders = (file.FileInfo.Name).Split('/');
-                // if (folders.Length > 1)
-                // {
-                //     for (var i = 0; i < folders.Length - 1; i++)
-                //     {
-                //         string newDirectoryPath = Path.Combine(FileManagerService.basePath + currentPath, folders[i]);
-                //         if (Path.GetFullPath(newDirectoryPath) != (Path.GetDirectoryName(newDirectoryPath) + Path.DirectorySeparatorChar + folders[i]))
-                //         {
-                //             throw new UnauthorizedAccessException("Access denied for Directory-traversal");
-                //         }
-                //         if (!Directory.Exists(newDirectoryPath))
-                //         {
-                //             await FileManagerService.Create(currentPath, folders[i]);
-                //         }
-                //         currentPath += folders[i] + "/";
-                //     }
-                // }
-                // var fullName = Path.Combine((FileManagerService.contentRootPath + currentPath), file.File.Name);
-                // using (var filestream = new FileStream(fullName, FileMode.Create, FileAccess.Write))
-                // {
-                //     await file.File.OpenReadStream(long.MaxValue).CopyToAsync(filestream);
-                // }
-                //}
             }
             catch (Exception ex)
             {
@@ -1646,15 +1672,6 @@ namespace TelegramDownloader.Data
                 }
             }
             return result;
-            //var root = listFolders.Where(x => string.IsNullOrEmpty(x.ParentId)).FirstOrDefault();
-            //FolderModel folder = new FolderModel();
-            //folder.FolderName = root.Name;
-            //folder.Id = "/";
-            //folder.Expanded = true;
-            //folder.Folders = await getTelegramSubfolders(root.Id, listFolders.Where(x => !string.IsNullOrEmpty(x.ParentId)).ToList(), folder.Id);
-            //node.Add(folder);
-            //return node;
-
         }
 
         private async Task<List<FolderModel>> getTelegramSubfolders(string id, List<BsonFileManagerModel> listFolders, string prevPath)
@@ -1712,27 +1729,6 @@ namespace TelegramDownloader.Data
             if (fileDetails == null) fileDetails = new List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>();
             FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> response = new FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>();
 
-            //if (path == "/")
-            //{
-            //    List<BsonFileManagerModel> Data = await _db.getAllFiles();
-            //    string ParentId = Data
-            //        .Where(x => string.IsNullOrEmpty(x.ParentId))
-            //        .Select(x => x.Id).First();
-            //    response.CWD = Data
-            //        .Where(x => string.IsNullOrEmpty(x.ParentId)).First().toFileManagerContent();
-            //    response.Files = Data
-            //        .Where(x => x.ParentId == ParentId).Select(x => x.toFileManagerContent()).ToList();
-            //}
-            //else
-            //{
-            //List<BsonFileManagerModel> Data = await _db.getAllFilesInDirectoryPath(path);
-            //    var childItem = fileDetails.Count > 0 && fileDetails[0] != null ? fileDetails[0] : Data
-            //    .Where(x => x.FilterPath == path).First().toFileManagerContent();
-            //    response.CWD = childItem;
-            //    response.Files = Data
-            //        .Where(x => x.ParentId == childItem.Id).Select(x => x.toFileManagerContent()).ToList();
-
-            //}
             if (path == "/")
             {
                 List<BsonFileManagerModel> Data = collectionName == null ? await _db.getAllFiles(dbName) : await _db.getAllFiles(dbName, collectionName);

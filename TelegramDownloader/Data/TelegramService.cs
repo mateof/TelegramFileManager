@@ -3,9 +3,11 @@ using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using Syncfusion.Blazor.Inputs;
 using Syncfusion.Blazor.Kanban.Internal;
+using Syncfusion.Blazor.Schedule;
 using Syncfusion.Blazor.Sparkline.Internal;
 using System.Collections.Generic;
 using System.Reflection.Metadata;
+using System.Threading.Channels;
 using System.Threading.Tasks;
 using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
@@ -28,13 +30,14 @@ namespace TelegramDownloader.Data
         private static Messages_Chats chats = null;
         private static List<ChatViewBase> favouriteChannels = new List<ChatViewBase>();
         private static Mutex mut = new Mutex();
+        private ILogger<IFileService> _logger { get; set; }
 
 
-
-        public TelegramService(TransactionInfoService tis, IDbService db)
+        public TelegramService(TransactionInfoService tis, IDbService db, ILogger<IFileService> logger)
         {
             _tis = tis;
             _db = db;
+            _logger = logger;
             // createDownloadFolder();
             mut.WaitOne();
             if (client == null)
@@ -234,9 +237,24 @@ namespace TelegramDownloader.Data
 
         public string getChatName(long id)
         {
-            List<ChatMessages> cm = new List<ChatMessages>();
+            if (chats == null)
+                return "";
             var peer = chats.chats[id];
             return peer.Title;
+        }
+
+        public bool isMyChat(long id)
+        {
+            if (chats == null)
+                return false;
+            var peer = chats.chats[id];
+            if (peer is TL.Channel channel)
+            {
+                // Si es un canal, checkea la propiedad 'creator'
+                bool canPost = channel.admin_rights != null;
+                return canPost;
+            }
+            return true;
         }
 
         public async Task<List<ChatViewBase>> GetFouriteChannels(bool mustRefresh = true)
@@ -650,20 +668,26 @@ namespace TelegramDownloader.Data
                                 thumb_size = ""
                             };
 
-                            //var file = await client.Invoke(new Upload_GetFile
-                            //{
-                            //    location = new InputDocumentFileLocation
-                            //    {
-                            //        id = inputFile.id,
-                            //        access_hash = inputFile.access_hash,
-                            //        file_reference = inputFile.file_reference,
-                            //        thumb_size = ""
-                            //    },
-                            //    offset = currentOffset,
-                            //    limit = totalDownloadBytes
-                            //});
-
-                            var file = await client.Upload_GetFile(location, currentOffset, limit: totalDownloadBytes);
+                            Upload_FileBase file = null;
+                            try
+                            {
+                                file = await client.Upload_GetFile(location, currentOffset, limit: totalDownloadBytes);
+                            }
+                            catch (RpcException ex) when (ex.Code == 303 && ex.Message == "FILE_MIGRATE_X")
+                            {
+                                client = await client.GetClientForDC(-ex.X, true);
+                                file = await client.Upload_GetFile(location, currentOffset, limit: totalDownloadBytes);
+                            }
+                            catch (RpcException ex) when (ex.Code == 400 && ex.Message == "OFFSET_INVALID")
+                            {
+                                _logger.LogError("OFFSET_INVALID", ex);
+                                throw;
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogError("Download Error", ex);
+                                throw;
+                            }
 
                             if (file is Upload_File uploadFile)
                             {
@@ -794,5 +818,89 @@ namespace TelegramDownloader.Data
             return null;
         }
 
+        public async Task<List<TelegramChatDocuments>> searchAllChannelFiles(long id)
+        {
+            List<TelegramChatDocuments> telegramChatDocuments = new List<TelegramChatDocuments>();
+            List<ChatMessages> result = await getAllFileMessages(id);
+
+            foreach (var msg in result)
+                if (msg.message is Message msgBase)
+                {
+                    if (msgBase.media is MessageMediaDocument mediaDoc &&
+                        mediaDoc.document is TL.Document doc)
+                    {
+                        TelegramChatDocuments tcd = new TelegramChatDocuments();
+                        tcd.id = msgBase.id;
+                        tcd.documentType = DocumentType.Document;
+                        tcd.name = doc.Filename;
+                        tcd.fileSize = doc.size;
+                        tcd.extension = Path.GetExtension(doc.Filename);
+                        tcd.creationDate = msgBase.date;
+                        tcd.modifiedDate = msgBase.edit_date < msgBase.date ? msgBase.date : msgBase.edit_date;
+                        telegramChatDocuments.Add(tcd);
+                    }
+                }
+            return telegramChatDocuments;
+        }
+
+        //public async Task<List<TelegramChatDocuments>> searchAllChannelFiles(long id)
+        //{
+        //    InputPeer channel = chats.chats[id];
+        //    List<TelegramChatDocuments> telegramChatDocuments = new List<TelegramChatDocuments>();
+        //    for (int offset_id = 0; ;)
+        //    {
+        //        Messages_MessagesBase result = await client.Messages_Search<InputMessagesFilterDocument>(
+        //        peer: channel,
+        //        text: "",
+        //        offset_id: offset_id,
+        //        limit: 0);
+        //        if (result.Messages.Length == 0) break;
+        //        foreach (var msgBase in result.Messages.OfType<Message>())
+        //        {
+        //            if (msgBase.media is MessageMediaDocument mediaDoc &&
+        //                mediaDoc.document is TL.Document doc)
+        //            {
+        //                TelegramChatDocuments tcd = new TelegramChatDocuments();
+        //                tcd.id = msgBase.id;
+        //                tcd.documentType = DocumentType.Document;
+        //                tcd.name = doc.Filename;
+        //                tcd.extension = Path.GetExtension(doc.Filename);
+        //                tcd.creationDate = msgBase.date;
+        //                tcd.modifiedDate = msgBase.edit_date;
+        //                telegramChatDocuments.Add(tcd);
+        //            }
+        //        }
+        //        offset_id = result.Messages[^1].ID;
+        //    }
+
+        //    for (int offset_id = 0; ;)
+        //    {
+        //        Messages_MessagesBase result = await client.Messages_Search<InputMessagesFilterPhotos>(
+        //        peer: channel,
+        //        text: "",
+        //        offset_id: offset_id,
+        //        limit: 0);
+        //        if (result.Messages.Length == 0) break;
+        //        foreach (var msgBase in result.Messages.OfType<Message>())
+        //        {
+        //            if (msgBase.media is MessageMediaPhoto mediaPhoto &&
+        //                mediaPhoto.photo is Photo photo)
+        //            {
+        //                TelegramChatDocuments tcd = new TelegramChatDocuments();
+        //                tcd.documentType = DocumentType.Photo;
+        //                tcd.id = msgBase.id;
+        //                // Nombre "falso" porque la foto no trae filename
+        //                tcd.name = $"{photo.id}.jpg";
+        //                tcd.extension = ".jpg";
+        //                tcd.creationDate = msgBase.date;
+        //                tcd.modifiedDate = msgBase.edit_date;
+        //                telegramChatDocuments.Add(tcd);
+        //            }
+        //        }
+        //        offset_id = result.Messages[^1].ID;
+        //    }
+
+        //    return telegramChatDocuments;
+        //}
     }
 }
