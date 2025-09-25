@@ -16,7 +16,7 @@
 @inject NavigationManager MyNavigationManager;
 
 
-<SfFileManager ID="remotefm" @ref="fm" TValue="FileManagerDirectoryContent" ShowThumbnail="false" SelectedItemsChanged="itemsChanged" AllowDragAndDrop="false" EnablePersistence="false">
+<SfFileManager ID="remotefm" @ref="fm" TValue="FileManagerDirectoryContent" ShowThumbnail="false" SelectedItemsChanged="itemsChanged" AllowDragAndDrop="false" EnablePersistence="false" EnableVirtualization="true">
 
 
     <FileManagerEvents TValue="FileManagerDirectoryContent"
@@ -34,8 +34,9 @@
     ItemsUploaded="ItemsUploadedAsync"></FileManagerEvents>
     <FileManagerUploadSettings MaxFileSize="@(long.MaxValue)" AutoUpload="true"></FileManagerUploadSettings>
     <FileManagerToolbarSettings ToolbarItems="@Items"></FileManagerToolbarSettings>
-    <FileManagerContextMenuSettings Visible="@(!isShared)" File="@ContextItems"></FileManagerContextMenuSettings>
+    <FileManagerContextMenuSettings Visible="@(!isShared || isMyChannel)" File="@ContextItems"></FileManagerContextMenuSettings>
     <FileManagerSearchSettings FilterDelay="1200"></FileManagerSearchSettings>
+    <FileManagerPageSettings PageSize="50" NumericItemsCount="5"></FileManagerPageSettings>
 </SfFileManager>
 <TelegramDownloader.Pages.Modals.DowloadFromTelegram @ref="Modal" isShare="@isShared" bsi="@bsi"></TelegramDownloader.Pages.Modals.DowloadFromTelegram>
 

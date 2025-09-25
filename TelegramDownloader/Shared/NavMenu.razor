@@ -11,10 +11,18 @@
 @inject IJSRuntime JS;
 
 <style>
+    @@media (max-width: 1024px) {
+        .collapse.navbar-collapse {
+            display: none !important;
+        }
 
+            .collapse.navbar-collapse.show {
+                display: block !important;
+            }
+    }
 </style>
 
-<div class="top-row ps-3 navbar navbar-dark">
+<div class="navbar navbar-dark bg-dark top-row ps-3 navbar-expand-xl">
     <div class="container-fluid">
         <a class="navbar-brand" href="/fetchdata"><img src="/favicon.ico" style="height: 2em;" /> TelegramFileManager</a>
         <button title="Navigation menu" class="navbar-toggler" @onclick="ToggleNavMenu">

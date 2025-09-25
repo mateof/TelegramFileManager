@@ -527,6 +527,7 @@ namespace TelegramDownloader.Data
             for (int offset_id = 0; ;)
             {
                 var messages = await client.Messages_GetHistory(peer, offset_id);
+                Thread.Sleep(500);
                 if (messages.Messages.Length == 0) break;
                 foreach (MessageBase msgBase in messages.Messages)
                 {
@@ -547,6 +548,7 @@ namespace TelegramDownloader.Data
                     }
                 }
                 offset_id = messages.Messages[^1].ID;
+                Console.WriteLine("Get telegram files, offset_id: " + offset_id);
             }
             return cm;
         }

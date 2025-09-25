@@ -29,16 +29,23 @@
         <DropdownMenu>
             <DropdownItem @onclick="exportData" Type="DropdownItemType.Button"><i class="bi bi-cloud-download"></i> Export</DropdownItem>
             <DropdownItem @onclick="importData" Type="DropdownItemType.Button"><i class="bi bi-cloud-upload"></i> Import</DropdownItem>
+            @if (!isMyChannel && showRefresh)
+            {
+                <DropdownItem @onclick="refreshData" Type="DropdownItemType.Button">
+                    
+                    <span class="position-relative badge rounded-pill bg-danger">
+                        Beta
+                        <span class="visually-hidden">Beta function</span>
+                    </span>
+                    <i class="bi bi-arrow-clockwise"></i> Refresh data
+                </DropdownItem>
+            }
+
         </DropdownMenu>
     </Dropdown>
     @if (webDavService.IsRunning)
     {
         <Button Color="ButtonColor.Info" class="ms-3" @onclick="openWebDavInfo"><i class="bi bi-info-circle"></i> WebDav</Button>
-    }
-
-    @if (!isMyChannel && showRefresh)
-    {
-        <Button Color="ButtonColor.Light" class="ms-3" @onclick="refreshData"><i class="bi bi-info-circle"></i> Refresh Data</Button>
     }
 
 </h3>
