@@ -1492,7 +1492,10 @@ namespace TelegramDownloader.Data
             refreshMutex.WaitOne();
             refreshChannelList.Add(channelId);
             refreshMutex.ReleaseMutex();
+            DateTime init = DateTime.Now;
+            _logger.LogInformation($"Refresh channel with id: {channelId}");
             List<TelegramChatDocuments> telegramChatDocuments = (await _ts.searchAllChannelFiles(Convert.ToInt64(channelId))).Where(x => x.name != null).ToList();
+            _logger.LogInformation($"Get the telegram files in: {(DateTime.Now - init).TotalSeconds} seconds  for channel id:{channelId}");
             var nameCount = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
             foreach (var doc in telegramChatDocuments)
@@ -1539,6 +1542,7 @@ namespace TelegramDownloader.Data
             refreshMutex.WaitOne();
             refreshChannelList.Remove(channelId);
             refreshMutex.ReleaseMutex();
+            _logger.LogInformation($"Finish Refresh channel with id: {channelId}");
         }
 
         public bool isChannelRefreshing(string channelId)
