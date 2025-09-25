@@ -13,9 +13,9 @@
 
 <SfFileManager @ref="FileManager" ID="localfm" TValue="FileManagerDirectoryContent">
     <FileManagerAjaxSettings Url=@($"/api/file/FileOperations")
-                             UploadUrl="/api/file/Upload"
-                             DownloadUrl="/api/file/Download"
-                             GetImageUrl="/api/file/GetImage">
+    UploadUrl="/api/file/Upload"
+    DownloadUrl="/api/file/Download"
+    GetImageUrl="/api/file/GetImage">
     </FileManagerAjaxSettings>
     <FileManagerSearchSettings FilterDelay="1200"></FileManagerSearchSettings>
     <FileManagerUploadSettings MaxFileSize="@(long.MaxValue)" AutoUpload="true"></FileManagerUploadSettings>
@@ -48,6 +48,7 @@
 
     private Modals.UploadToTelegramModal Modal { get; set; }
     private Modals.FileUploadModal ModalUpSer { get; set; }
+    private bool isMyChannel = false;
 
 
     public List<ToolBarItemModel> Items = new List<ToolBarItemModel>(){
@@ -71,13 +72,25 @@
     {
         if (!isShared)
         {
+            isMyChannel = ts.isMyChat(Convert.ToInt64(id));
             // Items = Items.Prepend(new ToolBarItemModel() { Name = "NewFolder" }).ToList();
-            Items.AddRange(new List<ToolBarItemModel>(){
+            if (isMyChannel)
+            {
+                Items.AddRange(new List<ToolBarItemModel>(){
                     new ToolBarItemModel() { Name = "Upload File", Text = "Upload To Local", TooltipText = "Upload To local", PrefixIcon = "e-icons e-fe-upload" },
                     new ToolBarItemModel() { Name = "UploadTelegram", Text = "Upload Telegram", TooltipText = "Upload File", PrefixIcon = "bi bi-telegram" },
 
-                }
-            );
+                    }
+                );
+            } else
+            {
+                Items.AddRange(new List<ToolBarItemModel>(){
+                    new ToolBarItemModel() { Name = "Upload File", Text = "Upload To Local", TooltipText = "Upload To local", PrefixIcon = "e-icons e-fe-upload" }
+
+                    }
+                );
+            }
+
         }
         try
         {

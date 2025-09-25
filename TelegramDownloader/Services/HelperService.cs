@@ -77,4 +77,49 @@ namespace TelegramDownloader.Services
         }
 
     }
+
+    public class FileExtensionTypeTest
+    {
+        private static List<String> videoExtensions = new List<String>() {
+            ".mp4",
+            ".mkv",
+            ".avi",
+            ".mov",
+            ".wmv",
+            ".flv",
+            ".webm",
+            ".mpeg",
+            ".mpg",
+            ".3gp",
+            ".ts",
+            ".m4v",
+            ".divx",
+            ".xvid",
+            ".rm",
+            ".vob"
+        };
+
+        private static List<string> audioExtensions = new List<string>
+        {
+            ".mp3",
+            ".wav",
+            ".flac",
+            ".aac",
+            ".ogg",
+            ".wma",
+            ".m4a",
+            ".aiff",
+            ".alac",
+            ".pcm",
+            ".opus",
+            ".mid",   // MIDI
+            ".amr",
+            ".ra",    // RealAudio
+            ".mp2"
+        };
+
+        public static bool isVideoExtension(string extension) { return videoExtensions.Contains(extension); }
+
+        public static bool isAudioExtension(string extension) { return audioExtensions.Contains(extension); }
+    }
 }

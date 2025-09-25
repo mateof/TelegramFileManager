@@ -35,6 +35,8 @@ namespace TelegramDownloader.Data
         Task logOff();
         Task sendVerificationCode(string vc);
         Task<Message> uploadFile(string chatId, Stream file, string fileName, string mimeType = null, UploadModel um = null, string caption = null);
+        Task<List<TelegramChatDocuments>> searchAllChannelFiles(long id);
+        bool isMyChat(long id);
 
     }
 }

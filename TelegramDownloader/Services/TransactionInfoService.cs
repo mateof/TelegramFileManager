@@ -193,6 +193,7 @@ namespace TelegramDownloader.Services
 
         public async Task CheckPendingDownloads()
         {
+            Thread.Sleep(500);
             PendingDownloadMutex.WaitOne();
             while (downloadModels.Where(x => x.state ==  StateTask.Working).Count() < GeneralConfigStatic.config.MaxSimultaneousDownloads
                 && pendingDownloadModels.Count() > 0

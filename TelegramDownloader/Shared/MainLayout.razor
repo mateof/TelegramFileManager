@@ -74,6 +74,13 @@
             <BodyTemplate>
                 <div class="list-group list-group-flush">
                     <button @onclick=' () => Navigateto("/config")' class="list-group-item list-group-item-action"><i class="bi bi-gear"></i> Configuration</button>
+                    <button @onclick=' () => Navigateto("/webdavinfo")' class="list-group-item list-group-item-action">
+                        <i class="bi bi-files-alt"></i> WebDav
+                        <span class="position-absolute top-50 start-50 translate-middle badge rounded-pill bg-danger">
+                            Beta
+                            <span class="visually-hidden">Beta function</span>
+                        </span>
+                    </button>
                     <button @onclick=' () => Navigateto("/downloads")' class="list-group-item list-group-item-action"><i class="bi bi-cloud-download"></i> Tasks</button>
                     <button @onclick=' () => Navigateto("/loglist")' class="list-group-item list-group-item-action"><i class="bi bi-file-earmark-text"></i> Logs</button>
                     <a href="#" @onclick=" () => Logout()" class="list-group-item list-group-item-action list-group-item-warning"><i class="bi bi-box-arrow-right"></i> LogOut</a>

@@ -3,7 +3,9 @@
 @using TelegramDownloader.Data
 @using TelegramDownloader.Data.db
 @using TelegramDownloader.Models
+@using TelegramDownloader.Pages.Modals.InfoModals
 @using TelegramDownloader.Pages.Partials
+@using TelegramDownloader.Services
 @inject IFileService fs
 @inject ITelegramService ts
 @inject ILogger<FileManager> Logger
@@ -12,11 +14,11 @@
 
 <style>
     .e-filemanager .e-splitter {
-        height: 75vh !important;
+    height: 75vh !important;
     }
 
     .e-filemanager {
-        height: 80vh !important;
+    height: 80vh !important;
     }
 </style>
 
@@ -27,8 +29,25 @@
         <DropdownMenu>
             <DropdownItem @onclick="exportData" Type="DropdownItemType.Button"><i class="bi bi-cloud-download"></i> Export</DropdownItem>
             <DropdownItem @onclick="importData" Type="DropdownItemType.Button"><i class="bi bi-cloud-upload"></i> Import</DropdownItem>
+            @if (!isMyChannel && showRefresh)
+            {
+                <DropdownItem @onclick="refreshData" Type="DropdownItemType.Button">
+                    
+                    <span class="position-relative badge rounded-pill bg-danger">
+                        Beta
+                        <span class="visually-hidden">Beta function</span>
+                    </span>
+                    <i class="bi bi-arrow-clockwise"></i> Refresh data
+                </DropdownItem>
+            }
+
         </DropdownMenu>
     </Dropdown>
+    @if (webDavService.IsRunning)
+    {
+        <Button Color="ButtonColor.Info" class="ms-3" @onclick="openWebDavInfo"><i class="bi bi-info-circle"></i> WebDav</Button>
+    }
+
 </h3>
 
 <ul class="nav nav-tabs">
@@ -42,14 +61,21 @@
 
 <TelegramDownloader.Pages.Partials.impl.FileManagerImpl id="@id"></TelegramDownloader.Pages.Partials.impl.FileManagerImpl>
 <TelegramDownloader.Pages.Modals.ImportDataModal id="@id" @ref="ImportModal"></TelegramDownloader.Pages.Modals.ImportDataModal>
+<TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal @ref="mediaUrlModal" title="WebDav URL" url="@webDavUrl"></TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal>
 
 @code {
     private Modals.ImportDataModal ImportModal { get; set; }
     [Parameter]
     public string id { get; set; }
+    private MediaUrlModal mediaUrlModal { get; set; } = default!;
+
+    private WebbDavService webDavService = GeneralConfigStatic.config.webDav.webDavService ?? new WebbDavService();
+    private String webDavUrl = "";
 
     BsonSharedInfoModel bsi { get; set; }
     public string chatName { get; set; }
+    private bool isMyChannel = true;
+    private bool showRefresh = true;
 
     NotificationModel nm = new NotificationModel();
 
@@ -58,12 +84,22 @@
     {
         try
         {
-            chatName = ts.getChatName(Convert.ToInt64(id));
+            showRefresh = !fs.isChannelRefreshing(id);
+            long channelId = Convert.ToInt64(id);
+            chatName = ts.getChatName(channelId);
+            isMyChannel = ts.isMyChat(channelId);
+
         } catch(Exception ex)
         {
             Logger.LogError(ex, "Error on GetSharedInfoById");
             nm.sendMessage("Error", "Error on GetSharedInfoById", NotificationTypes.Error);
         }     
+    }
+
+    public async Task openWebDavInfo()
+    {
+        webDavUrl = $"{new Uri(MyNavigationManager.BaseUri).Host}:{GeneralConfigStatic.config.webDav.PuertoSalida}/{id}/";
+        mediaUrlModal.OnShowModalClick();
     }
 
     public void exportData()
@@ -74,6 +110,10 @@
     {
         await ImportModal.Open();
     }
-
-    
+    public async Task refreshData()
+    {
+        showRefresh = false;
+        await InvokeAsync(StateHasChanged);
+        await fs.refreshChannelFIles(id);
+    }
 }

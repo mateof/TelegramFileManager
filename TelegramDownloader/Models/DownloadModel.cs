@@ -119,6 +119,7 @@ namespace TelegramDownloader.Models
     {
         public Mutex mutex = new Mutex();
         public event EventHandler<DownloadEventArgs> EventChanged;
+        public event EventHandler EventStatechanged;
         public string id = Guid.NewGuid().ToString();
         public string action { get; set; } = "Download";
         public StateTask state { get; set; } = StateTask.Working;
@@ -145,13 +146,14 @@ namespace TelegramDownloader.Models
                 id = Guid.NewGuid().ToString() + ":" + name;
         }
 
+        // Fix for CS7036: Ensure the required "sender" parameter is passed when invoking the EventHandler.
+
         public void ProgressCallback(long transmitted, long totalSize)
         {
             if (state == StateTask.Canceled)
                 throw new Exception($"Canceled {name}");
             if (state == StateTask.Paused)
             {
-                
                 state = StateTask.Working;
                 tis.deleteDownloadInList(this);
                 throw new Exception($"Paused {name}");
@@ -165,11 +167,11 @@ namespace TelegramDownloader.Models
             if (transmitted == totalSize)
             {
                 state = StateTask.Completed;
+                EventStatechanged?.Invoke(this, EventArgs.Empty);
                 NotificationModel nm = new NotificationModel();
                 nm.sendEvent(new Notification($"Download {name} completed", "Download Completed", NotificationTypes.Success));
                 tis.CheckPendingDownloads();
             }
-
         }
 
         public void Cancel()
