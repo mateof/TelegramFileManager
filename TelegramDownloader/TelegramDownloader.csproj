@@ -16,17 +16,26 @@
     <PackageReference Include="Blazor.Bootstrap" Version="3.4.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Log4Net.AspNetCore" Version="8.0.0" />
     <PackageReference Include="MongoDB.Driver" Version="3.5.0" />
-    <PackageReference Include="QRCoder" Version="1.6.0" />
+    <PackageReference Include="QRCoder" Version="1.7.0" />
     <PackageReference Include="Syncfusion.Blazor" Version="29.2.11" />
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.22.1" />
     <PackageReference Include="Syncfusion.EJ2.AspNet.Core" Version="29.2.11" />
-    <PackageReference Include="System.IO.Hashing" Version="9.0.9" />
-    <PackageReference Include="WTelegramClient" Version="4.3.10" />
+    <PackageReference Include="System.IO.Hashing" Version="9.0.10" />
+    <PackageReference Include="WTelegramClient" Version="4.3.12" />
   </ItemGroup>
 
   <ItemGroup>
     <Folder Include="wwwroot\local\local\" />
     <Folder Include="wwwroot\local\temp\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="WebDav\requirements.txt">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+    <None Update="WebDav\webdav_api_proxy.py">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
   </ItemGroup>
 
 </Project>

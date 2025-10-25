@@ -393,6 +393,30 @@ namespace TelegramDownloader.Data.db
             return allMessageIds.OrderBy(x => x).ToList();
         }
 
+        public async Task<List<string>> getAllFileNamesFromChannel(string dbName, string collectionName = "directory")
+        {
+            if (collectionName == null)
+                collectionName = "directory";
+            var collection = getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName);
+
+            var items = await collection
+            .Find(x => x.IsFile)
+            .Project(x => x.Name)
+            .ToListAsync();
+
+            var allMessageNames = new HashSet<string>();
+            foreach (var item in items)
+            {
+                if (item != null)
+                    allMessageNames.Add(item);
+
+                //if (item != null)
+                //    allMessageIds.UnionWith(item);
+            }
+
+            return allMessageNames.OrderBy(x => x).ToList();
+        }
+
         public async Task<List<BsonFileManagerModel>> getAllFilesInDirectoryById(string dbName, string idFolder, string collectionName = "directory")
         {
             if (collectionName == null)

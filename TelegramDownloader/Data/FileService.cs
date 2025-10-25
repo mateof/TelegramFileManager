@@ -1,26 +1,18 @@
 ﻿using BlazorBootstrap;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.StaticFiles;
-using Microsoft.Extensions.Logging;
 using MongoDB.Driver;
 using Newtonsoft.Json;
-using SharpCompress.Archives;
-using SharpCompress.Common;
 using Syncfusion.Blazor.FileManager;
 using Syncfusion.Blazor.Inputs;
 
 using Syncfusion.EJ2.FileManager.PhysicalFileProvider;
 using Syncfusion.EJ2.Linq;
-using Syncfusion.EJ2.Notifications;
 using System.Dynamic;
-using System.IO;
 using System.IO.Compression;
 using System.IO.Hashing;
 using System.Security.Cryptography;
-using System.Text.Json;
 using System.Text.RegularExpressions;
-using System.Threading.Channels;
-using System.Xml.Linq;
 using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
 using TelegramDownloader.Services;
@@ -279,6 +271,11 @@ namespace TelegramDownloader.Data
         public async Task<BsonFileManagerModel> getItemById(string dbName, string id)
         {
             return await _db.getFileById(dbName, id);
+        }
+
+        public async Task<BsonFileManagerModel> getSharedItemById(string id, string collection)
+        {
+            return await _db.getFileById(DbService.SHARED_DB_NAME, id, collection);
         }
 
         public async Task<BsonSharedInfoModel> GetSharedInfoById(string id)
@@ -1191,6 +1188,10 @@ namespace TelegramDownloader.Data
                     if (FileExtensionTypeTest.isVideoExtension(file.Type) || FileExtensionTypeTest.isAudioExtension(file.Type))
                     {
                         string contenido = Path.Combine(host, "api/file/GetFileStream", dbName, file.Id, "file" + file.Type).Replace("\\", "/");
+                        if (HelperService.bytesToMegaBytes(file.Size) < GeneralConfigStatic.config.MaxPreloadFileSizeInMb)
+                        {
+                            contenido = Path.Combine(host, "api/file/GetFile", file.Name).Replace("\\", "/") + $"?idChannel={dbName}&idFile={file.Id}";
+                        }
                         string pattern = $@"\.({file.Type.Replace(".", "")})$";
                         File.WriteAllText(Regex.Replace(filePath, pattern, ".strm"), contenido);
                     }
@@ -1487,16 +1488,23 @@ namespace TelegramDownloader.Data
             return contentType;
         }
 
-        public async Task refreshChannelFIles(string channelId)
+        public async Task refreshChannelFIles(string channelId, bool force = false)
         {
             refreshMutex.WaitOne();
             refreshChannelList.Add(channelId);
             refreshMutex.ReleaseMutex();
             DateTime init = DateTime.Now;
+            List<int> presentIds = await _db.getAllIdsFromChannel(channelId);
             _logger.LogInformation($"Refresh channel with id: {channelId}");
-            List<TelegramChatDocuments> telegramChatDocuments = (await _ts.searchAllChannelFiles(Convert.ToInt64(channelId))).Where(x => x.name != null).ToList();
+            List<TelegramChatDocuments> telegramChatDocuments = (await _ts.searchAllChannelFiles(Convert.ToInt64(channelId), (presentIds.Count > 0 && !force) ? presentIds.Max() : 0)).Where(x => x.name != null).ToList();
             _logger.LogInformation($"Get the telegram files in: {(DateTime.Now - init).TotalSeconds} seconds  for channel id:{channelId}");
+            List<string> fileNames = await _db.getAllFileNamesFromChannel(channelId);
             var nameCount = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (string name in fileNames)
+            {
+                nameCount[name] = 1;
+            }
 
             foreach (var doc in telegramChatDocuments)
             {
@@ -1515,7 +1523,7 @@ namespace TelegramDownloader.Data
                 if (count == 0)
                     nameCount[baseName] = 1;
             }
-            List<int> presentIds = await _db.getAllIdsFromChannel(channelId);
+            
             var rootFolder = await _db.getRootFolder(channelId);
             foreach (TelegramChatDocuments tcd in telegramChatDocuments)
             {
@@ -1543,6 +1551,17 @@ namespace TelegramDownloader.Data
             refreshChannelList.Remove(channelId);
             refreshMutex.ReleaseMutex();
             _logger.LogInformation($"Finish Refresh channel with id: {channelId}");
+
+            // Fix for CS1739: Removed the invalid 'autoHide' parameter and replaced it with the correct property assignment.
+            ToastMessage tm = new ToastMessage
+            {
+                Type = ToastType.Success,
+                IconName = IconName.CheckCircle,
+                Title = "Refresh channel files",
+                Message = "Files channel has been refreshed",
+                AutoHide = true
+            };
+            _toastService.Notify(tm);
         }
 
         public bool isChannelRefreshing(string channelId)

@@ -92,6 +92,17 @@
                 </div>
 
                 <div>
+                    <div class="input-group mb-3">
+                        <span class="input-group-text"><i class="bi bi-download"></i></span>
+                        <div class="form-floating">
+                            <NumberInput TValue="int" @bind-Value="Model!.MaxPreloadFileSizeInMb" Min="0" Max="10000" EnableMinMax="true" class="form-control" id="MaxPreloadFileSizeInMb" placeholder="Max. preload file size" />
+                            <label for="MaxPreloadFileSizeInMb">downloads the entire file when it weighs less than indicated</label>
+                        </div>
+
+                    </div>
+                </div>
+
+                <div>
                     <div class="d-flex flex-row mb-3">
                         @if (TelegramService.isPremium)
                         {

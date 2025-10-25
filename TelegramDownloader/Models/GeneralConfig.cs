@@ -78,6 +78,10 @@ namespace TelegramDownloader.Models
         /// Maximum image upload size in megabytes. if 0, All images will be sent as a file
         /// </summary>
         public int MaxImageUploadSizeInMb { get; set; } = 10;
+        /// <summary>
+        /// downloads the entire file when it weighs less than indicated
+        /// </summary>
+        public int MaxPreloadFileSizeInMb { get; set; } = 30;
         public bool ShouldShowCaptionPath { get; set; } = false;
         public bool ShouldShowLogInTerminal { get; set; } = false;
         public bool ShouldShowPaginatedFileChannel { get; set; } = false;

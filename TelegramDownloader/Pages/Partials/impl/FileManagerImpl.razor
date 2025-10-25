@@ -9,6 +9,7 @@
 @using TelegramDownloader.Pages.Modals.InfoModals
 @using TelegramDownloader.Pages.Modals
 @using TelegramDownloader.Pages.Partials
+@using TelegramDownloader.Services
 @inject IFileService fs
 @inject ITelegramService ts
 @inject ILogger<FileManager> Logger
@@ -100,7 +101,7 @@
         {
             isMyChannel = ts.isMyChat(Convert.ToInt64(id));
             if (isMyChannel)
-            // Items = Items.Prepend(new ToolBarItemModel() { Name = "NewFolder" }).ToList();
+                // Items = Items.Prepend(new ToolBarItemModel() { Name = "NewFolder" }).ToList();
                 Items.AddRange(new List<ToolBarItemModel>(){
                         new ToolBarItemModel() { Name = "NewFolder" },
                         new ToolBarItemModel() { Name = "Cut" },
@@ -150,22 +151,38 @@
 
     public async Task fileOpen(FileOpenEventArgs<FileManagerDirectoryContent> args)
     {
-        if (args != null && args.FileDetails != null && args.FileDetails.IsFile && new List<string> { ".mp3", ".ogg", ".flac", ".aac", ".wav" }.Contains(args.FileDetails.Type.ToLower()))
+        if (args.FileDetails == null || !args.FileDetails.IsFile)
+            return;
+        if (args != null && args.FileDetails != null && args.FileDetails.IsFile && isAudioFile(args.FileDetails.Type.ToLower()))
         {
             await playAudio(args);
+            return;
         }
-        else
+
+        if (args != null && args.FileDetails != null && args.FileDetails.IsFile && isVideoFile(args.FileDetails.Type.ToLower()))
         {
-            if (args != null && args.FileDetails != null && args.FileDetails.IsFile && new List<string> { ".mov", ".mp4", ".m4v", ".ogv", ".webm", ".flv", ".f4v" }.Contains(args.FileDetails.Type.ToLower()))
-            {
-                videoPlayer.ShowModal(getMediaUrl(args.FileDetails.Id, args.FileDetails.Name));
-            }
+            videoPlayer.ShowModal(await getMediaUrl(args.FileDetails.Id, args.FileDetails.Name, args.FileDetails.Size));
+            return;
         }
+
+        string filePath = getTempFileMediaUrl(args.FileDetails.Id, args.FileDetails.Name);
+
+        await JSRuntime.InvokeVoidAsync("open", filePath, "_blank");
+    }
+
+    private bool isVideoFile(string fileExtension)
+    {
+        return new List<string> { ".mov", ".mp4", ".m4v", ".ogv", ".webm", ".flv", ".f4v" }.Contains(fileExtension);
+    }
+
+    private bool isAudioFile(string fileExtension)
+    {
+        return new List<string> { ".mp3", ".ogg", ".flac", ".aac", ".wav" }.Contains(fileExtension);
     }
 
     private async Task playAudio(FileOpenEventArgs<FileManagerDirectoryContent> args)
     {
-        await JSRuntime.InvokeVoidAsync("openAudioPlayerModal", getMediaUrl(args.FileDetails.Id, args.FileDetails.Name), null, args.FileDetails.Name);
+        await JSRuntime.InvokeVoidAsync("openAudioPlayerModal", await getMediaUrl(args.FileDetails.Id, args.FileDetails.Name, args.FileDetails.Size), null, args.FileDetails.Name);
     }
 
     public async Task SearchingAsync(SearchEventArgs<FileManagerDirectoryContent> args)
@@ -216,16 +233,31 @@
         Console.WriteLine("");
     }
 
-    private async Task ShowMediaURLModal(string idFile, String name)
+    private async Task ShowMediaURLModal(string idFile, String name, long size, bool forcePreDownload = false)
     {
-        mediaUrlModal.url = getMediaUrl(idFile, name);
+        mediaUrlModal.url = await getMediaUrl(idFile, name, size, forcePreDownload);
         await mediaUrlModal.OnShowModalClick();
     }
 
-    private string getMediaUrl(string idFile, String name)
+    private async Task<string> getMediaUrl(string idFile, String name, long size, bool forcePreDownload = false)
+    {
+        BsonFileManagerModel item = null;
+        if (isShared)
+            item = await fs.getSharedItemById(id: idFile, collection: id);
+        else
+            item = await fs.getItemById(id, idFile);
+        string localdir = MyNavigationManager.BaseUri;
+        if (forcePreDownload || (HelperService.bytesToMegaBytes(size) <= GeneralConfigStatic.config.MaxPreloadFileSizeInMb && item.MessageId != null))
+        {
+            return new System.Uri(Path.Combine(localdir, "api/file/GetFile", name).Replace("\\", "/") + $"?idChannel={(isShared ? bsi.ChannelId : id)}&idFile={item.MessageId}").AbsoluteUri;
+        }
+        return new System.Uri(Path.Combine(localdir, "api/file/GetFileStream", isShared ? bsi.ChannelId : id, idFile, name).Replace("\\", "/")).AbsoluteUri;
+    }
+
+    private string getTempFileMediaUrl(string idFile, String name)
     {
         string localdir = MyNavigationManager.BaseUri;
-        return new System.Uri(Path.Combine(localdir, "api/file/GetFileStream", isShared ? bsi.ChannelId : id, idFile, name).Replace("\\", "/")).AbsoluteUri;
+        return new System.Uri(Path.Combine(localdir, "api/file/GetFileByTfmId", name).Replace("\\", "/") + $"?idChannel={(isShared ? bsi.ChannelId : id)}&idFile={idFile}").AbsoluteUri;
     }
 
     public async Task toolBarClicked(ToolbarClickEventArgs<FileManagerDirectoryContent> args)
@@ -249,7 +281,7 @@
         }
         if (args.Item.Text == "Url Media" && args.FileDetails.Count() > 0)
         {
-            await ShowMediaURLModal(args.FileDetails[0].Id, args.FileDetails[0].Name);
+            await ShowMediaURLModal(args.FileDetails[0].Id, args.FileDetails[0].Name, args.FileDetails[0].Size, isAudioFile(args.FileDetails[0].Type.ToLower()) || isVideoFile(args.FileDetails[0].Type.ToLower()));
         }
         if (args.Item.Text == "Strm" && args.FileDetails.Count() > 0)
         {

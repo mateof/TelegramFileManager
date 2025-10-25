@@ -520,7 +520,7 @@ namespace TelegramDownloader.Data
             return await Task.FromResult(new GridDataProviderResult<ChatMessages> { Data = cm, TotalCount = messages.Count });
         }
 
-        public async Task<List<ChatMessages>> getAllFileMessages(long id)
+        public async Task<List<ChatMessages>> getAllFileMessages(long id, int lastId = 0)
         {
             List<ChatMessages> cm = new List<ChatMessages>();
             InputPeer peer = chats.chats[id];
@@ -543,7 +543,8 @@ namespace TelegramDownloader.Data
                         {
                             cm2.isDocument = true;
                         }
-
+                        if (lastId != 0 && lastId == cm2.message.id)
+                            return cm;
                         cm.Add(cm2);
                     }
                 }
@@ -820,10 +821,10 @@ namespace TelegramDownloader.Data
             return null;
         }
 
-        public async Task<List<TelegramChatDocuments>> searchAllChannelFiles(long id)
+        public async Task<List<TelegramChatDocuments>> searchAllChannelFiles(long id, int lastId = 0)
         {
             List<TelegramChatDocuments> telegramChatDocuments = new List<TelegramChatDocuments>();
-            List<ChatMessages> result = await getAllFileMessages(id);
+            List<ChatMessages> result = await getAllFileMessages(id, lastId);
 
             foreach (var msg in result)
                 if (msg.message is Message msgBase)
