@@ -81,11 +81,20 @@
                 </div>
 
                 <div>
+                    <div class="form-check form-switch">
+                        <InputCheckbox @bind-Value="Model!.hasFileManagerVirtualScroll" class="form-check-input" type="checkbox" id="hasFileManagerVirtualScroll" />
+                        <label class="form-check-label" for="hasFileManagerVirtualScroll">File manager virtual scroll</label>
+                    </div>
+
+
+                </div>
+
+                <div>
                     <div class="input-group mb-3">
                         <span class="input-group-text"><i class="bi bi-upload"></i></span>
                         <div class="form-floating">
                             <NumberInput TValue="int" @bind-Value="Model!.MaxImageUploadSizeInMb" Min="0" Max="10" EnableMinMax="true" class="form-control" id="MaxImageUploadSizeInMb" placeholder="Max. Image Size" />
-                            <label for="MaxImageUploadSizeInMb">Max. Image File Size to send as Image (if 0, All images will be sent as a file)</label>
+                            <label for="MaxImageUploadSizeInMb">Max. Image File Size (Mb) to send as Image (if 0, All images will be sent as a file)</label>
                         </div>
 
                     </div>
@@ -96,7 +105,7 @@
                         <span class="input-group-text"><i class="bi bi-download"></i></span>
                         <div class="form-floating">
                             <NumberInput TValue="int" @bind-Value="Model!.MaxPreloadFileSizeInMb" Min="0" Max="10000" EnableMinMax="true" class="form-control" id="MaxPreloadFileSizeInMb" placeholder="Max. preload file size" />
-                            <label for="MaxPreloadFileSizeInMb">downloads the entire file when it weighs less than indicated</label>
+                            <label for="MaxPreloadFileSizeInMb">downloads the entire file when it weighs less than indicated (Mb)</label>
                         </div>
 
                     </div>

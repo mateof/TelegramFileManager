@@ -17,7 +17,7 @@
 @inject NavigationManager MyNavigationManager;
 
 
-<SfFileManager ID="remotefm" @ref="fm" TValue="FileManagerDirectoryContent" ShowThumbnail="false" SelectedItemsChanged="itemsChanged" AllowDragAndDrop="false" EnablePersistence="false" EnableVirtualization="true">
+<SfFileManager ID="remotefm" @ref="fm" TValue="FileManagerDirectoryContent" ShowThumbnail="false" SelectedItemsChanged="itemsChanged" AllowDragAndDrop="false" EnablePersistence="false" EnableVirtualization="@hasVirtualScroll">
 
 
     <FileManagerEvents TValue="FileManagerDirectoryContent"
@@ -58,6 +58,7 @@
     public string chatName { get; set; }
     public static string[] selectedItems = new string[] { "" };
     public static bool downloadToServer = true;
+    public static bool hasVirtualScroll { get; set; } = false;
     LocalFileManager lfm { get; set; }
     private VideoPlayerModal videoPlayer { get; set; } = default!;
 
@@ -97,6 +98,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        hasVirtualScroll = GeneralConfigStatic.config.hasFileManagerVirtualScroll;
         if (!isShared)
         {
             isMyChannel = ts.isMyChat(Convert.ToInt64(id));

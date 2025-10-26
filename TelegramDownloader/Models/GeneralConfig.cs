@@ -85,6 +85,7 @@ namespace TelegramDownloader.Models
         public bool ShouldShowCaptionPath { get; set; } = false;
         public bool ShouldShowLogInTerminal { get; set; } = false;
         public bool ShouldShowPaginatedFileChannel { get; set; } = false;
+        public bool hasFileManagerVirtualScroll { get; set; } = false;
         public List<long> FavouriteChannels { get; set; } = new List<long>();
         public WebDavModel webDav { get; set; } = new WebDavModel();
         
