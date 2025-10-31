@@ -283,7 +283,7 @@
         }
         if (args.Item.Text == "Url Media" && args.FileDetails.Count() > 0)
         {
-            await ShowMediaURLModal(args.FileDetails[0].Id, args.FileDetails[0].Name, args.FileDetails[0].Size, isAudioFile(args.FileDetails[0].Type.ToLower()) || isVideoFile(args.FileDetails[0].Type.ToLower()));
+            await ShowMediaURLModal(args.FileDetails[0].Id, args.FileDetails[0].Name, args.FileDetails[0].Size, !(isAudioFile(args.FileDetails[0].Type.ToLower()) || isVideoFile(args.FileDetails[0].Type.ToLower())));
         }
         if (args.Item.Text == "Strm" && args.FileDetails.Count() > 0)
         {

@@ -1190,7 +1190,7 @@ namespace TelegramDownloader.Data
                         string contenido = Path.Combine(host, "api/file/GetFileStream", dbName, file.Id, "file" + file.Type).Replace("\\", "/");
                         if (HelperService.bytesToMegaBytes(file.Size) < GeneralConfigStatic.config.MaxPreloadFileSizeInMb)
                         {
-                            contenido = Path.Combine(host, "api/file/GetFile", file.Name).Replace("\\", "/") + $"?idChannel={dbName}&idFile={file.Id}";
+                            contenido = Path.Combine(host, "api/file/GetFile", Uri.EscapeDataString(file.Name)).Replace("\\", "/") + $"?idChannel={dbName}&idFile={file.Id}";
                         }
                         string pattern = $@"\.({file.Type.Replace(".", "")})$";
                         File.WriteAllText(Regex.Replace(filePath, pattern, ".strm"), contenido);
