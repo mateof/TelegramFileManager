@@ -763,12 +763,12 @@ namespace TelegramDownloader.Data
             List<string> splitPaths = new List<string>();
             foreach (int messageId in file.ListMessageId)
             {
-                string filePathPart = System.IO.Path.Combine(currentFilePath, $"({i})" + itemFile.Name);
-                await downloadFromTelegram(dbName, messageId, filePathPart, file, true);
+                string filePathPart = Path.Combine(currentFilePath, $"({i})" + itemFile.Name);
+                await downloadFromTelegram(dbName, messageId, filePathPart, file, true, Path.Combine(currentFilePath, itemFile.Name));
                 splitPaths.Add(filePathPart);
                 i++;
             }
-            await mergeFileStreamAsync(splitPaths, System.IO.Path.Combine(currentFilePath, itemFile.Name));
+            await mergeFileStreamAsync(splitPaths, Path.Combine(currentFilePath, itemFile.Name));
             foreach (string filePath in splitPaths)
             {
                 File.Delete(filePath);
@@ -800,9 +800,10 @@ namespace TelegramDownloader.Data
         {
 
         }
-        private async Task downloadFromTelegram(string dbName, int messageId, string destPath, BsonFileManagerModel file = null, bool shouldWait = false)
+        private async Task downloadFromTelegram(string dbName, int messageId, string destPath, BsonFileManagerModel file = null, bool shouldWait = false, string path = null)
         {
             DownloadModel model = new DownloadModel();
+            model.path = path ?? destPath;
             model.tis = _tis;
             if (file != null)
             {

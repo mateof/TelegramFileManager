@@ -133,6 +133,7 @@ namespace TelegramDownloader.Models
         public string idTask { get; set; }
         public ChatMessages m {  get; set; }
         public string name { get; set; }
+        public string path { get; set; }
         public Callbacks callbacks { get; set; }
 
         public long _size { get; set; }

@@ -17,6 +17,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Net;
 using System.Net.Http.Headers;
+using System.Runtime.CompilerServices;
 using System.Runtime.Serialization.Formatters.Binary;
 using System.Web;
 using System.Xml.Linq;
@@ -278,9 +279,13 @@ namespace TelegramDownloader.Controllers
                 return new ObjectResult("") { StatusCode = (int)HttpStatusCode.NotFound };
             }
             var file = _fs.ExistFileIntempFolder($"{idChannel}-{(dbFile.MessageId != null ? dbFile.MessageId.ToString() : dbFile.Id)}-{id}");
-            if (file == null)
+            dbFile.Name = $"{idChannel}-{(dbFile.MessageId != null ? dbFile.MessageId.ToString() : dbFile.Id)}-{id}";
+            String path = Path.Combine(FileService.TEMPDIR, "_temp");
+            String filePath = Path.Combine(path, dbFile.Name);
+            if (file == null && !_tis.isFileDownloaded(path))
             {
-                _fs.downloadFile(idChannel, new List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> { dbFile.toFileManagerContent() }, System.IO.Path.Combine(FileService.TEMPDIR, "_temp", $"{idChannel}-{(dbFile.MessageId != null ? dbFile.MessageId.ToString() : dbFile.Id)}-{id}"));
+                
+                await _fs.downloadFile(idChannel, new List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> { dbFile.toFileManagerContent() }, path);
                 //TL.Message idM = await _ts.getMessageFile(idChannel, Convert.ToInt32(dbFile.MessageId));
                 //ChatMessages cm = new ChatMessages();
                 //cm.message = idM;
