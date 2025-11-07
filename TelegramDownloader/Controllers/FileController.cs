@@ -277,23 +277,29 @@ namespace TelegramDownloader.Controllers
             {
                 return new ObjectResult("") { StatusCode = (int)HttpStatusCode.NotFound };
             }
-            var file = _fs.ExistFileIntempFolder($"{idChannel}-{dbFile.MessageId}-{id}");
+            var file = _fs.ExistFileIntempFolder($"{idChannel}-{(dbFile.MessageId != null ? dbFile.MessageId.ToString() : dbFile.Id)}-{id}");
             if (file == null)
             {
-                TL.Message idM = await _ts.getMessageFile(idChannel, Convert.ToInt32(dbFile.MessageId));
-                ChatMessages cm = new ChatMessages();
-                cm.message = idM;
-                file = new FileStream(System.IO.Path.Combine(FileService.TEMPDIR, "_temp", $"{idChannel}-{idFile}-{id}"), FileMode.Create, FileAccess.ReadWrite);
-                DownloadModel dm = new DownloadModel();
-                dm.tis = _tis;
-                dm.channelName = _ts.getChatName(Convert.ToInt64(idChannel));
-                _tis.addToDownloadList(dm);
-                await _ts.DownloadFileAndReturn(cm, file, model: dm);
-                file.Position = 0;
+                _fs.downloadFile(idChannel, new List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> { dbFile.toFileManagerContent() }, System.IO.Path.Combine(FileService.TEMPDIR, "_temp", $"{idChannel}-{(dbFile.MessageId != null ? dbFile.MessageId.ToString() : dbFile.Id)}-{id}"));
+                //TL.Message idM = await _ts.getMessageFile(idChannel, Convert.ToInt32(dbFile.MessageId));
+                //ChatMessages cm = new ChatMessages();
+                //cm.message = idM;
+                //file = new FileStream(System.IO.Path.Combine(FileService.TEMPDIR, "_temp", $"{idChannel}-{idFile}-{id}"), FileMode.Create, FileAccess.ReadWrite);
+                //DownloadModel dm = new DownloadModel();
+                //dm.tis = _tis;
+                //dm.channelName = _ts.getChatName(Convert.ToInt64(idChannel));
+                //_tis.addToDownloadList(dm);
+                //await _ts.DownloadFileAndReturn(cm, file, model: dm);
+                //file.Position = 0;
+            }
+
+            if (file == null)
+            {
+                return NotFound();
             }
 
             Response.Headers["Content-Disposition"] = $"inline; filename=\"{HttpUtility.UrlEncode(fileName)}\"";
-
+            
             return new FileStreamResult(file, mimeType);
         }
 
