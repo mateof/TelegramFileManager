@@ -76,8 +76,6 @@
                         <InputCheckbox @bind-Value="Model!.ShouldShowCaptionPath" class="form-check-input" type="checkbox" id="CheckHash" />
                         <label class="form-check-label" for="ShouldShowCaptionPath">Show relative path in Telegram msg caption</label>
                     </div>
-
-
                 </div>
 
                 <div>
@@ -85,8 +83,13 @@
                         <InputCheckbox @bind-Value="Model!.hasFileManagerVirtualScroll" class="form-check-input" type="checkbox" id="hasFileManagerVirtualScroll" />
                         <label class="form-check-label" for="hasFileManagerVirtualScroll">File manager virtual scroll</label>
                     </div>
+                </div>
 
-
+                <div>
+                    <div class="form-check form-switch">
+                        <InputCheckbox @bind-Value="Model!.PreloadFilesOnStream" class="form-check-input" type="checkbox" id="PreloadFilesOnStream" />
+                        <label class="form-check-label" for="PreloadFilesOnStream">Preload Files on Stream</label>
+                    </div>
                 </div>
 
                 <div>

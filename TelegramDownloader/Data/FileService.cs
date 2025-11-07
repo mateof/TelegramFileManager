@@ -1188,7 +1188,7 @@ namespace TelegramDownloader.Data
                     if (FileExtensionTypeTest.isVideoExtension(file.Type) || FileExtensionTypeTest.isAudioExtension(file.Type))
                     {
                         string contenido = Path.Combine(host, "api/file/GetFileStream", dbName, file.Id, "file" + file.Type).Replace("\\", "/");
-                        if (HelperService.bytesToMegaBytes(file.Size) < GeneralConfigStatic.config.MaxPreloadFileSizeInMb)
+                        if (GeneralConfigStatic.config.PreloadFilesOnStream || HelperService.bytesToMegaBytes(file.Size) < GeneralConfigStatic.config.MaxPreloadFileSizeInMb)
                         {
                             contenido = Path.Combine(host, "api/file/GetFile", Uri.EscapeDataString(file.Name)).Replace("\\", "/") + $"?idChannel={dbName}&idFile={file.Id}";
                         }
