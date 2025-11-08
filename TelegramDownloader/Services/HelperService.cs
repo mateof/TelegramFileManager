@@ -90,6 +90,7 @@ namespace TelegramDownloader.Services
             ".mkv",
             ".avi",
             ".mov",
+            ".ogm",
             ".wmv",
             ".flv",
             ".webm",
