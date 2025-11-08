@@ -715,7 +715,11 @@ namespace TelegramDownloader.Data
                 foreach (var itemFile in files)
                 {
                     var filterPath = itemFile.FilterPath == "Files/" ? "/" : itemFile.FilterPath;
-                    BsonFileManagerModel file = collectionId == null ? _db.getFileByPathSync(dbName, filterPath.Replace("\\", "/") + itemFile.Name) : _db.getFileByPathSync(dbName, filterPath.Replace("\\", "/") + itemFile.Name, collectionId);
+                    BsonFileManagerModel file = null;
+                    if (itemFile.Id != null)
+                        file = collectionId == null ? await _db.getFileById(dbName, itemFile.Id) : await _db.getFileById(dbName, itemFile.Id, collectionId);
+                    else
+                        file = collectionId == null ? _db.getFileByPathSync(dbName, filterPath.Replace("\\", "/") + itemFile.Name) : _db.getFileByPathSync(dbName, filterPath.Replace("\\", "/") + itemFile.Name, collectionId);
                     string currentFilePath = currentTargetPath;
                     if (!itemFile.IsFile)
                     {
