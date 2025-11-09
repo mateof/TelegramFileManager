@@ -49,7 +49,7 @@ namespace TelegramDownloader.Services
 
         public bool isFileDownloaded(String path)
         {
-            return downloadModels.Any(x => x.path == path);
+            return downloadModels.Any(x => x.path == path && x.state == StateTask.Working || x.state == StateTask.Pending || x.state == StateTask.Paused);
         }
 
         public bool isUploading()

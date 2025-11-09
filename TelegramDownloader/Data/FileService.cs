@@ -314,7 +314,7 @@ namespace TelegramDownloader.Data
             String filePath = System.IO.Path.Combine(TEMPDIR, "_temp", id);
             if (File.Exists(filePath))
             {
-                return new FileStream(filePath, FileMode.Open, FileAccess.Read);
+                return new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
             }
             return null;
         }

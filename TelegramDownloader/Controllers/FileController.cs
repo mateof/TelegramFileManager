@@ -38,12 +38,16 @@ namespace TelegramDownloader.Controllers
         public PhysicalFileProvider operation;
         public string basePath;
         string root = FileService.RELATIVELOCALDIR;
+
+        private static Mutex downloadMutex = new Mutex();
+        private static SemaphoreSlim semaphoreSlim = new SemaphoreSlim(1);
         IDbService _db { get; set; }
         ITelegramService _ts { get; set; }
         IFileService _fs { get; set; }
         TransactionInfoService _tis { get; set; }
+        private ILogger<IFileService> _logger { get; set; }
 
-        public FileController(IDbService db, ITelegramService ts, IFileService fs, TransactionInfoService tis)
+        public FileController(IDbService db, ITelegramService ts, IFileService fs, TransactionInfoService tis, ILogger<IFileService> logger)
         {
             this.basePath = Environment.CurrentDirectory;
             if (!System.IO.Directory.Exists(Path.Combine(basePath, root)))
@@ -54,6 +58,7 @@ namespace TelegramDownloader.Controllers
             _ts = ts;
             _db = db;
             _tis = tis;
+            _logger = logger;
             
             this.operation = new PhysicalFileProvider();
             this.operation.RootFolder(Path.Combine(basePath, root));
@@ -278,25 +283,32 @@ namespace TelegramDownloader.Controllers
             {
                 return new ObjectResult("") { StatusCode = (int)HttpStatusCode.NotFound };
             }
-            var file = _fs.ExistFileIntempFolder($"{idChannel}-{(dbFile.MessageId != null ? dbFile.MessageId.ToString() : dbFile.Id)}-{id}");
+            
             dbFile.Name = $"{idChannel}-{(dbFile.MessageId != null ? dbFile.MessageId.ToString() : dbFile.Id)}-{id}";
             String path = Path.Combine(FileService.TEMPDIR, "_temp");
             String filePath = Path.Combine(path, dbFile.Name);
-            if (file == null && !_tis.isFileDownloaded(path))
+            var mutexState = semaphoreSlim.Wait(10000);
+            // var mutexState = downloadMutex.WaitOne();
+            FileStream? file = null;
+            if (!mutexState)
             {
-                
-                await _fs.downloadFile(idChannel, new List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> { dbFile.toFileManagerContent() }, path);
-                //TL.Message idM = await _ts.getMessageFile(idChannel, Convert.ToInt32(dbFile.MessageId));
-                //ChatMessages cm = new ChatMessages();
-                //cm.message = idM;
-                //file = new FileStream(System.IO.Path.Combine(FileService.TEMPDIR, "_temp", $"{idChannel}-{idFile}-{id}"), FileMode.Create, FileAccess.ReadWrite);
-                //DownloadModel dm = new DownloadModel();
-                //dm.tis = _tis;
-                //dm.channelName = _ts.getChatName(Convert.ToInt64(idChannel));
-                //_tis.addToDownloadList(dm);
-                //await _ts.DownloadFileAndReturn(cm, file, model: dm);
-                //file.Position = 0;
+                _logger.LogWarning("Could not acquire download mutex in 10 seconds for file {fileName}", dbFile.Name);
+                return StatusCode(500, "Could not acquire download mutex in 10 seconds");
             }
+
+            file = _fs.ExistFileIntempFolder(dbFile.Name);
+            var isFileDownloaded = _tis.isFileDownloaded(filePath);
+            if (!isFileDownloaded)
+                if ((file == null) || (file != null && file.Length < dbFile.Size))
+                {
+                    _logger.LogWarning("Stream Downloading file {fileName}", dbFile.Name);
+                    await _fs.downloadFile(idChannel, new List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> { dbFile.toFileManagerContent() }, path);
+                    Thread.Sleep(4000);
+                    file = _fs.ExistFileIntempFolder(dbFile.Name);
+                }
+
+            if (mutexState)
+                semaphoreSlim.Release();
 
             if (file == null)
             {
@@ -304,8 +316,21 @@ namespace TelegramDownloader.Controllers
             }
 
             Response.Headers["Content-Disposition"] = $"inline; filename=\"{HttpUtility.UrlEncode(fileName)}\"";
-            
-            return new FileStreamResult(file, mimeType);
+
+            try
+            {
+                return new FileStreamResult(file, mimeType)
+                {
+                    FileDownloadName = fileName,
+                    EnableRangeProcessing = true
+
+                };
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogInformation("❌ El cliente cerró la conexión al descargar el archivo {fileName}.", fileName);
+                return StatusCode(StatusCodes.Status499ClientClosedRequest);
+            }
         }
 
         [Route("strm")]
