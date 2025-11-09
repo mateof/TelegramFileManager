@@ -226,12 +226,12 @@ namespace TelegramDownloader.Data
   };
         public static List<string> refreshChannelList = new List<string>();
 
-        private PhysicalFileProvider operation = new PhysicalFileProvider();
-        private ITelegramService _ts { get; set; }
-        private IDbService _db { get; set; }
-        private ILogger<IFileService> _logger { get; set; }
-        private TransactionInfoService _tis { get; set; }
-        private ToastService _toastService { get; set;  }
+        protected PhysicalFileProvider operation = new PhysicalFileProvider();
+        protected ITelegramService _ts { get; set; }
+        protected IDbService _db { get; set; }
+        protected ILogger<IFileService> _logger { get; set; }
+        protected TransactionInfoService _tis { get; set; }
+        protected ToastService _toastService { get; set;  }
         private static Mutex refreshMutex = new Mutex();
 
         const int MaxSize = 1024 * 1024 * 1000; // 1GB 
@@ -699,7 +699,7 @@ namespace TelegramDownloader.Data
 
         }
 
-        public async Task downloadFile(string dbName, List<FileManagerDirectoryContent> files, string targetPath, string? collectionId = null, string? channelId = null)
+        public virtual async Task downloadFile(string dbName, List<FileManagerDirectoryContent> files, string targetPath, string? collectionId = null, string? channelId = null)
         {
             NotificationModel nm = new NotificationModel();
             try
@@ -761,7 +761,7 @@ namespace TelegramDownloader.Data
 
         }
 
-        private async Task downloadSplitFiles(FileManagerDirectoryContent itemFile, BsonFileManagerModel file, string currentFilePath, string dbName)
+        public virtual async Task downloadSplitFiles(FileManagerDirectoryContent itemFile, BsonFileManagerModel file, string currentFilePath, string dbName)
         {
             int i = 1;
             List<string> splitPaths = new List<string>();
@@ -804,7 +804,7 @@ namespace TelegramDownloader.Data
         {
 
         }
-        private async Task downloadFromTelegram(string dbName, int messageId, string destPath, BsonFileManagerModel file = null, bool shouldWait = false, string path = null)
+        public virtual async Task downloadFromTelegram(string dbName, int messageId, string destPath, BsonFileManagerModel file = null, bool shouldWait = false, string path = null)
         {
             DownloadModel model = new DownloadModel();
             model.path = path ?? destPath;

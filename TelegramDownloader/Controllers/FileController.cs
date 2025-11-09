@@ -6,21 +6,11 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 
 using Syncfusion.Blazor.FileManager;
-using Syncfusion.Blazor.Inputs;
 using Syncfusion.EJ2.FileManager.Base;
 using Syncfusion.EJ2.FileManager.PhysicalFileProvider;
-using Syncfusion.EJ2.Notifications;
-using System;
-using System.Collections.Generic;
-using System.IO;
 using System.IO.Compression;
-using System.Linq;
 using System.Net;
-using System.Net.Http.Headers;
-using System.Runtime.CompilerServices;
-using System.Runtime.Serialization.Formatters.Binary;
 using System.Web;
-using System.Xml.Linq;
 using TelegramDownloader.Data;
 using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
@@ -39,7 +29,6 @@ namespace TelegramDownloader.Controllers
         public string basePath;
         string root = FileService.RELATIVELOCALDIR;
 
-        private static Mutex downloadMutex = new Mutex();
         private static SemaphoreSlim semaphoreSlim = new SemaphoreSlim(1);
         IDbService _db { get; set; }
         ITelegramService _ts { get; set; }
@@ -288,7 +277,6 @@ namespace TelegramDownloader.Controllers
             String path = Path.Combine(FileService.TEMPDIR, "_temp");
             String filePath = Path.Combine(path, dbFile.Name);
             var mutexState = semaphoreSlim.Wait(10000);
-            // var mutexState = downloadMutex.WaitOne();
             FileStream? file = null;
             if (!mutexState)
             {
