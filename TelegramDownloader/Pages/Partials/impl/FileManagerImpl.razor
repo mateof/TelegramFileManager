@@ -17,7 +17,12 @@
 @inject NavigationManager MyNavigationManager;
 
 
-<SfFileManager ID="remotefm" @ref="fm" TValue="FileManagerDirectoryContent" ShowThumbnail="false" SelectedItemsChanged="itemsChanged" AllowDragAndDrop="false" EnablePersistence="false" EnableVirtualization="@hasVirtualScroll">
+<SfFileManager ID="remotefm" @ref="fm" TValue="FileManagerDirectoryContent"
+    ShowThumbnail="false"
+    SelectedItemsChanged="itemsChanged"
+    AllowDragAndDrop="false"
+    EnablePersistence="false"
+    EnableVirtualization="@hasVirtualScroll">
 
 
     <FileManagerEvents TValue="FileManagerDirectoryContent"
@@ -155,6 +160,7 @@
     {
         if (args.FileDetails == null || !args.FileDetails.IsFile)
             return;
+        args.Cancel = true;
         if (args != null && args.FileDetails != null && args.FileDetails.IsFile && isAudioFile(args.FileDetails.Type.ToLower()))
         {
             await playAudio(args);
@@ -259,7 +265,7 @@
     private string getTempFileMediaUrl(string idFile, String name)
     {
         string localdir = MyNavigationManager.BaseUri;
-        return new System.Uri(Path.Combine(localdir, "api/file/GetFileByTfmId", name).Replace("\\", "/") + $"?idChannel={(isShared ? bsi.ChannelId : id)}&idFile={idFile}").AbsoluteUri;
+        return new System.Uri(Path.Combine(localdir, "api/file/GetFileByTfmIdNow", name).Replace("\\", "/") + $"?idChannel={(isShared ? bsi.ChannelId : id)}&idFile={idFile}").AbsoluteUri;
     }
 
     public async Task toolBarClicked(ToolbarClickEventArgs<FileManagerDirectoryContent> args)

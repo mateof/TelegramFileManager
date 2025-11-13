@@ -262,6 +262,36 @@ namespace TelegramDownloader.Controllers
             };
         }
 
+        [Route("GetFileByTfmIdNow/{id}")]
+        public async Task<IActionResult> GetFileByTfmIdNow(string id, [FromQuery] string idChannel, [FromQuery] string idFile)
+        {
+            var fileName = id;
+            var mimeType = FileService.getMimeType(id.Split(".").Last());
+            var dbFile = await _fs.getItemById(idChannel, idFile);
+            if (dbFile == null)
+            {
+                return new ObjectResult("") { StatusCode = (int)HttpStatusCode.NotFound };
+            }
+            var file = _fs.ExistFileIntempFolder($"{idChannel}-{dbFile.MessageId}-{id}");
+            if (file == null)
+            {
+                TL.Message idM = await _ts.getMessageFile(idChannel, Convert.ToInt32(dbFile.MessageId));
+                ChatMessages cm = new ChatMessages();
+                cm.message = idM;
+                file = new FileStream(System.IO.Path.Combine(FileService.TEMPDIR, "_temp", $"{idChannel}-{idFile}-{id}"), FileMode.Create, FileAccess.ReadWrite);
+                DownloadModel dm = new DownloadModel();
+                dm.tis = _tis;
+                dm.channelName = _ts.getChatName(Convert.ToInt64(idChannel));
+                _tis.addToDownloadList(dm);
+                await _ts.DownloadFileAndReturn(cm, file, model: dm);
+                file.Position = 0;
+            }
+
+            Response.Headers["Content-Disposition"] = $"inline; filename=\"{HttpUtility.UrlEncode(fileName)}\"";
+
+            return new FileStreamResult(file, mimeType);
+        }
+
         [Route("GetFileByTfmId/{id}")]
         public async Task<IActionResult> GetFileByTfmId(string id, [FromQuery] string idChannel, [FromQuery] string idFile)
         {
