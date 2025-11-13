@@ -8,14 +8,16 @@
 @inject IFileService fs;
 @inject ITelegramService ts;
 @inject ILogger<FileManager> Logger;
+@inject NavigationManager NavManager
+
 
 
 
 <SfFileManager @ref="FileManager" ID="localfm" TValue="FileManagerDirectoryContent">
-    <FileManagerAjaxSettings Url=@($"/api/file/FileOperations")
-    UploadUrl="/api/file/Upload"
-    DownloadUrl="/api/file/Download"
-    GetImageUrl="/api/file/GetImage">
+    <FileManagerAjaxSettings Url="@FileOperationsUrl"
+                             UploadUrl="@UploadUrl"
+                             DownloadUrl="@DownloadUrl"
+                             GetImageUrl="@GetImageUrl">
     </FileManagerAjaxSettings>
     <FileManagerSearchSettings FilterDelay="1200"></FileManagerSearchSettings>
     <FileManagerUploadSettings MaxFileSize="@(long.MaxValue)" AutoUpload="true"></FileManagerUploadSettings>
@@ -49,6 +51,13 @@
     private Modals.UploadToTelegramModal Modal { get; set; }
     private Modals.FileUploadModal ModalUpSer { get; set; }
     private bool isMyChannel = false;
+
+    private string BaseUrl => NavManager.BaseUri.TrimEnd('/');
+
+    private string FileOperationsUrl => $"{BaseUrl}/api/file/FileOperations";
+    private string UploadUrl => $"{BaseUrl}/api/file/Upload";
+    private string DownloadUrl => $"{BaseUrl}/api/file/Download";
+    private string GetImageUrl => $"{BaseUrl}/api/file/GetImage";
 
 
     public List<ToolBarItemModel> Items = new List<ToolBarItemModel>(){
