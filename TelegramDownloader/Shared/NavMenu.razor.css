@@ -50,7 +50,7 @@
     color: white;
 }
 
-@media (min-width: 641px) {
+@media (min-width: 2048px) {
     .navbar-toggler {
         display: none;
     }
@@ -65,4 +65,10 @@
     overflow-y: auto;
     height: 94vh;
     overflow-x: hidden;
+}
+
+@media (min-width: 768px) and (max-width: 2048px) {
+    .navbar-toggler {
+        display: block !important; /* mostrar botón hamburguesa */
+    }
 }

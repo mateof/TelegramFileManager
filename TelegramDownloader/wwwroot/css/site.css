@@ -106,3 +106,13 @@ a, .btn-link {
 .download-btn {
     margin-bottom: 2% !important;
 }
+
+/*@media (min-width: 768px) and (max-width: 1024px) {
+    .sidebar {
+        display: none;
+    }
+
+    .content {
+        width: 100%;
+    }
+}*/
