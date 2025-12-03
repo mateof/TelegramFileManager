@@ -19,6 +19,7 @@ namespace TelegramDownloader.Models
         public StateTask state { get; set; } = StateTask.Pending;
         public DateTime creationDate { get; set; } = DateTime.Now;
         public DateTime endnDate { get; set; } = DateTime.Now;
+        public string _internalId { get; set; } = Guid.NewGuid().ToString();
         public string id {  get; set; }
         public bool isUpload {  get; set; }
         public List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files { get; set; }
@@ -129,6 +130,7 @@ namespace TelegramDownloader.Models
         public Mutex mutex = new Mutex();
         public event EventHandler<DownloadEventArgs> EventChanged;
         public event EventHandler EventStatechanged;
+        public string _internalId { get; set; } = Guid.NewGuid().ToString();
         public string id = Guid.NewGuid().ToString();
         public string action { get; set; } = "Download";
         public StateTask state { get; set; } = StateTask.Working;
@@ -218,6 +220,7 @@ namespace TelegramDownloader.Models
     {
         public Mutex mutex = new Mutex();
         public event EventHandler<UploadEventArgs> EventChanged;
+        public string _internalId { get; set; } = Guid.NewGuid().ToString();
         public Guid id = Guid.NewGuid();
         public string action { get; set; } = "Upload";
         public StateTask state { get; set; } = StateTask.Working;

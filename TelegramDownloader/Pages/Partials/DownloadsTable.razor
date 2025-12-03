@@ -12,11 +12,12 @@ DataProvider="DownloadsDataProvider"
 AllowFiltering="false"
 AllowPaging="true"
 AllowSorting="false"
-Responsive="true">
+Responsive="true"
+ItemsPropertyName="_internalId">
 
-    <GridColumn TItem="DownloadModel" HeaderText="ID" PropertyName="id" SortString="id" SortKeySelector="item => item.id" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
+ @*    <GridColumn TItem="DownloadModel" HeaderText="ID" PropertyName="id" SortString="id" SortKeySelector="item => item.id" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
         @context.id
-    </GridColumn>
+    </GridColumn> *@
     <GridColumn TItem="DownloadModel" HeaderText="File" PropertyName="name"  HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
         @context.name
     </GridColumn>
