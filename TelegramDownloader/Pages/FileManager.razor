@@ -80,7 +80,18 @@
     NotificationModel nm = new NotificationModel();
 
 
-    protected override async Task OnInitializedAsync()
+    private string _previousId;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_previousId != id)
+        {
+            _previousId = id;
+            await LoadDataAsync();
+        }
+    }
+
+    private async Task LoadDataAsync()
     {
         try
         {
@@ -93,7 +104,7 @@
         {
             Logger.LogError(ex, "Error on GetSharedInfoById");
             nm.sendMessage("Error", "Error on GetSharedInfoById", NotificationTypes.Error);
-        }     
+        }
     }
 
     public async Task openWebDavInfo()

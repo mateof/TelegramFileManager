@@ -1,49 +1,49 @@
-﻿@using TelegramDownloader.Models
+@using TelegramDownloader.Models
 @using TelegramDownloader.Services
 
-<Modal @ref="Modal" title="Upload Info" Size="ModalSize.ExtraLarge">
+<Modal @ref="Modal" title="Download Info" Size="ModalSize.ExtraLarge">
     <BodyTemplate>
-        @if (uploadModel != null)
+        @if (downloadModel != null)
         {
             <table class="table table-striped">
                 <tbody>
                     <tr>
                         <th scope="row"><i class="bi bi-file-earmark"></i> File Name</th>
-                        <td>@uploadModel.name</td>
+                        <td>@downloadModel.name</td>
                     </tr>
                     <tr>
                         <th scope="row"><i class="bi bi-folder"></i> Path</th>
-                        <td>@uploadModel.path</td>
+                        <td>@downloadModel.path</td>
                     </tr>
                     <tr>
                         <th scope="row"><i class="bi bi-chat"></i> Channel</th>
-                        <td>@uploadModel.chatName</td>
+                        <td>@downloadModel.channelName</td>
                     </tr>
                     <tr>
                         <th scope="row"><i class="bi bi-hdd"></i> Size</th>
-                        <td>@uploadModel._sizeString</td>
+                        <td>@downloadModel._sizeString</td>
                     </tr>
                     <tr>
-                        <th scope="row"><i class="bi bi-cloud-upload"></i> Transmitted</th>
-                        <td>@uploadModel._transmittedString</td>
+                        <th scope="row"><i class="bi bi-cloud-download"></i> Transmitted</th>
+                        <td>@downloadModel._transmittedString</td>
                     </tr>
                     <tr>
                         <th scope="row"><i class="bi bi-flag"></i> State</th>
                         <td>
-                            <span class="badge @GetStateBadgeClass(uploadModel.state)">@uploadModel.state</span>
+                            <span class="badge @GetStateBadgeClass(downloadModel.state)">@downloadModel.state</span>
                         </td>
                     </tr>
                     <tr>
                         <th scope="row"><i class="bi bi-calendar-plus"></i> Creation Date</th>
-                        <td>@uploadModel.creationDate.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                        <td>@downloadModel.creationDate.ToString("yyyy-MM-dd HH:mm:ss")</td>
                     </tr>
                     <tr>
                         <th scope="row"><i class="bi bi-play-circle"></i> Start Date</th>
-                        <td>@(uploadModel.startDate != default ? uploadModel.startDate.ToString("yyyy-MM-dd HH:mm:ss") : "-")</td>
+                        <td>@(downloadModel.startDate != default ? downloadModel.startDate.ToString("yyyy-MM-dd HH:mm:ss") : "-")</td>
                     </tr>
                     <tr>
                         <th scope="row"><i class="bi bi-stop-circle"></i> End Date</th>
-                        <td>@(uploadModel.endnDate != default && uploadModel.state == StateTask.Completed ? uploadModel.endnDate.ToString("yyyy-MM-dd HH:mm:ss") : "-")</td>
+                        <td>@(downloadModel.endnDate != default && downloadModel.state == StateTask.Completed ? downloadModel.endnDate.ToString("yyyy-MM-dd HH:mm:ss") : "-")</td>
                     </tr>
                     <tr>
                         <th scope="row"><i class="bi bi-stopwatch"></i> Duration</th>
@@ -61,13 +61,13 @@
 
 @code {
     [Parameter]
-    public UploadModel uploadModel { get; set; }
+    public DownloadModel downloadModel { get; set; }
     private Modal Modal = default!;
 
-    public async Task ShowModal(UploadModel uploadModel)
+    public async Task ShowModal(DownloadModel downloadModel)
     {
-        this.uploadModel = uploadModel;
-        if (this.uploadModel != null)
+        this.downloadModel = downloadModel;
+        if (this.downloadModel != null)
         {
             await Modal.ShowAsync();
         }
@@ -75,14 +75,14 @@
 
     private string GetDuration()
     {
-        if (uploadModel.startDate == default)
+        if (downloadModel.startDate == default)
             return "-";
 
-        DateTime endTime = uploadModel.state == StateTask.Completed && uploadModel.endnDate != default
-            ? uploadModel.endnDate
+        DateTime endTime = downloadModel.state == StateTask.Completed && downloadModel.endnDate != default
+            ? downloadModel.endnDate
             : DateTime.Now;
 
-        TimeSpan duration = endTime - uploadModel.startDate;
+        TimeSpan duration = endTime - downloadModel.startDate;
 
         if (duration.TotalHours >= 1)
             return $"{(int)duration.TotalHours}h {duration.Minutes}m {duration.Seconds}s";
@@ -93,18 +93,18 @@
 
     private string GetAverageSpeed()
     {
-        if (uploadModel.startDate == default || uploadModel._transmitted == 0)
+        if (downloadModel.startDate == default || downloadModel._transmitted == 0)
             return "-";
 
-        DateTime endTime = uploadModel.state == StateTask.Completed && uploadModel.endnDate != default
-            ? uploadModel.endnDate
+        DateTime endTime = downloadModel.state == StateTask.Completed && downloadModel.endnDate != default
+            ? downloadModel.endnDate
             : DateTime.Now;
 
-        double seconds = (endTime - uploadModel.startDate).TotalSeconds;
+        double seconds = (endTime - downloadModel.startDate).TotalSeconds;
         if (seconds <= 0)
             return "-";
 
-        double bytesPerSecond = uploadModel._transmitted / seconds;
+        double bytesPerSecond = downloadModel._transmitted / seconds;
         return $"{HelperService.SizeSuffix((long)bytesPerSecond)}/s";
     }
 

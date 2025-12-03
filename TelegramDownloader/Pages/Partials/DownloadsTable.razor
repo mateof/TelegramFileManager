@@ -1,6 +1,7 @@
 ﻿@using TelegramDownloader.Data
 @using TelegramDownloader.Models
 @using TelegramDownloader.Services
+@using TelegramDownloader.Pages.Modals.InfoModals
 
 @inject TransactionInfoService tis
 
@@ -33,7 +34,12 @@ Responsive="true">
     <GridColumn TItem="DownloadModel" HeaderText="Actions">
         @if (context.state == StateTask.Working && !isPending)
         {
-            <td><button class="btn btn-danger" @onclick="() => cancel(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Cancel task"><i class="bi bi-x"></i></button></td>
+            <td>
+                <div class="btn-group" role="group">
+                    <button class="btn btn-danger" @onclick="() => cancel(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Cancel task"><i class="bi bi-x"></i></button>
+                    <button class="btn btn-info" @onclick="() => infoModal.ShowModal(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Show Info"><i class="bi bi-info"></i></button>
+                </div>
+            </td>
         }
 
         @if (context.state == StateTask.Canceled || context.state == StateTask.Error)
@@ -44,14 +50,24 @@ Responsive="true">
                         <button class="btn btn-info" @onclick="() => retry(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="retry task"><i class="bi bi-arrow-clockwise"></i></button>
                     }
                     <button class="btn btn-danger" @onclick="() => deleteDownload(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="delete task"><i class="bi bi-trash"></i></button>
+                    <button class="btn btn-info" @onclick="() => infoModal.ShowModal(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Show Info"><i class="bi bi-info"></i></button>
                 </div>
             </td>
         }
-        @if(isPending) 
+        @if(isPending)
         {
             <td>
                 <div class="btn-group" role="group">
                     <button class="btn btn-danger" @onclick="() => deleteDownload(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="delete task"><i class="bi bi-trash"></i></button>
+                    <button class="btn btn-info" @onclick="() => infoModal.ShowModal(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Show Info"><i class="bi bi-info"></i></button>
+                </div>
+            </td>
+        }
+        @if(context.state == StateTask.Completed)
+        {
+            <td>
+                <div class="btn-group" role="group">
+                    <button class="btn btn-info" @onclick="() => infoModal.ShowModal(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Show Info"><i class="bi bi-info"></i></button>
                 </div>
             </td>
         }
@@ -59,11 +75,14 @@ Responsive="true">
 
 </Grid>
 
+<TelegramDownloader.Pages.Modals.InfoModals.DownloadFileInfoModal @ref="infoModal"></TelegramDownloader.Pages.Modals.InfoModals.DownloadFileInfoModal>
+
 @code {
     [Parameter]
     public bool isPending { get; set; } = false;
     public static List<DownloadModel> ldm = new List<DownloadModel>();
     BlazorBootstrap.Grid<DownloadModel> grid = default!;
+    DownloadFileInfoModal infoModal { get; set; }
 
     protected override async Task OnInitializedAsync()
     {

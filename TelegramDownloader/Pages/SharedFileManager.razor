@@ -43,11 +43,21 @@
     BsonSharedInfoModel bsi { get; set; }
     public string chatName { get; set; }
     FileManagerImpl fmi { get; set; }
+    private string _previousId;
 
     NotificationModel nm = new NotificationModel();
 
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_previousId != id)
+        {
+            _previousId = id;
+            await LoadDataAsync();
+        }
+    }
+
+    private async Task LoadDataAsync()
     {
         try
         {
