@@ -243,9 +243,21 @@ namespace TelegramDownloader.Controllers
                 TL.Message idM = await _ts.getMessageFile(idChannel, Convert.ToInt32(idFile));
                 ChatMessages cm = new ChatMessages();
                 cm.message = idM;
-                file = new FileStream(System.IO.Path.Combine(FileService.TEMPDIR, "_temp", $"{idChannel}-{idFile}-{id}"), FileMode.Create, FileAccess.ReadWrite);
+                string filePath = System.IO.Path.Combine(FileService.TEMPDIR, "_temp", $"{idChannel}-{idFile}-{id}");
+                file = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite);
                 DownloadModel dm = new DownloadModel();
                 dm.tis = _tis;
+                dm.startDate = DateTime.Now;
+                dm.path = filePath;
+                if (cm.message is Message msgBase)
+                {
+                    if (msgBase.media is MessageMediaDocument mediaDoc &&
+                        mediaDoc.document is TL.Document doc)
+                    {
+                        dm._size = doc.size;
+                        dm.name = doc.Filename;
+                    }
+                }
                 dm.channelName = _ts.getChatName(Convert.ToInt64(idChannel));
                 _tis.addToDownloadList(dm);
                 await _ts.DownloadFileAndReturn(cm, file, model: dm);
@@ -278,9 +290,14 @@ namespace TelegramDownloader.Controllers
                 TL.Message idM = await _ts.getMessageFile(idChannel, Convert.ToInt32(dbFile.MessageId));
                 ChatMessages cm = new ChatMessages();
                 cm.message = idM;
-                file = new FileStream(System.IO.Path.Combine(FileService.TEMPDIR, "_temp", $"{idChannel}-{idFile}-{id}"), FileMode.Create, FileAccess.ReadWrite);
+                String filePath = System.IO.Path.Combine(FileService.TEMPDIR, "_temp", $"{idChannel}-{idFile}-{id}");
+                file = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite);
                 DownloadModel dm = new DownloadModel();
                 dm.tis = _tis;
+                dm.startDate = DateTime.Now;
+                dm.path = filePath;
+                dm.name = dbFile.Name;
+                dm._size = dbFile.Size;
                 dm.channelName = _ts.getChatName(Convert.ToInt64(idChannel));
                 _tis.addToDownloadList(dm);
                 await _ts.DownloadFileAndReturn(cm, file, model: dm);

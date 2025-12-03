@@ -89,11 +89,22 @@
 
     };
 
-    // protected override async Task OnParametersSetAsync()
-    // {
-    //     await OnInitializedAsync();
-    //     StateHasChanged();
-    // }
+    private string _previousId;
+    private bool _initialized = false;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_previousId != id)
+        {
+            _previousId = id;
+            await LoadDataAsync();
+            if (_initialized && fm != null)
+            {
+                await fm.RefreshFilesAsync();
+            }
+            _initialized = true;
+        }
+    }
 
     private void LoadFiles(InputFileChangeEventArgs e)
     {
@@ -101,14 +112,27 @@
     }
 
 
-    protected override async Task OnInitializedAsync()
+    private async Task LoadDataAsync()
     {
         hasVirtualScroll = GeneralConfigStatic.config.hasFileManagerVirtualScroll;
         if (!isShared)
         {
             isMyChannel = ts.isMyChat(Convert.ToInt64(id));
+
+            // Reset Items to base items
+            Items = new List<ToolBarItemModel>(){
+                new ToolBarItemModel() { Name = "Download" },
+                new ToolBarItemModel() { Name = "SortBy" },
+                new ToolBarItemModel() { Name = "Refresh" },
+                new ToolBarItemModel() { Name = "DownloadServer", Text="Download To Local", TooltipText="Download To local", PrefixIcon="e-icons e-download" },
+                new ToolBarItemModel() { Name = "Selection" },
+                new ToolBarItemModel() { Name = "View" },
+                new ToolBarItemModel() { Name = "Details" },
+                new ToolBarItemModel() { Name = "UrlMedia", Text = "Url Media", TooltipText = "Url Media", PrefixIcon = "bi bi-collection-play-fill", Visible = false },
+                new ToolBarItemModel() { Name = "Strm", Text = "Strm", TooltipText = "Strm folder", PrefixIcon = "bi bi-collection-play-fill", Visible = false }
+            };
+
             if (isMyChannel)
-                // Items = Items.Prepend(new ToolBarItemModel() { Name = "NewFolder" }).ToList();
                 Items.AddRange(new List<ToolBarItemModel>(){
                         new ToolBarItemModel() { Name = "NewFolder" },
                         new ToolBarItemModel() { Name = "Cut" },

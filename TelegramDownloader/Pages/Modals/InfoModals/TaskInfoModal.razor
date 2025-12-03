@@ -1,0 +1,129 @@
+@using TelegramDownloader.Models
+@using TelegramDownloader.Services
+
+<Modal @ref="Modal" title="Task Info" Size="ModalSize.ExtraLarge">
+    <BodyTemplate>
+        @if (taskModel != null)
+        {
+            <table class="table table-striped">
+                <tbody>
+                    <tr>
+                        <th scope="row"><i class="bi bi-hash"></i> Task ID</th>
+                        <td>@taskModel.id</td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><i class="bi bi-folder"></i> From Path</th>
+                        <td>@taskModel.fromPath</td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><i class="bi bi-folder-symlink"></i> To Path</th>
+                        <td>@taskModel.toPath</td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><i class="bi bi-arrow-up-circle"></i> Type</th>
+                        <td>@(taskModel.isUpload ? "Upload" : "Download")</td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><i class="bi bi-flag"></i> State</th>
+                        <td>
+                            <span class="badge @GetStateBadgeClass(taskModel.state)">@taskModel.state</span>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><i class="bi bi-files"></i> Total Files</th>
+                        <td>@taskModel.total</td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><i class="bi bi-check2-circle"></i> Completed Files</th>
+                        <td>@taskModel.executed</td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><i class="bi bi-hdd"></i> Total Size</th>
+                        <td>@HelperService.SizeSuffix(taskModel.totalSize)</td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><i class="bi bi-cloud-arrow-up"></i> Executed Size</th>
+                        <td>@HelperService.SizeSuffix(taskModel.executedSize)</td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><i class="bi bi-calendar-plus"></i> Creation Date</th>
+                        <td>@taskModel.creationDate.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><i class="bi bi-stop-circle"></i> End Date</th>
+                        <td>@(taskModel.endnDate != default && taskModel.state == StateTask.Completed ? taskModel.endnDate.ToString("yyyy-MM-dd HH:mm:ss") : "-")</td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><i class="bi bi-stopwatch"></i> Duration</th>
+                        <td>@GetDuration()</td>
+                    </tr>
+                    <tr>
+                        <th scope="row"><i class="bi bi-speedometer2"></i> Average Speed</th>
+                        <td>@GetAverageSpeed()</td>
+                    </tr>
+                </tbody>
+            </table>
+        }
+    </BodyTemplate>
+</Modal>
+
+@code {
+    [Parameter]
+    public InfoDownloadTaksModel taskModel { get; set; }
+    private Modal Modal = default!;
+
+    public async Task ShowModal(InfoDownloadTaksModel taskModel)
+    {
+        this.taskModel = taskModel;
+        if (this.taskModel != null)
+        {
+            await Modal.ShowAsync();
+        }
+    }
+
+    private string GetDuration()
+    {
+        DateTime endTime = taskModel.state == StateTask.Completed && taskModel.endnDate != default
+            ? taskModel.endnDate
+            : DateTime.Now;
+
+        TimeSpan duration = endTime - taskModel.creationDate;
+
+        if (duration.TotalHours >= 1)
+            return $"{(int)duration.TotalHours}h {duration.Minutes}m {duration.Seconds}s";
+        if (duration.TotalMinutes >= 1)
+            return $"{duration.Minutes}m {duration.Seconds}s";
+        return $"{duration.Seconds}s";
+    }
+
+    private string GetAverageSpeed()
+    {
+        if (taskModel.executedSize == 0)
+            return "-";
+
+        DateTime endTime = taskModel.state == StateTask.Completed && taskModel.endnDate != default
+            ? taskModel.endnDate
+            : DateTime.Now;
+
+        double seconds = (endTime - taskModel.creationDate).TotalSeconds;
+        if (seconds <= 0)
+            return "-";
+
+        double bytesPerSecond = taskModel.executedSize / seconds;
+        return $"{HelperService.SizeSuffix((long)bytesPerSecond)}/s";
+    }
+
+    private string GetStateBadgeClass(StateTask state)
+    {
+        return state switch
+        {
+            StateTask.Completed => "bg-success",
+            StateTask.Working => "bg-primary",
+            StateTask.Error => "bg-danger",
+            StateTask.Canceled => "bg-warning",
+            StateTask.Pending => "bg-secondary",
+            StateTask.Paused => "bg-info",
+            _ => "bg-secondary"
+        };
+    }
+}
