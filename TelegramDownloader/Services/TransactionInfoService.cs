@@ -9,11 +9,12 @@ namespace TelegramDownloader.Services
 {
     public class TransactionInfoService
     {
-        
+
 
         public bool isPauseDownloads = false;
         public event EventHandler<EventArgs> EventChanged;
         public event EventHandler TaskEventChanged;
+        public event EventHandler HistorykEventChanged;
         public List<DownloadModel> downloadModels = new List<DownloadModel>();
         public List<DownloadModel> pendingDownloadModels = new List<DownloadModel>();
         public List<UploadModel> uploadModels = new List<UploadModel>();
@@ -22,11 +23,17 @@ namespace TelegramDownloader.Services
         public String uploadSpeed = "0 KB/s";
         public long bytesUploaded = 0;
         public long bytesDownloaded = 0;
+        public List<SpeedHistory> downloadSpeedsHistory = new List<SpeedHistory>();
+        public List<SpeedHistory> uploadSpeedsHistory = new List<SpeedHistory>();
+        private int speedHistoryCount = 0;
 
         private static Mutex PendingDownloadMutex = new Mutex();
         private static Mutex PendingUploadInfoTaskMutex = new Mutex();
         private static Mutex DownloadBytesMutex = new Mutex();
         private static Mutex UploadBytesMutex = new Mutex();
+
+        public static int MAX_SPEED_HISTORY_SECONDS = 600; // 10 minutes
+        public static int INTERVAL_SPEED_HISTORY_SECONDS = 3;
 
         private Timer aTimer;
         private readonly ILogger<IFileService> _logger;
@@ -37,9 +44,16 @@ namespace TelegramDownloader.Services
         }
         public bool isWorking()
         {
-            if (!(downloadModels.Where(x => x.state == StateTask.Working).Count() > 0
-                || uploadModels.Where(x => x.state == StateTask.Working).Count() > 0))
+            if (!(isDownloading() || isUploading()))
             {
+                //if (!isDownloading())
+                //{
+                //    resetDownloadBytes();
+                //}
+                //if (!isUploading())
+                //{
+                //    resetUploadBytes();
+                //}
                 stopTimer();
                 return false;
             }
@@ -54,12 +68,12 @@ namespace TelegramDownloader.Services
 
         public bool isUploading()
         {
-            return uploadModels.Where(x => x.state == StateTask.Working).Count() > 0;
+            return uploadModels.Any(x => x.state == StateTask.Working);
         }
 
         public bool isDownloading()
         {
-            return downloadModels.Where(x => x.state == StateTask.Working).Count() > 0;
+            return downloadModels.Any(x => x.state == StateTask.Working);
         }
 
         public void startTimer()
@@ -80,7 +94,7 @@ namespace TelegramDownloader.Services
 
         public void stopTimer()
         {
-            if (aTimer != null && aTimer.Enabled)
+            if (aTimer != null && aTimer.Enabled && canStopTimer())
             {
                 aTimer.Stop();
                 resetUploadBytes();
@@ -96,8 +110,33 @@ namespace TelegramDownloader.Services
                 setDownloadSpeed(HelperService.SizeSuffixPerTime(bytesDownloaded));
             if (bytesUploaded > 0)
                 setUploadSpeed(HelperService.SizeSuffixPerTime(bytesUploaded));
+            if (speedHistoryCount++ >= INTERVAL_SPEED_HISTORY_SECONDS)
+            {
+                speedHistoryCount = 0;
+                setHistorySpeed();
+            }
             resetDownloadBytes();
             resetUploadBytes();
+            if (!aTimer.Enabled)
+                stopTimer();
+        }
+
+        private bool canStopTimer()
+        {
+            return uploadSpeedsHistory.Sum(x => x.speed) + downloadSpeedsHistory.Sum(x => x.speed) == 0;
+        }
+
+        private void setHistorySpeed()
+        {
+            DateTime now = DateTime.Now;
+            var activeDownloads = downloadModels.Where(x => x.state == StateTask.Working).Select(x => x.name).ToList();
+            var activeUploads = uploadModels.Where(x => x.state == StateTask.Working).Select(x => x.name).ToList();
+            downloadSpeedsHistory.Add(new SpeedHistory() { time = now, speed = bytesDownloaded, speedString = downloadSpeed, activeFiles = activeDownloads });
+            uploadSpeedsHistory.Add(new SpeedHistory() { time = now, speed = bytesUploaded, speedString = uploadSpeed, activeFiles = activeUploads });
+            downloadSpeedsHistory.RemoveAll(x => (now - x.time).TotalSeconds > MAX_SPEED_HISTORY_SECONDS);
+            uploadSpeedsHistory.RemoveAll(x => (now - x.time).TotalSeconds > MAX_SPEED_HISTORY_SECONDS);
+            if (HistorykEventChanged != null)
+                HistorykEventChanged.Invoke(this, EventArgs.Empty);
         }
 
         public async Task addDownloadBytes(long bytes)
@@ -118,6 +157,8 @@ namespace TelegramDownloader.Services
         {
             DownloadBytesMutex.WaitOne();
             bytesDownloaded = 0;
+            if (!isDownloading())
+                setDownloadSpeed("0 KB/s");
             DownloadBytesMutex.ReleaseMutex();
         }
 
@@ -125,6 +166,8 @@ namespace TelegramDownloader.Services
         {
             UploadBytesMutex.WaitOne();
             bytesUploaded = 0;
+            if (!isUploading())
+                setUploadSpeed("0 KB/s");
             UploadBytesMutex.ReleaseMutex();
         }
 
@@ -143,6 +186,8 @@ namespace TelegramDownloader.Services
 
         public void addToDownloadList(DownloadModel downloadModel)
         {
+            _logger.LogInformation("Adding to download list - Name: {Name}, Size: {SizeMB:F2}MB",
+                downloadModel.name, downloadModel._size / (1024.0 * 1024.0));
             PendingDownloadMutex.WaitOne(10000);
             downloadModels.Insert(0, downloadModel);
             PendingDownloadMutex.ReleaseMutex();
@@ -152,6 +197,8 @@ namespace TelegramDownloader.Services
 
         public void addToPendingDownloadList(DownloadModel downloadModel, bool atFirst = false, bool chekDownloads = true)
         {
+            _logger.LogDebug("Adding to pending download list - Name: {Name}, AtFirst: {AtFirst}, PendingCount: {Count}",
+                downloadModel.name, atFirst, pendingDownloadModels.Count + 1);
             PendingDownloadMutex.WaitOne(10000);
             if (atFirst)
                 pendingDownloadModels.Insert(0, downloadModel);
@@ -164,6 +211,7 @@ namespace TelegramDownloader.Services
 
         public void PauseDownloads()
         {
+            _logger.LogInformation("Pausing all downloads - ActiveCount: {Count}", downloadModels.Where(x => x.state == StateTask.Working).Count());
             PendingDownloadMutex.WaitOne(10000);
             isPauseDownloads = true;
             foreach (DownloadModel dm in downloadModels.Where(x => x.state == StateTask.Working).ToList())
@@ -177,6 +225,7 @@ namespace TelegramDownloader.Services
 
         public void PlayDownloads()
         {
+            _logger.LogInformation("Resuming downloads - PendingCount: {Count}", pendingDownloadModels.Count);
             PendingDownloadMutex.WaitOne(10000);
             isPauseDownloads = false;
             PendingDownloadMutex.ReleaseMutex();
@@ -185,6 +234,8 @@ namespace TelegramDownloader.Services
 
         public void StopDownloads()
         {
+            _logger.LogInformation("Stopping all downloads - ActiveCount: {Active}, PendingCount: {Pending}",
+                downloadModels.Where(x => x.state == StateTask.Working).Count(), pendingDownloadModels.Count);
             PendingDownloadMutex.WaitOne(10000);
             isPauseDownloads = true;
             foreach (DownloadModel dm in downloadModels.Where(x => x.state == StateTask.Working).ToList())
@@ -200,7 +251,7 @@ namespace TelegramDownloader.Services
         {
             Thread.Sleep(500);
             PendingDownloadMutex.WaitOne();
-            while (downloadModels.Where(x => x.state ==  StateTask.Working).Count() < GeneralConfigStatic.config.MaxSimultaneousDownloads
+            while (downloadModels.Where(x => x.state == StateTask.Working).Count() < GeneralConfigStatic.config.MaxSimultaneousDownloads
                 && pendingDownloadModels.Count() > 0
                 && !isPauseDownloads)
             {
@@ -233,6 +284,8 @@ namespace TelegramDownloader.Services
 
         public void addToUploadList(UploadModel uploadModel)
         {
+            _logger.LogInformation("Adding to upload list - Name: {Name}, Size: {SizeMB:F2}MB",
+                uploadModel.name, uploadModel._size / (1024.0 * 1024.0));
             uploadModels.Insert(0, uploadModel);
             EventChanged?.Invoke(this, new EventArgs());
             TaskEventChanged.Invoke(null, EventArgs.Empty);
@@ -287,7 +340,7 @@ namespace TelegramDownloader.Services
         public void deleteDownloadInList(DownloadModel downloadModel)
         {
             PendingDownloadMutex.WaitOne();
-                downloadModels.Remove(downloadModel);
+            downloadModels.Remove(downloadModel);
             PendingDownloadMutex.ReleaseMutex();
             EventChanged?.Invoke(this, new EventArgs());
             TaskEventChanged.Invoke(null, EventArgs.Empty);
@@ -344,5 +397,13 @@ namespace TelegramDownloader.Services
         }
 
 
+    }
+
+    public class SpeedHistory
+    {
+        public DateTime time { get; set; }
+        public long speed { get; set; }
+        public String speedString { get; set; }
+        public List<string> activeFiles { get; set; } = new List<string>();
     }
 }

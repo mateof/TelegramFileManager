@@ -372,7 +372,7 @@ namespace TelegramDownloader.Controllers
 
             var request = HttpContext.Request;
             var rangeHeader = request.Headers["Range"].ToString();
-            Console.WriteLine("range: ", rangeHeader);
+            _logger.LogDebug("GetFileStream - Range: {Range}", rangeHeader);
 
             var file = await _fs.getItemById(idChannel, idFile);
             long totalLength = file.Size;
@@ -403,7 +403,7 @@ namespace TelegramDownloader.Controllers
 
             if (from >= totalPartialFileLength)
             {
-                Console.WriteLine("Take a file part: from: " + from + ", totalPartialFileLength: " + totalPartialFileLength);
+                _logger.LogDebug("Take a file part - From: {From}, TotalPartialFileLength: {TotalPartialFileLength}", from, totalPartialFileLength);
                 int filePart = 0;
                 while(from >= totalPartialFileLength)
                 {
@@ -423,7 +423,7 @@ namespace TelegramDownloader.Controllers
                 from = (from / 524288) * 524288;
             }
 
-            Console.WriteLine("Fom:" + from);
+            _logger.LogDebug("Stream position - From: {From}", from);
 
             if (to == 0)
                 if (string.IsNullOrEmpty(rangeHeader) || from == 0)
@@ -501,7 +501,7 @@ namespace TelegramDownloader.Controllers
             }
             catch (OperationCanceledException)
             {
-                Console.WriteLine("❌ El cliente cerró la conexión.");
+                _logger.LogInformation("Client closed connection during stream - File: {FileName}", fileName);
             }
 
             return new EmptyResult();

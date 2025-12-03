@@ -11,15 +11,17 @@ namespace TelegramDownloader.Controllers
     public class WebDavController : ControllerBase
     {
         IDbService _db { get; set; }
+        private readonly ILogger<WebDavController> _logger;
 
-        public WebDavController(IDbService db)
+        public WebDavController(IDbService db, ILogger<WebDavController> logger)
         {
             _db = db;
+            _logger = logger;
         }
         [HttpGet]
         public async Task<List<WebDavFileModel>> webDavPaths([FromQuery] string path, [FromQuery] string depth)
         {
-            Console.WriteLine("Peticion de webDavPaths: " + path);
+            _logger.LogDebug("WebDav request - Path: {Path}, Depth: {Depth}", path, depth);
             var isFile = Path.HasExtension(path);
             if (!path.EndsWith("/") && !isFile)
                 path = path + "/";
@@ -64,7 +66,7 @@ namespace TelegramDownloader.Controllers
         [HttpGet("meta")]
         public async Task<object> webDavMetadata([FromQuery] string path)
         {
-            Console.WriteLine("Peticion de webDavMetadata: " + path);
+            _logger.LogDebug("WebDav metadata request - Path: {Path}", path);
             if (String.IsNullOrEmpty(path))
                 throw new Exception("Path is null or empty");
             string channel = path.Split("/")[1];

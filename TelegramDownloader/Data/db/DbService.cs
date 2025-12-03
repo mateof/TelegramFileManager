@@ -16,16 +16,19 @@ namespace TelegramDownloader.Data.db
         private MongoClient client { get; set; }
         private IMongoDatabase currentDatabase { get; set; }
         private string dbName { get; set; }
+        private readonly ILogger<DbService> _logger;
 
         private const string CONFIG_DB_NAME = "TCCONFIG";
 
         public const string SHARED_DB_NAME = "TFM-SHARED";
 
-        public DbService()
+        public DbService(ILogger<DbService> logger)
         {
+            _logger = logger;
             client = new MongoClient(GeneralConfigStatic.tlconfig?.mongo_connection_string ?? Environment.GetEnvironmentVariable("connectionString"));
             currentDatabase = getDatabase("default");
             this.dbName = "default";
+            _logger.LogInformation("DbService initialized - Connected to MongoDB");
         }
 
         public async Task<IClientSessionHandle> getSession()
@@ -67,6 +70,7 @@ namespace TelegramDownloader.Data.db
 
         public async Task CreateDatabase(string dbName = "default", string collection = "directory", bool CreateDefaultEntry = true)
         {
+            _logger.LogInformation("Creating database - DbName: {DbName}, Collection: {Collection}", dbName, collection);
             if (dbName == null)
                 dbName = "default";
             if (collection == null) collection = "directory";
@@ -76,27 +80,31 @@ namespace TelegramDownloader.Data.db
             if (!(await (await db.ListCollectionsAsync(new ListCollectionsOptions { Filter = filter })).AnyAsync()))
             {
                 await db.CreateCollectionAsync(collection);
-                // await createIndex(dbName, collection);
+                _logger.LogInformation("Collection created - DbName: {DbName}, Collection: {Collection}", dbName, collection);
             }
             await createIndex(dbName, collection);
             if (CreateDefaultEntry)
                 await createDefaultEntry(dbName);
-
+            _logger.LogInformation("Database setup completed - DbName: {DbName}", dbName);
         }
 
         public async Task deleteDatabase(string dbName = "default")
         {
+            _logger.LogWarning("Deleting database - DbName: {DbName}", dbName);
             if (dbName == null)
                 dbName = "default";
             await client.DropDatabaseAsync(dbName);
+            _logger.LogInformation("Database deleted - DbName: {DbName}", dbName);
         }
 
         public async Task resetDatabase(string dbName = "default")
         {
+            _logger.LogWarning("Resetting database - DbName: {DbName}", dbName);
             if (dbName == null)
                 dbName = "default";
             await deleteDatabase(dbName);
             await CreateDatabase(dbName, CreateDefaultEntry: false);
+            _logger.LogInformation("Database reset completed - DbName: {DbName}", dbName);
         }
 
         public async Task resetCollection(string dbName = "default", string collection = "directory", IClientSessionHandle? session = null)
@@ -277,6 +285,7 @@ namespace TelegramDownloader.Data.db
 
         public async Task deleteEntry(string dbName, string id, string collectionName = "directory")
         {
+            _logger.LogDebug("Deleting entry - DbName: {DbName}, Id: {Id}", dbName, id);
             if (collectionName == null)
                 collectionName = "directory";
             //BsonFileManagerModel entry = await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Eq(x => x.Id, id))).FirstOrDefaultAsync();
@@ -537,6 +546,8 @@ namespace TelegramDownloader.Data.db
 
         public async Task<List<BsonFileManagerModel>> createEntry(string dbName, BsonFileManagerModel file, string collectionName = "directory", IClientSessionHandle? session = null)
         {
+            _logger.LogDebug("Creating entry - DbName: {DbName}, Name: {Name}, IsFile: {IsFile}, Path: {Path}",
+                dbName, file?.Name, file?.IsFile, file?.FilePath);
             if (collectionName == null)
                 collectionName = "directory";
             if (file != null)

@@ -97,6 +97,7 @@ namespace TelegramDownloader.Data
 
         public async Task downloadSplitFilesV2(FileManagerDirectoryContent itemFile, BsonFileManagerModel file, string currentFilePath, string dbName)
         {
+            _logger.LogInformation("Starting split file download V2 - FileName: {FileName}, Parts: {Parts}", itemFile.Name, file.ListMessageId.Count);
             int i = 1;
             string filePathPart = Path.Combine(currentFilePath, itemFile.Name);
             if (File.Exists(filePathPart))
@@ -108,10 +109,12 @@ namespace TelegramDownloader.Data
                 await downloadFromTelegramV2(dbName, messageId, filePathPart, file, true, Path.Combine(currentFilePath, itemFile.Name), i);
                 i++;
             }
+            _logger.LogInformation("Split file download V2 completed - FileName: {FileName}", itemFile.Name);
         }
 
         public async Task downloadFromTelegramV2(string dbName, int messageId, string destPath, BsonFileManagerModel file = null, bool shouldWait = false, string path = null, Int32 part = 0)
         {
+            _logger.LogDebug("Queueing download V2 - DbName: {DbName}, MessageId: {MessageId}, Part: {Part}", dbName, messageId, part);
             DownloadModel model = new DownloadModel();
             model.path = path ?? destPath;
             model.tis = _tis;

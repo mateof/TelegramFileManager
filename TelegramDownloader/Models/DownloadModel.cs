@@ -18,6 +18,7 @@ namespace TelegramDownloader.Models
         public event EventHandler<InfoTaskEventArgs> EventChanged;
         public StateTask state { get; set; } = StateTask.Pending;
         public DateTime creationDate { get; set; } = DateTime.Now;
+        public DateTime endnDate { get; set; } = DateTime.Now;
         public string id {  get; set; }
         public bool isUpload {  get; set; }
         public List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files { get; set; }
@@ -52,6 +53,7 @@ namespace TelegramDownloader.Models
         public async void markAsCompleted()
         {
             state = StateTask.Completed;
+            endnDate = DateTime.Now;
             tis.CheckPendingUploadInfoTasks();
             EventChanged?.Invoke(this, new InfoTaskEventArgs());
 
@@ -145,6 +147,9 @@ namespace TelegramDownloader.Models
         public IPeerInfo channel { get; set; }
         public string channelName { get; set; }
         public int progress { get; set; }
+        public DateTime creationDate { get; set; } = DateTime.Now;
+        public DateTime startDate {  get; set; }
+        public DateTime endnDate { get; set; }
         public TransactionInfoService tis { get; set; }
 
 
@@ -175,6 +180,7 @@ namespace TelegramDownloader.Models
             EventChanged?.Invoke(this, new DownloadEventArgs());
             if (transmitted == totalSize)
             {
+                endnDate = DateTime.Now;
                 state = StateTask.Completed;
                 EventStatechanged?.Invoke(this, EventArgs.Empty);
                 NotificationModel nm = new NotificationModel();
@@ -203,6 +209,7 @@ namespace TelegramDownloader.Models
 
         public void RetryCallback()
         {
+            startDate = DateTime.Now;
             callbacks.callback.Invoke();
         }
     }
@@ -226,7 +233,9 @@ namespace TelegramDownloader.Models
         public string chatName { get; set; }
         public IPeerInfo channel { get; set; }
         public int progress { get; set; }
-        public Thread thread { get; set; }
+        public DateTime creationDate { get; set; } = DateTime.Now;
+        public DateTime startDate { get; set; }
+        public DateTime endnDate { get; set; }
         public TransactionInfoService tis { get; set; }
 
         public virtual void ProgressCallback(long transmitted, long totalSize)
@@ -242,6 +251,7 @@ namespace TelegramDownloader.Models
             EventChanged?.Invoke(this, new UploadEventArgs());
             if (transmitted == totalSize)
             {
+                endnDate = DateTime.Now;
                 state = StateTask.Completed;
                 NotificationModel nm = new NotificationModel();
                 nm.sendEvent(new Notification($"Upload {name} completed", "Upload Completed", NotificationTypes.Success));
@@ -257,6 +267,8 @@ namespace TelegramDownloader.Models
 
         public void SetState(StateTask newState)
         {
+            if (newState == StateTask.Working)
+                startDate = DateTime.Now;
             mutex.WaitOne();
             state = newState;
             mutex.ReleaseMutex();

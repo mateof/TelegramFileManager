@@ -321,6 +321,8 @@ namespace TelegramDownloader.Data
 
         public async Task<FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>> itemDeleteAsync(string dbName, ItemsDeleteEventArgs<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> args)
         {
+            _logger.LogInformation("Deleting items - DbName: {DbName}, Count: {Count}, Path: {Path}",
+                dbName, args.Files.Count(), args.Path);
             string[] names = args.Files.Select(x => x.Name).ToArray();
             bool isMyChannel = _ts.isMyChat(Convert.ToInt64(dbName));
             // args.Response = await FileManagerService.Delete(args.Path, names, args.Files.ToArray());
@@ -634,6 +636,8 @@ namespace TelegramDownloader.Data
 
         public async Task downloadFile(string dbName, string path, List<string> files, string targetPath, string? collectionId = null, string? channelId = null)
         {
+            _logger.LogInformation("Starting download - DbName: {DbName}, Path: {Path}, FilesCount: {Count}, TargetPath: {TargetPath}",
+                dbName, path, files.Count, targetPath);
             NotificationModel nm = new NotificationModel();
             try
             {
@@ -806,6 +810,8 @@ namespace TelegramDownloader.Data
         }
         public virtual async Task downloadFromTelegram(string dbName, int messageId, string destPath, BsonFileManagerModel file = null, bool shouldWait = false, string path = null)
         {
+            _logger.LogDebug("Queueing download from Telegram - DbName: {DbName}, MessageId: {MessageId}, DestPath: {DestPath}",
+                dbName, messageId, destPath);
             DownloadModel model = new DownloadModel();
             model.path = path ?? destPath;
             model.tis = _tis;
@@ -1130,6 +1136,8 @@ namespace TelegramDownloader.Data
 
         public async Task AddUploadFileFromServer(string dbName, string currentPath, List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files, InfoDownloadTaksModel idt = null) // ItemsUploadedEventArgs<FileManagerDirectoryContent> args)
         {
+            _logger.LogInformation("Adding upload task from server - DbName: {DbName}, Path: {Path}, FilesCount: {Count}",
+                dbName, currentPath, files.Count);
             idt = new InfoDownloadTaksModel();
             idt.tis = _tis;
             idt.id = Guid.NewGuid().ToString();
@@ -1215,7 +1223,8 @@ namespace TelegramDownloader.Data
         }
         public async Task UploadFileFromServer(string dbName, string currentPath, List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files, InfoDownloadTaksModel dm = null) // ItemsUploadedEventArgs<FileManagerDirectoryContent> args)
         {
-
+            _logger.LogInformation("Starting upload from server - DbName: {DbName}, Path: {Path}, FilesCount: {Count}",
+                dbName, currentPath, files.Count);
             // string currentPath = args.Path;
             NotificationModel nm = new NotificationModel();
             InfoDownloadTaksModel idt = dm;
@@ -1275,7 +1284,6 @@ namespace TelegramDownloader.Data
                                 um.chatName = _ts.getChatName(Convert.ToInt64(dbName));
                                 // add upload to task list
                                 idt.addUpload(um);
-                                um.thread = Thread.CurrentThread;
                                 while (attempts != 0 || um.state == StateTask.Canceled)
                                     try
                                     {
@@ -1292,7 +1300,8 @@ namespace TelegramDownloader.Data
                                             _logger.LogInformation(e, "Current work cancelled");
                                             throw e;
                                         }
-                                        _logger.LogError(e, "Exception sending file to Telegram");
+                                        _logger.LogError(e, "Exception sending file to Telegram - FileName: {FileName}, Attempt: {Attempt}, Remaining: {Remaining}",
+                                            file.Name, 4 - attempts, attempts - 1);
                                         attempts--;
                                         // waitForNextAttempt *= 2;
                                         if (attempts == 0 || um.state == StateTask.Canceled)
@@ -1305,6 +1314,7 @@ namespace TelegramDownloader.Data
                                             um.state = StateTask.Error;
                                             throw e;
                                         }
+                                        _logger.LogWarning("Retrying upload in {DelayMs}ms - FileName: {FileName}", waitForNextAttempt, file.Name);
                                         await Task.Delay(waitForNextAttempt);
                                     }
 
@@ -1363,7 +1373,8 @@ namespace TelegramDownloader.Data
                                         _logger.LogInformation(e, "Current work cancelled");
                                         throw e;
                                     }
-                                    _logger.LogError(e, "Exception sending file to Telegram");
+                                    _logger.LogError(e, "Exception sending file to Telegram - FileName: {FileName}, Attempt: {Attempt}, Remaining: {Remaining}",
+                                        file.Name, 4 - attempts, attempts - 1);
                                     attempts--;
                                     // waitForNextAttempt *= 2;
                                     if (attempts == 0 || um.state == StateTask.Canceled)
@@ -1373,11 +1384,11 @@ namespace TelegramDownloader.Data
                                             um.SendNotification();
                                             return;
                                         }
-                                           
+
                                         um.state = StateTask.Error;
                                         throw e;
                                     }
-
+                                    _logger.LogWarning("Retrying upload in {DelayMs}ms - FileName: {FileName}", waitForNextAttempt, file.Name);
                                     await Task.Delay(waitForNextAttempt);
                                 }
 
@@ -1432,9 +1443,8 @@ namespace TelegramDownloader.Data
                     return;
                 }
                 idt.state = StateTask.Error;
-                _logger.LogError(ex, $"Error on uploadFileFromServer, path: {currentPath}");
+                _logger.LogError(ex, "Error on uploadFileFromServer - Path: {Path}, Message: {Message}", currentPath, ex.Message);
                 nm.sendEvent(new Notification("Error Uploading files to Telegram", "Telegram Upload", NotificationTypes.Error));
-                Console.WriteLine(ex.Message);
                 throw ex;
             }
         }
@@ -1631,11 +1641,9 @@ namespace TelegramDownloader.Data
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error on uploadFile");
+                _logger.LogError(ex, "Error on uploadFile - FileName: {FileName}, Message: {Message}", file.File.Name, ex.Message);
                 NotificationModel nm = new NotificationModel();
                 nm.sendEvent(new Notification($"Error on UploadFile: {file.File.Name}", "Error", NotificationTypes.Error));
-                Console.WriteLine(ex.Message);
-
                 throw ex;
             }
         }
@@ -1855,6 +1863,8 @@ namespace TelegramDownloader.Data
 
         private async Task<List<string>> splitFileStreamAsync(string path, string name, int splitSize)
         {
+            _logger.LogInformation("Starting file split - FileName: {FileName}, SizeMB: {SizeMB:F2}, SplitSizeMB: {SplitSizeMB}",
+                name, new System.IO.FileInfo(System.IO.Path.Combine(path, name)).Length / (1024.0 * 1024.0), splitSize / (1024 * 1024));
             int _gb = TelegramService.splitSizeGB;
             List<string> listPath = new List<string>();
             byte[] buffer = new byte[splitSize];
@@ -1864,7 +1874,6 @@ namespace TelegramDownloader.Data
                 sm.name = name;
                 sm._size = fs.Length;
                 sm._transmitted = 0;
-                sm.thread = Thread.CurrentThread;
                 _tis.addToUploadList(sm);
                 int index = 1;
                 while (fs.Position < fs.Length)
@@ -1892,12 +1901,13 @@ namespace TelegramDownloader.Data
                     index++;
                 }
             }
-
+            _logger.LogInformation("File split completed - FileName: {FileName}, Parts: {PartsCount}", name, listPath.Count);
             return listPath;
         }
 
         private async Task mergeFileStreamAsync(List<string> pathList, string destName)
         {
+            _logger.LogInformation("Starting file merge - DestName: {DestName}, PartsCount: {PartsCount}", destName, pathList.Count);
             using (FileStream fileResult = new FileStream(destName, FileMode.Create))
                 foreach (string pathSplited in pathList)
                 {
@@ -1909,6 +1919,7 @@ namespace TelegramDownloader.Data
                         //await fileResult.WriteAsync(buffer);
                     }
                 }
+            _logger.LogInformation("File merge completed - DestName: {DestName}", destName);
         }
     }
 }

@@ -98,13 +98,22 @@ namespace TelegramDownloader.Data
 
         async Task<string> DoLogin(string loginInfo) // (add this method to your code)
         {
+            _logger.LogInformation("Starting login process");
             if (client.User == null)
                 switch (await client.Login(loginInfo)) // returns which config is needed to continue login
                 {
-                    case "phone_number": return "phone";
-                    case "verification_code": return "vc";
-                    case "name": return "name";    // if sign-up is required (first/last_name)
-                    case "password": return "pass"; // if user has enabled 2FA
+                    case "phone_number":
+                        _logger.LogInformation("Login requires phone number");
+                        return "phone";
+                    case "verification_code":
+                        _logger.LogInformation("Login requires verification code");
+                        return "vc";
+                    case "name":
+                        _logger.LogInformation("Login requires name (sign-up)");
+                        return "name";    // if sign-up is required (first/last_name)
+                    case "password":
+                        _logger.LogInformation("Login requires 2FA password");
+                        return "pass"; // if user has enabled 2FA
                     default: break;
                 }
             await getAllChats();
@@ -114,7 +123,7 @@ namespace TelegramDownloader.Data
                 isPremium = true;
                 // splitSizeGB = 4;
             }
-            Console.WriteLine($"We are logged-in as {client.User} (id {client.User.id})");
+            _logger.LogInformation("Login successful - User: {UserId}, Premium: {IsPremium}", client.User.id, isPremium);
             return "ok";
         }
         /// <summary>
@@ -130,6 +139,7 @@ namespace TelegramDownloader.Data
 
         public async Task<string> checkAuth(string number, bool isPhone = false)
         {
+            _logger.LogInformation("Checking authentication - IsPhone: {IsPhone}", isPhone);
             if (client.UserId != null && number == null)
             {
                 UserData ud = await UserService.getUserDataFromFile();
@@ -137,10 +147,12 @@ namespace TelegramDownloader.Data
                 {
                     try
                     {
+                        _logger.LogInformation("Attempting auto-login with saved user data");
                         return await DoLogin(ud.phone);
                     }
                     catch (Exception ex)
                     {
+                        _logger.LogError(ex, "Auto-login failed, resetting client");
                         client.Dispose();
                         newClient();
                         return "phone";
@@ -149,13 +161,14 @@ namespace TelegramDownloader.Data
                 }
                 else
                 {
+                    _logger.LogInformation("No saved user data found, requesting phone");
                     return "phone";
                 }
 
             }
             if (isPhone && number != null)
             {
-                // newClient();
+                _logger.LogInformation("Saving new phone number for authentication");
                 await UserService.setUserDataToFile(new UserData(number));
             }
             try
@@ -164,6 +177,7 @@ namespace TelegramDownloader.Data
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Login failed for number, resetting client");
                 client.Dispose();
                 newClient();
                 return null;
@@ -184,10 +198,12 @@ namespace TelegramDownloader.Data
 
         public async Task logOff()
         {
+            _logger.LogInformation("User logging off");
             await client.Auth_LogOut();
             UserService.deleteUserDataToFile();
             client.Dispose();
             newClient();
+            _logger.LogInformation("User logged off successfully");
         }
 
         public async Task<InvitationInfo?> getInvitationHash(long id)
@@ -314,6 +330,8 @@ namespace TelegramDownloader.Data
 
         public async Task<Message> uploadFile(string chatId, Stream file, string fileName, string mimeType = null, UploadModel um = null, string caption = null)
         {
+            _logger.LogInformation("Starting file upload - FileName: {FileName}, Size: {SizeMB:F2}MB, ChatId: {ChatId}",
+                fileName, file.Length / (1024.0 * 1024.0), chatId);
             um = um ?? new UploadModel();
             um.tis = _tis;
 
@@ -322,14 +340,26 @@ namespace TelegramDownloader.Data
             um._size = file.Length;
             um._transmitted = 0;
             _tis.addToUploadList(um);
-            var inputFile = await client.UploadFileAsync(file, fileName, um.ProgressCallback);
-            return await client.SendMediaAsync(peer, caption ?? fileName, inputFile, mimeType);
+            try
+            {
+                var inputFile = await client.UploadFileAsync(file, fileName, um.ProgressCallback);
+                var result = await client.SendMediaAsync(peer, caption ?? fileName, inputFile, mimeType);
+                _logger.LogInformation("File upload completed - FileName: {FileName}, MessageId: {MessageId}", fileName, result.id);
+                return result;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "File upload failed - FileName: {FileName}, ChatId: {ChatId}", fileName, chatId);
+                throw;
+            }
         }
 
         public async Task deleteFile(string chatId, int idMessage)
         {
+            _logger.LogInformation("Deleting file from Telegram - ChatId: {ChatId}, MessageId: {MessageId}", chatId, idMessage);
             InputPeer peer = chats.chats[Convert.ToInt64(chatId)];
             await client.DeleteMessages(peer, idMessage);
+            _logger.LogInformation("File deleted successfully - MessageId: {MessageId}", idMessage);
         }
 
         public async Task<Message> getMessageFile(string chatId, int idMessage)
@@ -522,6 +552,7 @@ namespace TelegramDownloader.Data
 
         public async Task<List<ChatMessages>> getAllFileMessages(long id, int lastId = 0)
         {
+            _logger.LogInformation("Fetching all file messages - ChannelId: {ChannelId}, LastId: {LastId}", id, lastId);
             List<ChatMessages> cm = new List<ChatMessages>();
             InputPeer peer = chats.chats[id];
             for (int offset_id = 0; ;)
@@ -544,13 +575,17 @@ namespace TelegramDownloader.Data
                             cm2.isDocument = true;
                         }
                         if (lastId != 0 && lastId == cm2.message.id)
+                        {
+                            _logger.LogInformation("Reached lastId, returning {Count} messages", cm.Count);
                             return cm;
+                        }
                         cm.Add(cm2);
                     }
                 }
                 offset_id = messages.Messages[^1].ID;
-                Console.WriteLine("Get telegram files, offset_id: " + offset_id);
+                _logger.LogDebug("Fetching telegram files - OffsetId: {OffsetId}, MessagesCount: {Count}", offset_id, cm.Count);
             }
+            _logger.LogInformation("Finished fetching all file messages - Total: {Count}", cm.Count);
             return cm;
         }
 
@@ -633,6 +668,7 @@ namespace TelegramDownloader.Data
         }
         public async Task<Byte[]> DownloadFileStream(Message message, long offset, int limit)
         {
+            _logger.LogDebug("DownloadFileStream - Offset: {Offset}, Limit: {Limit}", offset, limit);
             int totalLimit = limit;
             long currentOffset = offset;
             Byte[] response;
@@ -683,12 +719,12 @@ namespace TelegramDownloader.Data
                             }
                             catch (RpcException ex) when (ex.Code == 400 && ex.Message == "OFFSET_INVALID")
                             {
-                                _logger.LogError("OFFSET_INVALID", ex);
+                                _logger.LogError(ex, "OFFSET_INVALID - CurrentOffset: {Offset}, TotalLimit: {Limit}", currentOffset, totalLimit);
                                 throw;
                             }
                             catch (Exception ex)
                             {
-                                _logger.LogError("Download Error", ex);
+                                _logger.LogError(ex, "Download Error - CurrentOffset: {Offset}, TotalLimit: {Limit}", currentOffset, totalLimit);
                                 throw;
                             }
 
@@ -723,7 +759,7 @@ namespace TelegramDownloader.Data
                 model = new DownloadModel();
                 model.tis = _tis;
             }
-                
+
             model.m = message;
             model.channel = message.user;
 
@@ -737,32 +773,28 @@ namespace TelegramDownloader.Data
                 if (model.name == null)
                     model.name = filename;
                 // _tis.addToDownloadList(model);
-                Console.WriteLine("Downloading " + filename);
+                _logger.LogInformation("Starting document download - FileName: {FileName}, Size: {SizeMB:F2}MB", filename, document.size / (1024.0 * 1024.0));
                 // using var fileStream = File.Create(filename);
                 MemoryStream dest = new MemoryStream();
                 // using var dest = new FileStream($"{Path.Combine(folder != null ? folder : Path.Combine(Environment.CurrentDirectory, "download"), filename)}", FileMode.Create, FileAccess.Write);
                 await client.DownloadFileAsync(document, ms ?? dest, null, model.ProgressCallback);
-                   
+                _logger.LogInformation("Document download completed - FileName: {FileName}", filename);
                 return ms ?? dest;
-                // fileStream.CopyTo(dest);
-                Console.WriteLine("Download finished");
             }
             else if (message.message.media is MessageMediaPhoto { photo: Photo photo })
             {
                 var filename = $"{photo.id}.jpg";
                 if (File.Exists(Path.Combine(Environment.CurrentDirectory!, "wwwroot", "img", "telegram", filename)))
+                {
+                    _logger.LogDebug("Photo already exists locally - FileName: {FileName}", filename);
                     return null;
-                Console.WriteLine("Downloading " + filename);
+                }
+                _logger.LogInformation("Starting photo download - FileName: {FileName}", filename);
                 MemoryStream dest = new MemoryStream();
                 // using var dest = new FileStream($"{Path.Combine(Environment.CurrentDirectory!, "wwwroot", "img", "telegram", filename)}", FileMode.Create, FileAccess.Write);
                 var type = await client.DownloadFileAsync(photo, ms ?? dest, (PhotoSizeBase)null, model.ProgressCallback);
                 dest.Close(); // necessary for the renaming
-                Console.WriteLine("Download finished");
-                //if (type is not Storage_FileType.unknown and not Storage_FileType.partial)
-                //{
-                //    File.Move(Path.Combine(Environment.CurrentDirectory!, "wwwroot", "img", "telegram", filename), Path.Combine(Environment.CurrentDirectory!, "wwwroot", "img", "telegram", $"{photo.id}.{type}"), true); // rename extension
-                //    filename = $"{photo.id}.{type}";
-                //}
+                _logger.LogInformation("Photo download completed - FileName: {FileName}", filename);
                 return ms ?? dest;
 
 
@@ -777,7 +809,7 @@ namespace TelegramDownloader.Data
                 model = new DownloadModel();
                 model.tis = _tis;
             }
-                
+
             model.m = message;
             model.channel = message.user;
 
@@ -791,24 +823,26 @@ namespace TelegramDownloader.Data
                 model.name = filename;
                 if (shouldAddToList)
                     _tis.addToDownloadList(model);
-                Console.WriteLine("Downloading " + filename);
+                _logger.LogInformation("Starting file download to disk - FileName: {FileName}, Size: {SizeMB:F2}MB", filename, document.size / (1024.0 * 1024.0));
                 // using var fileStream = File.Create(filename);
                 using var dest = new FileStream($"{Path.Combine(folder != null ? folder : Path.Combine(Environment.CurrentDirectory, "local", "temp"), filename)}", FileMode.Create, FileAccess.Write);
                 await client.DownloadFileAsync(document, dest, null, model.ProgressCallback);
 
-                // fileStream.CopyTo(dest);
-                Console.WriteLine("Download finished");
+                _logger.LogInformation("File download to disk completed - FileName: {FileName}", filename);
             }
             else if (message.message.media is MessageMediaPhoto { photo: Photo photo })
             {
                 var filename = $"{photo.id}.jpg";
                 if (File.Exists(Path.Combine(Environment.CurrentDirectory!, "wwwroot", "img", "telegram", filename)))
+                {
+                    _logger.LogDebug("Photo already exists - FileName: {FileName}", filename);
                     return filename;
-                Console.WriteLine("Downloading " + filename);
+                }
+                _logger.LogInformation("Starting photo download to disk - FileName: {FileName}", filename);
                 using var dest = new FileStream($"{Path.Combine(Environment.CurrentDirectory!, "wwwroot", "img", "telegram", filename)}", FileMode.Create, FileAccess.Write);
                 var type = await client.DownloadFileAsync(photo, dest, progress: model.ProgressCallback);
                 dest.Close();
-                Console.WriteLine("Download finished");
+                _logger.LogInformation("Photo download to disk completed - FileName: {FileName}", filename);
                 if (type is not Storage_FileType.unknown and not Storage_FileType.partial)
                 {
                     File.Move(Path.Combine(Environment.CurrentDirectory!, "wwwroot", "img", "telegram", filename), Path.Combine(Environment.CurrentDirectory!, "wwwroot", "img", "telegram", $"{photo.id}.{type}"), true); // rename extension

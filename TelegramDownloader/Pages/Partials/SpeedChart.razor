@@ -1,0 +1,74 @@
+@using TelegramDownloader.Services
+@implements IDisposable
+
+@inject TransactionInfoService tis
+@inject IJSRuntime JS
+
+<div class="speed-chart-container">
+    <canvas id="speedChart" style="width: 100%; height: @Height;"></canvas>
+</div>
+
+@code {
+    [Parameter]
+    public string Height { get; set; } = "300px";
+
+    private bool chartInitialized = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        tis.HistorykEventChanged += OnHistoryChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await InitializeChart();
+            chartInitialized = true;
+            await UpdateChartData(isInitial: true);
+        }
+    }
+
+    private async void OnHistoryChanged(object? sender, System.EventArgs e)
+    {
+        if (chartInitialized)
+        {
+            await InvokeAsync(async () => await UpdateChartData());
+        }
+    }
+
+    private async Task InitializeChart()
+    {
+        int maxPoints = TransactionInfoService.MAX_SPEED_HISTORY_SECONDS / TransactionInfoService.INTERVAL_SPEED_HISTORY_SECONDS;
+        int intervalSeconds = TransactionInfoService.INTERVAL_SPEED_HISTORY_SECONDS;
+        await JS.InvokeVoidAsync("initSpeedChart", maxPoints, intervalSeconds);
+    }
+
+    private async Task UpdateChartData(bool isInitial = false)
+    {
+        var downloadData = tis.downloadSpeedsHistory
+            .Select(x => new {
+                time = x.time.ToString("HH:mm:ss"),
+                datetime = x.time.ToString("dd/MM/yyyy HH:mm:ss"),
+                speed = x.speed / 1024.0 / 1024.0,
+                files = x.activeFiles
+            })
+            .ToList();
+
+        var uploadData = tis.uploadSpeedsHistory
+            .Select(x => new {
+                time = x.time.ToString("HH:mm:ss"),
+                datetime = x.time.ToString("dd/MM/yyyy HH:mm:ss"),
+                speed = x.speed / 1024.0 / 1024.0,
+                files = x.activeFiles
+            })
+            .ToList();
+
+        await JS.InvokeVoidAsync("updateSpeedChart", downloadData, uploadData, isInitial);
+    }
+
+    public void Dispose()
+    {
+        tis.HistorykEventChanged -= OnHistoryChanged;
+    }
+}
