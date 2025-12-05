@@ -90,20 +90,51 @@
     };
 
     private string _previousId;
-    private bool _initialized = false;
+    private string _previousBsiId;
+    private bool _firstRenderComplete = false;
+    private bool _needsRefresh = false;
 
     protected override async Task OnParametersSetAsync()
     {
-        if (_previousId != id)
+        string currentBsiId = bsi?.Id;
+        bool idChanged = _previousId != id;
+        bool bsiChanged = isShared && _previousBsiId != currentBsiId && currentBsiId != null;
+
+        if (idChanged || bsiChanged)
         {
             _previousId = id;
+            _previousBsiId = currentBsiId;
             await LoadDataAsync();
-            if (_initialized && fm != null)
+
+            // Solo marcar refresh si ya pasó el primer render
+            if (_firstRenderComplete)
             {
-                fm.Path = "/";
-                await fm.RefreshFilesAsync();
+                _needsRefresh = true;
             }
-            _initialized = true;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _firstRenderComplete = true;
+        }
+
+        if (_needsRefresh && fm != null)
+        {
+            _needsRefresh = false;
+            fm.Path = "/";
+            await fm.RefreshFilesAsync();
+        }
+    }
+
+    public async Task RefreshFileManager()
+    {
+        if (fm != null)
+        {
+            fm.Path = "/";
+            await fm.RefreshFilesAsync();
         }
     }
 

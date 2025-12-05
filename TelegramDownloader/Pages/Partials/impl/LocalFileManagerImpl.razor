@@ -78,7 +78,8 @@
     };
 
     private string _previousId;
-    private bool _initialized = false;
+    private bool _firstRenderComplete = false;
+    private bool _needsRefresh = false;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -86,12 +87,36 @@
         {
             _previousId = id;
             await LoadDataAsync();
-            if (_initialized && FileManager != null)
+
+            // Solo marcar refresh si ya pasó el primer render
+            if (_firstRenderComplete)
             {
-                FileManager.Path = "/";
-                await FileManager.RefreshFilesAsync();
+                _needsRefresh = true;
             }
-            _initialized = true;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _firstRenderComplete = true;
+        }
+
+        if (_needsRefresh && FileManager != null)
+        {
+            _needsRefresh = false;
+            FileManager.Path = "/";
+            await FileManager.RefreshFilesAsync();
+        }
+    }
+
+    public async Task RefreshFileManager()
+    {
+        if (FileManager != null)
+        {
+            FileManager.Path = "/";
+            await FileManager.RefreshFilesAsync();
         }
     }
 

@@ -158,7 +158,7 @@
                                 <div class="col-9">
 
                                     <div class="nav-item" style="padding:inherit;" @onclick="ToggleNavMenu">
-                                        <NavLink class="nav-link ellipsis" @onclick="@(async () => await goTo($"/shared/{sc.Id}"))" Match="NavLinkMatch.All">
+                                        <NavLink class="nav-link ellipsis" href="@($"/shared/{sc.Id}")" Match="NavLinkMatch.All">
                                             <span aria-hidden="true">
 
 
