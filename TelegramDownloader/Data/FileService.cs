@@ -879,7 +879,7 @@ namespace TelegramDownloader.Data
             TL.Message m = await _ts.getMessageFile(dbName, messageId);
             ChatMessages cm = new ChatMessages();
             cm.message = m;
-
+            model.startDate = DateTime.Now;
             cm.user = null;
             cm.isDocument = false;
             if (m.media is MessageMediaDocument { document: Document document })

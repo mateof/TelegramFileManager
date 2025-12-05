@@ -808,6 +808,7 @@ namespace TelegramDownloader.Data
             {
                 model = new DownloadModel();
                 model.tis = _tis;
+                model.startDate = DateTime.Now;
             }
 
             model.m = message;
