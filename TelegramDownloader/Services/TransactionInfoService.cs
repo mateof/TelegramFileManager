@@ -25,6 +25,7 @@ namespace TelegramDownloader.Services
         public long bytesDownloaded = 0;
         public List<SpeedHistory> downloadSpeedsHistory = new List<SpeedHistory>();
         public List<SpeedHistory> uploadSpeedsHistory = new List<SpeedHistory>();
+        private readonly object _speedHistoryLock = new object();
         private int speedHistoryCount = 0;
 
         private static Mutex PendingDownloadMutex = new Mutex();
@@ -123,7 +124,10 @@ namespace TelegramDownloader.Services
 
         private bool canStopTimer()
         {
-            return uploadSpeedsHistory.Sum(x => x.speed) + downloadSpeedsHistory.Sum(x => x.speed) == 0;
+            lock (_speedHistoryLock)
+            {
+                return uploadSpeedsHistory.Sum(x => x.speed) + downloadSpeedsHistory.Sum(x => x.speed) == 0;
+            }
         }
 
         private void setHistorySpeed()
@@ -131,12 +135,31 @@ namespace TelegramDownloader.Services
             DateTime now = DateTime.Now;
             var activeDownloads = downloadModels.Where(x => x.state == StateTask.Working).Select(x => x.name).ToList();
             var activeUploads = uploadModels.Where(x => x.state == StateTask.Working).Select(x => x.name).ToList();
-            downloadSpeedsHistory.Add(new SpeedHistory() { time = now, speed = bytesDownloaded, speedString = downloadSpeed, activeFiles = activeDownloads });
-            uploadSpeedsHistory.Add(new SpeedHistory() { time = now, speed = bytesUploaded, speedString = uploadSpeed, activeFiles = activeUploads });
-            downloadSpeedsHistory.RemoveAll(x => (now - x.time).TotalSeconds > MAX_SPEED_HISTORY_SECONDS);
-            uploadSpeedsHistory.RemoveAll(x => (now - x.time).TotalSeconds > MAX_SPEED_HISTORY_SECONDS);
+            lock (_speedHistoryLock)
+            {
+                downloadSpeedsHistory.Add(new SpeedHistory() { time = now, speed = bytesDownloaded, speedString = downloadSpeed, activeFiles = activeDownloads });
+                uploadSpeedsHistory.Add(new SpeedHistory() { time = now, speed = bytesUploaded, speedString = uploadSpeed, activeFiles = activeUploads });
+                downloadSpeedsHistory.RemoveAll(x => (now - x.time).TotalSeconds > MAX_SPEED_HISTORY_SECONDS);
+                uploadSpeedsHistory.RemoveAll(x => (now - x.time).TotalSeconds > MAX_SPEED_HISTORY_SECONDS);
+            }
             if (HistorykEventChanged != null)
                 HistorykEventChanged.Invoke(this, EventArgs.Empty);
+        }
+
+        public List<SpeedHistory> GetDownloadSpeedsHistoryCopy()
+        {
+            lock (_speedHistoryLock)
+            {
+                return downloadSpeedsHistory.ToList();
+            }
+        }
+
+        public List<SpeedHistory> GetUploadSpeedsHistoryCopy()
+        {
+            lock (_speedHistoryLock)
+            {
+                return uploadSpeedsHistory.ToList();
+            }
         }
 
         public async Task addDownloadBytes(long bytes)

@@ -88,6 +88,7 @@
             await LoadDataAsync();
             if (_initialized && FileManager != null)
             {
+                FileManager.Path = "/";
                 await FileManager.RefreshFilesAsync();
             }
             _initialized = true;

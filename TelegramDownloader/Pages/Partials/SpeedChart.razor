@@ -46,7 +46,10 @@
 
     private async Task UpdateChartData(bool isInitial = false)
     {
-        var downloadData = tis.downloadSpeedsHistory
+        var downloadHistory = tis.GetDownloadSpeedsHistoryCopy();
+        var uploadHistory = tis.GetUploadSpeedsHistoryCopy();
+
+        var downloadData = downloadHistory
             .Select(x => new {
                 time = x.time.ToString("HH:mm:ss"),
                 datetime = x.time.ToString("dd/MM/yyyy HH:mm:ss"),
@@ -55,7 +58,7 @@
             })
             .ToList();
 
-        var uploadData = tis.uploadSpeedsHistory
+        var uploadData = uploadHistory
             .Select(x => new {
                 time = x.time.ToString("HH:mm:ss"),
                 datetime = x.time.ToString("dd/MM/yyyy HH:mm:ss"),

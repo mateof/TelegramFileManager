@@ -100,6 +100,7 @@
             await LoadDataAsync();
             if (_initialized && fm != null)
             {
+                fm.Path = "/";
                 await fm.RefreshFilesAsync();
             }
             _initialized = true;
@@ -275,11 +276,11 @@
     {
         BsonFileManagerModel item = null;
         if (isShared)
-            item = await fs.getSharedItemById(id: idFile, collection: id);
+            item = await fs.getSharedItemById(id: idFile, collection: bsi.CollectionId);
         else
             item = await fs.getItemById(id, idFile);
         string localdir = MyNavigationManager.BaseUri;
-        if (forcePreDownload || (HelperService.bytesToMegaBytes(size) <= GeneralConfigStatic.config.MaxPreloadFileSizeInMb && item.MessageId != null))
+        if (forcePreDownload || (HelperService.bytesToMegaBytes(size) <= GeneralConfigStatic.config.MaxPreloadFileSizeInMb && item != null && item.MessageId != null))
         {
             return new System.Uri(Path.Combine(localdir, "api/file/GetFile", name).Replace("\\", "/") + $"?idChannel={(isShared ? bsi.ChannelId : id)}&idFile={item.MessageId}").AbsoluteUri;
         }
