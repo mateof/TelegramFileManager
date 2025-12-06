@@ -50,25 +50,90 @@
     color: white;
 }
 
-@media (min-width: 2048px) {
-    .navbar-toggler {
-        display: none;
-    }
-
-    .collapse {
-        /* Never collapse the sidebar for wide screens */
-        display: block;
-    }
-}
-
 .menu {
     overflow-y: auto;
     height: 94vh;
     overflow-x: hidden;
 }
 
-@media (min-width: 768px) and (max-width: 2048px) {
-    .navbar-toggler {
-        display: block !important; /* mostrar botón hamburguesa */
-    }
+/* Toolbar buttons - full width */
+.groupbtnclass {
+    display: flex;
+    width: 100%;
+    padding: 0.5rem;
+}
+
+.groupbtnclass .btn {
+    flex: 1;
+}
+
+/* Always show navbar-toggler and allow collapse on all screen sizes */
+.navbar-toggler {
+    display: block !important;
+}
+
+/* Collapse behavior - works on all screen sizes */
+.collapse:not(.show) {
+    display: none !important;
+}
+
+.collapse.show {
+    display: block !important;
+}
+
+/* Row alignment for channel items */
+.row {
+    display: flex;
+    align-items: center;
+    margin: 0;
+    padding: 0.25rem 0;
+}
+
+.col-1 {
+    flex: 0 0 auto;
+    width: 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.col-9 {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.col-2 {
+    flex: 0 0 auto;
+    width: auto;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+/* Star icon styling */
+.bi-star, .bi-star-fill {
+    font-size: 0.9rem;
+}
+
+.bi-star-fill {
+    color: #ffc107 !important;
+}
+
+/* Scrollbar styling */
+.menu::-webkit-scrollbar {
+    width: 6px;
+}
+
+.menu::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.menu::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 3px;
+}
+
+.menu::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.3);
 }

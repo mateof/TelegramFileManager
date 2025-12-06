@@ -10,17 +10,6 @@
 @inject ITelegramService ts;
 @inject IJSRuntime JS;
 
-<style>
-    @@media (max-width: 1024px), (orientation: portrait) {
-        .collapse.navbar-collapse {
-            display: none !important;
-        }
-
-            .collapse.navbar-collapse.show {
-                display: block !important;
-            }
-    }
-</style>
 
 <div class="navbar navbar-dark bg-dark top-row ps-3 navbar-expand-xl">
     <div class="container-fluid">
@@ -257,7 +246,7 @@
     private bool showSearch = false;
     private ElementReference searchInput;
 
-    private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
+    private string NavMenuCssClass => collapseNavMenu ? "collapse" : "collapse show";
 
     private void ToggleNavMenu()
     {
