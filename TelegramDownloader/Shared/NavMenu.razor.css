@@ -67,19 +67,6 @@
     flex: 1;
 }
 
-/* Always show navbar-toggler and allow collapse on all screen sizes */
-.navbar-toggler {
-    display: block !important;
-}
-
-/* Collapse behavior - works on all screen sizes */
-.collapse:not(.show) {
-    display: none !important;
-}
-
-.collapse.show {
-    display: block !important;
-}
 
 /* Row alignment for channel items */
 .row {

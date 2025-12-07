@@ -6,29 +6,129 @@
     justify-content: center;
     padding: 10px 20px;
     background-color: transparent;
-    border: 2px solid #007bff; /* borde de color */
-    color: #007bff; /* color del texto y el icono */
+    border: 2px solid #007bff;
+    color: #007bff;
 }
 
-    .download-button .arrow {
-        margin-right: 10px;
-        animation: bounce 1s infinite;
-    }
+.download-button .arrow {
+    margin-right: 10px;
+    animation: bounce 1s infinite;
+}
 
 @keyframes bounce {
     0%, 20%, 50%, 80%, 100% {
         transform: translateY(0);
     }
-
     40% {
         transform: translateY(-10px);
     }
-
     60% {
         transform: translateY(-5px);
     }
 }
 
 .download-button:hover {
-    background-color: rgba(0, 123, 255, 0.1); /* ligero cambio de fondo en hover */
+    background-color: rgba(0, 123, 255, 0.1);
+}
+
+/* Water fill effect buttons */
+button.btn.water-fill-button {
+    position: relative !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    padding: 8px 16px !important;
+    border: 2px solid #007bff !important;
+    background-color: transparent !important;
+    background-image: none !important;
+    color: #007bff !important;
+    overflow: hidden !important;
+    min-width: 130px !important;
+    min-height: 40px !important;
+    border-radius: 4px !important;
+    cursor: pointer !important;
+}
+
+button.btn.water-fill-button.upload {
+    border-color: #28a745 !important;
+    color: #28a745 !important;
+}
+
+button.btn.water-fill-button.download {
+    border-color: #17a2b8 !important;
+    color: #17a2b8 !important;
+}
+
+/* Water fill background layer */
+button.btn.water-fill-button > .water-fill {
+    position: absolute !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: auto !important;
+    width: 100% !important;
+    background: rgba(0, 123, 255, 0.7) !important;
+    transition: height 0.4s ease-out !important;
+    pointer-events: none !important;
+    z-index: 0 !important;
+    display: block !important;
+}
+
+button.btn.water-fill-button.upload > .water-fill {
+    background: rgba(40, 167, 69, 0.7) !important;
+}
+
+button.btn.water-fill-button.download > .water-fill {
+    background: rgba(23, 162, 184, 0.7) !important;
+}
+
+/* Wave effect on top of water */
+button.btn.water-fill-button > .water-wave {
+    position: absolute !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: auto !important;
+    width: 100% !important;
+    background: linear-gradient(90deg,
+        transparent 0%,
+        rgba(255,255,255,0.4) 50%,
+        transparent 100%) !important;
+    background-size: 50% 100% !important;
+    animation: waveShine 1.5s ease-in-out infinite !important;
+    pointer-events: none !important;
+    z-index: 1 !important;
+    display: block !important;
+}
+
+@keyframes waveShine {
+    0% {
+        background-position: -100% 0;
+    }
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+/* Button content stays on top */
+button.btn.water-fill-button > .btn-content {
+    position: relative !important;
+    z-index: 2 !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    transition: color 0.3s ease !important;
+}
+
+button.btn.water-fill-button .arrow {
+    animation: bounce 1s infinite;
+}
+
+/* Text color changes when filled more than 50% */
+button.btn.water-fill-button.filled-high > .btn-content {
+    color: #fff !important;
+}
+
+button.btn.water-fill-button:hover {
+    opacity: 0.9 !important;
 }

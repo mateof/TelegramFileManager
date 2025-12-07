@@ -10,6 +10,43 @@
 @inject ITelegramService ts;
 @inject IJSRuntime JS;
 
+<style>
+    /* Collapse behavior for NavMenu */
+    @@media (max-width: 2048px) {
+        .nav-collapse-content {
+            display: none;
+            height: 0;
+            overflow: hidden;
+            transition: height 0.3s ease;
+        }
+
+        .nav-collapse-content.show {
+            display: block;
+            height: auto;
+            overflow: visible;
+        }
+
+        .nav-collapse-content .menu {
+            height: auto !important;
+            max-height: calc(100vh - 3.5rem);
+            overflow-y: auto;
+        }
+
+        .navbar-toggler {
+            display: block !important;
+        }
+    }
+
+    @@media (min-width: 2049px) {
+        .nav-collapse-content {
+            display: block !important;
+        }
+
+        .navbar-toggler {
+            display: none !important;
+        }
+    }
+</style>
 
 <div class="navbar navbar-dark bg-dark top-row ps-3 navbar-expand-xl">
     <div class="container-fluid">
@@ -20,7 +57,7 @@
     </div>
 </div>
 
-<div class="@NavMenuCssClass">
+<div class="nav-collapse-content @(collapseNavMenu ? "" : "show")">
     <nav class="flex-column menu">
         @if (showSearch)
         {
@@ -233,6 +270,7 @@
 
     [Parameter] public EventCallback OnClickCallback { get; set; }
     [Parameter] public EventCallback OnClickOpenImportCallback { get; set; }
+    [Parameter] public EventCallback<bool> OnCollapseChanged { get; set; }
 
     Tabs tabs = default!;
 
@@ -248,9 +286,13 @@
 
     private string NavMenuCssClass => collapseNavMenu ? "collapse" : "collapse show";
 
-    private void ToggleNavMenu()
+    private async Task ToggleNavMenu()
     {
         collapseNavMenu = !collapseNavMenu;
+        if (OnCollapseChanged.HasDelegate)
+        {
+            await OnCollapseChanged.InvokeAsync(collapseNavMenu);
+        }
     }
     private async Task ToggleSearch()
     {
