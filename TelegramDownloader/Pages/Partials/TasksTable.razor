@@ -2,6 +2,7 @@
 @using TelegramDownloader.Models
 @using TelegramDownloader.Services
 @using TelegramDownloader.Pages.Modals.InfoModals
+@implements IDisposable
 
 @inject TransactionInfoService tis
 
@@ -143,4 +144,12 @@
         await InvokeAsync(StateHasChanged);
     }
 
+    public void Dispose()
+    {
+        tis.EventChanged -= eventChangedNew;
+        foreach (InfoDownloadTaksModel pt in lpt)
+        {
+            pt.EventChanged -= eventChangedPendingTask;
+        }
+    }
 }

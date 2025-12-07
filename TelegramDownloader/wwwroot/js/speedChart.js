@@ -112,11 +112,11 @@ function initSpeedChart(maxPoints, intervalSeconds) {
     });
 }
 
-function updateSpeedChart(downloadHistory, uploadHistory, isInitial) {
+// Load initial historical data (called once on component init)
+function loadSpeedChartHistory(downloadHistory, uploadHistory) {
     if (!speedChart) return;
 
-    if (isInitial && downloadHistory.length > 0) {
-        // Load all historical data on initial load
+    if (downloadHistory.length > 0) {
         // Fill from the right side (most recent on right)
         const historyLength = downloadHistory.length;
         const startIndex = chartMaxPoints - historyLength;
@@ -142,32 +142,51 @@ function updateSpeedChart(downloadHistory, uploadHistory, isInitial) {
                 } : null;
             }
         }
-    } else if (downloadHistory.length > 0) {
-        // Get the latest values (last element in the arrays)
-        const latestDownload = downloadHistory[downloadHistory.length - 1];
-        const latestUpload = uploadHistory.length > 0 ? uploadHistory[uploadHistory.length - 1] : null;
 
-        // Shift data left (remove oldest) and add new value on the right
-        downloadData.shift();
-        downloadData.push(latestDownload ? latestDownload.speed : null);
-
-        uploadData.shift();
-        uploadData.push(latestUpload ? latestUpload.speed : null);
-
-        downloadMeta.shift();
-        downloadMeta.push(latestDownload ? {
-            datetime: latestDownload.datetime,
-            files: latestDownload.files
-        } : null);
-
-        uploadMeta.shift();
-        uploadMeta.push(latestUpload ? {
-            datetime: latestUpload.datetime,
-            files: latestUpload.files
-        } : null);
+        speedChart.data.datasets[0].data = [...downloadData];
+        speedChart.data.datasets[1].data = [...uploadData];
+        speedChart.update('none');
     }
+}
+
+// Add a single new point (called for each new speed event)
+function addSpeedChartPoint(downloadPoint, uploadPoint) {
+    if (!speedChart) return;
+
+    // Shift data left (remove oldest) and add new value on the right
+    downloadData.shift();
+    downloadData.push(downloadPoint ? downloadPoint.speed : null);
+
+    uploadData.shift();
+    uploadData.push(uploadPoint ? uploadPoint.speed : null);
+
+    downloadMeta.shift();
+    downloadMeta.push(downloadPoint ? {
+        datetime: downloadPoint.datetime,
+        files: downloadPoint.files
+    } : null);
+
+    uploadMeta.shift();
+    uploadMeta.push(uploadPoint ? {
+        datetime: uploadPoint.datetime,
+        files: uploadPoint.files
+    } : null);
 
     speedChart.data.datasets[0].data = [...downloadData];
     speedChart.data.datasets[1].data = [...uploadData];
     speedChart.update('none');
+}
+
+// Legacy function - kept for backwards compatibility
+function updateSpeedChart(downloadHistory, uploadHistory, isInitial) {
+    if (!speedChart) return;
+
+    if (isInitial && downloadHistory.length > 0) {
+        loadSpeedChartHistory(downloadHistory, uploadHistory);
+    } else if (downloadHistory.length > 0) {
+        // Get the latest values (last element in the arrays)
+        const latestDownload = downloadHistory[downloadHistory.length - 1];
+        const latestUpload = uploadHistory.length > 0 ? uploadHistory[uploadHistory.length - 1] : null;
+        addSpeedChartPoint(latestDownload, latestUpload);
+    }
 }

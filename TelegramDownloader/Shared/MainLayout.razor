@@ -1,4 +1,5 @@
 ﻿@inherits LayoutComponentBase
+@implements IDisposable
 @using TelegramDownloader.Data
 @using TelegramDownloader.Models
 @using TelegramDownloader.Models.GitHub
@@ -188,5 +189,10 @@
     private void eventChangedWorkingTasks(object sender, System.EventArgs e)
     {
         checkWorkingTasks();
+    }
+
+    public void Dispose()
+    {
+        tis.TaskEventChanged -= eventChangedWorkingTasks;
     }
 }

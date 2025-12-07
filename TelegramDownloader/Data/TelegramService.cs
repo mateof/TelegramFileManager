@@ -338,6 +338,7 @@ namespace TelegramDownloader.Data
             InputPeer peer = chats.chats[Convert.ToInt64(chatId)];
             um.name = fileName;
             um._size = file.Length;
+            um.startDate = DateTime.Now;
             um._transmitted = 0;
             _tis.addToUploadList(um);
             try

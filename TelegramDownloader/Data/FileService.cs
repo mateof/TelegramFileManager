@@ -1280,6 +1280,7 @@ namespace TelegramDownloader.Data
                                 int waitForNextAttempt = 1000;
                                 UploadModel um = new UploadModel();
                                 um.tis = _tis;
+                                um.startDate = DateTime.Now;
                                 um.path = currentFilePath;
                                 um.chatName = _ts.getChatName(Convert.ToInt64(dbName));
                                 // add upload to task list
@@ -1335,6 +1336,7 @@ namespace TelegramDownloader.Data
                             um.chatName = _ts.getChatName(Convert.ToInt64(dbName));
                             // add upload to task list
                             idt.addUpload(um);
+                            um.startDate = DateTime.Now;
                             while (attempts != 0 || um.state == StateTask.Canceled)
                                 try
                                 {
@@ -1586,43 +1588,65 @@ namespace TelegramDownloader.Data
 
         public async Task UploadFile(string dbName, string currentPath, UploadFiles file) // ItemsUploadedEventArgs<FileManagerDirectoryContent> args)
         {
+            _logger.LogInformation("UploadFile started - DbName: {DbName}, CurrentPath: {CurrentPath}, FileName: {FileName}, FileSize: {FileSize} bytes ({FileSizeMB:F2} MB)",
+                dbName, currentPath, file.File.Name, file.File.Size, file.File.Size / 1024.0 / 1024.0);
+
             try
             {
                 string currentFilePath = System.IO.Path.Combine(TEMPDIR, dbName + currentPath);
-                await SaveToFile(file.File, currentFilePath);
+                _logger.LogDebug("Saving file to temp path: {TempPath}", currentFilePath);
 
+                await SaveToFile(file.File, currentFilePath);
+                _logger.LogDebug("File saved to temp successfully");
 
                 BsonFileManagerModel model = new BsonFileManagerModel();
                 model.Size = file.File.Size;
                 TL.Message m = null;
+
                 if (file.File.Size > MaxSize)
                 {
+                    _logger.LogInformation("File exceeds MaxSize ({MaxSizeMB:F2} MB), splitting file into chunks", MaxSize / 1024.0 / 1024.0);
 
                     List<string> files = await splitFileStreamAsync(currentFilePath, file.File.Name, MaxSize);
+                    _logger.LogDebug("File split into {ChunkCount} chunks", files.Count);
+
                     File.Delete(System.IO.Path.Combine(currentFilePath, file.File.Name));
                     int i = 1;
                     model.ListMessageId = new List<int>();
                     model.isSplit = true;
+
                     foreach (string s in files)
                     {
+                        _logger.LogDebug("Uploading chunk {ChunkNumber} of {TotalChunks}: {ChunkPath}", i, files.Count, s);
+
                         using (FileStream fs = new FileStream(s, FileMode.Open, FileAccess.Read, FileShare.Read))
                             m = await _ts.uploadFile(dbName, fs, $"({i} of {files.Count}) - " + file.File.Name, caption: getCaption(currentPath));
+
                         model.ListMessageId.Add(m.ID);
+                        _logger.LogDebug("Chunk {ChunkNumber} uploaded successfully, MessageId: {MessageId}", i, m.ID);
+
                         File.Delete(s);
                         i++;
                     }
 
+                    _logger.LogInformation("All {ChunkCount} chunks uploaded successfully", files.Count);
                 }
                 else
                 {
+                    _logger.LogDebug("Uploading single file to Telegram");
+
                     using (FileStream ms = new FileStream(System.IO.Path.Combine(currentFilePath, file.File.Name), FileMode.Open))
                     {
                         m = await _ts.uploadFile(dbName, ms, file.File.Name, caption: getCaption(currentPath));
                     }
                     model.MessageId = m.ID;
+
+                    _logger.LogDebug("File uploaded to Telegram, MessageId: {MessageId}", m.ID);
                 }
 
                 BsonFileManagerModel parent = await _db.getParentDirectoryByPath(dbName, currentPath);
+                _logger.LogDebug("Parent directory found - ParentId: {ParentId}, ParentName: {ParentName}", parent?.Id, parent?.Name);
+
                 model.Name = file.File.Name;
                 model.IsFile = true;
                 model.HasChild = false;
@@ -1635,13 +1659,20 @@ namespace TelegramDownloader.Data
                 model.Type = file.File.Name.Split(".").LastOrDefault() != null ? "." + file.File.Name.Split(".").LastOrDefault() : file.File.ContentType;
 
                 await _db.createEntry(dbName, model);
+                _logger.LogDebug("Database entry created for file");
+
                 await _db.addBytesToFolder(dbName, model.ParentId, model.Size);
+                _logger.LogDebug("Folder size updated");
 
                 GC.Collect();
+
+                _logger.LogInformation("UploadFile completed successfully - FileName: {FileName}, IsSplit: {IsSplit}, MessageId: {MessageId}",
+                    file.File.Name, model.isSplit, model.isSplit ? string.Join(",", model.ListMessageId) : model.MessageId.ToString());
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Error on uploadFile - FileName: {FileName}, Message: {Message}", file.File.Name, ex.Message);
+                _logger.LogError(ex, "Error on uploadFile - FileName: {FileName}, CurrentPath: {CurrentPath}, DbName: {DbName}, Message: {Message}",
+                    file.File.Name, currentPath, dbName, ex.Message);
                 NotificationModel nm = new NotificationModel();
                 nm.sendEvent(new Notification($"Error on UploadFile: {file.File.Name}", "Error", NotificationTypes.Error));
                 throw ex;

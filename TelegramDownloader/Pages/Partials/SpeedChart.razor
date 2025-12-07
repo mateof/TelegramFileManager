@@ -16,7 +16,8 @@
 
     protected override async Task OnInitializedAsync()
     {
-        tis.HistorykEventChanged += OnHistoryChanged;
+        // Subscribe to the new incremental event
+        tis.NewSpeedHistoryPoint += OnNewSpeedHistoryPoint;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -25,15 +26,15 @@
         {
             await InitializeChart();
             chartInitialized = true;
-            await UpdateChartData(isInitial: true);
+            await LoadInitialData();
         }
     }
 
-    private async void OnHistoryChanged(object? sender, System.EventArgs e)
+    private async void OnNewSpeedHistoryPoint(object? sender, SpeedHistoryEventArgs e)
     {
         if (chartInitialized)
         {
-            await InvokeAsync(async () => await UpdateChartData());
+            await InvokeAsync(async () => await AddSinglePoint(e.DownloadPoint, e.UploadPoint));
         }
     }
 
@@ -44,7 +45,7 @@
         await JS.InvokeVoidAsync("initSpeedChart", maxPoints, intervalSeconds);
     }
 
-    private async Task UpdateChartData(bool isInitial = false)
+    private async Task LoadInitialData()
     {
         var downloadHistory = tis.GetDownloadSpeedsHistoryCopy();
         var uploadHistory = tis.GetUploadSpeedsHistoryCopy();
@@ -67,11 +68,30 @@
             })
             .ToList();
 
-        await JS.InvokeVoidAsync("updateSpeedChart", downloadData, uploadData, isInitial);
+        await JS.InvokeVoidAsync("loadSpeedChartHistory", downloadData, uploadData);
+    }
+
+    private async Task AddSinglePoint(SpeedHistory downloadPoint, SpeedHistory uploadPoint)
+    {
+        var download = new {
+            time = downloadPoint.time.ToString("HH:mm:ss"),
+            datetime = downloadPoint.time.ToString("dd/MM/yyyy HH:mm:ss"),
+            speed = downloadPoint.speed / 1024.0 / 1024.0,
+            files = downloadPoint.activeFiles
+        };
+
+        var upload = new {
+            time = uploadPoint.time.ToString("HH:mm:ss"),
+            datetime = uploadPoint.time.ToString("dd/MM/yyyy HH:mm:ss"),
+            speed = uploadPoint.speed / 1024.0 / 1024.0,
+            files = uploadPoint.activeFiles
+        };
+
+        await JS.InvokeVoidAsync("addSpeedChartPoint", download, upload);
     }
 
     public void Dispose()
     {
-        tis.HistorykEventChanged -= OnHistoryChanged;
+        tis.NewSpeedHistoryPoint -= OnNewSpeedHistoryPoint;
     }
 }

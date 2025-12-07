@@ -2,6 +2,7 @@
 @using TelegramDownloader.Models
 @using TelegramDownloader.Services
 @using TelegramDownloader.Pages.Modals.InfoModals
+@implements IDisposable
 
 @inject TransactionInfoService tis
 
@@ -150,5 +151,14 @@ ItemsPropertyName="_internalId">
     {
         checkNewEventsHandler();
         grid.RefreshDataAsync();
+    }
+
+    public void Dispose()
+    {
+        tis.EventChanged -= eventChangedNew;
+        foreach (DownloadModel dm in ldm)
+        {
+            dm.EventChanged -= eventChanged;
+        }
     }
 }
