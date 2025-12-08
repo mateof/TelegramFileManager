@@ -2,6 +2,7 @@
 @using TelegramDownloader.Models
 @using TelegramDownloader.Pages.Modals.InfoModals
 @using TelegramDownloader.Services
+@implements IDisposable
 
 @inject TransactionInfoService tis
 
@@ -12,11 +13,12 @@ DataProvider="UploadsDataProvider"
 AllowFiltering="false"
 AllowPaging="true"
 AllowSorting="false"
-Responsive="true">
+Responsive="true"
+ItemsPropertyName="_internalId">
 
-    <GridColumn TItem="UploadModel" Class="d-none d-md-table-cell" HeaderText="ID" PropertyName="id" SortString="id" SortKeySelector="item => item.id" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
+   @*  <GridColumn TItem="UploadModel" Class="d-none d-md-table-cell" HeaderText="ID" PropertyName="id" SortString="id" SortKeySelector="item => item.id" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
         @context.id
-    </GridColumn>
+    </GridColumn> *@
     <GridColumn TItem="UploadModel" HeaderText="File" PropertyName="name" SortString="name" SortKeySelector="item => item.name" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
         <Tooltip Class="me-4" Title="@context.path">@context.name</Tooltip>
     </GridColumn>
@@ -141,5 +143,17 @@ Responsive="true">
     {
         checkNewEventsHandler();
         grid.RefreshDataAsync();
+    }
+
+    public void Dispose()
+    {
+        tis.EventChanged -= eventChangedNew;
+        if (lum != null)
+        {
+            foreach (UploadModel um in lum)
+            {
+                um.EventChanged -= eventChangedUpload;
+            }
+        }
     }
 }

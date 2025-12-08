@@ -1,6 +1,8 @@
 ﻿@using TelegramDownloader.Data
 @using TelegramDownloader.Models
 @using TelegramDownloader.Services
+@using TelegramDownloader.Pages.Modals.InfoModals
+@implements IDisposable
 
 @inject TransactionInfoService tis
 
@@ -11,11 +13,12 @@
       AllowFiltering="false"
       AllowPaging="true"
       AllowSorting="false"
-      Responsive="true">
+      Responsive="true"
+      ItemsPropertyName="_internalId">
 
-    <GridColumn TItem="InfoDownloadTaksModel" Class="d-none d-md-table-cell" HeaderText="ID" PropertyName="id" SortString="id" SortKeySelector="item => item.id" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
+  @*   <GridColumn TItem="InfoDownloadTaksModel" Class="d-none d-md-table-cell" HeaderText="ID" PropertyName="id" SortString="id" SortKeySelector="item => item.id" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
         @context.id
-    </GridColumn>
+    </GridColumn> *@
     <GridColumn TItem="InfoDownloadTaksModel" HeaderText="To" PropertyName="toPath" SortString="toPath" SortKeySelector="item => item.toPath" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
         @context.toPath
     </GridColumn>
@@ -36,7 +39,12 @@
     <GridColumn TItem="InfoDownloadTaksModel" HeaderText="Actions">
         @if (context.state == StateTask.Working)
         {
-            <td><button class="btn btn-danger" @onclick="() => cancel(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Cancel task"><i class="bi bi-x"></i></button></td>
+            <td>
+                <div class="btn-group" role="group">
+                    <button class="btn btn-danger" @onclick="() => cancel(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Cancel task"><i class="bi bi-x"></i></button>
+                    <button class="btn btn-info" @onclick="() => infoModal.ShowModal(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Show Info"><i class="bi bi-info"></i></button>
+                </div>
+            </td>
         }
 
         @if (context.state == StateTask.Canceled || context.state == StateTask.Error)
@@ -44,7 +52,8 @@
             <td>
                 <div class="btn-group" role="group">
                     <button class="btn btn-info" @onclick="() => retry(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="retry task"><i class="bi bi-arrow-clockwise"></i></button>
-                    <button class="btn btn-danger" @onclick="() => delete(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="retry task"><i class="bi bi-trash"></i></button>
+                    <button class="btn btn-danger" @onclick="() => delete(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="delete task"><i class="bi bi-trash"></i></button>
+                    <button class="btn btn-info" @onclick="() => infoModal.ShowModal(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Show Info"><i class="bi bi-info"></i></button>
                 </div>
             </td>
         }
@@ -52,7 +61,16 @@
         {
             <td>
                 <div class="btn-group" role="group">
-                    <button class="btn btn-danger" @onclick="() => delete(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="retry task"><i class="bi bi-trash"></i></button>
+                    <button class="btn btn-danger" @onclick="() => delete(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="delete task"><i class="bi bi-trash"></i></button>
+                    <button class="btn btn-info" @onclick="() => infoModal.ShowModal(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Show Info"><i class="bi bi-info"></i></button>
+                </div>
+            </td>
+        }
+        @if(context.state == StateTask.Pending)
+        {
+            <td>
+                <div class="btn-group" role="group">
+                    <button class="btn btn-info" @onclick="() => infoModal.ShowModal(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Show Info"><i class="bi bi-info"></i></button>
                 </div>
             </td>
         }
@@ -60,10 +78,13 @@
 
 </Grid>
 
+<TelegramDownloader.Pages.Modals.InfoModals.TaskInfoModal @ref="infoModal"></TelegramDownloader.Pages.Modals.InfoModals.TaskInfoModal>
+
 @code {
 
     BlazorBootstrap.Grid<InfoDownloadTaksModel> grid = default!;
     public static List<InfoDownloadTaksModel> lpt = new List<InfoDownloadTaksModel>();
+    TaskInfoModal infoModal { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
@@ -123,4 +144,12 @@
         await InvokeAsync(StateHasChanged);
     }
 
+    public void Dispose()
+    {
+        tis.EventChanged -= eventChangedNew;
+        foreach (InfoDownloadTaksModel pt in lpt)
+        {
+            pt.EventChanged -= eventChangedPendingTask;
+        }
+    }
 }

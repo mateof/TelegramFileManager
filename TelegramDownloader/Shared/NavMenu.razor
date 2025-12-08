@@ -11,14 +11,40 @@
 @inject IJSRuntime JS;
 
 <style>
-    @@media (max-width: 1024px) {
-        .collapse.navbar-collapse {
-            display: none !important;
+    /* Collapse behavior for NavMenu */
+    @@media (max-width: 2048px) {
+        .nav-collapse-content {
+            display: none;
+            height: 0;
+            overflow: hidden;
+            transition: height 0.3s ease;
         }
 
-            .collapse.navbar-collapse.show {
-                display: block !important;
-            }
+        .nav-collapse-content.show {
+            display: block;
+            height: auto;
+            overflow: visible;
+        }
+
+        .nav-collapse-content .menu {
+            height: auto !important;
+            max-height: calc(100vh - 3.5rem);
+            overflow-y: auto;
+        }
+
+        .navbar-toggler {
+            display: block !important;
+        }
+    }
+
+    @@media (min-width: 2049px) {
+        .nav-collapse-content {
+            display: block !important;
+        }
+
+        .navbar-toggler {
+            display: none !important;
+        }
     }
 </style>
 
@@ -31,20 +57,20 @@
     </div>
 </div>
 
-<div class="@NavMenuCssClass">
+<div class="nav-collapse-content @(collapseNavMenu ? "" : "show")">
     <nav class="flex-column menu">
         @if (showSearch)
         {
             <div class="nav-item px-3">
                 <div class="input-group mb-3">
                     <span class="input-group-text" id="searchChatLabel"><i class="bi bi-search"></i></span>
-                    <input type="text" id="searchChats" class="form-control navbar-collapse" @onchange="searchChat" placeholder="Search" aria-label="Search" aria-describedby="Search">
+                    <input type="text" @ref="searchInput" @bind="searchString" @bind:event="onchange" @bind:after="searchChat" id="searchChats" class="form-control navbar-collapse" placeholder="Search" aria-label="Search" aria-describedby="Search">
                 </div>
             </div>
         }
         <div class="">
             <div class="btn-group btn-group-sm groupbtnclass" role="group" aria-label="Small button group">
-                <button type="button" class="btn btn-outline-primary groupbtnactionclass" @onclick="ToggleSearch"><i class="bi bi-search"></i></button>
+                <button type="button" class="btn btn-outline-primary groupbtnactionclass" @onclick="ToggleSearch"><i class="bi @(showSearch ? "bi-x-lg" : "bi-search")"></i></button>
                 <button type="button" class="btn btn-outline-primary groupbtnactionclass" title="Refresh channels" @onclick="RefreshChannels"><i class="bi bi-arrow-clockwise"></i></button>
                 <button type="button" class="btn btn-outline-primary groupbtnactionclass" @onclick="showPlayer"><i class="bi bi-boombox"></i></button>
                 <button class="btn groupbtnactionclass" type="button" @onclick="HandleThreeDots"><i class="bi bi-three-dots"></i></button>
@@ -73,7 +99,7 @@
                                 <div class="col-9">
 
                                     <div class="nav-item" style="padding:inherit;" @onclick="ToggleNavMenu">
-                                        <NavLink class="nav-link ellipsis" href="@($"/fetchdata/{cb.chat.ID}")" Match="NavLinkMatch.All">
+                                        <NavLink class="nav-link ellipsis" href="@($"/fm/{cb.chat.ID}")" Match="NavLinkMatch.All">
                                             <span aria-hidden="true">
 
 
@@ -90,8 +116,8 @@
                                             <span style="color:white" class="bi bi-table"></span>
                                         </button>
                                     }
-                                    <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false" @onclick="@(async () => await goTo($"/fm/{cb.chat.ID}"))">
-                                        <span style="color:white" class="bi bi-folder"></span>
+                                    <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false" @onclick="@(async () => await goTo($"/fetchdata/{cb.chat.ID}"))">
+                                        <span style="color:white" class="bi bi-chat-left-text"></span>
                                     </button>
                                 </div>
                             </div>
@@ -112,7 +138,7 @@
                                 <div class="col-9">
 
                                     <div class="nav-item" style="padding:inherit;" @onclick="ToggleNavMenu">
-                                        <NavLink class="nav-link ellipsis" href="@($"/fetchdata/{cb.chat.ID}")" Match="NavLinkMatch.All">
+                                        <NavLink class="nav-link ellipsis" href="@($"/fm/{cb.chat.ID}")" Match="NavLinkMatch.All">
                                             <span aria-hidden="true">
 
 
@@ -130,8 +156,8 @@
                                         </button>
                                     }
 
-                                    <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false" @onclick="@(async () => await goTo($"/fm/{cb.chat.ID}"))">
-                                        <span style="color:white" class="bi bi-folder"></span>
+                                    <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false" @onclick="@(async () => await goTo($"/fetchdata/{cb.chat.ID}"))">
+                                        <span style="color:white" class="bi bi-chat-left-text"></span>
                                     </button>
                                 </div>
                             </div>
@@ -158,7 +184,7 @@
                                 <div class="col-9">
 
                                     <div class="nav-item" style="padding:inherit;" @onclick="ToggleNavMenu">
-                                        <NavLink class="nav-link ellipsis" @onclick="@(async () => await goTo($"/shared/{sc.Id}"))" Match="NavLinkMatch.All">
+                                        <NavLink class="nav-link ellipsis" href="@($"/shared/{sc.Id}")" Match="NavLinkMatch.All">
                                             <span aria-hidden="true">
 
 
@@ -198,7 +224,7 @@
                                 </div>
                                 <div class="col-9">
                                     <div class="nav-item" style="padding:inherit;" @onclick="ToggleNavMenu">
-                                        <NavLink class="nav-link ellipsis" href="@($"/fetchdata/{cb.chat.ID}")" Match="NavLinkMatch.All">
+                                        <NavLink class="nav-link ellipsis" href="@($"/fm/{cb.chat.ID}")" Match="NavLinkMatch.All">
                                             <span aria-hidden="true">
                                                 @*  @if (cb.chat.Photo != null)
                                             {
@@ -218,8 +244,8 @@
                                             <span style="color:white" class="bi bi-table"></span>
                                         </button>
                                     }
-                                    <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false" @onclick="@(async () => await goTo($"/fm/{cb.chat.ID}"))">
-                                        <span style="color:white" class="bi bi-folder"></span>
+                                    <button class="btn" type="button" style="padding:0" data-bs-toggle="dropdown" aria-expanded="false" @onclick="@(async () => await goTo($"/fetchdata/{cb.chat.ID}"))">
+                                        <span style="color:white" class="bi bi-chat-left-text"></span>
                                     </button>
 
                                 </div>
@@ -244,6 +270,7 @@
 
     [Parameter] public EventCallback OnClickCallback { get; set; }
     [Parameter] public EventCallback OnClickOpenImportCallback { get; set; }
+    [Parameter] public EventCallback<bool> OnCollapseChanged { get; set; }
 
     Tabs tabs = default!;
 
@@ -255,20 +282,36 @@
     private string searchString = "";
     private bool collapseNavMenu = true;
     private bool showSearch = false;
+    private ElementReference searchInput;
 
-    private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
+    private string NavMenuCssClass => collapseNavMenu ? "collapse" : "collapse show";
 
-    private void ToggleNavMenu()
+    private async Task ToggleNavMenu()
     {
         collapseNavMenu = !collapseNavMenu;
+        if (OnCollapseChanged.HasDelegate)
+        {
+            await OnCollapseChanged.InvokeAsync(collapseNavMenu);
+        }
     }
     private async Task ToggleSearch()
     {
-        showSearch = !showSearch;
-        // if (showSearch)
-        // {
-        //     await JS.InvokeVoidAsync("focusElement", "searchChats");
-        // }
+        if (showSearch)
+        {
+            // Closing search - clear and refresh
+            searchString = "";
+            showSearch = false;
+            await OnInitializedAsync();
+            StateHasChanged();
+        }
+        else
+        {
+            // Opening search
+            showSearch = true;
+            StateHasChanged();
+            await Task.Delay(50); // Small delay to ensure input is rendered
+            await searchInput.FocusAsync();
+        }
     }
 
     private async Task OnTabShowingAsync(TabsEventArgs args)
@@ -343,9 +386,8 @@
         uriHelper.NavigateTo(route, forceLoad: true, replace: false);
     }
 
-    public async Task searchChat(Microsoft.AspNetCore.Components.ChangeEventArgs e)
+    public async Task searchChat()
     {
-        searchString = e.Value?.ToString() ?? "";
         await OnInitializedAsync();
         StateHasChanged();
     }

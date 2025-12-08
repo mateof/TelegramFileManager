@@ -1,20 +1,19 @@
+using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
-using TelegramDownloader.Data;
-
-using TelegramDownloader.Data.db;
-using TelegramDownloader.Services;
-
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.FileProviders;
 using Syncfusion.Blazor;
-using TL;
-using Microsoft.AspNetCore.StaticFiles;
-using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore;
-using TelegramDownloader.Models;
-using TelegramDownloader.Services.GitHub;
-using System.Net.Http;
 using System.Net;
+using System.Net.Http;
+using TelegramDownloader.Data;
+using TelegramDownloader.Data.db;
+using TelegramDownloader.Models;
+using TelegramDownloader.Services;
+using TelegramDownloader.Services.GitHub;
+using TL;
 
 var extensionProvider = new FileExtensionContentTypeProvider();
 foreach(var mime in FileService.MIMETypesDictionary)
@@ -59,7 +58,7 @@ builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
 builder.Services.AddSingleton<ITelegramService, TelegramService>();
 builder.Services.AddSingleton<IDbService, DbService>();
-builder.Services.AddTransient<IFileService, FileService>();
+builder.Services.AddTransient<IFileService, FileServiceV2>();
 builder.Services.AddSingleton<TransactionInfoService>();
 builder.Services.AddSingleton<FileManagerService>();
 builder.Services.AddSingleton<GHService>();
@@ -82,6 +81,11 @@ builder.Services.AddBlazorBootstrap();
 //});
 
 var app = builder.Build();
+
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
 
 using (var scope = app.Services.CreateScope())
 {

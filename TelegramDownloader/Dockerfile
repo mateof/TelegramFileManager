@@ -30,9 +30,16 @@ RUN apt-get update && \
 
 COPY ./WebDav /app/WebDav
 RUN python3 -m venv /app/venv
-RUN ln -sf /app/venv/bin/python /usr/bin/python
-RUN /app/venv/bin/pip install --upgrade pip
-RUN /app/venv/bin/pip install -r /app/WebDav/requirements.txt
+
+# Añade el venv al PATH para que "python" y los scripts (uvicorn, etc.) estén disponibles globalmente
+ENV PATH="/app/venv/bin:${PATH}"
+
+# Actualiza pip e instala requirements dentro del venv
+RUN python -m pip install --upgrade pip
+RUN python -m pip install -r /app/WebDav/requirements.txt
+
+# Comprobación opcional para fallar la build si falta uvicorn
+RUN python -c "import uvicorn; print('uvicorn OK', uvicorn.__version__)"
 
 COPY --from=publish /app/publish .
 ENTRYPOINT ["dotnet", "TelegramDownloader.dll"]

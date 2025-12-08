@@ -7,15 +7,19 @@ using TL;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using BlazorBootstrap;
+using System.Threading;
 
 namespace TelegramDownloader.Models
 {
 
     public class InfoDownloadTaksModel
     {
+        public Mutex mutex = new Mutex();
         public event EventHandler<InfoTaskEventArgs> EventChanged;
         public StateTask state { get; set; } = StateTask.Pending;
         public DateTime creationDate { get; set; } = DateTime.Now;
+        public DateTime endnDate { get; set; } = DateTime.Now;
+        public string _internalId { get; set; } = Guid.NewGuid().ToString();
         public string id {  get; set; }
         public bool isUpload {  get; set; }
         public List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files { get; set; }
@@ -38,10 +42,11 @@ namespace TelegramDownloader.Models
         {
             if (state == StateTask.Canceled)
                 cancelTask();
-            
+            mutex.WaitOne();
             executed += 1;
             progress = Convert.ToInt32(executed * 100 / total);
             executedSize += size;
+            mutex.ReleaseMutex();
             EventChanged?.Invoke(this, new InfoTaskEventArgs());
 
         }
@@ -49,6 +54,7 @@ namespace TelegramDownloader.Models
         public async void markAsCompleted()
         {
             state = StateTask.Completed;
+            endnDate = DateTime.Now;
             tis.CheckPendingUploadInfoTasks();
             EventChanged?.Invoke(this, new InfoTaskEventArgs());
 
@@ -66,16 +72,20 @@ namespace TelegramDownloader.Models
         {
             if (state == StateTask.Canceled)
                 return;
+            mutex.WaitOne();
             deleteNotWorkingTasks();
             currentUploads.Add(um);
+            mutex.ReleaseMutex();
         }
 
         public void addDownloads(DownloadModel dm)
         {
             if (state == StateTask.Canceled)
                 return;
+            mutex.WaitOne();
             deleteNotWorkingTasks();
             currentDownloads.Add(dm);
+            mutex.ReleaseMutex();
         }
 
         public void Retry()
@@ -120,12 +130,14 @@ namespace TelegramDownloader.Models
         public Mutex mutex = new Mutex();
         public event EventHandler<DownloadEventArgs> EventChanged;
         public event EventHandler EventStatechanged;
+        public string _internalId { get; set; } = Guid.NewGuid().ToString();
         public string id = Guid.NewGuid().ToString();
         public string action { get; set; } = "Download";
         public StateTask state { get; set; } = StateTask.Working;
         public string idTask { get; set; }
         public ChatMessages m {  get; set; }
         public string name { get; set; }
+        public string path { get; set; }
         public Callbacks callbacks { get; set; }
 
         public long _size { get; set; }
@@ -137,6 +149,9 @@ namespace TelegramDownloader.Models
         public IPeerInfo channel { get; set; }
         public string channelName { get; set; }
         public int progress { get; set; }
+        public DateTime creationDate { get; set; } = DateTime.Now;
+        public DateTime startDate {  get; set; }
+        public DateTime endnDate { get; set; }
         public TransactionInfoService tis { get; set; }
 
 
@@ -159,6 +174,7 @@ namespace TelegramDownloader.Models
                 throw new Exception($"Paused {name}");
             }
             tis.addDownloadBytes(transmitted - _transmitted);
+            mutex.WaitOne();
             _transmitted = transmitted;
             _sizeString = HelperService.SizeSuffix(totalSize);
             _transmittedString = HelperService.SizeSuffix(transmitted);
@@ -166,36 +182,45 @@ namespace TelegramDownloader.Models
             EventChanged?.Invoke(this, new DownloadEventArgs());
             if (transmitted == totalSize)
             {
+                endnDate = DateTime.Now;
                 state = StateTask.Completed;
                 EventStatechanged?.Invoke(this, EventArgs.Empty);
                 NotificationModel nm = new NotificationModel();
                 nm.sendEvent(new Notification($"Download {name} completed", "Download Completed", NotificationTypes.Success));
                 tis.CheckPendingDownloads();
             }
+            mutex.ReleaseMutex();
         }
 
         public void Cancel()
         {
+            mutex.WaitOne();
             state = StateTask.Canceled;
+            mutex.ReleaseMutex();
             tis.CheckPendingDownloads();
             EventChanged?.Invoke(this, new DownloadEventArgs());
         }
 
         public void Pause()
         {
+            mutex.WaitOne();
             state = StateTask.Paused;
+            mutex.ReleaseMutex();
             EventChanged?.Invoke(this, new DownloadEventArgs());
         }
 
         public void RetryCallback()
         {
+            startDate = DateTime.Now;
             callbacks.callback.Invoke();
         }
     }
 
     public class UploadModel
     {
+        public Mutex mutex = new Mutex();
         public event EventHandler<UploadEventArgs> EventChanged;
+        public string _internalId { get; set; } = Guid.NewGuid().ToString();
         public Guid id = Guid.NewGuid();
         public string action { get; set; } = "Upload";
         public StateTask state { get; set; } = StateTask.Working;
@@ -211,7 +236,9 @@ namespace TelegramDownloader.Models
         public string chatName { get; set; }
         public IPeerInfo channel { get; set; }
         public int progress { get; set; }
-        public Thread thread { get; set; }
+        public DateTime creationDate { get; set; } = DateTime.Now;
+        public DateTime startDate { get; set; }
+        public DateTime endnDate { get; set; }
         public TransactionInfoService tis { get; set; }
 
         public virtual void ProgressCallback(long transmitted, long totalSize)
@@ -219,6 +246,7 @@ namespace TelegramDownloader.Models
             if (state == StateTask.Canceled)
                 throw new Exception($"Canceled {name}");
             tis.addUploadBytes(transmitted - _transmitted);
+            mutex.WaitOne();
             _transmitted = transmitted;
             _sizeString = HelperService.SizeSuffix(totalSize);
             _transmittedString = HelperService.SizeSuffix(transmitted);
@@ -226,10 +254,12 @@ namespace TelegramDownloader.Models
             EventChanged?.Invoke(this, new UploadEventArgs());
             if (transmitted == totalSize)
             {
+                endnDate = DateTime.Now;
                 state = StateTask.Completed;
                 NotificationModel nm = new NotificationModel();
                 nm.sendEvent(new Notification($"Upload {name} completed", "Upload Completed", NotificationTypes.Success));
             }
+            mutex.ReleaseMutex();
 
         }
 
@@ -240,13 +270,19 @@ namespace TelegramDownloader.Models
 
         public void SetState(StateTask newState)
         {
+            if (newState == StateTask.Working)
+                startDate = DateTime.Now;
+            mutex.WaitOne();
             state = newState;
+            mutex.ReleaseMutex();
             EventChanged?.Invoke(this, new UploadEventArgs());
         }
 
         public void Cancel()
         {
+            mutex.WaitOne();
             state = StateTask.Canceled;
+            mutex.ReleaseMutex();
             EventChanged?.Invoke(this, new UploadEventArgs());
         }
 
@@ -264,6 +300,7 @@ namespace TelegramDownloader.Models
         }
         public override void ProgressCallback(long transmitted, long totalSize)
         {
+            mutex.WaitOne();
             _transmitted = transmitted;
             _sizeString = HelperService.SizeSuffix(totalSize);
             _transmittedString = HelperService.SizeSuffix(transmitted);
@@ -275,7 +312,7 @@ namespace TelegramDownloader.Models
                 NotificationModel nm = new NotificationModel();
                 nm.sendEvent(new Notification($"Split {name} completed", "Split Completed", NotificationTypes.Success));
             }
-
+            mutex.ReleaseMutex();
         }
     }
 
@@ -287,15 +324,19 @@ namespace TelegramDownloader.Models
         }
         public virtual void Init(long size, string filename)
         {
+            mutex.WaitOne();
             _sizeString = HelperService.SizeSuffix(size);
             name = filename;
+            mutex.ReleaseMutex();
             base.InvokeEvent(new UploadEventArgs());
         }
 
         public virtual void Finish()
         {
+            mutex.WaitOne();
             state = StateTask.Completed;
             progress = 100;
+            mutex.ReleaseMutex();
             base.InvokeEvent(new UploadEventArgs());
         }
     }

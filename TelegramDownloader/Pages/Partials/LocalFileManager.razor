@@ -32,8 +32,18 @@
     [Parameter]
     public string id { get; set; }
     private string chatName { get; set; }
+    private string _previousId;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_previousId != id)
+        {
+            _previousId = id;
+            await LoadDataAsync();
+        }
+    }
+
+    private async Task LoadDataAsync()
     {
         try
         {
@@ -43,6 +53,5 @@
         {
             Logger.LogError(e, "Error on getChatName");
         }
-
     }
 }

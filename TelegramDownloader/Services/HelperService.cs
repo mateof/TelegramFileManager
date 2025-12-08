@@ -8,7 +8,7 @@ namespace TelegramDownloader.Services
         public static readonly string[] SizeSuffixes =
                   { "bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB" };
 
-        public  static string SizeSuffix(Int64 value, int decimalPlaces = 1)
+        public static string SizeSuffix(Int64 value, int decimalPlaces = 1)
         {
             if (value < 0) { return "-" + SizeSuffix(-value, decimalPlaces); }
 
@@ -26,6 +26,11 @@ namespace TelegramDownloader.Services
         public static string SizeSuffixPerTime(Int64 value, String time = "s", int decimalPlaces = 1)
         {
             return SizeSuffix(value, decimalPlaces) + "/" + time;
+        }
+
+        public static long bytesToMegaBytes(Int64 value)
+        {
+            return value / 1024 / 1024;
         }
 
         public static async Task<DirectorySizeModel> GetDirecctorySizeAsync(string path)
@@ -85,6 +90,7 @@ namespace TelegramDownloader.Services
             ".mkv",
             ".avi",
             ".mov",
+            ".ogm",
             ".wmv",
             ".flv",
             ".webm",

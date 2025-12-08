@@ -6,20 +6,11 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 
 using Syncfusion.Blazor.FileManager;
-using Syncfusion.Blazor.Inputs;
 using Syncfusion.EJ2.FileManager.Base;
 using Syncfusion.EJ2.FileManager.PhysicalFileProvider;
-using Syncfusion.EJ2.Notifications;
-using System;
-using System.Collections.Generic;
-using System.IO;
 using System.IO.Compression;
-using System.Linq;
 using System.Net;
-using System.Net.Http.Headers;
-using System.Runtime.Serialization.Formatters.Binary;
 using System.Web;
-using System.Xml.Linq;
 using TelegramDownloader.Data;
 using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
@@ -37,12 +28,15 @@ namespace TelegramDownloader.Controllers
         public PhysicalFileProvider operation;
         public string basePath;
         string root = FileService.RELATIVELOCALDIR;
+
+        private static SemaphoreSlim semaphoreSlim = new SemaphoreSlim(1);
         IDbService _db { get; set; }
         ITelegramService _ts { get; set; }
         IFileService _fs { get; set; }
         TransactionInfoService _tis { get; set; }
+        private ILogger<IFileService> _logger { get; set; }
 
-        public FileController(IDbService db, ITelegramService ts, IFileService fs, TransactionInfoService tis)
+        public FileController(IDbService db, ITelegramService ts, IFileService fs, TransactionInfoService tis, ILogger<IFileService> logger)
         {
             this.basePath = Environment.CurrentDirectory;
             if (!System.IO.Directory.Exists(Path.Combine(basePath, root)))
@@ -53,6 +47,7 @@ namespace TelegramDownloader.Controllers
             _ts = ts;
             _db = db;
             _tis = tis;
+            _logger = logger;
             
             this.operation = new PhysicalFileProvider();
             this.operation.RootFolder(Path.Combine(basePath, root));
@@ -248,9 +243,21 @@ namespace TelegramDownloader.Controllers
                 TL.Message idM = await _ts.getMessageFile(idChannel, Convert.ToInt32(idFile));
                 ChatMessages cm = new ChatMessages();
                 cm.message = idM;
-                file = new FileStream(System.IO.Path.Combine(FileService.TEMPDIR, "_temp", $"{idChannel}-{idFile}-{id}"), FileMode.Create, FileAccess.ReadWrite);
+                string filePath = System.IO.Path.Combine(FileService.TEMPDIR, "_temp", $"{idChannel}-{idFile}-{id}");
+                file = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite);
                 DownloadModel dm = new DownloadModel();
                 dm.tis = _tis;
+                dm.startDate = DateTime.Now;
+                dm.path = filePath;
+                if (cm.message is Message msgBase)
+                {
+                    if (msgBase.media is MessageMediaDocument mediaDoc &&
+                        mediaDoc.document is TL.Document doc)
+                    {
+                        dm._size = doc.size;
+                        dm.name = doc.Filename;
+                    }
+                }
                 dm.channelName = _ts.getChatName(Convert.ToInt64(idChannel));
                 _tis.addToDownloadList(dm);
                 await _ts.DownloadFileAndReturn(cm, file, model: dm);
@@ -265,6 +272,100 @@ namespace TelegramDownloader.Controllers
                 EnableRangeProcessing = true
                 
             };
+        }
+
+        [Route("GetFileByTfmIdNow/{id}")]
+        public async Task<IActionResult> GetFileByTfmIdNow(string id, [FromQuery] string idChannel, [FromQuery] string idFile)
+        {
+            var fileName = id;
+            var mimeType = FileService.getMimeType(id.Split(".").Last());
+            var dbFile = await _fs.getItemById(idChannel, idFile);
+            if (dbFile == null)
+            {
+                return new ObjectResult("") { StatusCode = (int)HttpStatusCode.NotFound };
+            }
+            var file = _fs.ExistFileIntempFolder($"{idChannel}-{dbFile.MessageId}-{id}");
+            if (file == null)
+            {
+                TL.Message idM = await _ts.getMessageFile(idChannel, Convert.ToInt32(dbFile.MessageId));
+                ChatMessages cm = new ChatMessages();
+                cm.message = idM;
+                String filePath = System.IO.Path.Combine(FileService.TEMPDIR, "_temp", $"{idChannel}-{idFile}-{id}");
+                file = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite);
+                DownloadModel dm = new DownloadModel();
+                dm.tis = _tis;
+                dm.startDate = DateTime.Now;
+                dm.path = filePath;
+                dm.name = dbFile.Name;
+                dm._size = dbFile.Size;
+                dm.channelName = _ts.getChatName(Convert.ToInt64(idChannel));
+                _tis.addToDownloadList(dm);
+                await _ts.DownloadFileAndReturn(cm, file, model: dm);
+                file.Position = 0;
+            }
+
+            Response.Headers["Content-Disposition"] = $"inline; filename=\"{HttpUtility.UrlEncode(fileName)}\"";
+
+            return new FileStreamResult(file, mimeType);
+        }
+
+        [Route("GetFileByTfmId/{id}")]
+        public async Task<IActionResult> GetFileByTfmId(string id, [FromQuery] string idChannel, [FromQuery] string idFile)
+        {
+            var fileName = id;
+            var mimeType = FileService.getMimeType(id.Split(".").Last());
+            var dbFile = await _fs.getItemById(idChannel, idFile);
+            if (dbFile == null)
+            {
+                return new ObjectResult("") { StatusCode = (int)HttpStatusCode.NotFound };
+            }
+            
+            dbFile.Name = $"{idChannel}-{(dbFile.MessageId != null ? dbFile.MessageId.ToString() : dbFile.Id)}-{id}";
+            String path = Path.Combine(FileService.TEMPDIR, "_temp");
+            String filePath = Path.Combine(path, dbFile.Name);
+            var mutexState = semaphoreSlim.Wait(10000);
+            FileStream? file = null;
+            if (!mutexState)
+            {
+                _logger.LogWarning("Could not acquire download mutex in 10 seconds for file {fileName}", dbFile.Name);
+                return StatusCode(500, "Could not acquire download mutex in 10 seconds");
+            }
+
+            file = _fs.ExistFileIntempFolder(dbFile.Name);
+            var isFileDownloaded = _tis.isFileDownloaded(filePath);
+            if (!isFileDownloaded)
+                if ((file == null) || (file != null && file.Length < dbFile.Size))
+                {
+                    _logger.LogWarning("Stream Downloading file {fileName}", dbFile.Name);
+                    await _fs.downloadFile(idChannel, new List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> { dbFile.toFileManagerContent() }, path);
+                    Thread.Sleep(4000);
+                    file = _fs.ExistFileIntempFolder(dbFile.Name);
+                }
+
+            if (mutexState)
+                semaphoreSlim.Release();
+
+            if (file == null)
+            {
+                return NotFound();
+            }
+
+            Response.Headers["Content-Disposition"] = $"inline; filename=\"{HttpUtility.UrlEncode(fileName)}\"";
+
+            try
+            {
+                return new FileStreamResult(file, mimeType)
+                {
+                    FileDownloadName = fileName,
+                    EnableRangeProcessing = true
+
+                };
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogInformation("❌ El cliente cerró la conexión al descargar el archivo {fileName}.", fileName);
+                return StatusCode(StatusCodes.Status499ClientClosedRequest);
+            }
         }
 
         [Route("strm")]
@@ -288,7 +389,7 @@ namespace TelegramDownloader.Controllers
 
             var request = HttpContext.Request;
             var rangeHeader = request.Headers["Range"].ToString();
-            Console.WriteLine("range: ", rangeHeader);
+            _logger.LogDebug("GetFileStream - Range: {Range}", rangeHeader);
 
             var file = await _fs.getItemById(idChannel, idFile);
             long totalLength = file.Size;
@@ -319,7 +420,7 @@ namespace TelegramDownloader.Controllers
 
             if (from >= totalPartialFileLength)
             {
-                Console.WriteLine("Take a file part: from: " + from + ", totalPartialFileLength: " + totalPartialFileLength);
+                _logger.LogDebug("Take a file part - From: {From}, TotalPartialFileLength: {TotalPartialFileLength}", from, totalPartialFileLength);
                 int filePart = 0;
                 while(from >= totalPartialFileLength)
                 {
@@ -339,7 +440,7 @@ namespace TelegramDownloader.Controllers
                 from = (from / 524288) * 524288;
             }
 
-            Console.WriteLine("Fom:" + from);
+            _logger.LogDebug("Stream position - From: {From}", from);
 
             if (to == 0)
                 if (string.IsNullOrEmpty(rangeHeader) || from == 0)
@@ -417,113 +518,10 @@ namespace TelegramDownloader.Controllers
             }
             catch (OperationCanceledException)
             {
-                Console.WriteLine("❌ El cliente cerró la conexión.");
+                _logger.LogInformation("Client closed connection during stream - File: {FileName}", fileName);
             }
 
             return new EmptyResult();
-
-        }
-
-        [Route("GetFileStream2/{idChannel}/{idFile}/{name}")]
-        public async Task<IActionResult> GetFileStream2(string idChannel, string idFile, string name)
-        {
-            var fileName = name;
-            var mimeType = FileService.getMimeType(name.Split(".").Last());
-
-            var request = HttpContext.Request;
-            var rangeHeader = request.Headers["Range"].ToString();
-
-            var file = await _fs.getItemById(idChannel, idFile);
-
-            // HttpResponseMessage fullResponse = new HttpResponseMessage(HttpStatusCode.OK); // Request.CreateResponse(HttpStatusCode.OK);
-            TL.Message idM = await _ts.getMessageFile(idChannel, file.MessageId ?? file.ListMessageId.FirstOrDefault());
-            //byte[] data = await _ts.DownloadFileStream(idM, 0, 512);
-            //var stream = new MemoryStream(data);
-
-            // Supón que puedes obtener el tamaño total del archivo remoto
-            long totalLength = (await _fs.getItemById(idChannel, idFile)).Size;
-
-            long from = 0;
-            long initialFrom = 0;
-            long to = 0;
-
-
-
-            if (!string.IsNullOrEmpty(rangeHeader) && rangeHeader.StartsWith("bytes="))
-            {
-                var range = rangeHeader.Replace("bytes=", "").Split('-');
-                from = long.Parse(range[0]);
-                initialFrom = from;
-                if (range.Length > 1 && !string.IsNullOrEmpty(range[1]))
-                    to = long.Parse(range[1]);
-            }
-
-            if (from > 0)
-            {
-                from = (from / 524288) * 524288;
-            }
-
-            if (to == 0)
-                to = (25 * 524288) + from;
-            else
-                to = ((to + 524288) / 524288) * 524288;
-
-            if (to > totalLength)
-            {
-                to = totalLength - 1;
-            }
-
-            long length = to - from;
-
-            byte[] data = await _ts.DownloadFileStream(idM, from, (int)length);
-
-            long skipedBytes = initialFrom - from; // (data.Length + initialFrom) >= totalLength ? data.Length - (totalLength - initialFrom) : initialFrom - from;
-
-            if (skipedBytes < 0) skipedBytes = 0;
-
-            if (skipedBytes >= data.Length)
-                return StatusCode(500, "No hay suficientes bytes en el bloque descargado");
-
-            long dataLength = data.Length - skipedBytes;
-            Response.ContentLength = (dataLength + initialFrom) >= totalLength ? totalLength - initialFrom : dataLength;
-            // Response.StatusCode = (int)HttpStatusCode.PartialContent; // 206
-            Response.StatusCode = StatusCodes.Status206PartialContent;
-            Response.ContentType = mimeType;
-            Response.Headers.Add("Content-Range", $"bytes {initialFrom}-{(initialFrom + Response.ContentLength - 1)}/{totalLength}");
-            Response.Headers.Add("Accept-Ranges", "bytes");
-
-            if (Request.Headers.ContainsKey("Range"))
-            {
-                Console.WriteLine("Range header recibido:");
-                Console.WriteLine(Request.Headers["Range"]);
-            }
-
-            foreach (var header in Response.Headers)
-            {
-                Console.WriteLine($"{header.Key}: {header.Value}");
-            }
-
-
-
-
-            var stream = new MemoryStream(data, (int)skipedBytes, (int)Response.ContentLength);
-
-            Console.WriteLine("Real Data length: " + stream.Length);
-
-            Console.WriteLine("---------------------------------------------------");
-
-            //return new FileStreamResult(stream, mimeType);
-            var cancellationToken = HttpContext.RequestAborted;
-
-            await stream.CopyToAsync(Response.Body, 64 * 1024, cancellationToken);
-            await Response.Body.FlushAsync(cancellationToken);
-
-            return new EmptyResult();
-            // return File(stream, mimeType, enableRangeProcessing: false);
-            //return new FileStreamResult(stream, mimeType)
-            //{
-            //    EnableRangeProcessing = false
-            //};
 
         }
 

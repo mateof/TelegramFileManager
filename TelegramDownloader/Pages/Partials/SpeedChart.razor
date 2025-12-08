@@ -1,0 +1,97 @@
+@using TelegramDownloader.Services
+@implements IDisposable
+
+@inject TransactionInfoService tis
+@inject IJSRuntime JS
+
+<div class="speed-chart-container">
+    <canvas id="speedChart" style="width: 100%; height: @Height;"></canvas>
+</div>
+
+@code {
+    [Parameter]
+    public string Height { get; set; } = "300px";
+
+    private bool chartInitialized = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Subscribe to the new incremental event
+        tis.NewSpeedHistoryPoint += OnNewSpeedHistoryPoint;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await InitializeChart();
+            chartInitialized = true;
+            await LoadInitialData();
+        }
+    }
+
+    private async void OnNewSpeedHistoryPoint(object? sender, SpeedHistoryEventArgs e)
+    {
+        if (chartInitialized)
+        {
+            await InvokeAsync(async () => await AddSinglePoint(e.DownloadPoint, e.UploadPoint));
+        }
+    }
+
+    private async Task InitializeChart()
+    {
+        int maxPoints = TransactionInfoService.MAX_SPEED_HISTORY_SECONDS / TransactionInfoService.INTERVAL_SPEED_HISTORY_SECONDS;
+        int intervalSeconds = TransactionInfoService.INTERVAL_SPEED_HISTORY_SECONDS;
+        await JS.InvokeVoidAsync("initSpeedChart", maxPoints, intervalSeconds);
+    }
+
+    private async Task LoadInitialData()
+    {
+        var downloadHistory = tis.GetDownloadSpeedsHistoryCopy();
+        var uploadHistory = tis.GetUploadSpeedsHistoryCopy();
+
+        var downloadData = downloadHistory
+            .Select(x => new {
+                time = x.time.ToString("HH:mm:ss"),
+                datetime = x.time.ToString("dd/MM/yyyy HH:mm:ss"),
+                speed = x.speed / 1024.0 / 1024.0,
+                files = x.activeFiles
+            })
+            .ToList();
+
+        var uploadData = uploadHistory
+            .Select(x => new {
+                time = x.time.ToString("HH:mm:ss"),
+                datetime = x.time.ToString("dd/MM/yyyy HH:mm:ss"),
+                speed = x.speed / 1024.0 / 1024.0,
+                files = x.activeFiles
+            })
+            .ToList();
+
+        await JS.InvokeVoidAsync("loadSpeedChartHistory", downloadData, uploadData);
+    }
+
+    private async Task AddSinglePoint(SpeedHistory downloadPoint, SpeedHistory uploadPoint)
+    {
+        var download = new {
+            time = downloadPoint.time.ToString("HH:mm:ss"),
+            datetime = downloadPoint.time.ToString("dd/MM/yyyy HH:mm:ss"),
+            speed = downloadPoint.speed / 1024.0 / 1024.0,
+            files = downloadPoint.activeFiles
+        };
+
+        var upload = new {
+            time = uploadPoint.time.ToString("HH:mm:ss"),
+            datetime = uploadPoint.time.ToString("dd/MM/yyyy HH:mm:ss"),
+            speed = uploadPoint.speed / 1024.0 / 1024.0,
+            files = uploadPoint.activeFiles
+        };
+
+        await JS.InvokeVoidAsync("addSpeedChartPoint", download, upload);
+    }
+
+    public void Dispose()
+    {
+        tis.NewSpeedHistoryPoint -= OnNewSpeedHistoryPoint;
+    }
+}

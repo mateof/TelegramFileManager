@@ -12,6 +12,7 @@ namespace TelegramDownloader.Data
         Task<List<FileManagerDirectoryContent>> createFolder(string dbName, FolderCreateEventArgs<FileManagerDirectoryContent> args);
         void cleanTempFolder();
         Task<BsonSharedInfoModel> GetSharedInfoById(string id);
+        Task<BsonFileManagerModel> getSharedItemById(string id, string collection);
         Task DeleteShared(string id, string collectionId);
         Task downloadFile(string dbName, List<FileManagerDirectoryContent> files, string targetPath, string? collectionId = null, string? channelId = null);
         Task downloadFile(string dbName, string path, List<string> files, string targetPath, string? collectionId = null, string? channelId = null);
@@ -35,7 +36,7 @@ namespace TelegramDownloader.Data
         Task UploadFile(string dbName, string currentPath, UploadFiles file);
         Task UploadFileFromServer(string dbName, string currentPath, List<FileManagerDirectoryContent> files, InfoDownloadTaksModel dm = null);
         Task AddUploadFileFromServer(string dbName, string currentPath, List<FileManagerDirectoryContent> files, InfoDownloadTaksModel idt = null);
-        Task refreshChannelFIles(string channelId);
+        Task refreshChannelFIles(string channelId, bool force = false);
         bool isChannelRefreshing(string channelId);
     }
 }

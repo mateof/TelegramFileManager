@@ -8,14 +8,16 @@
 @inject IFileService fs;
 @inject ITelegramService ts;
 @inject ILogger<FileManager> Logger;
+@inject NavigationManager NavManager
+
 
 
 
 <SfFileManager @ref="FileManager" ID="localfm" TValue="FileManagerDirectoryContent">
-    <FileManagerAjaxSettings Url=@($"/api/file/FileOperations")
-    UploadUrl="/api/file/Upload"
-    DownloadUrl="/api/file/Download"
-    GetImageUrl="/api/file/GetImage">
+    <FileManagerAjaxSettings Url="@FileOperationsUrl"
+                             UploadUrl="@UploadUrl"
+                             DownloadUrl="@DownloadUrl"
+                             GetImageUrl="@GetImageUrl">
     </FileManagerAjaxSettings>
     <FileManagerSearchSettings FilterDelay="1200"></FileManagerSearchSettings>
     <FileManagerUploadSettings MaxFileSize="@(long.MaxValue)" AutoUpload="true"></FileManagerUploadSettings>
@@ -50,6 +52,13 @@
     private Modals.FileUploadModal ModalUpSer { get; set; }
     private bool isMyChannel = false;
 
+    private string BaseUrl => NavManager.BaseUri.TrimEnd('/');
+
+    private string FileOperationsUrl => $"{BaseUrl}/api/file/FileOperations";
+    private string UploadUrl => $"{BaseUrl}/api/file/Upload";
+    private string DownloadUrl => $"{BaseUrl}/api/file/Download";
+    private string GetImageUrl => $"{BaseUrl}/api/file/GetImage";
+
 
     public List<ToolBarItemModel> Items = new List<ToolBarItemModel>(){
         new ToolBarItemModel() { Name = "NewFolder" },
@@ -68,12 +77,72 @@
         new ToolBarItemModel() { Name = "UrlMedia", Text = "Url Media", TooltipText = "Url Media", PrefixIcon = "bi bi-collection-play-fill", Visible = false }
     };
 
-    protected override async Task OnInitializedAsync()
+    private string _previousId;
+    private bool _firstRenderComplete = false;
+    private bool _needsRefresh = false;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_previousId != id)
+        {
+            _previousId = id;
+            await LoadDataAsync();
+
+            // Solo marcar refresh si ya pasó el primer render
+            if (_firstRenderComplete)
+            {
+                _needsRefresh = true;
+            }
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _firstRenderComplete = true;
+        }
+
+        if (_needsRefresh && FileManager != null)
+        {
+            _needsRefresh = false;
+            FileManager.Path = "/";
+            await FileManager.RefreshFilesAsync();
+        }
+    }
+
+    public async Task RefreshFileManager()
+    {
+        if (FileManager != null)
+        {
+            FileManager.Path = "/";
+            await FileManager.RefreshFilesAsync();
+        }
+    }
+
+    private async Task LoadDataAsync()
     {
         if (!isShared)
         {
             isMyChannel = ts.isMyChat(Convert.ToInt64(id));
-            // Items = Items.Prepend(new ToolBarItemModel() { Name = "NewFolder" }).ToList();
+
+            // Reset Items to base items
+            Items = new List<ToolBarItemModel>(){
+                new ToolBarItemModel() { Name = "NewFolder" },
+                new ToolBarItemModel() { Name = "Cut" },
+                new ToolBarItemModel() { Name = "Copy" },
+                new ToolBarItemModel() { Name = "Paste" },
+                new ToolBarItemModel() { Name = "Delete" },
+                new ToolBarItemModel() { Name = "Download" },
+                new ToolBarItemModel() { Name = "Rename" },
+                new ToolBarItemModel() { Name = "SortBy" },
+                new ToolBarItemModel() { Name = "Refresh" },
+                new ToolBarItemModel() { Name = "Selection" },
+                new ToolBarItemModel() { Name = "View" },
+                new ToolBarItemModel() { Name = "Details" },
+                new ToolBarItemModel() { Name = "UrlMedia", Text = "Url Media", TooltipText = "Url Media", PrefixIcon = "bi bi-collection-play-fill", Visible = false }
+            };
+
             if (isMyChannel)
             {
                 Items.AddRange(new List<ToolBarItemModel>(){
