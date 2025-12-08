@@ -1182,7 +1182,35 @@ namespace TelegramDownloader.Data
 
         public async Task<String> CreateStrmFiles(string path, string dbName, string host)
         {
-            String basePath = Path.Combine(TEMPDIR, "Strm", dbName);
+            String folderPathName = Path.GetFileName(path.TrimEnd('/'));
+            String strmPath = Path.Combine(TEMPDIR, "Strm");
+
+
+            DateTime limite = DateTime.Now.AddHours(-1);
+
+            // Eliminar ficheros
+            foreach (string fichero in Directory.GetFiles(strmPath))
+            {
+                DateTime creacion = File.GetCreationTime(fichero);
+                if (creacion <= limite)
+                {
+                    File.Delete(fichero);
+                    Console.WriteLine($"Archivo eliminado: {fichero}");
+                }
+            }
+
+            // Eliminar carpetas
+            foreach (string carpeta in Directory.GetDirectories(strmPath))
+            {
+                DateTime creacion = Directory.GetCreationTime(carpeta);
+                if (creacion <= limite)
+                {
+                    Directory.Delete(carpeta, true); // true elimina recursivamente
+                    Console.WriteLine($"Carpeta eliminada: {carpeta}");
+                }
+            }
+
+            String basePath = Path.Combine(TEMPDIR, "Strm", dbName, folderPathName);
             try
             {
                 Directory.Delete(basePath, true);
