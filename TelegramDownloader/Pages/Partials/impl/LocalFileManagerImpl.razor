@@ -107,7 +107,15 @@
         {
             _needsRefresh = false;
             FileManager.Path = "/";
-            await FileManager.RefreshFilesAsync();
+            try
+            {
+                await FileManager.RefreshFilesAsync();
+            } catch(Exception ex)
+            {
+                Logger.LogError(ex, "Error on  FileManager.RefreshFilesAsync()");
+                nm.sendMessage("Error", "Error on  FileManager.RefreshFilesAsync()", NotificationTypes.Error);
+            }
+            
         }
     }
 

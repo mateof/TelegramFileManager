@@ -1,0 +1,110 @@
+@using TelegramDownloader.Data
+@using TelegramDownloader.Models
+
+<div class="custom-dropdown-tree @(IsOpen ? "open" : "")">
+    <div class="dropdown-header" @onclick="ToggleDropdown">
+        <span class="selected-text">@(string.IsNullOrEmpty(SelectedText) ? Placeholder : SelectedText)</span>
+        <span class="dropdown-arrow">@(IsOpen ? "\u25B2" : "\u25BC")</span>
+    </div>
+
+    @if (IsOpen)
+    {
+        <div class="dropdown-content">
+            @if (IsLoading && RootNodes == null)
+            {
+                <div class="loading-indicator">Loading...</div>
+            }
+            else if (RootNodes != null)
+            {
+                <div class="tree-container">
+                    @foreach (var node in RootNodes)
+                    {
+                        <CustomTreeNode
+                            Node="node"
+                            OnNodeSelected="HandleNodeSelected"
+                            OnLoadChildren="LoadChildrenAsync"
+                            Level="0"
+                            SelectedNodeId="@SelectedValue" />
+                    }
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public string DbName { get; set; }
+
+    [Parameter]
+    public string Placeholder { get; set; } = "Select a folder";
+
+    [Parameter]
+    public string SelectedValue { get; set; }
+
+    [Parameter]
+    public EventCallback<string> SelectedValueChanged { get; set; }
+
+    [Parameter]
+    public Func<string, string, Task<List<TreeNodeModel>>> LoadChildrenFunc { get; set; }
+
+    private bool IsOpen { get; set; } = false;
+    private bool IsLoading { get; set; } = false;
+    private string SelectedText { get; set; }
+    private List<TreeNodeModel> RootNodes { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (RootNodes == null && !string.IsNullOrEmpty(DbName))
+        {
+            await LoadRootNodes();
+        }
+    }
+
+    private async Task LoadRootNodes()
+    {
+        IsLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            if (LoadChildrenFunc != null)
+            {
+                RootNodes = await LoadChildrenFunc(DbName, null);
+            }
+        }
+        finally
+        {
+            IsLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ToggleDropdown()
+    {
+        IsOpen = !IsOpen;
+    }
+
+    private async Task HandleNodeSelected(TreeNodeModel node)
+    {
+        SelectedValue = node.Id;
+        SelectedText = node.Name;
+        IsOpen = false;
+        await SelectedValueChanged.InvokeAsync(node.Id);
+    }
+
+    private async Task<List<TreeNodeModel>> LoadChildrenAsync(string parentId)
+    {
+        if (LoadChildrenFunc != null)
+        {
+            return await LoadChildrenFunc(DbName, parentId);
+        }
+        return new List<TreeNodeModel>();
+    }
+
+    public void Refresh()
+    {
+        RootNodes = null;
+        _ = LoadRootNodes();
+    }
+}

@@ -32,6 +32,7 @@ namespace TelegramDownloader.Data.db
         Task<List<BsonFileManagerModel>> getAllFilesInDirectoryPath(string dbName, string path, string collectionName = "directory");
         Task<List<BsonFileManagerModel>> getAllFilesInDirectoryPath2(string dbName, string path, string collectionName = "directory");
         Task<List<BsonFileManagerModel>> getAllFolders(string dbName, string? parentId = null, string collectionName = "directory");
+        Task<List<BsonFileManagerModel>> getFoldersByParentId(string dbName, string? parentId, string collectionName = "directory");
         Task<List<int>> getAllIdsFromChannel(string dbName, string collectionName = "directory");
         IMongoDatabase getDatabase(string dbName);
         Task<BsonFileManagerModel> getEntry(string dbName, string filterId, string name, string collectionName = "directory");

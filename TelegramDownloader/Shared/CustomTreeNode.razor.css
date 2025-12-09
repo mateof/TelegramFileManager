@@ -1,0 +1,67 @@
+.tree-node {
+    user-select: none;
+}
+
+.node-content {
+    display: flex;
+    align-items: center;
+    padding: 0.25rem 0.35rem;
+    cursor: pointer;
+    border-radius: 0.25rem;
+    transition: background-color 0.15s ease-in-out;
+}
+
+.node-content:hover {
+    background-color: var(--bs-tertiary-bg, #f8f9fa);
+}
+
+.node-content.selected {
+    background-color: var(--bs-primary-bg-subtle, #cfe2ff);
+    color: var(--bs-primary-text-emphasis, #084298);
+}
+
+.expand-icon {
+    width: 1rem;
+    height: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.6rem;
+    color: var(--bs-secondary-color, #6c757d);
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.expand-icon:hover {
+    color: var(--bs-body-color, #212529);
+}
+
+.expand-icon-placeholder {
+    width: 1rem;
+    height: 1rem;
+    flex-shrink: 0;
+}
+
+.folder-icon {
+    width: 14px;
+    height: 14px;
+    min-width: 14px;
+    min-height: 14px;
+    margin-right: 0.3rem;
+    flex-shrink: 0;
+    color: #f0c14b;
+}
+
+.node-text {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.9rem;
+}
+
+.spinner-border-sm {
+    width: 0.65rem;
+    height: 0.65rem;
+    border-width: 0.12em;
+}

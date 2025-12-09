@@ -378,6 +378,25 @@ namespace TelegramDownloader.Data.db
             //return await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Where(x => !x.IsFile && x.ParentId == parentId))).ToListAsync();
         }
 
+        public async Task<List<BsonFileManagerModel>> getFoldersByParentId(string dbName, string? parentId, string collectionName = "directory")
+        {
+            if (collectionName == null)
+                collectionName = "directory";
+
+            if (string.IsNullOrEmpty(parentId))
+            {
+                // Root level folders - ParentId is empty
+                return await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName)
+                    .FindAsync(Builders<BsonFileManagerModel>.Filter.Where(x => !x.IsFile && string.IsNullOrEmpty(x.ParentId))))
+                    .ToListAsync();
+            }
+
+            // Child folders by ParentId
+            return await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName)
+                .FindAsync(Builders<BsonFileManagerModel>.Filter.Where(x => !x.IsFile && x.ParentId == parentId)))
+                .ToListAsync();
+        }
+
         public async Task<List<int>> getAllIdsFromChannel(string dbName, string collectionName = "directory")
         {
             if (collectionName == null)

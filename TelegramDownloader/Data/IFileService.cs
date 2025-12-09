@@ -25,6 +25,7 @@ namespace TelegramDownloader.Data
         Task<MemoryStream> getImage(string dbName, string path, string fileName, MemoryStream ms = null, string? collectionId = null);
         Task<BsonFileManagerModel> getItemById(string dbName, string id);
         Task<List<BsonFileManagerModel>> getTelegramFolders(string dbName, string? parentId = null);
+        Task<List<BsonFileManagerModel>> getTelegramFoldersByParentId(string dbName, string? parentId);
         Task<List<ExpandoObject>> GetTelegramFoldersExpando(string id, string parentId);
         Task<String> CreateStrmFiles(string path, string dbName, string host);
         Task importData(string dbName, string path, GenericNotificationProgressModel gnp);

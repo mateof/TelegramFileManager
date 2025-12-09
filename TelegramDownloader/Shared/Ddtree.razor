@@ -1,33 +1,22 @@
-﻿@using System.Collections.ObjectModel
+@using System.Collections.ObjectModel
 @using TelegramDownloader.Data
 @using TelegramDownloader.Models
-@using Syncfusion.Blazor
-@using Syncfusion.Blazor.Navigations
 
 @inject IFileService fs
 
 
-    <div class="form-floating mb-3">
-    @if (localFolderTypes.Contains(folderType))
-    {
-        <SfDropDownTree class="form-control" id="@idTree" type="text" aria-label="Folder" AllowFiltering="true" LoadOnDemand="true" TValue="string" TItem="FolderModel" Placeholder="Select a Folder" @bind-Value="@selectedNode">
-            <DropDownTreeField TItem="FolderModel" ID="Id" Text="FolderName" Child="Folders" DataSource="@LocalFolders" Expanded="Expanded"></DropDownTreeField>
-        </SfDropDownTree>
-        
-    } else
-    {
-        <SfDropDownTree class="form-control" TItem="BsonFileManagerModel" id="@idTree" type="text" aria-label="Folder" AllowFiltering="false" LoadOnDemand="true" TValue="string" Placeholder="Select a Folder" @bind-Value="@selectedNode">
-            <DropDownTreeField TItem="BsonFileManagerModel" ID="Id" Text="Name" ParentID="ParentId" DataSource="@MyFolder" HasChildren="HasChild"></DropDownTreeField>
-        </SfDropDownTree>
-    }
-    
-        <label for="mtree">Folder</label>
-    </div>
+<div class="mb-3">
+    <label class="form-label">Folder</label>
+    <CustomDropDownTree
+        DbName="@id"
+        Placeholder="Select a Folder"
+        SelectedValue="@(selectedNode?.FirstOrDefault())"
+        SelectedValueChanged="OnFolderSelected"
+        LoadChildrenFunc="LoadFolders" />
+</div>
 
 
 @code {
-
-    [Inject] protected PreloadService PreloadService { get; set; } = default!;
 
     [Parameter]
     public string id { get; set; }
@@ -36,46 +25,102 @@
     [Parameter]
     public List<string> selectedNode { get; set; }
     [Parameter]
+    public EventCallback<List<string>> selectedNodeChanged { get; set; }
+    [Parameter]
     public string folderType { get; set; } = "local";
 
     private List<string> localFolderTypes = new List<string> {"local", "temp"};
-    private List<BsonFileManagerModel> MyFolder { get; set; }
-    private List<FolderModel> LocalFolders { get; set; }
 
-    protected override async Task OnParametersSetAsync()
+    private async Task<List<TreeNodeModel>> LoadFolders(string dbName, string parentId)
     {
-        PreloadService.Show(SpinnerColor.Light, "Loading data...");
-        await getFolders();
-        PreloadService.Hide();
-    }
-
-    void ValueChanged(DdtChangeEventArgs<string> args)
-    {
-        // EmployeeData currentData = Data?.Find((item) => item.Id == args.NodeData.Id);
-        // Name = currentData?.Name;
-        // Role = currentData?.Job;
-        // this.Visibility = true;
-    }
-
-
-    public async Task getFolders()
-    {
-        // if (MyFolder != null) return MyFolder;
-
         if (localFolderTypes.Contains(folderType))
-            LocalFolders = new List<FolderModel>(FileService.getFolderNodes(FileService.TEMPDIR).ToList());
-        if (folderType == "telegram")
-            if (MyFolder != null)
+        {
+            return await LoadLocalFolders(parentId);
+        }
+        else
+        {
+            return await LoadTelegramFolders(dbName, parentId);
+        }
+    }
+
+    private Task<List<TreeNodeModel>> LoadLocalFolders(string parentPath)
+    {
+        var result = new List<TreeNodeModel>();
+        string basePath = FileService.TEMPDIR;
+
+        // If parentPath is null, load root (temp folder)
+        string targetPath = string.IsNullOrEmpty(parentPath) ? basePath : parentPath;
+
+        if (Directory.Exists(targetPath))
+        {
+            // For root, add the temp folder itself
+            if (string.IsNullOrEmpty(parentPath))
             {
-                MyFolder.Clear();
-                MyFolder.AddRange((await fs.getTelegramFolders(id)).ToList());
-            }else
+                var dirInfo = new DirectoryInfo(targetPath);
+                bool hasSubDirs = dirInfo.GetDirectories().Length > 0;
+                result.Add(new TreeNodeModel
+                {
+                    Id = targetPath,
+                    OriginalId = targetPath,
+                    Name = dirInfo.Name,
+                    ParentId = null,
+                    HasChildren = hasSubDirs
+                });
+            }
+            else
             {
-                MyFolder = new List<BsonFileManagerModel>((await fs.getTelegramFolders(id)).ToList());
+                // Load subdirectories
+                foreach (var dir in Directory.GetDirectories(targetPath))
+                {
+                    var dirInfo = new DirectoryInfo(dir);
+                    bool hasSubDirs = dirInfo.GetDirectories().Length > 0;
+                    result.Add(new TreeNodeModel
+                    {
+                        Id = dir,
+                        OriginalId = dir,
+                        Name = dirInfo.Name,
+                        ParentId = targetPath,
+                        HasChildren = hasSubDirs
+                    });
+                }
+            }
+        }
+
+        return Task.FromResult(result);
+    }
+
+    private async Task<List<TreeNodeModel>> LoadTelegramFolders(string dbName, string parentId)
+    {
+        var folders = await fs.getTelegramFoldersByParentId(dbName, parentId);
+        var result = new List<TreeNodeModel>();
+        foreach (var f in folders)
+        {
+            // Create a path-based Id for the selected value (like /FolderName/ or /Parent/Child/)
+            string pathId;
+            if (String.IsNullOrEmpty(f.FilterPath) || f.FilterPath == "/")
+            {
+                pathId = "/" + f.Name + "/";
+            }
+            else
+            {
+                pathId = f.FilterPath + f.Name + "/";
             }
 
-        await Task.Delay(1000);
+            result.Add(new TreeNodeModel
+            {
+                Id = pathId,  // Path-based Id for selection
+                OriginalId = f.Id,  // MongoDB ObjectId for expansion
+                Name = f.Name,
+                ParentId = f.ParentId,
+                HasChildren = f.HasChild
+            });
+        }
+        return result;
+    }
 
-        
+    private async Task OnFolderSelected(string value)
+    {
+        selectedNode = new List<string> { value };
+        await selectedNodeChanged.InvokeAsync(selectedNode);
     }
 }

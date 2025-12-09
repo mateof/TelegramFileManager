@@ -1444,10 +1444,11 @@ namespace TelegramDownloader.Data
                     // if file or folder does not exist, it will be created
                     if ((await _db.getFileByPath(dbName, System.IO.Path.Combine(currentPath, file.Name))) == null)
                         await _db.createEntry(dbName, model);
+                    if (!parent.HasChild)
+                        await _db.setDirectoryHasChild(dbName, parent.Id);
                     if (file.IsFile)
                     {
                         await _db.addBytesToFolder(dbName, model.ParentId, model.Size);
-                        await _db.setDirectoryHasChild(dbName, parent.Id);
                         if (idt != null) idt.AddOne(file.Size);
                     }
                     else
@@ -1766,6 +1767,13 @@ namespace TelegramDownloader.Data
                     folder.Id = folder.FilterPath + folder.Name + "/";
                 }
             }
+            return result;
+        }
+
+        public async Task<List<BsonFileManagerModel>> getTelegramFoldersByParentId(string dbName, string? parentId)
+        {
+            var result = await _db.getFoldersByParentId(dbName, parentId);
+
             return result;
         }
 
