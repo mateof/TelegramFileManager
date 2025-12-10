@@ -94,4 +94,10 @@ namespace TelegramDownloader.Shared.MobileFileManager
     {
         public string Path { get; set; } = "/";
     }
+
+    public class MfmStrmEventArgs
+    {
+        public FileManagerDirectoryContent? Folder { get; set; }
+        public string Path { get; set; } = "/";
+    }
 }

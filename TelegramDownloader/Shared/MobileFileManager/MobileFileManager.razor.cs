@@ -48,6 +48,12 @@ namespace TelegramDownloader.Shared.MobileFileManager
         [Parameter]
         public bool CanUploadToTelegram { get; set; } = false;
 
+        [Parameter]
+        public bool CanStrm { get; set; } = false;
+
+        [Parameter]
+        public string RootFolderName { get; set; } = "Root";
+
         #endregion
 
         #region Events
@@ -96,6 +102,9 @@ namespace TelegramDownloader.Shared.MobileFileManager
 
         [Parameter]
         public EventCallback<MfmUploadToLocalEventArgs> OnUploadToLocal { get; set; }
+
+        [Parameter]
+        public EventCallback<MfmStrmEventArgs> OnStrm { get; set; }
 
         #endregion
 
@@ -185,7 +194,6 @@ namespace TelegramDownloader.Shared.MobileFileManager
 
             try
             {
-                // Normalize CurrentPath before sending
                 CurrentPath = NormalizePath(CurrentPath);
 
                 var args = new MfmReadEventArgs
@@ -197,7 +205,6 @@ namespace TelegramDownloader.Shared.MobileFileManager
 
                 if (args.Response?.Files != null)
                 {
-                    // Normalize FilterPath in all returned files
                     Files = args.Response.Files.Select(f =>
                     {
                         f.FilterPath = NormalizePath(f.FilterPath);
@@ -205,7 +212,6 @@ namespace TelegramDownloader.Shared.MobileFileManager
                     }).ToList();
                 }
 
-                // Save current working directory (folder) for paste operations
                 if (args.Response?.CWD != null)
                 {
                     CurrentFolder = args.Response.CWD;
@@ -263,7 +269,9 @@ namespace TelegramDownloader.Shared.MobileFileManager
         private List<PathSegment> GetPathSegments()
         {
             var segments = new List<PathSegment>();
-            segments.Add(new PathSegment { Name = "Root", Path = "/" });
+
+            // Root segment always maps to path "/"
+            segments.Add(new PathSegment { Name = RootFolderName, Path = "/" });
 
             if (CurrentPath != "/")
             {
@@ -274,6 +282,13 @@ namespace TelegramDownloader.Shared.MobileFileManager
                     if (!string.IsNullOrEmpty(part))
                     {
                         currentPath += part + "/";
+
+                        // Skip adding if this is the RootFolderName (already added as first segment)
+                        if (part == RootFolderName && segments.Count == 1)
+                        {
+                            continue;
+                        }
+
                         segments.Add(new PathSegment { Name = part, Path = currentPath });
                     }
                 }
@@ -297,16 +312,29 @@ namespace TelegramDownloader.Shared.MobileFileManager
             var parts = CurrentPath.Trim('/').Split('/');
             if (parts.Length <= 1)
             {
+                // Only one part (e.g., "Files/") - go to root
                 CurrentPath = "/";
             }
             else
             {
-                CurrentPath = "/" + string.Join("/", parts.Take(parts.Length - 1)) + "/";
+                // Remove last part
+                var newParts = parts.Take(parts.Length - 1).ToArray();
+
+                // If only RootFolderName remains (e.g., "Files"), go to root "/"
+                if (newParts.Length == 1 && newParts[0] == RootFolderName)
+                {
+                    CurrentPath = "/";
+                }
+                else
+                {
+                    // Keep the leading "/" to match the format used in NavigateToFolder
+                    CurrentPath = "/" + string.Join("/", newParts) + "/";
+                }
             }
 
             ClearSelection();
             ResetPagination();
-            await LoadFiles(); // LoadFiles will update CurrentFolder from CWD response
+            await LoadFiles();
         }
 
         private async Task OnFileClick(FileManagerDirectoryContent file)
@@ -329,11 +357,24 @@ namespace TelegramDownloader.Shared.MobileFileManager
 
         private async Task NavigateToFolder(FileManagerDirectoryContent folder)
         {
-            var filterPath = NormalizePath(folder.FilterPath);
-            CurrentPath = filterPath + folder.Name + "/";
+            var basePath = CurrentPath;
+            if (!basePath.EndsWith("/"))
+            {
+                basePath += "/";
+            }
+
+            var newPath = basePath + folder.Name + "/";
+
+            if (newPath == CurrentPath)
+            {
+                await LoadFiles();
+                return;
+            }
+
+            CurrentPath = newPath;
             ClearSelection();
             ResetPagination();
-            await LoadFiles(); // LoadFiles will update CurrentFolder from CWD response
+            await LoadFiles();
         }
 
         private async Task OpenFile(FileManagerDirectoryContent file)
@@ -490,7 +531,21 @@ namespace TelegramDownloader.Shared.MobileFileManager
         private string NormalizePath(string path)
         {
             if (string.IsNullOrEmpty(path)) return "/";
-            return path.Replace("\\", "/");
+
+            // Replace backslashes with forward slashes
+            var normalized = path.Replace("\\", "/");
+
+            // Remove duplicate slashes
+            while (normalized.Contains("//"))
+            {
+                normalized = normalized.Replace("//", "/");
+            }
+
+            // Only root path should start with "/", other paths should not have leading "/"
+            // Server expects: "/" for root, "Files/Folder/" for subfolders
+            // Don't add leading "/" here - let the caller decide the format
+
+            return normalized;
         }
 
         #endregion
@@ -755,6 +810,36 @@ namespace TelegramDownloader.Shared.MobileFileManager
 
             await OnUploadToLocal.InvokeAsync(args);
             ShowFabMenu = false;
+        }
+
+        private async Task StrmItem(FileManagerDirectoryContent item)
+        {
+            if (item.IsFile) return; // STRM only works on folders
+
+            var args = new MfmStrmEventArgs
+            {
+                Folder = item,
+                Path = item.FilterPath + item.Name + "/"
+            };
+
+            await OnStrm.InvokeAsync(args);
+            CloseContextMenu();
+        }
+
+        private async Task StrmSelected()
+        {
+            // Only works if exactly one folder is selected
+            var folder = SelectedItems.FirstOrDefault(x => !x.IsFile);
+            if (folder == null) return;
+
+            var args = new MfmStrmEventArgs
+            {
+                Folder = folder,
+                Path = folder.FilterPath + folder.Name + "/"
+            };
+
+            await OnStrm.InvokeAsync(args);
+            ClearSelection();
         }
 
         #endregion

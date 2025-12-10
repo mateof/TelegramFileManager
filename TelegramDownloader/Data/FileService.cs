@@ -1900,9 +1900,20 @@ namespace TelegramDownloader.Data
                 var childItem = fileDetails.Count > 0 && fileDetails[0] != null ? fileDetails[0] : Data
                 .Where(x => x.FilePath + "/" == path).First().toFileManagerContent();
                 response.CWD = childItem;
-                response.Files = Data
-                    .Where(x => x.ParentId == childItem.Id).Select(x => x.toFileManagerContent()).ToList();
 
+                // First try to find children in the query result (by ParentId)
+                var files = Data.Where(x => x.ParentId == childItem.Id).ToList();
+
+                // If no children found in query result, do a separate query by ParentId
+                // This handles the case where children's FilterPath format doesn't match the query path
+                if (files.Count == 0 && !string.IsNullOrEmpty(childItem.Id))
+                {
+                    files = collectionName == null
+                        ? await _db.getFilesByParentId(dbName, childItem.Id)
+                        : await _db.getFilesByParentId(dbName, childItem.Id, collectionName);
+                }
+
+                response.Files = files.Select(x => x.toFileManagerContent()).ToList();
             }
             await Task.Yield();
             return response;
