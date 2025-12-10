@@ -11,8 +11,18 @@
 @inject ILogger<FileManager> Logger;
 @inject NavigationManager NavManager
 
-@* Desktop FileManager - only render when not on mobile *@
-@if (!_isMobileView)
+@* Loading while detecting viewport *@
+@if (!_viewportDetected)
+{
+    <div style="display: flex; justify-content: center; align-items: center; height: 200px;">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+
+@* Desktop FileManager - only render when viewport detected and not on mobile *@
+@if (_viewportDetected && !_isMobileView)
 {
     <SfFileManager @ref="FileManager" ID="localfm" TValue="FileManagerDirectoryContent">
         <FileManagerAjaxSettings Url="@FileOperationsUrl"
@@ -29,7 +39,7 @@
 }
 
 @* Mobile FileManager *@
-@if (_isMobileView)
+@if (_viewportDetected && _isMobileView)
 {
     <div class="mobile-fm-container">
         <MobileFileManager @ref="mobileFileManager"
@@ -85,6 +95,7 @@
 
     // Mobile detection
     private bool _isMobileView = false;
+    private bool _viewportDetected = false;
     private const int MobileBreakpoint = 1920; // Custom breakpoint for mobile file manager
 
     private string BaseUrl => NavManager.BaseUri.TrimEnd('/');
@@ -161,18 +172,17 @@
         try
         {
             var width = await JSRuntime.InvokeAsync<int>("eval", "window.innerWidth");
-            var newIsMobile = width < MobileBreakpoint;
-            if (newIsMobile != _isMobileView)
-            {
-                _isMobileView = newIsMobile;
-                StateHasChanged();
-            }
+            _isMobileView = width < MobileBreakpoint;
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Error detecting viewport size");
-            // Default to desktop view on error
             _isMobileView = false;
+        }
+        finally
+        {
+            _viewportDetected = true;
+            StateHasChanged();
         }
     }
 
