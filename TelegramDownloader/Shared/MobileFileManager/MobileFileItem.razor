@@ -1,0 +1,211 @@
+@using Syncfusion.Blazor.FileManager
+
+<div class="mfm-item @(ViewMode == "grid" ? "mfm-item-grid" : "mfm-item-list") @(IsSelected ? "selected" : "") @(IsPreview ? "preview" : "")"
+     @onclick="HandleClick"
+     @oncontextmenu="HandleContextMenu"
+     @oncontextmenu:preventDefault="true"
+     @ontouchstart="HandleTouchStart"
+     @ontouchend="HandleTouchEnd"
+     @ontouchmove="HandleTouchMove">
+
+    @if (!IsPreview && !IsSelected)
+    {
+        <div class="mfm-item-checkbox" @onclick="HandleSelect" @onclick:stopPropagation="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+            </svg>
+        </div>
+    }
+    @if (IsSelected)
+    {
+        <div class="mfm-item-checkbox checked" @onclick="HandleSelect" @onclick:stopPropagation="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                <polyline points="9 11 12 14 22 4" stroke="white" fill="none"/>
+            </svg>
+        </div>
+    }
+
+    <div class="mfm-item-icon">
+        @if (File.IsFile)
+        {
+            @GetFileIcon()
+        }
+        else
+        {
+            <svg xmlns="http://www.w3.org/2000/svg" width="@IconSize" height="@IconSize" viewBox="0 0 24 24" fill="#f0c14b" stroke="#e5a800" stroke-width="0.5">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+            </svg>
+        }
+    </div>
+
+    <div class="mfm-item-info">
+        <span class="mfm-item-name" title="@File.Name">@File.Name</span>
+        @if (ViewMode == "list" && !IsPreview)
+        {
+            <span class="mfm-item-meta">
+                @if (File.IsFile)
+                {
+                    <span>@FormatSize(File.Size)</span>
+                    <span class="mfm-dot">·</span>
+                }
+                <span>@File.DateModified.ToString("MMM d, yyyy")</span>
+            </span>
+        }
+    </div>
+
+    @if (!IsPreview)
+    {
+        <button class="mfm-item-more" @onclick="HandleMoreClick" @onclick:stopPropagation="true">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/>
+            </svg>
+        </button>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public FileManagerDirectoryContent File { get; set; } = new();
+
+    [Parameter]
+    public bool IsSelected { get; set; }
+
+    [Parameter]
+    public string ViewMode { get; set; } = "list";
+
+    [Parameter]
+    public bool IsPreview { get; set; } = false;
+
+    [Parameter]
+    public EventCallback OnClick { get; set; }
+
+    [Parameter]
+    public EventCallback OnLongPress { get; set; }
+
+    [Parameter]
+    public EventCallback OnSelect { get; set; }
+
+    private int IconSize => ViewMode == "grid" ? 48 : 36;
+
+    private System.Threading.Timer? longPressTimer;
+    private bool isLongPress = false;
+    private double touchStartX;
+    private double touchStartY;
+
+    private async Task HandleClick()
+    {
+        if (!isLongPress)
+        {
+            await OnClick.InvokeAsync();
+        }
+        isLongPress = false;
+    }
+
+    private async Task HandleContextMenu()
+    {
+        await OnLongPress.InvokeAsync();
+    }
+
+    private void HandleTouchStart(TouchEventArgs e)
+    {
+        isLongPress = false;
+        touchStartX = e.Touches[0].ClientX;
+        touchStartY = e.Touches[0].ClientY;
+
+        longPressTimer = new System.Threading.Timer(async _ =>
+        {
+            isLongPress = true;
+            await InvokeAsync(async () =>
+            {
+                await OnLongPress.InvokeAsync();
+                StateHasChanged();
+            });
+        }, null, 500, System.Threading.Timeout.Infinite);
+    }
+
+    private void HandleTouchEnd(TouchEventArgs e)
+    {
+        longPressTimer?.Dispose();
+        longPressTimer = null;
+    }
+
+    private void HandleTouchMove(TouchEventArgs e)
+    {
+        if (longPressTimer != null)
+        {
+            var deltaX = Math.Abs(e.Touches[0].ClientX - touchStartX);
+            var deltaY = Math.Abs(e.Touches[0].ClientY - touchStartY);
+
+            if (deltaX > 10 || deltaY > 10)
+            {
+                longPressTimer.Dispose();
+                longPressTimer = null;
+            }
+        }
+    }
+
+    private async Task HandleSelect()
+    {
+        await OnSelect.InvokeAsync();
+    }
+
+    private async Task HandleMoreClick()
+    {
+        await OnLongPress.InvokeAsync();
+    }
+
+    private RenderFragment GetFileIcon()
+    {
+        var ext = File.Type?.ToLower() ?? "";
+        var color = GetFileColor(ext);
+
+        return @<svg xmlns="http://www.w3.org/2000/svg" width="@IconSize" height="@IconSize" viewBox="0 0 24 24" fill="none" stroke="@color" stroke-width="1.5">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" fill="@color" fill-opacity="0.1"/>
+            <polyline points="14 2 14 8 20 8" fill="none"/>
+            <text x="12" y="16" font-size="6" text-anchor="middle" fill="@color" font-weight="bold">@GetExtensionLabel(ext)</text>
+        </svg>;
+    }
+
+    private string GetFileColor(string ext)
+    {
+        return ext switch
+        {
+            ".pdf" => "#e53935",
+            ".doc" or ".docx" => "#1a73e8",
+            ".xls" or ".xlsx" => "#0f9d58",
+            ".ppt" or ".pptx" => "#ff6d00",
+            ".txt" => "#5f6368",
+            ".zip" or ".rar" or ".7z" => "#8e44ad",
+            ".mp3" or ".wav" or ".flac" or ".aac" or ".ogg" => "#e91e63",
+            ".mp4" or ".mkv" or ".avi" or ".mov" or ".webm" => "#9c27b0",
+            ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp" or ".svg" => "#00bcd4",
+            ".js" or ".ts" => "#f7df1e",
+            ".cs" => "#68217a",
+            ".json" => "#5c5c5c",
+            ".html" => "#e44d26",
+            ".css" => "#264de4",
+            _ => "#5f6368"
+        };
+    }
+
+    private string GetExtensionLabel(string ext)
+    {
+        if (string.IsNullOrEmpty(ext)) return "";
+        var label = ext.TrimStart('.').ToUpper();
+        return label.Length > 4 ? label.Substring(0, 4) : label;
+    }
+
+    private string FormatSize(long bytes)
+    {
+        string[] suffixes = { "B", "KB", "MB", "GB", "TB" };
+        int counter = 0;
+        decimal number = bytes;
+        while (Math.Round(number / 1024) >= 1)
+        {
+            number /= 1024;
+            counter++;
+        }
+        return $"{number:n1} {suffixes[counter]}";
+    }
+}

@@ -8,8 +8,10 @@ namespace TelegramDownloader.Data
     public interface IFileService
     {
         Task<FileManagerResponse<FileManagerDirectoryContent>> CopyItems(string dbName, ItemsMoveEventArgs<FileManagerDirectoryContent> args);
+        Task<FileManagerResponse<FileManagerDirectoryContent>> CopyOrMoveItems(string dbName, FileManagerDirectoryContent[] files, string targetPath, FileManagerDirectoryContent targetData, bool isCopy);
         Task CreateDatabase(string id);
         Task<List<FileManagerDirectoryContent>> createFolder(string dbName, FolderCreateEventArgs<FileManagerDirectoryContent> args);
+        Task<List<FileManagerDirectoryContent>> createFolder(string dbName, string path, string folderName, FileManagerDirectoryContent? parentFolder);
         void cleanTempFolder();
         Task<BsonSharedInfoModel> GetSharedInfoById(string id);
         Task<BsonFileManagerModel> getSharedItemById(string id, string collection);

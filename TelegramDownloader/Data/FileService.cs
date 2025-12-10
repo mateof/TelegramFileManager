@@ -557,6 +557,52 @@ namespace TelegramDownloader.Data
 
         }
 
+        public async Task<FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>> CopyOrMoveItems(string dbName, Syncfusion.Blazor.FileManager.FileManagerDirectoryContent[] files, string targetPath, Syncfusion.Blazor.FileManager.FileManagerDirectoryContent targetData, bool isCopy)
+        {
+            try
+            {
+                FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> fm = new FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>();
+                var lista = new List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>();
+                foreach (var item in files)
+                {
+                    if (!item.IsFile)
+                    {
+                        var result = await copyAllDirectoryFiles(dbName, item.Id, targetData, targetPath + item.Name + "/");
+                        lista.Add(result.toFileManagerContentInCopy());
+                        if (!isCopy)
+                        {
+                            await _db.deleteEntry(dbName, item.Id);
+                        }
+                    }
+                    else
+                    {
+                        var result = await _db.copyItem(dbName, item.Id, targetData, targetPath, item.IsFile);
+                        lista.Add(result.toFileManagerContentInCopy());
+                        if (!isCopy)
+                        {
+                            await _db.deleteEntry(dbName, item.Id);
+                        }
+                    }
+                    await _db.addBytesToFolder(dbName, item.ParentId, item.Size);
+                }
+                fm.Files = lista;
+                return fm;
+            }
+            catch (Exception e)
+            {
+                _logger.LogError(e, "Error on CopyOrMoveItems");
+                if (e is MongoWriteException ex)
+                {
+                    if (ex.WriteError.Category == ServerErrorCategory.DuplicateKey)
+                    {
+                        NotificationModel nm = new NotificationModel();
+                        nm.sendEvent(new Notification("The file exist in the directory", "Duplicate", NotificationTypes.Error));
+                    }
+                }
+                throw e;
+            }
+        }
+
         private async Task<BsonFileManagerModel> copyAllDirectoryFiles(string dbName, string idfolder, Syncfusion.Blazor.FileManager.FileManagerDirectoryContent target, string targetPath, bool isCopy = true)
         {
             var result = await _db.copyItem(dbName, idfolder, target, targetPath, false);
@@ -1025,6 +1071,11 @@ namespace TelegramDownloader.Data
         public async Task<List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>> createFolder(string dbName, FolderCreateEventArgs<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> args)
         {
             return (await _db.createEntry(dbName, await _db.toBasonFile(args.Path, args.FolderName, args.ParentFolder))).Select(x => x.toFileManagerContent()).ToList();
+        }
+
+        public async Task<List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>> createFolder(string dbName, string path, string folderName, Syncfusion.Blazor.FileManager.FileManagerDirectoryContent? parentFolder)
+        {
+            return (await _db.createEntry(dbName, await _db.toBasonFile(path, folderName, parentFolder))).Select(x => x.toFileManagerContent()).ToList();
         }
 
         public async Task CreateDatabase(string id)
