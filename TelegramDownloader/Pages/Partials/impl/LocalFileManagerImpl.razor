@@ -2,6 +2,7 @@
 @using TelegramDownloader.Models
 @using TelegramDownloader.Pages.Modals
 @using TelegramDownloader.Pages.Modals.InfoModals
+@using TelegramDownloader.Shared.MobileFileManager
 @inject HttpClient httpClient;
 @inject IJSRuntime JSRuntime;
 @inject NavigationManager MyNavigationManager;
@@ -10,22 +11,51 @@
 @inject ILogger<FileManager> Logger;
 @inject NavigationManager NavManager
 
+@* Desktop FileManager - only render when not on mobile *@
+@if (!_isMobileView)
+{
+    <SfFileManager @ref="FileManager" ID="localfm" TValue="FileManagerDirectoryContent">
+        <FileManagerAjaxSettings Url="@FileOperationsUrl"
+                                 UploadUrl="@UploadUrl"
+                                 DownloadUrl="@DownloadUrl"
+                                 GetImageUrl="@GetImageUrl">
+        </FileManagerAjaxSettings>
+        <FileManagerSearchSettings FilterDelay="1200"></FileManagerSearchSettings>
+        <FileManagerUploadSettings MaxFileSize="@(long.MaxValue)" AutoUpload="true"></FileManagerUploadSettings>
+        <FileManagerToolbarSettings ToolbarItems="@Items"></FileManagerToolbarSettings>
+        <FileManagerContextMenuSettings File="@ContextItems"></FileManagerContextMenuSettings>
+        <FileManagerEvents TValue="FileManagerDirectoryContent" FileSelection="FileSelection" ToolbarItemClicked="toolBarClicked" OnFileOpen="fileOpen" MenuOpened="MenuOpened" OnMenuClick="OnMenuClick"></FileManagerEvents>
+    </SfFileManager>
+}
 
-
-
-<SfFileManager @ref="FileManager" ID="localfm" TValue="FileManagerDirectoryContent">
-    <FileManagerAjaxSettings Url="@FileOperationsUrl"
-                             UploadUrl="@UploadUrl"
-                             DownloadUrl="@DownloadUrl"
-                             GetImageUrl="@GetImageUrl">
-    </FileManagerAjaxSettings>
-    <FileManagerSearchSettings FilterDelay="1200"></FileManagerSearchSettings>
-    <FileManagerUploadSettings MaxFileSize="@(long.MaxValue)" AutoUpload="true"></FileManagerUploadSettings>
-    <FileManagerToolbarSettings ToolbarItems="@Items"></FileManagerToolbarSettings>
-    <FileManagerContextMenuSettings File="@ContextItems"></FileManagerContextMenuSettings>
-    <FileManagerEvents TValue="FileManagerDirectoryContent" FileSelection="FileSelection" ToolbarItemClicked="toolBarClicked" OnFileOpen="fileOpen" MenuOpened="MenuOpened" OnMenuClick="OnMenuClick"></FileManagerEvents>
-
-</SfFileManager>
+@* Mobile FileManager *@
+@if (_isMobileView)
+{
+    <div class="mobile-fm-container">
+        <MobileFileManager @ref="mobileFileManager"
+                           Id="@id"
+                           IsShared="@isShared"
+                           CanCopy="true"
+                           CanCut="true"
+                           CanDelete="true"
+                           CanRename="true"
+                           CanCreate="true"
+                           CanUpload="true"
+                           CanUploadToTelegram="@isMyChannel"
+                           CanShowUrlMedia="true"
+                           OnRead="OnMobileReadAsync"
+                           OnItemsDeleting="OnMobileItemsDeletingAsync"
+                           OnItemsMoving="OnMobileItemsMovingAsync"
+                           OnItemRenaming="OnMobileItemRenamingAsync"
+                           OnFolderCreating="OnMobileFolderCreatingAsync"
+                           OnSearching="OnMobileSearchingAsync"
+                           OnFileOpen="OnMobileFileOpenAsync"
+                           OnBeforeDownload="OnMobileBeforeDownloadAsync"
+                           OnUploadToTelegram="OnMobileUploadToTelegramAsync"
+                           OnUploadToLocal="OnMobileUploadToLocalAsync"
+                           OnUrlMedia="OnMobileUrlMediaAsync" />
+    </div>
+}
 
 <TelegramDownloader.Pages.Modals.UploadToTelegramModal @ref="Modal"></TelegramDownloader.Pages.Modals.UploadToTelegramModal>
 <TelegramDownloader.Pages.Modals.FileUploadModal @ref="ModalUpSer"></TelegramDownloader.Pages.Modals.FileUploadModal>
@@ -41,6 +71,7 @@
     public bool isShared { get; set; } = false;
 
     SfFileManager<FileManagerDirectoryContent>? FileManager;
+    private MobileFileManager? mobileFileManager;
 
     private MediaUrlModal mediaUrlModal { get; set; } = default!;
     private VideoPlayerModal videoPlayer { get; set; } = default!;
@@ -51,6 +82,10 @@
     private Modals.UploadToTelegramModal Modal { get; set; }
     private Modals.FileUploadModal ModalUpSer { get; set; }
     private bool isMyChannel = false;
+
+    // Mobile detection
+    private bool _isMobileView = false;
+    private const int MobileBreakpoint = 1920; // Custom breakpoint for mobile file manager
 
     private string BaseUrl => NavManager.BaseUri.TrimEnd('/');
 
@@ -101,6 +136,8 @@
         if (firstRender)
         {
             _firstRenderComplete = true;
+            // Detect viewport size on first render
+            await DetectMobileView();
         }
 
         if (_needsRefresh && FileManager != null)
@@ -115,7 +152,27 @@
                 Logger.LogError(ex, "Error on  FileManager.RefreshFilesAsync()");
                 nm.sendMessage("Error", "Error on  FileManager.RefreshFilesAsync()", NotificationTypes.Error);
             }
-            
+
+        }
+    }
+
+    private async Task DetectMobileView()
+    {
+        try
+        {
+            var width = await JSRuntime.InvokeAsync<int>("eval", "window.innerWidth");
+            var newIsMobile = width < MobileBreakpoint;
+            if (newIsMobile != _isMobileView)
+            {
+                _isMobileView = newIsMobile;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error detecting viewport size");
+            // Default to desktop view on error
+            _isMobileView = false;
         }
     }
 
@@ -365,4 +422,249 @@
             await ShowMediaURLModal(args.FileDetails[0].FilterPath, args.FileDetails[0].Name);
         }
     }
+
+    #region Mobile FileManager Event Handlers
+
+    private async Task OnMobileReadAsync(MfmReadEventArgs args)
+    {
+        try
+        {
+            var response = await CallFileOperationsAsync("read", args.Path, null);
+            args.Response = response;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error reading files for mobile");
+        }
+    }
+
+    private async Task OnMobileItemsDeletingAsync(MfmDeleteEventArgs args)
+    {
+        try
+        {
+            await CallFileOperationsAsync("delete", args.Path, args.Files);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error deleting files for mobile");
+            nm.sendMessage("Error", "Error deleting files", NotificationTypes.Error);
+        }
+    }
+
+    private async Task OnMobileItemsMovingAsync(MfmMoveEventArgs args)
+    {
+        try
+        {
+            var action = args.IsCopy ? "copy" : "move";
+            // Normalize paths to use forward slashes
+            var sourcePath = args.SourcePath?.Replace("\\", "/") ?? "/";
+            var targetPath = args.TargetPath?.Replace("\\", "/") ?? "/";
+
+            // Also normalize FilterPath in files
+            var normalizedFiles = args.Files.Select(f => {
+                f.FilterPath = f.FilterPath?.Replace("\\", "/");
+                return f;
+            }).ToArray();
+
+            var targetData = args.TargetData;
+            if (targetData != null)
+            {
+                targetData.FilterPath = targetData.FilterPath?.Replace("\\", "/");
+            }
+
+            await CallFileOperationsAsync(action, sourcePath, normalizedFiles, targetPath, targetData);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error moving/copying files for mobile");
+            nm.sendMessage("Error", "Error moving/copying files", NotificationTypes.Error);
+        }
+    }
+
+    private async Task OnMobileItemRenamingAsync(MfmRenameEventArgs args)
+    {
+        try
+        {
+            if (args.File != null)
+            {
+                await CallFileOperationsAsync("rename", args.Path, new[] { args.File }, newName: args.NewName);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error renaming file for mobile");
+            nm.sendMessage("Error", "Error renaming file", NotificationTypes.Error);
+        }
+    }
+
+    private async Task OnMobileFolderCreatingAsync(MfmFolderCreateEventArgs args)
+    {
+        try
+        {
+            await CallFileOperationsAsync("create", args.Path, null, newName: args.FolderName);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error creating folder for mobile");
+            nm.sendMessage("Error", "Error creating folder", NotificationTypes.Error);
+        }
+    }
+
+    private async Task OnMobileSearchingAsync(MfmSearchEventArgs args)
+    {
+        try
+        {
+            var response = await CallFileOperationsAsync("search", args.Path, null, searchString: args.SearchText);
+            args.Response = response;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error searching files for mobile");
+        }
+    }
+
+    private async Task OnMobileFileOpenAsync(MfmFileOpenEventArgs args)
+    {
+        if (args.FileDetails == null || !args.FileDetails.IsFile) return;
+
+        var fileType = args.FileDetails.Type?.ToLower() ?? "";
+        var audioTypes = new List<string> { ".mp3", ".ogg", ".flac", ".aac", ".wav" };
+        var videoTypes = new List<string> { ".mov", ".mp4", ".m4v", ".ogv", ".webm", ".flv", ".f4v" };
+
+        if (audioTypes.Contains(fileType))
+        {
+            string localdir = MyNavigationManager.BaseUri + FileService.STATICRELATIVELOCALDIR.Replace("\\", "/");
+            string path = new System.Uri((Path.Combine(localdir, args.FileDetails.FilterPath.Substring(1).Replace("\\", "/"), args.FileDetails.Name)).Replace("\\", "/")).AbsoluteUri;
+            await JSRuntime.InvokeVoidAsync("openAudioPlayerModal", path, null, args.FileDetails.Name);
+        }
+        else if (videoTypes.Contains(fileType))
+        {
+            string localdir = MyNavigationManager.BaseUri + FileService.STATICRELATIVELOCALDIR.Replace("\\", "/");
+            string path = new System.Uri((Path.Combine(localdir, args.FileDetails.FilterPath.Substring(1).Replace("\\", "/"), args.FileDetails.Name)).Replace("\\", "/")).AbsoluteUri;
+            videoPlayer.ShowModal(path);
+        }
+    }
+
+    private async Task OnMobileBeforeDownloadAsync(MfmDownloadEventArgs args)
+    {
+        try
+        {
+            var downloadNames = string.Join(",", args.Names);
+            var downloadPath = args.Path;
+            var url = $"{DownloadUrl}?downloadInput={System.Text.Json.JsonSerializer.Serialize(new { action = "download", path = downloadPath, names = args.Names, data = args.Files })}";
+            await JSRuntime.InvokeVoidAsync("open", url, "_blank");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error downloading files for mobile");
+            nm.sendMessage("Error", "Error downloading files", NotificationTypes.Error);
+        }
+    }
+
+    private async Task OnMobileUploadToTelegramAsync(MfmUploadToTelegramEventArgs args)
+    {
+        try
+        {
+            Modal.id = id;
+            Modal.fileList = args.Files.ToList();
+            Modal.filePath = args.Files.FirstOrDefault()?.IsFile == true
+                ? args.Files.FirstOrDefault()?.FilterPath?.Replace("\\", "/") + args.Files.FirstOrDefault()?.Name
+                : args.Files.FirstOrDefault()?.FilterPath?.Replace("\\", "/") + args.Files.FirstOrDefault()?.Name + "/";
+            Modal.Open();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error opening upload to telegram dialog");
+            nm.sendMessage("Error", "Error opening upload dialog", NotificationTypes.Error);
+        }
+    }
+
+    private async Task OnMobileUploadToLocalAsync(MfmUploadToLocalEventArgs args)
+    {
+        try
+        {
+            ModalUpSer.filePath = args.Path;
+            ModalUpSer.Open();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error opening upload to local dialog");
+            nm.sendMessage("Error", "Error opening upload dialog", NotificationTypes.Error);
+        }
+    }
+
+    private async Task OnMobileUrlMediaAsync(MfmUrlMediaEventArgs args)
+    {
+        try
+        {
+            if (args.File != null)
+            {
+                await ShowMediaURLModal(args.File.FilterPath, args.File.Name);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error showing media URL");
+            nm.sendMessage("Error", "Error showing media URL", NotificationTypes.Error);
+        }
+    }
+
+    private async Task<FileManagerResponse<FileManagerDirectoryContent>?> CallFileOperationsAsync(
+        string action,
+        string path,
+        FileManagerDirectoryContent[]? data,
+        string? targetPath = null,
+        FileManagerDirectoryContent? targetData = null,
+        string? newName = null,
+        string? searchString = null)
+    {
+        var requestData = new Dictionary<string, object?>
+        {
+            ["action"] = action,
+            ["path"] = path,
+            ["showHiddenItems"] = false,
+            ["data"] = data ?? Array.Empty<FileManagerDirectoryContent>()
+        };
+
+        // Add names array for copy/move operations
+        if (data != null && data.Length > 0)
+        {
+            requestData["names"] = data.Select(f => f.Name).ToArray();
+        }
+
+        if (targetPath != null)
+        {
+            requestData["targetPath"] = targetPath;
+            requestData["targetData"] = targetData;
+        }
+
+        if (newName != null)
+        {
+            requestData["name"] = newName;
+        }
+
+        if (searchString != null)
+        {
+            requestData["searchString"] = searchString;
+            requestData["caseSensitive"] = false;
+        }
+
+        var json = System.Text.Json.JsonSerializer.Serialize(requestData);
+        var content = new StringContent(json, System.Text.Encoding.UTF8, "application/json");
+
+        var response = await httpClient.PostAsync(FileOperationsUrl, content);
+
+        if (response.IsSuccessStatusCode)
+        {
+            var responseJson = await response.Content.ReadAsStringAsync();
+            return System.Text.Json.JsonSerializer.Deserialize<FileManagerResponse<FileManagerDirectoryContent>>(responseJson, new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+        }
+
+        return null;
+    }
+
+    #endregion
 }
