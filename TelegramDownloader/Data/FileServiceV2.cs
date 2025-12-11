@@ -170,7 +170,141 @@ namespace TelegramDownloader.Data
             {
                 await _ts.DownloadFileAndReturn(cm, ms: fs, model: model);
             }
-                
+
+        }
+
+        public override async Task<int> PreloadFilesToTemp(string channelId, List<FileManagerDirectoryContent> items)
+        {
+            _logger.LogInformation("Starting preload files to temp V2 - ChannelId: {ChannelId}, ItemsCount: {Count}", channelId, items.Count);
+            NotificationModel nm = new NotificationModel();
+            int preloadedCount = 0;
+            string tempPath = System.IO.Path.Combine(TEMPDIR, "_temp");
+            Directory.CreateDirectory(tempPath);
+
+            try
+            {
+                nm.sendEvent(new Notification($"Starting preload of {items.Count} items to cache", "Preload", NotificationTypes.Info));
+
+                // Collect all files to preload (including files inside folders)
+                var filesToPreload = new List<BsonFileManagerModel>();
+                await CollectFilesForPreloadV2(channelId, items, filesToPreload);
+
+                _logger.LogInformation("Collected {Count} files to preload", filesToPreload.Count);
+                nm.sendEvent(new Notification($"Found {filesToPreload.Count} files to preload", "Preload", NotificationTypes.Info));
+
+                foreach (var file in filesToPreload)
+                {
+                    try
+                    {
+                        // Build the temp file name: {channelId}-{MessageId}-{fileName}
+                        string tempFileName = $"{channelId}-{file.MessageId}-{file.Name}";
+                        string tempFilePath = System.IO.Path.Combine(tempPath, tempFileName);
+
+                        // Check if file already exists and is complete
+                        if (File.Exists(tempFilePath))
+                        {
+                            var existingFile = new System.IO.FileInfo(tempFilePath);
+                            if (existingFile.Length >= file.Size)
+                            {
+                                _logger.LogInformation("File already preloaded: {FileName}", file.Name);
+                                preloadedCount++;
+                                continue;
+                            }
+                            // File exists but incomplete, delete and re-download
+                            File.Delete(tempFilePath);
+                        }
+
+                        // Download file to temp
+                        _logger.LogInformation("Preloading file: {FileName} (MessageId: {MessageId})", file.Name, file.MessageId);
+
+                        if (file.isSplit)
+                        {
+                            // Handle split files
+                            await PreloadSplitFilesToTempV2(channelId, file, tempFilePath);
+                        }
+                        else
+                        {
+                            await downloadFromTelegramV2(channelId, (int)file.MessageId, tempFilePath, file);
+                        }
+
+                        preloadedCount++;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error preloading file: {FileName}", file.Name);
+                    }
+                }
+
+                nm.sendEvent(new Notification($"Preload completed: {preloadedCount} files cached", "Preload", NotificationTypes.Success));
+                _logger.LogInformation("Preload completed - FilesPreloaded: {Count}", preloadedCount);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during preload to temp");
+                nm.sendEvent(new Notification($"Error during preload: {ex.Message}", "Preload Error", NotificationTypes.Error));
+            }
+
+            return preloadedCount;
+        }
+
+        private async Task CollectFilesForPreloadV2(string channelId, List<FileManagerDirectoryContent> items, List<BsonFileManagerModel> filesToPreload)
+        {
+            foreach (var item in items)
+            {
+                if (item.IsFile)
+                {
+                    // Get the file details from database
+                    var dbFile = await _db.getFileById(channelId, item.Id);
+                    if (dbFile != null && dbFile.MessageId != null)
+                    {
+                        filesToPreload.Add(dbFile);
+                    }
+                }
+                else
+                {
+                    // It's a folder - get all files inside recursively
+                    await CollectFilesInFolderRecursiveV2(channelId, item.Id, filesToPreload);
+                }
+            }
+        }
+
+        private async Task CollectFilesInFolderRecursiveV2(string channelId, string folderId, List<BsonFileManagerModel> filesToPreload)
+        {
+            // Get all items in this folder
+            var children = await _db.getFilesByParentId(channelId, folderId);
+
+            foreach (var child in children)
+            {
+                if (child.IsFile)
+                {
+                    if (child.MessageId != null)
+                    {
+                        filesToPreload.Add(child);
+                    }
+                }
+                else
+                {
+                    // Recurse into subfolder
+                    await CollectFilesInFolderRecursiveV2(channelId, child.Id, filesToPreload);
+                }
+            }
+        }
+
+        private async Task PreloadSplitFilesToTempV2(string channelId, BsonFileManagerModel file, string destPath)
+        {
+            _logger.LogInformation("Preloading split file V2 - FileName: {FileName}, Parts: {Parts}", file.Name, file.ListMessageId?.Count ?? 0);
+
+            if (File.Exists(destPath))
+            {
+                File.Delete(destPath);
+            }
+
+            int i = 1;
+            foreach (int messageId in file.ListMessageId)
+            {
+                await downloadFromTelegramV2(channelId, messageId, destPath, file, true, destPath, i);
+                i++;
+            }
         }
 
     }

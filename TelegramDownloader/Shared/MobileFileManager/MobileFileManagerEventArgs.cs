@@ -100,4 +100,10 @@ namespace TelegramDownloader.Shared.MobileFileManager
         public FileManagerDirectoryContent? Folder { get; set; }
         public string Path { get; set; } = "/";
     }
+
+    public class MfmPreloadFilesEventArgs
+    {
+        public FileManagerDirectoryContent[] Items { get; set; } = Array.Empty<FileManagerDirectoryContent>();
+        public string Path { get; set; } = "/";
+    }
 }

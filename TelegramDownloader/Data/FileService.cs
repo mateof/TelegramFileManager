@@ -2053,5 +2053,10 @@ namespace TelegramDownloader.Data
                 }
             _logger.LogInformation("File merge completed - DestName: {DestName}", destName);
         }
+
+        public virtual Task<int> PreloadFilesToTemp(string channelId, List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> items)
+        {
+            throw new NotImplementedException("PreloadFilesToTemp is implemented in FileServiceV2");
+        }
     }
 }

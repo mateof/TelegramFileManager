@@ -52,6 +52,9 @@ namespace TelegramDownloader.Shared.MobileFileManager
         public bool CanStrm { get; set; } = false;
 
         [Parameter]
+        public bool CanPreload { get; set; } = false;
+
+        [Parameter]
         public string RootFolderName { get; set; } = "Root";
 
         #endregion
@@ -105,6 +108,9 @@ namespace TelegramDownloader.Shared.MobileFileManager
 
         [Parameter]
         public EventCallback<MfmStrmEventArgs> OnStrm { get; set; }
+
+        [Parameter]
+        public EventCallback<MfmPreloadFilesEventArgs> OnPreloadFiles { get; set; }
 
         #endregion
 
@@ -902,6 +908,20 @@ namespace TelegramDownloader.Shared.MobileFileManager
             };
 
             await OnStrm.InvokeAsync(args);
+            ClearSelection();
+        }
+
+        private async Task PreloadSelected()
+        {
+            if (SelectedItems.Count == 0) return;
+
+            var args = new MfmPreloadFilesEventArgs
+            {
+                Items = SelectedItems.ToArray(),
+                Path = CurrentPath
+            };
+
+            await OnPreloadFiles.InvokeAsync(args);
             ClearSelection();
         }
 

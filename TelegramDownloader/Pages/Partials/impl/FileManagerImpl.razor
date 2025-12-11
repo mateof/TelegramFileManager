@@ -78,6 +78,7 @@
             CanShowInApp="true"
             CanShowUrlMedia="true"
             CanStrm="true"
+            CanPreload="@(!isShared)"
             OnRead="OnMobileReadAsync"
             OnItemsDeleting="OnMobileItemsDeletingAsync"
             OnItemsMoving="OnMobileItemsMovingAsync"
@@ -90,7 +91,8 @@
             OnShareFile="OnMobileShareFileAsync"
             OnShowInApp="OnMobileShowInAppAsync"
             OnUrlMedia="OnMobileUrlMediaAsync"
-            OnStrm="OnMobileStrmAsync" />
+            OnStrm="OnMobileStrmAsync"
+            OnPreloadFiles="OnMobilePreloadFilesAsync" />
     </div>
 }
 
@@ -137,6 +139,7 @@
         new ToolBarItemModel() { Name = "SortBy" },
         new ToolBarItemModel() { Name = "Refresh" },
         new ToolBarItemModel() { Name = "DownloadServer", Text="Download To Local", TooltipText="Download To local", PrefixIcon="e-icons e-download" },
+        new ToolBarItemModel() { Name = "Preload", Text="Preload", TooltipText="Preload files to cache", PrefixIcon="e-icons e-download" },
         new ToolBarItemModel() { Name = "Selection" },
         new ToolBarItemModel() { Name = "View" },
         new ToolBarItemModel() { Name = "Details" },
@@ -239,6 +242,7 @@
                 new ToolBarItemModel() { Name = "SortBy" },
                 new ToolBarItemModel() { Name = "Refresh" },
                 new ToolBarItemModel() { Name = "DownloadServer", Text="Download To Local", TooltipText="Download To local", PrefixIcon="e-icons e-download" },
+                new ToolBarItemModel() { Name = "Preload", Text="Preload", TooltipText="Preload files to cache", PrefixIcon="e-icons e-download" },
                 new ToolBarItemModel() { Name = "Selection" },
                 new ToolBarItemModel() { Name = "View" },
                 new ToolBarItemModel() { Name = "Details" },
@@ -392,6 +396,16 @@
         {
             var file = args.FileDetails.FirstOrDefault();
             MyNavigationManager.NavigateTo($"/api/file/strm?idChannel={id}&path={file.FilterPath + file.Name + "/"}&host={MyNavigationManager.BaseUri}", true);
+        }
+        if (args.Item.Text == "Preload" && args.FileDetails.Count() > 0)
+        {
+            nm.sendMessage("Preload", $"Starting preload of {args.FileDetails.Count()} items to cache...", NotificationTypes.Info);
+            var channelId = isShared ? bsi.ChannelId : id;
+            _ = Task.Run(async () =>
+            {
+                var count = await fs.PreloadFilesToTemp(channelId, args.FileDetails.ToList());
+                nm.sendMessage("Preload Complete", $"Preloaded {count} files to cache", NotificationTypes.Success);
+            });
         }
         Console.WriteLine("");
     }
@@ -780,6 +794,28 @@
             nm.sendMessage("Error", "Error generating STRM files", NotificationTypes.Error);
         }
         await Task.CompletedTask;
+    }
+
+    private async Task OnMobilePreloadFilesAsync(MfmPreloadFilesEventArgs args)
+    {
+        try
+        {
+            if (args.Items.Length > 0)
+            {
+                nm.sendMessage("Preload", $"Starting preload of {args.Items.Length} items to cache...", NotificationTypes.Info);
+                var channelId = isShared ? bsi.ChannelId : id;
+                _ = Task.Run(async () =>
+                {
+                    var count = await fs.PreloadFilesToTemp(channelId, args.Items.ToList());
+                    nm.sendMessage("Preload Complete", $"Preloaded {count} files to cache", NotificationTypes.Success);
+                });
+            }
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Error on OnMobilePreloadFilesAsync");
+            nm.sendMessage("Error", "Error preloading files", NotificationTypes.Error);
+        }
     }
 
     #endregion
