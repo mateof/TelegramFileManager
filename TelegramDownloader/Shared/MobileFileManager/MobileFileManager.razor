@@ -2,7 +2,7 @@
 @using TelegramDownloader.Models
 @inject ILogger<MobileFileManager> Logger
 
-<div class="mobile-file-manager">
+<div class="mobile-file-manager @(IsFullscreen ? "mfm-fullscreen" : "")">
     @* Header con breadcrumb y acciones *@
     <div class="mfm-header">
         <div class="mfm-breadcrumb">
@@ -23,6 +23,18 @@
             </div>
         </div>
         <div class="mfm-actions">
+            @if (SelectedTypeFilters.Count > 0)
+            {
+                <button class="mfm-filter-badge" @onclick="ClearTypeFilters" title="Clear filters: @string.Join(", ", SelectedTypeFilters)">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                    </svg>
+                    <span>@(SelectedTypeFilters.Count == 1 ? SelectedTypeFilters.First() : $"{SelectedTypeFilters.Count} types")</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 6L6 18M6 6l12 12"/>
+                    </svg>
+                </button>
+            }
             @if (SelectedItems.Count > 0)
             {
                 <span class="mfm-selection-count">@SelectedItems.Count</span>
@@ -45,6 +57,20 @@
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/>
                         <rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+                    </svg>
+                }
+            </button>
+            <button class="mfm-btn-icon" @onclick="ToggleFullscreen" title="@(IsFullscreen ? "Exit fullscreen" : "Fullscreen")">
+                @if (IsFullscreen)
+                {
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
+                    </svg>
+                }
+                else
+                {
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
                     </svg>
                 }
             </button>
@@ -540,6 +566,12 @@
                     </svg>
                     <span>Select all</span>
                 </button>
+                <button class="mfm-more-item" @onclick="OpenFilterDialog">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/>
+                    </svg>
+                    <span>Filter: @(SelectedTypeFilters.Count == 0 ? "All" : SelectedTypeFilters.Count == 1 ? SelectedTypeFilters.First() : $"{SelectedTypeFilters.Count} selected")</span>
+                </button>
                 <button class="mfm-more-item" @onclick="SortFiles">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="14" y2="15"/><line x1="4" y1="3" x2="10" y2="3"/><line x1="4" y1="21" x2="8" y2="21"/>
@@ -562,6 +594,69 @@
                         <span>Descending</span>
                     }
                 </button>
+            </div>
+        </div>
+    }
+
+    @* Filter by type dialog (multiple selection) *@
+    @if (ShowFilterDialog)
+    {
+        <div class="mfm-modal-overlay" @onclick="CloseFilterDialog">
+            <div class="mfm-filter-dialog" @onclick:stopPropagation="true">
+                <div class="mfm-filter-header">
+                    <h3>Filter by type</h3>
+                    <button class="mfm-btn-icon" @onclick="CloseFilterDialog">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 6L6 18M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="mfm-filter-actions-top">
+                    <button class="mfm-filter-action-btn" @onclick="SelectAllTypeFilters">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
+                        </svg>
+                        Select all
+                    </button>
+                    <button class="mfm-filter-action-btn" @onclick="ClearTypeFilters">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
+                        </svg>
+                        Clear all
+                    </button>
+                </div>
+                <div class="mfm-filter-content">
+                    @foreach (var fileType in AvailableFileTypes)
+                    {
+                        <button class="mfm-filter-item @(SelectedTypeFilters.Contains(fileType) ? "active" : "")" @onclick="() => ToggleTypeFilter(fileType)">
+                            <div class="mfm-filter-checkbox @(SelectedTypeFilters.Contains(fileType) ? "checked" : "")">
+                                @if (SelectedTypeFilters.Contains(fileType))
+                                {
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                                        <polyline points="20 6 9 17 4 12"/>
+                                    </svg>
+                                }
+                            </div>
+                            @if (fileType == "Folder")
+                            {
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="#f0c14b" stroke="#f0c14b" stroke-width="1.5">
+                                    <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                                </svg>
+                            }
+                            else
+                            {
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>
+                                </svg>
+                            }
+                            <span>@fileType</span>
+                        </button>
+                    }
+                </div>
+                <div class="mfm-filter-footer">
+                    <span class="mfm-filter-count">@(SelectedTypeFilters.Count == 0 ? "Showing all types" : $"{SelectedTypeFilters.Count} type(s) selected")</span>
+                    <button class="mfm-btn mfm-btn-primary" @onclick="ApplyFiltersAndClose">Done</button>
+                </div>
             </div>
         </div>
     }

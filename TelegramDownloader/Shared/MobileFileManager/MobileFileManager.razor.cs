@@ -149,9 +149,15 @@ namespace TelegramDownloader.Shared.MobileFileManager
 
         private bool ShowMoreMenu { get; set; } = false;
         private bool ShowFabMenu { get; set; } = false;
+        private bool IsFullscreen { get; set; } = false;
 
         private bool ShowDeleteConfirmDialog { get; set; } = false;
         private FileManagerDirectoryContent[] ItemsToDelete { get; set; } = Array.Empty<FileManagerDirectoryContent>();
+
+        // File type filter (multiple selection)
+        private bool ShowFilterDialog { get; set; } = false;
+        private HashSet<string> SelectedTypeFilters { get; set; } = new();
+        private List<string> AvailableFileTypes => GetAvailableFileTypes();
 
         private System.Timers.Timer? searchTimer;
 
@@ -178,6 +184,7 @@ namespace TelegramDownloader.Shared.MobileFileManager
                 ResetPagination();
                 ClearSelection();
                 ClipboardItems.Clear();
+                SelectedTypeFilters.Clear(); // Clear filters when Id changes
                 Files.Clear();
                 await LoadFiles();
             }
@@ -243,6 +250,12 @@ namespace TelegramDownloader.Shared.MobileFileManager
                 files = files.Where(f => f.Name.Contains(SearchText, StringComparison.OrdinalIgnoreCase)).ToList();
             }
 
+            // Apply file type filter (multiple selection)
+            if (SelectedTypeFilters.Count > 0)
+            {
+                files = files.Where(f => SelectedTypeFilters.Contains(GetFileTypeForFilter(f))).ToList();
+            }
+
             // Apply sorting
             files = SortBy switch
             {
@@ -254,6 +267,39 @@ namespace TelegramDownloader.Shared.MobileFileManager
             };
 
             return files;
+        }
+
+        private List<string> GetAvailableFileTypes()
+        {
+            var files = Files ?? new List<FileManagerDirectoryContent>();
+            var types = new List<string>();
+
+            // Add "Folder" type if there are folders
+            if (files.Any(f => !f.IsFile))
+            {
+                types.Add("Folder");
+            }
+
+            // Get distinct file types from files
+            var fileTypes = files
+                .Where(f => f.IsFile && !string.IsNullOrEmpty(f.Type))
+                .Select(f => f.Type)
+                .Distinct()
+                .OrderBy(t => t)
+                .ToList();
+
+            types.AddRange(fileTypes);
+
+            return types;
+        }
+
+        private string GetFileTypeForFilter(FileManagerDirectoryContent file)
+        {
+            if (!file.IsFile)
+            {
+                return "Folder";
+            }
+            return file.Type ?? string.Empty;
         }
 
         private List<FileManagerDirectoryContent> GetPagedFiles()
@@ -922,6 +968,12 @@ namespace TelegramDownloader.Shared.MobileFileManager
             ViewMode = ViewMode == "grid" ? "list" : "grid";
         }
 
+        private void ToggleFullscreen()
+        {
+            IsFullscreen = !IsFullscreen;
+            StateHasChanged();
+        }
+
         private void ShowMoreOptions()
         {
             ShowMoreMenu = true;
@@ -976,6 +1028,51 @@ namespace TelegramDownloader.Shared.MobileFileManager
         {
             ShowDetailsPanel = false;
             DetailsItem = null;
+        }
+
+        private void OpenFilterDialog()
+        {
+            ShowMoreMenu = false;
+            ShowFilterDialog = true;
+        }
+
+        private void CloseFilterDialog()
+        {
+            ShowFilterDialog = false;
+        }
+
+        private void ToggleTypeFilter(string type)
+        {
+            if (SelectedTypeFilters.Contains(type))
+            {
+                SelectedTypeFilters.Remove(type);
+            }
+            else
+            {
+                SelectedTypeFilters.Add(type);
+            }
+            ResetPagination();
+            StateHasChanged();
+        }
+
+        private void SelectAllTypeFilters()
+        {
+            SelectedTypeFilters = new HashSet<string>(AvailableFileTypes);
+            ResetPagination();
+            StateHasChanged();
+        }
+
+        private void ClearTypeFilters()
+        {
+            SelectedTypeFilters.Clear();
+            ResetPagination();
+            StateHasChanged();
+        }
+
+        private void ApplyFiltersAndClose()
+        {
+            ShowFilterDialog = false;
+            StateHasChanged();
         }
 
         private void UploadFiles()
