@@ -242,7 +242,7 @@
 .mfm-bottom-bar {
     display: flex;
     align-items: center;
-    justify-content: space-around;
+    gap: 4px;
     padding: 8px 12px;
     padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px));
     background-color: var(--bs-body-bg, #fff);
@@ -253,6 +253,16 @@
     left: 0;
     right: 0;
     z-index: 100;
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/Edge */
+}
+
+.mfm-bottom-bar::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
 }
 
 .mfm-action-btn {
@@ -268,6 +278,8 @@
     cursor: pointer;
     border-radius: 8px;
     transition: background-color 0.2s;
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 
 .mfm-action-btn:hover {
