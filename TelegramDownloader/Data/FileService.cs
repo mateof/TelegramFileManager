@@ -1587,6 +1587,7 @@ namespace TelegramDownloader.Data
 
         public async Task refreshChannelFIles(string channelId, bool force = false)
         {
+            int totalNewMessages = 0;
             refreshMutex.WaitOne();
             refreshChannelList.Add(channelId);
             refreshMutex.ReleaseMutex();
@@ -1642,12 +1643,13 @@ namespace TelegramDownloader.Data
                     model.isSplit = false;
                     model.isEncrypted = false;
                     await _db.createEntry(channelId, model);
+                    totalNewMessages++;
                 }
             }
             refreshMutex.WaitOne();
             refreshChannelList.Remove(channelId);
             refreshMutex.ReleaseMutex();
-            _logger.LogInformation($"Finish Refresh channel with id: {channelId}");
+            _logger.LogInformation($"Finish Refresh channel with id: {channelId} with {totalNewMessages} new files added.");
 
             // Fix for CS1739: Removed the invalid 'autoHide' parameter and replaced it with the correct property assignment.
             ToastMessage tm = new ToastMessage
@@ -1655,8 +1657,9 @@ namespace TelegramDownloader.Data
                 Type = ToastType.Success,
                 IconName = IconName.CheckCircle,
                 Title = "Refresh channel files",
-                Message = "Files channel has been refreshed",
+                Message = $"Files channel has been refreshed with {totalNewMessages} new files added.",
                 AutoHide = true
+                
             };
             _toastService.Notify(tm);
         }

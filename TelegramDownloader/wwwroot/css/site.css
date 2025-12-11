@@ -123,3 +123,17 @@ a, .btn-link {
     width: 100%;
     overflow: hidden;
 }
+
+/* Toast notifications - ensure high z-index */
+.toast-container {
+    z-index: 10000 !important;
+}
+
+/* Modal players - ensure high z-index */
+.modal {
+    z-index: 10000 !important;
+}
+
+.modal-backdrop {
+    z-index: 9999 !important;
+}

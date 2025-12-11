@@ -79,3 +79,7 @@ main {
         display: block;
     }
 }
+
+.toast-container {
+    z-index: 200 !important;
+}

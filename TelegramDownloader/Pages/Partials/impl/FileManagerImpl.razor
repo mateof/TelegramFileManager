@@ -74,7 +74,7 @@
             CanCreate="@(!isShared || isMyChannel)"
             CanUpload="false"
             CanDownloadToLocal="true"
-            CanShareFile="@(!isShared || isMyChannel)"
+            CanShareFile="@(isMyChannel && !isShared)"
             CanShowInApp="true"
             CanShowUrlMedia="true"
             CanStrm="true"

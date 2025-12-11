@@ -800,8 +800,10 @@ namespace TelegramDownloader.Shared.MobileFileManager
             CloseContextMenu();
         }
 
-        private async Task ShareFileItem(FileManagerDirectoryContent item)
+        private async Task ShareFolderItem(FileManagerDirectoryContent item)
         {
+            if (item.IsFile) return; // Only folders can be shared
+
             var args = new MfmShareFileEventArgs
             {
                 File = item
@@ -809,6 +811,21 @@ namespace TelegramDownloader.Shared.MobileFileManager
 
             await OnShareFile.InvokeAsync(args);
             CloseContextMenu();
+        }
+
+        private async Task ShareSelectedFolder()
+        {
+            // Only share if exactly one folder is selected
+            var folder = SelectedItems.FirstOrDefault(x => !x.IsFile);
+            if (folder == null || SelectedItems.Count != 1) return;
+
+            var args = new MfmShareFileEventArgs
+            {
+                File = folder
+            };
+
+            await OnShareFile.InvokeAsync(args);
+            ClearSelection();
         }
 
         private async Task ShowInAppItem(FileManagerDirectoryContent item)
