@@ -130,7 +130,7 @@
             {
                 <MobileFileItem
                     File="file"
-                    IsSelected="@SelectedItems.Contains(file)"
+                    IsSelected="@IsItemSelected(file)"
                     ViewMode="@ViewMode"
                     OnClick="() => OnFileClick(file)"
                     OnLongPress="() => OnFileLongPress(file)"

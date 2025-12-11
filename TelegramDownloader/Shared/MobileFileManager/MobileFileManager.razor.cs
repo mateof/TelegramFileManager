@@ -126,9 +126,26 @@ namespace TelegramDownloader.Shared.MobileFileManager
         private bool SortAscending { get; set; } = true;
 
         private List<FileManagerDirectoryContent> Files { get; set; } = new();
-        private List<FileManagerDirectoryContent> DisplayFiles => GetDisplayFiles();
+
+        // Cached display files - invalidated when data/filters change
+        private List<FileManagerDirectoryContent>? _cachedDisplayFiles;
+        private bool _displayFilesDirty = true;
+        private List<FileManagerDirectoryContent> DisplayFiles
+        {
+            get
+            {
+                if (_displayFilesDirty || _cachedDisplayFiles == null)
+                {
+                    _cachedDisplayFiles = GetDisplayFiles();
+                    _displayFilesDirty = false;
+                }
+                return _cachedDisplayFiles;
+            }
+        }
+
         private List<FileManagerDirectoryContent> PagedFiles => GetPagedFiles();
         private List<FileManagerDirectoryContent> SelectedItems { get; set; } = new();
+        private HashSet<string> _selectedIds = new(); // O(1) lookup for selection state
         private List<FileManagerDirectoryContent> ClipboardItems { get; set; } = new();
         private bool IsCutOperation { get; set; } = false;
 
@@ -223,6 +240,7 @@ namespace TelegramDownloader.Shared.MobileFileManager
                         f.FilterPath = NormalizePath(f.FilterPath);
                         return f;
                     }).ToList();
+                    InvalidateDisplayFilesCache();
                 }
 
                 if (args.Response?.CWD != null)
@@ -244,6 +262,16 @@ namespace TelegramDownloader.Shared.MobileFileManager
         public async Task RefreshFilesAsync()
         {
             await LoadFiles();
+        }
+
+        private void InvalidateDisplayFilesCache()
+        {
+            _displayFilesDirty = true;
+        }
+
+        private bool IsItemSelected(FileManagerDirectoryContent file)
+        {
+            return _selectedIds.Contains(file.Id);
         }
 
         private List<FileManagerDirectoryContent> GetDisplayFiles()
@@ -451,22 +479,25 @@ namespace TelegramDownloader.Shared.MobileFileManager
 
         private void ToggleSelection(FileManagerDirectoryContent file)
         {
-            if (SelectedItems.Contains(file))
+            if (_selectedIds.Contains(file.Id))
             {
                 SelectedItems.Remove(file);
+                _selectedIds.Remove(file.Id);
             }
             else
             {
                 SelectedItems.Add(file);
+                _selectedIds.Add(file.Id);
             }
 
-            OnSelectedItemsChanged.InvokeAsync(SelectedItems.Select(f => f.Id).ToArray());
+            OnSelectedItemsChanged.InvokeAsync(_selectedIds.ToArray());
             StateHasChanged();
         }
 
         private void ClearSelection()
         {
             SelectedItems.Clear();
+            _selectedIds.Clear();
             OnSelectedItemsChanged.InvokeAsync(Array.Empty<string>());
             StateHasChanged();
         }
@@ -474,8 +505,9 @@ namespace TelegramDownloader.Shared.MobileFileManager
         private void SelectAll()
         {
             SelectedItems = new List<FileManagerDirectoryContent>(DisplayFiles);
+            _selectedIds = new HashSet<string>(SelectedItems.Select(f => f.Id));
             ShowMoreMenu = false;
-            OnSelectedItemsChanged.InvokeAsync(SelectedItems.Select(f => f.Id).ToArray());
+            OnSelectedItemsChanged.InvokeAsync(_selectedIds.ToArray());
             StateHasChanged();
         }
 
@@ -969,6 +1001,7 @@ namespace TelegramDownloader.Shared.MobileFileManager
                                 f.FilterPath = NormalizePath(f.FilterPath);
                                 return f;
                             }).ToList();
+                            InvalidateDisplayFilesCache();
                         }
                     }
                     else
@@ -1032,6 +1065,7 @@ namespace TelegramDownloader.Shared.MobileFileManager
                 "Type" => "Name",
                 _ => "Name"
             };
+            InvalidateDisplayFilesCache();
             ResetPagination();
             StateHasChanged();
         }
@@ -1039,6 +1073,7 @@ namespace TelegramDownloader.Shared.MobileFileManager
         private void ToggleSortDirection()
         {
             SortAscending = !SortAscending;
+            InvalidateDisplayFilesCache();
             ResetPagination();
             StateHasChanged();
         }
@@ -1088,6 +1123,7 @@ namespace TelegramDownloader.Shared.MobileFileManager
             {
                 SelectedTypeFilters.Add(type);
             }
+            InvalidateDisplayFilesCache();
             ResetPagination();
             StateHasChanged();
         }
@@ -1095,6 +1131,7 @@ namespace TelegramDownloader.Shared.MobileFileManager
         private void SelectAllTypeFilters()
         {
             SelectedTypeFilters = new HashSet<string>(AvailableFileTypes);
+            InvalidateDisplayFilesCache();
             ResetPagination();
             StateHasChanged();
         }
@@ -1102,6 +1139,7 @@ namespace TelegramDownloader.Shared.MobileFileManager
         private void ClearTypeFilters()
         {
             SelectedTypeFilters.Clear();
+            InvalidateDisplayFilesCache();
             ResetPagination();
             StateHasChanged();
         }

@@ -4,7 +4,7 @@
 	<Version>0.0.0.0</Version>
 	<Authors>Mateo</Authors>
 	<Product>TelegramFileManager</Product>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>528ba20b-8482-4c0f-9c2f-7ecc8dc30410</UserSecretsId>

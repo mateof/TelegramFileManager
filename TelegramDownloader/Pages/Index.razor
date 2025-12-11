@@ -2,6 +2,7 @@
 @page "/"
 @implements IDisposable
 
+@using Microsoft.AspNetCore.Components
 @using QRCoder
 @using TelegramDownloader.Data
 @using TelegramDownloader.Models
@@ -108,12 +109,17 @@
 
     protected override async Task OnInitializedAsync()
     {
-        Model ??= new();
-        Model.type = await ts.checkAuth(Model.value);
-        StateHasChanged();
-        await isLogin();
-        
-
+        try
+        {
+            Model ??= new();
+            Model.type = await ts.checkAuth(Model.value);
+            StateHasChanged();
+            await isLogin();
+        }
+        catch (NavigationException)
+        {
+            // Expected when navigating during initialization in Blazor Server
+        }
     }
 
 
