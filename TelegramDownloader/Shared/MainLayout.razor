@@ -10,8 +10,7 @@
 @inject NavigationManager NavManager
 @inject IJSRuntime JS
 @inject ModalService ModalService
-@inject GHService ghService;
-@inject TransactionInfoService tis;
+@inject TransactionInfoService tis
 
 <PageTitle>TelegramFileManager</PageTitle>
 
@@ -118,9 +117,7 @@
                     <Spinner Type="SpinnerType.Border" />
                 </Button>
             }
-            <Button Color="ButtonColor.None" Size="ButtonSize.Small" @onclick="() => ShowModalVersion(ModalType.Info)">
-                <Icon Name="IconName.InfoCircleFill" Size="IconSize.x2" Color="IconColor.Info" />
-            </Button>
+            <VersionBadge />
             <button class="btn" type="button" @onclick="openOffCanvasMenu"><i class="bi bi-three-dots"></i></button>
         </div>
         <TelegramDownloader.Pages.Modals.ToastNotify></TelegramDownloader.Pages.Modals.ToastNotify>
@@ -163,7 +160,6 @@
 
     private Offcanvas offcanvas = default!;
     private Pages.Modals.ImportDataModal ImportModal { get; set; }
-    private GithubVersionModel LastVersion { get; set; }
     private NavMenu menu { get; set; }
     private bool active { get; set; } = true;
     private bool sidebarCollapsed { get; set; } = false;
@@ -176,7 +172,6 @@
             try
             {
                 if (!ts.checkUserLogin()) NavManager.NavigateTo("/", true);
-                LastVersion = await ghService.GetLastVersion();
             }
             catch (Exception e)
             {
@@ -194,20 +189,6 @@
     private async Task reloadMenu()
     {
         menu.RefreshChannels();
-    }
-
-
-    private async Task ShowModalVersion(ModalType modalType)
-    {
-        var modalOption = new ModalOption
-            {
-                Title = "Versión",
-                Message = GetType().Assembly.GetName().Version.ToString() == "0.0.0.0" ? "You have a docker version" : $@"Your versión is v{GetType().Assembly.GetName().Version.ToString()}
-[[Last version is {(LastVersion != null ? LastVersion.tag_name : "")}]]",
-                Type = modalType,
-            };
-
-        await ModalService.ShowAsync(modalOption);
     }
 
     private async Task openOffCanvasMenu()

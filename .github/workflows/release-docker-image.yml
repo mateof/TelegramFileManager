@@ -1,4 +1,4 @@
-name: Docker Image CI
+name: Docker Image CI (Release)
 
 on:
   push:
@@ -12,16 +12,28 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
+    - name: Extract version from tag
+      id: version
+      run: |
+        # Remove 'v' prefix from tag (v1.2.3 -> 1.2.3)
+        VERSION=${GITHUB_REF_NAME#v}
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Extracted version: $VERSION"
+
     - name: 'Login to GitHub Container Registry'
       uses: docker/login-action@v3
       with:
         registry: ghcr.io
         username: ${{github.actor}}
         password: ${{secrets.GHCR}}
+
     - name: Build and Push the Docker image
       run: |
-        docker build ./TelegramDownloader -f ./TelegramDownloader/Dockerfile --tag ghcr.io/mateof/telegramfilemanager:latest --build-arg tag=${{github.ref_name}}
-        IMAGE_ID=$(docker images | grep ghcr.io/mateof/telegramfilemanager | awk '{print $3}')
-        docker tag $IMAGE_ID ghcr.io/mateof/telegramfilemanager:${{github.ref_name}}
-        docker push ghcr.io/mateof/telegramfilemanager:latest
+        VERSION=${{ steps.version.outputs.version }}
+        docker build ./TelegramDownloader -f ./TelegramDownloader/Dockerfile \
+          --build-arg VERSION=$VERSION \
+          --tag ghcr.io/mateof/telegramfilemanager:${{github.ref_name}} \
+          --tag ghcr.io/mateof/telegramfilemanager:latest
         docker push ghcr.io/mateof/telegramfilemanager:${{github.ref_name}}
+        docker push ghcr.io/mateof/telegramfilemanager:latest

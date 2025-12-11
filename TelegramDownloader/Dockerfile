@@ -8,6 +8,7 @@ EXPOSE 443
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
 ARG BUILD_CONFIGURATION=Release
+ARG VERSION=0.0.0.0
 WORKDIR /src
 COPY ["TelegramDownloader.csproj", "."]
 RUN dotnet restore "TelegramDownloader.csproj"
@@ -17,7 +18,8 @@ RUN dotnet build "./TelegramDownloader.csproj" -c $BUILD_CONFIGURATION -o /app/b
 
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish "./TelegramDownloader.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false,Version=0.0.0.0
+ARG VERSION=0.0.0.0
+RUN dotnet publish "./TelegramDownloader.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false,Version=$VERSION
 
 FROM base AS final
 WORKDIR /app
