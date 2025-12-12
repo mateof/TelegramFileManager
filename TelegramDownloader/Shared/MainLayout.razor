@@ -117,7 +117,7 @@
                     <Spinner Type="SpinnerType.Border" />
                 </Button>
             }
-            <VersionBadge />
+            <VersionBadge @ref="versionBadge" @bind-ShowModal="showVersionModal" />
             <button class="btn" type="button" @onclick="openOffCanvasMenu"><i class="bi bi-three-dots"></i></button>
         </div>
         <TelegramDownloader.Pages.Modals.ToastNotify></TelegramDownloader.Pages.Modals.ToastNotify>
@@ -155,15 +155,113 @@
     </main>
 </div>
 
+@* Version Modal - rendered outside .page to avoid stacking context issues *@
+@if (showVersionModal)
+{
+    <div class="version-portal">
+        <div class="version-backdrop" @onclick="CloseVersionModal"></div>
+        <div class="version-dialog">
+            <div class="version-dialog-header">
+                <h5>Version Information</h5>
+                <button type="button" class="btn-close" @onclick="CloseVersionModal"></button>
+            </div>
+            <div class="version-dialog-body">
+                @if (versionBadge?.VersionInfo != null)
+                {
+                    var info = versionBadge.VersionInfo;
+                    <div class="version-current">
+                        <div class="version-label">Current Version</div>
+                        <div class="version-value">
+                            @if (info.IsDockerVersion)
+                            {
+                                <span class="badge bg-secondary me-2">Docker</span>
+                            }
+                            else if (info.IsDevVersion)
+                            {
+                                <span class="badge bg-warning text-dark me-2">Dev</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-success me-2">Release</span>
+                            }
+                            <code>@info.CurrentVersion</code>
+                        </div>
+                    </div>
+
+                    @if (info.LatestRelease != null)
+                    {
+                        <div class="version-section @(info.HasNewRelease ? "has-update" : "")">
+                            <div class="version-label">
+                                Latest Release
+                                @if (info.HasNewRelease)
+                                {
+                                    <span class="badge bg-primary ms-2">New!</span>
+                                }
+                            </div>
+                            <div class="version-value">
+                                <code>@info.LatestRelease.tag_name</code>
+                                <small class="text-muted ms-2">@info.LatestRelease.published_at.ToString("yyyy-MM-dd")</small>
+                            </div>
+                            @if (info.HasNewRelease)
+                            {
+                                <a href="@info.LatestRelease.html_url" target="_blank" class="btn btn-sm btn-outline-primary mt-2">
+                                    <i class="bi bi-box-arrow-up-right"></i> View Release
+                                </a>
+                            }
+                        </div>
+                    }
+
+                    @if (info.LatestDev != null)
+                    {
+                        <div class="version-section @(info.HasNewDev ? "has-update" : "")">
+                            <div class="version-label">
+                                Latest Dev
+                                @if (info.HasNewDev)
+                                {
+                                    <span class="badge bg-warning text-dark ms-2">New!</span>
+                                }
+                            </div>
+                            <div class="version-value">
+                                <code>@info.LatestDev.tag_name</code>
+                                <small class="text-muted ms-2">@info.LatestDev.published_at.ToString("yyyy-MM-dd")</small>
+                            </div>
+                            @if (info.HasNewDev && info.IsDevVersion)
+                            {
+                                <a href="@info.LatestDev.html_url" target="_blank" class="btn btn-sm btn-outline-warning mt-2">
+                                    <i class="bi bi-box-arrow-up-right"></i> View Dev Release
+                                </a>
+                            }
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="text-center py-3">
+                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                        <span class="ms-2">Loading version info...</span>
+                    </div>
+                }
+            </div>
+            <div class="version-dialog-footer">
+                <a href="https://github.com/mateof/TelegramFileManager/releases" target="_blank" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-github"></i> All Releases
+                </a>
+                <button class="btn btn-sm btn-secondary" @onclick="CloseVersionModal">Close</button>
+            </div>
+        </div>
+    </div>
+}
 
 @code {
 
     private Offcanvas offcanvas = default!;
     private Pages.Modals.ImportDataModal ImportModal { get; set; }
     private NavMenu menu { get; set; }
+    private VersionBadge versionBadge { get; set; }
     private bool active { get; set; } = true;
     private bool sidebarCollapsed { get; set; } = false;
     private bool navMenuCollapsed { get; set; } = true;
+    private bool showVersionModal { get; set; } = false;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -258,6 +356,15 @@
     {
         navMenuCollapsed = isCollapsed;
         StateHasChanged();
+    }
+
+    private async Task CloseVersionModal()
+    {
+        showVersionModal = false;
+        if (versionBadge != null)
+        {
+            await versionBadge.CloseModal();
+        }
     }
 
     public void Dispose()

@@ -137,3 +137,242 @@ a, .btn-link {
 .modal-backdrop {
     z-index: 9999 !important;
 }
+
+/* Version Modal Portal - renders outside stacking contexts */
+.version-portal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 99999 !important;
+    pointer-events: auto;
+    animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translate(-50%, -48%);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%);
+    }
+}
+
+.version-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 99999;
+}
+
+.version-dialog {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: linear-gradient(145deg, #ffffff 0%, #f8f9fa 100%);
+    border-radius: 1rem;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25),
+                0 0 0 1px rgba(255, 255, 255, 0.1);
+    max-width: 420px;
+    width: 92%;
+    max-height: 85vh;
+    overflow-y: auto;
+    z-index: 100000;
+    animation: slideIn 0.3s ease-out;
+}
+
+.version-dialog-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.25rem 1.5rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 1rem 1rem 0 0;
+    color: white;
+}
+
+.version-dialog-header h5 {
+    margin: 0;
+    font-weight: 600;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.version-dialog-header h5::before {
+    content: "\f430";
+    font-family: "bootstrap-icons";
+    font-size: 1.2rem;
+}
+
+.version-dialog-header .btn-close {
+    filter: brightness(0) invert(1);
+    opacity: 0.8;
+    transition: opacity 0.2s, transform 0.2s;
+}
+
+.version-dialog-header .btn-close:hover {
+    opacity: 1;
+    transform: scale(1.1);
+}
+
+.version-dialog-body {
+    padding: 1.5rem;
+}
+
+.version-current {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    padding: 1.25rem;
+    border-radius: 0.75rem;
+    margin-bottom: 1.25rem;
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05);
+}
+
+.version-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #6c757d;
+    margin-bottom: 0.5rem;
+}
+
+.version-value {
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.version-value code {
+    background: linear-gradient(135deg, #343a40 0%, #495057 100%);
+    color: #fff;
+    padding: 0.35rem 0.75rem;
+    border-radius: 0.5rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.version-section {
+    padding: 1rem 1.25rem;
+    border: 1px solid #e9ecef;
+    border-radius: 0.75rem;
+    margin-bottom: 1rem;
+    background: #fff;
+    transition: all 0.2s ease;
+}
+
+.version-section:hover {
+    border-color: #dee2e6;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.version-section.has-update {
+    border-color: #667eea;
+    background: linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.15);
+}
+
+.version-section .badge {
+    font-size: 0.7rem;
+    padding: 0.35rem 0.6rem;
+    font-weight: 600;
+    animation: pulse-badge 2s infinite;
+}
+
+@keyframes pulse-badge {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+.version-section .btn {
+    margin-top: 0.75rem;
+    border-radius: 0.5rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.version-section .btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.version-dialog-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    background: #f8f9fa;
+    border-top: 1px solid #e9ecef;
+    border-radius: 0 0 1rem 1rem;
+    gap: 0.75rem;
+}
+
+.version-dialog-footer .btn {
+    border-radius: 0.5rem;
+    font-weight: 500;
+    padding: 0.5rem 1rem;
+    transition: all 0.2s ease;
+}
+
+.version-dialog-footer .btn:hover {
+    transform: translateY(-1px);
+}
+
+.version-dialog-footer .btn-outline-secondary {
+    border-color: #dee2e6;
+}
+
+.version-dialog-footer .btn-outline-secondary:hover {
+    background: #e9ecef;
+    border-color: #dee2e6;
+    color: #495057;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    .version-dialog {
+        background: linear-gradient(145deg, #2d3748 0%, #1a202c 100%);
+    }
+
+    .version-current {
+        background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
+        border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .version-section {
+        background: #2d3748;
+        border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .version-section.has-update {
+        background: linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%);
+    }
+
+    .version-dialog-footer {
+        background: #1a202c;
+        border-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .version-label {
+        color: #a0aec0;
+    }
+}

@@ -3,7 +3,7 @@
 @inject GHService GHService
 
 <div class="version-badge-container">
-    <button class="btn btn-link version-badge @(HasUpdate ? "has-update" : "")" @onclick="ShowVersionModal" title="Version info">
+    <button class="btn btn-link version-badge @(HasUpdate ? "has-update" : "")" @onclick="ToggleModal" title="Version info">
         <i class="bi bi-info-circle-fill"></i>
         @if (HasUpdate)
         {
@@ -11,100 +11,6 @@
         }
     </button>
 </div>
-
-@if (ShowModal)
-{
-    <div class="version-modal-overlay" @onclick="CloseModal">
-        <div class="version-modal" @onclick:stopPropagation="true">
-            <div class="version-modal-header">
-                <h5>Version Information</h5>
-                <button class="btn-close" @onclick="CloseModal"></button>
-            </div>
-            <div class="version-modal-body">
-                @if (VersionInfo != null)
-                {
-                    <div class="version-current">
-                        <div class="version-label">Current Version</div>
-                        <div class="version-value @(VersionInfo.IsDevVersion ? "dev" : "release")">
-                            @if (VersionInfo.IsDockerVersion)
-                            {
-                                <span class="badge bg-secondary me-2">Docker</span>
-                            }
-                            else if (VersionInfo.IsDevVersion)
-                            {
-                                <span class="badge bg-warning text-dark me-2">Dev</span>
-                            }
-                            else
-                            {
-                                <span class="badge bg-success me-2">Release</span>
-                            }
-                            <code>@VersionInfo.CurrentVersion</code>
-                        </div>
-                    </div>
-
-                    @if (VersionInfo.LatestRelease != null)
-                    {
-                        <div class="version-section @(VersionInfo.HasNewRelease ? "has-update" : "")">
-                            <div class="version-label">
-                                Latest Release
-                                @if (VersionInfo.HasNewRelease)
-                                {
-                                    <span class="badge bg-primary ms-2">New!</span>
-                                }
-                            </div>
-                            <div class="version-value">
-                                <code>@VersionInfo.LatestRelease.tag_name</code>
-                                <small class="text-muted ms-2">@VersionInfo.LatestRelease.published_at.ToString("yyyy-MM-dd")</small>
-                            </div>
-                            @if (VersionInfo.HasNewRelease)
-                            {
-                                <a href="@VersionInfo.LatestRelease.html_url" target="_blank" class="btn btn-sm btn-outline-primary mt-2">
-                                    <i class="bi bi-box-arrow-up-right"></i> View Release
-                                </a>
-                            }
-                        </div>
-                    }
-
-                    @if (VersionInfo.LatestDev != null)
-                    {
-                        <div class="version-section @(VersionInfo.HasNewDev ? "has-update" : "")">
-                            <div class="version-label">
-                                Latest Dev
-                                @if (VersionInfo.HasNewDev)
-                                {
-                                    <span class="badge bg-warning text-dark ms-2">New!</span>
-                                }
-                            </div>
-                            <div class="version-value">
-                                <code>@VersionInfo.LatestDev.tag_name</code>
-                                <small class="text-muted ms-2">@VersionInfo.LatestDev.published_at.ToString("yyyy-MM-dd")</small>
-                            </div>
-                            @if (VersionInfo.HasNewDev && VersionInfo.IsDevVersion)
-                            {
-                                <a href="@VersionInfo.LatestDev.html_url" target="_blank" class="btn btn-sm btn-outline-warning mt-2">
-                                    <i class="bi bi-box-arrow-up-right"></i> View Dev Release
-                                </a>
-                            }
-                        </div>
-                    }
-                }
-                else
-                {
-                    <div class="text-center py-3">
-                        <div class="spinner-border spinner-border-sm" role="status"></div>
-                        <span class="ms-2">Loading version info...</span>
-                    </div>
-                }
-            </div>
-            <div class="version-modal-footer">
-                <a href="https://github.com/mateof/TelegramFileManager/releases" target="_blank" class="btn btn-sm btn-outline-secondary">
-                    <i class="bi bi-github"></i> All Releases
-                </a>
-                <button class="btn btn-sm btn-secondary" @onclick="CloseModal">Close</button>
-            </div>
-        </div>
-    </div>
-}
 
 <style>
     .version-badge-container {
@@ -143,91 +49,16 @@
         50% { transform: scale(1.2); opacity: 0.7; }
         100% { transform: scale(1); opacity: 1; }
     }
-
-    .version-modal-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background-color: rgba(0, 0, 0, 0.5);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 1050;
-    }
-
-    .version-modal {
-        background: var(--bs-body-bg, #fff);
-        border-radius: 0.5rem;
-        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
-        max-width: 400px;
-        width: 90%;
-    }
-
-    .version-modal-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 1rem;
-        border-bottom: 1px solid var(--bs-border-color, #dee2e6);
-    }
-
-    .version-modal-header h5 {
-        margin: 0;
-    }
-
-    .version-modal-body {
-        padding: 1rem;
-    }
-
-    .version-current {
-        background: var(--bs-tertiary-bg, #f8f9fa);
-        padding: 1rem;
-        border-radius: 0.375rem;
-        margin-bottom: 1rem;
-    }
-
-    .version-section {
-        padding: 0.75rem;
-        border: 1px solid var(--bs-border-color, #dee2e6);
-        border-radius: 0.375rem;
-        margin-bottom: 0.75rem;
-    }
-
-    .version-section.has-update {
-        border-color: var(--bs-primary);
-        background: rgba(var(--bs-primary-rgb), 0.05);
-    }
-
-    .version-label {
-        font-size: 0.875rem;
-        color: var(--bs-secondary-color, #6c757d);
-        margin-bottom: 0.25rem;
-    }
-
-    .version-value {
-        font-weight: 500;
-    }
-
-    .version-value code {
-        background: var(--bs-tertiary-bg, #e9ecef);
-        padding: 0.2rem 0.4rem;
-        border-radius: 0.25rem;
-        font-size: 0.9rem;
-    }
-
-    .version-modal-footer {
-        display: flex;
-        justify-content: space-between;
-        padding: 1rem;
-        border-top: 1px solid var(--bs-border-color, #dee2e6);
-    }
 </style>
 
 @code {
-    private VersionInfo? VersionInfo { get; set; }
-    private bool ShowModal { get; set; } = false;
+    [Parameter]
+    public bool ShowModal { get; set; } = false;
+
+    [Parameter]
+    public EventCallback<bool> ShowModalChanged { get; set; }
+
+    public VersionInfo? VersionInfo { get; private set; }
     private bool HasUpdate => VersionInfo?.HasNewRelease == true || VersionInfo?.HasNewDev == true;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -239,17 +70,19 @@
         }
     }
 
-    private async Task ShowVersionModal()
+    private async Task ToggleModal()
     {
-        ShowModal = true;
         if (VersionInfo == null)
         {
             VersionInfo = await GHService.GetVersionInfo(forceRefresh: true);
         }
+        ShowModal = true;
+        await ShowModalChanged.InvokeAsync(ShowModal);
     }
 
-    private void CloseModal()
+    public async Task CloseModal()
     {
         ShowModal = false;
+        await ShowModalChanged.InvokeAsync(ShowModal);
     }
 }
