@@ -125,10 +125,10 @@
         <article class="content px-4">
             <div id="modalFileUploadVue">
                 <TelegramDownloader.Pages.Modals.FileUploadModalTemplate></TelegramDownloader.Pages.Modals.FileUploadModalTemplate>
-                <TelegramDownloader.Pages.Modals.AudioPlayerModal></TelegramDownloader.Pages.Modals.AudioPlayerModal>
             </div>
             @Body
         </article>
+        <TelegramDownloader.Pages.Modals.AudioPlayerModal @ref="audioPlayer" />
 
         <Offcanvas @ref="offcanvas"
         title="Menu">
@@ -256,12 +256,37 @@
 
     private Offcanvas offcanvas = default!;
     private Pages.Modals.ImportDataModal ImportModal { get; set; }
+    private Pages.Modals.AudioPlayerModal audioPlayer { get; set; } = default!;
     private NavMenu menu { get; set; }
     private VersionBadge versionBadge { get; set; }
     private bool active { get; set; } = true;
     private bool sidebarCollapsed { get; set; } = false;
     private bool navMenuCollapsed { get; set; } = true;
     private bool showVersionModal { get; set; } = false;
+    private static MainLayout? _instance;
+
+    protected override void OnInitialized()
+    {
+        _instance = this;
+    }
+
+    [JSInvokable]
+    public static async Task OpenAudioPlayer(string url, string type, string title)
+    {
+        if (_instance?.audioPlayer != null)
+        {
+            await _instance.audioPlayer.ShowModal(url, type, title);
+        }
+    }
+
+    [JSInvokable]
+    public static async Task OpenAudioPlayerCurrent()
+    {
+        if (_instance?.audioPlayer != null)
+        {
+            await _instance.audioPlayer.ShowCurrentModal();
+        }
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

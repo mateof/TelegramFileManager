@@ -1,43 +1,273 @@
-﻿<Modal @ref="modal" Title="Video" UseStaticBackdrop="true" CloseOnEscape="false" Size="ModalSize.ExtraLarge">
-    <BodyTemplate>
-        @if(!string.IsNullOrEmpty(fileUrl))
-        {
-            <video id="video-player"
-                   class="video-js"
-                   controls
-                   preload="auto"
-                   style="height: 100% !important; width: 100% !important"
-                   data-setup="{}">
-                <source src=@fileUrl type="video/mp4" />
-                <p class="vjs-no-js">
-                    To view this video please enable JavaScript, and consider upgrading to a
-                    web browser that
-                    <a href="https://videojs.com/html5-video-support/" target="_blank">supports HTML5 video</a>
-                </p>
-            </video>
+@inject IJSRuntime JSRuntime
+
+<style>
+    /* Video Player Modal Styles */
+    .video-modal-header {
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        color: white;
+        border-radius: 0.5rem 0.5rem 0 0;
+        padding: 1rem 1.5rem;
+    }
+
+    .video-modal-header .video-title {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 500;
+    }
+
+    .video-modal-header .video-title i {
+        font-size: 1.5rem;
+        color: #e94560;
+        animation: video-pulse 2s ease-in-out infinite;
+    }
+
+    @@keyframes video-pulse {
+        0%, 100% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.1); opacity: 0.8; }
+    }
+
+    .video-modal-header .video-filename {
+        max-width: 500px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .video-modal-body {
+        background: #000;
+        padding: 0 !important;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 300px;
+        position: relative;
+    }
+
+    .video-modal-body video,
+    .video-modal-body .video-js {
+        width: 100% !important;
+        height: auto !important;
+        max-height: 70vh;
+        outline: none;
+    }
+
+    /* Video controls styling */
+    .video-modal-body video::-webkit-media-controls-panel {
+        background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
+    }
+
+    .video-modal-body video::-webkit-media-controls-play-button {
+        background-color: #e94560;
+        border-radius: 50%;
+    }
+
+    .video-modal-body video::-webkit-media-controls-current-time-display,
+    .video-modal-body video::-webkit-media-controls-time-remaining-display {
+        color: #fff;
+    }
+
+    .video-modal-footer {
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        padding: 0.75rem 1.5rem;
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.5rem;
+    }
+
+    .video-modal-footer .btn {
+        border-radius: 0.5rem;
+        padding: 0.5rem 1.25rem;
+        font-weight: 500;
+        transition: all 0.2s ease;
+    }
+
+    .video-modal-footer .btn-close-video {
+        background: linear-gradient(135deg, #e94560 0%, #c73659 100%);
+        border: none;
+        color: white;
+    }
+
+    .video-modal-footer .btn-close-video:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(233, 69, 96, 0.4);
+    }
+
+    .video-loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1rem;
+        color: #888;
+        padding: 3rem;
+    }
+
+    .video-loading i {
+        font-size: 3rem;
+        animation: pulse-video 1.5s infinite;
+    }
+
+    @@keyframes pulse-video {
+        0%, 100% { opacity: 0.5; transform: scale(1); }
+        50% { opacity: 1; transform: scale(1.1); }
+    }
+
+    /* Video info bar */
+    .video-info-bar {
+        background: linear-gradient(135deg, rgba(233, 69, 96, 0.1) 0%, rgba(15, 52, 96, 0.2) 100%);
+        border: 1px solid rgba(233, 69, 96, 0.2);
+        border-radius: 0.5rem;
+        padding: 0.5rem 1rem;
+        margin: 0.75rem;
+        color: #fff;
+        font-size: 0.85rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .video-info-bar i {
+        color: #e94560;
+    }
+
+    /* Responsive */
+    @@media (max-width: 768px) {
+        .video-modal-header {
+            padding: 0.75rem 1rem;
         }
-        
+
+        .video-modal-header .video-title {
+            font-size: 0.9rem;
+        }
+
+        .video-modal-header .video-filename {
+            max-width: 200px;
+        }
+
+        .video-modal-body {
+            min-height: 200px;
+        }
+
+        .video-modal-body video,
+        .video-modal-body .video-js {
+            max-height: 50vh;
+        }
+
+        .video-modal-footer {
+            padding: 0.5rem 1rem;
+        }
+
+        .video-modal-footer .btn {
+            padding: 0.4rem 1rem;
+            font-size: 0.9rem;
+        }
+    }
+
+    @@media (max-width: 576px) {
+        .video-modal-header .video-title i {
+            font-size: 1.25rem;
+        }
+
+        .video-modal-header .video-filename {
+            max-width: 150px;
+            font-size: 0.85rem;
+        }
+
+        .video-info-bar {
+            font-size: 0.75rem;
+            padding: 0.4rem 0.75rem;
+        }
+    }
+</style>
+
+<Modal @ref="modal" UseStaticBackdrop="true" CloseOnEscape="false" Size="ModalSize.ExtraLarge" ShowCloseButton="false">
+    <HeaderTemplate>
+        <div class="video-modal-header w-100 d-flex justify-content-between align-items-center">
+            <h5 class="video-title">
+                <i class="bi bi-play-circle-fill"></i>
+                <span class="video-filename" title="@fileName">@GetDisplayFileName()</span>
+            </h5>
+            <button type="button" class="btn-close btn-close-white" @onclick="OnHideModalClick" aria-label="Close"></button>
+        </div>
+    </HeaderTemplate>
+    <BodyTemplate>
+        <div class="video-modal-body">
+            @if (!string.IsNullOrEmpty(fileUrl))
+            {
+                <video id="videoPlayer"
+                       controls
+                       preload="auto"
+                       controlsList="nodownload">
+                    <source src="@fileUrl" type="@videoType" />
+                    <p>
+                        Your browser does not support the video element.
+                    </p>
+                </video>
+            }
+            else
+            {
+                <div class="video-loading">
+                    <i class="bi bi-film"></i>
+                    <span>Loading video...</span>
+                </div>
+            }
+        </div>
     </BodyTemplate>
     <FooterTemplate>
-        <Button Color="ButtonColor.Secondary" @onclick="OnHideModalClick">Close</Button>
+        <div class="video-modal-footer w-100">
+            <button class="btn btn-close-video" @onclick="OnHideModalClick">
+                <i class="bi bi-x-lg me-2"></i>Close
+            </button>
+        </div>
     </FooterTemplate>
 </Modal>
 
 
 @code {
-    public string fileUrl = "";
+    private string fileUrl = "";
+    private string fileName = "";
+    private string videoType = "video/mp4";
 
     private Modal modal = default!;
 
-    public async Task ShowModal(string file)
+    public async Task ShowModal(string file, string name = "", string type = "video/mp4")
     {
         fileUrl = file;
+        fileName = !string.IsNullOrEmpty(name) ? name : ExtractFileName(file);
+        videoType = !string.IsNullOrEmpty(type) ? type : "video/mp4";
         await modal.ShowAsync();
     }
 
     public async Task OnHideModalClick()
     {
+        await JSRuntime.InvokeVoidAsync("stopVideoPlayer");
         fileUrl = "";
+        fileName = "";
         await modal.HideAsync();
+    }
+
+    private string ExtractFileName(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return "Video";
+        try
+        {
+            var uri = new Uri(url);
+            var path = uri.LocalPath;
+            return System.IO.Path.GetFileName(path);
+        }
+        catch
+        {
+            return "Video";
+        }
+    }
+
+    private string GetDisplayFileName()
+    {
+        if (string.IsNullOrEmpty(fileName)) return "Video Player";
+        return fileName.Length > 60 ? fileName.Substring(0, 57) + "..." : fileName;
     }
 }

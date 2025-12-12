@@ -139,24 +139,115 @@ window.openFileUploadModal = (id, path, url) => {
 }
 
 window.openAudioPlayerModal = (file, type = "audio/mpeg", title = "") => {
-    // https://stackoverflow.com/questions/10792163/change-audio-src-with-javascript
+    // Call Blazor component via JSInvokable
     if (type === null) {
         type = "audio/mpeg";
     }
-    fileModal.showAudioModal = true;
-    var audioTitle = document.getElementById('audioTitle');
-    audioTitle.innerHTML = title;
-    var source = document.getElementById('audioSource');
-    source.src = file;
-    source.type = type;
-    document.getElementById("audiomusic").load();
-    document.getElementById("audiomusic").play();
-    
+    DotNet.invokeMethodAsync('TelegramDownloader', 'OpenAudioPlayer', file, type, title);
 }
 
 window.openAudioModal = () => {
-    // https://stackoverflow.com/questions/10792163/change-audio-src-with-javascript
-    fileModal.showAudioModal = true;
+    // Abrir el modal con la canción actual (si hay una)
+    DotNet.invokeMethodAsync('TelegramDownloader', 'OpenAudioPlayerCurrent');
+}
 
+window.playAudioPlayer = (url, type) => {
+    const audio = document.getElementById('audioPlayer');
+    if (audio) {
+        // Establecer src directamente
+        if (url) {
+            audio.src = url;
+            if (type) {
+                audio.type = type;
+            }
+        }
+        audio.load();
+        audio.play().catch(e => console.log('Audio play error:', e));
+    }
+}
 
+window.isAudioPlaying = () => {
+    const audio = document.getElementById('audioPlayer');
+    return audio ? !audio.paused : false;
+}
+
+window.stopAudioPlayer = () => {
+    const audio = document.getElementById('audioPlayer');
+    if (audio) {
+        audio.pause();
+        audio.currentTime = 0;
+    }
+}
+
+window.pauseAudioPlayer = () => {
+    const audio = document.getElementById('audioPlayer');
+    if (audio) {
+        audio.pause();
+    }
+}
+
+window.resumeAudioPlayer = () => {
+    const audio = document.getElementById('audioPlayer');
+    if (audio) {
+        audio.play().catch(e => console.log('Audio play error:', e));
+    }
+}
+
+window.seekAudioPlayer = (percent) => {
+    const audio = document.getElementById('audioPlayer');
+    if (audio && audio.duration) {
+        audio.currentTime = (percent / 100) * audio.duration;
+    }
+}
+
+window.setAudioVolume = (volume) => {
+    const audio = document.getElementById('audioPlayer');
+    if (audio) {
+        audio.volume = volume;
+    }
+}
+
+window.setAudioMuted = (muted) => {
+    const audio = document.getElementById('audioPlayer');
+    if (audio) {
+        audio.muted = muted;
+    }
+}
+
+window.getAudioInfo = () => {
+    const audio = document.getElementById('audioPlayer');
+    if (!audio) {
+        return { isPlaying: false, currentTime: 0, duration: 0, progress: 0, bufferPercent: 0 };
+    }
+
+    const duration = audio.duration || 0;
+    const currentTime = audio.currentTime || 0;
+    const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+
+    // Calcular buffer
+    let bufferPercent = 0;
+    if (audio.buffered.length > 0 && duration > 0) {
+        const bufferedEnd = audio.buffered.end(audio.buffered.length - 1);
+        bufferPercent = (bufferedEnd / duration) * 100;
+    }
+
+    return {
+        isPlaying: !audio.paused,
+        currentTime: currentTime,
+        duration: duration,
+        progress: progress,
+        bufferPercent: bufferPercent
+    };
+}
+
+window.closeAudioModal = () => {
+    // El audio sigue reproduciéndose en segundo plano
+}
+
+window.stopVideoPlayer = () => {
+    const video = document.getElementById('videoPlayer');
+    if (video) {
+        video.pause();
+        video.currentTime = 0;
+    }
 }
