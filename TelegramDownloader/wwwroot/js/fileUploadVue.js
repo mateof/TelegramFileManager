@@ -244,6 +244,16 @@ window.closeAudioModal = () => {
     // El audio sigue reproduciéndose en segundo plano
 }
 
+window.addToAudioPlaylist = (url, type = "audio/mpeg", title = "") => {
+    if (type === null) type = "audio/mpeg";
+    DotNet.invokeMethodAsync('TelegramDownloader', 'AddToAudioPlaylist', url, type, title);
+}
+
+window.addToAudioPlaylistAndPlay = (url, type = "audio/mpeg", title = "") => {
+    if (type === null) type = "audio/mpeg";
+    DotNet.invokeMethodAsync('TelegramDownloader', 'AddToAudioPlaylistAndPlay', url, type, title);
+}
+
 window.stopVideoPlayer = () => {
     const video = document.getElementById('videoPlayer');
     if (video) {

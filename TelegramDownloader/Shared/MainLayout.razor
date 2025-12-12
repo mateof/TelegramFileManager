@@ -288,6 +288,21 @@
         }
     }
 
+    [JSInvokable]
+    public static void AddToAudioPlaylist(string url, string type, string title)
+    {
+        _instance?.audioPlayer?.AddToPlaylist(url, type, title);
+    }
+
+    [JSInvokable]
+    public static void AddToAudioPlaylistAndPlay(string url, string type, string title)
+    {
+        _instance?.audioPlayer?.AddToPlaylistAndPlay(url, type, title);
+    }
+
+    // Método público para acceder al reproductor desde otros componentes
+    public static Pages.Modals.AudioPlayerModal? GetAudioPlayer() => _instance?.audioPlayer;
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)

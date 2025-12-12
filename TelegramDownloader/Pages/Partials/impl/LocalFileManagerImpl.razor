@@ -63,7 +63,9 @@
                            OnBeforeDownload="OnMobileBeforeDownloadAsync"
                            OnUploadToTelegram="OnMobileUploadToTelegramAsync"
                            OnUploadToLocal="OnMobileUploadToLocalAsync"
-                           OnUrlMedia="OnMobileUrlMediaAsync" />
+                           OnUrlMedia="OnMobileUrlMediaAsync"
+                           CanAddToPlaylist="true"
+                           OnAddToPlaylist="OnMobileAddToPlaylistAsync" />
     </div>
 }
 
@@ -87,7 +89,7 @@
     private VideoPlayerModal videoPlayer { get; set; } = default!;
 
     NotificationModel nm = new NotificationModel();
-    public string[] ContextItems = new string[] { "Open", "Delete", "Download", "Rename", "Details", "Copy Media Url" };
+    public string[] ContextItems = new string[] { "Open", "Delete", "Download", "Rename", "Details", "Copy Media Url", "Add to Playlist" };
 
     private Modals.UploadToTelegramModal Modal { get; set; }
     private Modals.FileUploadModal ModalUpSer { get; set; }
@@ -396,8 +398,23 @@
             {
                 await ShowMediaURLModal(args.FileDetails[0].FilterPath, args.FileDetails[0].Name);
             }
-
+            if (args.Item.Text == "Add to Playlist")
+            {
+                var file = args.FileDetails[0];
+                if (file.IsFile && IsAudioFile(file.Type?.ToLower() ?? ""))
+                {
+                    string localdir = MyNavigationManager.BaseUri + FileService.STATICRELATIVELOCALDIR.Replace("\\", "/");
+                    string url = new System.Uri((Path.Combine(localdir, file.FilterPath.Substring(1).Replace("\\", "/"), file.Name)).Replace("\\", "/")).AbsoluteUri;
+                    await JSRuntime.InvokeVoidAsync("addToAudioPlaylist", url, null, file.Name);
+                    nm.sendMessage("Playlist", $"Added '{file.Name}' to playlist", NotificationTypes.Success);
+                }
+            }
         }
+    }
+
+    private bool IsAudioFile(string fileExtension)
+    {
+        return new List<string> { ".mp3", ".ogg", ".flac", ".aac", ".wav" }.Contains(fileExtension);
     }
 
     private async Task ShowMediaURLModal(string FilterPath, string Name)
@@ -616,6 +633,25 @@
         {
             Logger.LogError(ex, "Error showing media URL");
             nm.sendMessage("Error", "Error showing media URL", NotificationTypes.Error);
+        }
+    }
+
+    private async Task OnMobileAddToPlaylistAsync(MfmAddToPlaylistEventArgs args)
+    {
+        try
+        {
+            if (args.File != null && IsAudioFile(args.File.Type?.ToLower() ?? ""))
+            {
+                string localdir = MyNavigationManager.BaseUri + FileService.STATICRELATIVELOCALDIR.Replace("\\", "/");
+                string url = new System.Uri((Path.Combine(localdir, args.File.FilterPath.Substring(1).Replace("\\", "/"), args.File.Name)).Replace("\\", "/")).AbsoluteUri;
+                await JSRuntime.InvokeVoidAsync("addToAudioPlaylist", url, null, args.File.Name);
+                nm.sendMessage("Playlist", $"Added '{args.File.Name}' to playlist", NotificationTypes.Success);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error adding to playlist");
+            nm.sendMessage("Error", "Error adding to playlist", NotificationTypes.Error);
         }
     }
 

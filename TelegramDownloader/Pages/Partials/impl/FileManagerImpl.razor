@@ -50,7 +50,8 @@
         FolderCreating="FolderCreatingAsync"
         BeforeDownload="BeforeDownload"
         ItemsDeleting="ItemsDeletingAsync"
-        ItemsUploaded="ItemsUploadedAsync"></FileManagerEvents>
+        ItemsUploaded="ItemsUploadedAsync"
+        OnMenuClick="OnMenuClickAsync"></FileManagerEvents>
         <FileManagerUploadSettings MaxFileSize="@(long.MaxValue)" AutoUpload="true"></FileManagerUploadSettings>
         <FileManagerToolbarSettings ToolbarItems="@Items"></FileManagerToolbarSettings>
         <FileManagerContextMenuSettings Visible="@(!isShared || isMyChannel)" File="@ContextItems"></FileManagerContextMenuSettings>
@@ -92,7 +93,9 @@
             OnShowInApp="OnMobileShowInAppAsync"
             OnUrlMedia="OnMobileUrlMediaAsync"
             OnStrm="OnMobileStrmAsync"
-            OnPreloadFiles="OnMobilePreloadFilesAsync" />
+            OnPreloadFiles="OnMobilePreloadFilesAsync"
+            CanAddToPlaylist="true"
+            OnAddToPlaylist="OnMobileAddToPlaylistAsync" />
     </div>
 }
 
@@ -121,7 +124,7 @@
 
     private MediaUrlModal mediaUrlModal { get; set; } = default!;
 
-    public string[] ContextItems = new string[] { "Open", "Delete", "Download", "Rename", "Details"};
+    public string[] ContextItems = new string[] { "Open", "Delete", "Download", "Rename", "Details", "Add to Playlist"};
     private bool isMyChannel = false;
 
     SfFileManager<FileManagerDirectoryContent> fm { get; set; }
@@ -451,6 +454,20 @@
     {
 
         Console.WriteLine("");
+    }
+
+    public async Task OnMenuClickAsync(MenuClickEventArgs<FileManagerDirectoryContent> args)
+    {
+        if (args.Item.Text == "Add to Playlist" && args.FileDetails.Count() == 1)
+        {
+            var file = args.FileDetails.First();
+            if (file.IsFile && isAudioFile(file.Type?.ToLower() ?? ""))
+            {
+                var url = await getMediaUrl(file.Id, file.Name, file.Size);
+                await JSRuntime.InvokeVoidAsync("addToAudioPlaylist", url, null, file.Name);
+                nm.sendMessage("Playlist", $"Added '{file.Name}' to playlist", NotificationTypes.Success);
+            }
+        }
     }
 
     public async Task<string> ItemsUploadedAsync(ItemsUploadedEventArgs<FileManagerDirectoryContent> args)
@@ -815,6 +832,24 @@
         {
             Logger.LogError(e, "Error on OnMobilePreloadFilesAsync");
             nm.sendMessage("Error", "Error preloading files", NotificationTypes.Error);
+        }
+    }
+
+    private async Task OnMobileAddToPlaylistAsync(MfmAddToPlaylistEventArgs args)
+    {
+        try
+        {
+            if (args.File != null)
+            {
+                var url = await getMediaUrl(args.File.Id, args.File.Name, args.File.Size);
+                await JSRuntime.InvokeVoidAsync("addToAudioPlaylist", url, null, args.File.Name);
+                nm.sendMessage("Playlist", $"Added '{args.File.Name}' to playlist", NotificationTypes.Success);
+            }
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Error on OnMobileAddToPlaylistAsync");
+            nm.sendMessage("Error", "Error adding to playlist", NotificationTypes.Error);
         }
     }
 

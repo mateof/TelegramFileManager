@@ -55,6 +55,9 @@ namespace TelegramDownloader.Shared.MobileFileManager
         public bool CanPreload { get; set; } = false;
 
         [Parameter]
+        public bool CanAddToPlaylist { get; set; } = false;
+
+        [Parameter]
         public string RootFolderName { get; set; } = "Root";
 
         #endregion
@@ -111,6 +114,9 @@ namespace TelegramDownloader.Shared.MobileFileManager
 
         [Parameter]
         public EventCallback<MfmPreloadFilesEventArgs> OnPreloadFiles { get; set; }
+
+        [Parameter]
+        public EventCallback<MfmAddToPlaylistEventArgs> OnAddToPlaylist { get; set; }
 
         #endregion
 
@@ -271,7 +277,13 @@ namespace TelegramDownloader.Shared.MobileFileManager
 
         private bool IsItemSelected(FileManagerDirectoryContent file)
         {
-            return _selectedIds.Contains(file.Id);
+            return _selectedIds.Contains(GetFileUniqueId(file));
+        }
+
+        private string GetFileUniqueId(FileManagerDirectoryContent file)
+        {
+            // Use Id if available, otherwise use FilterPath + Name as unique identifier
+            return !string.IsNullOrEmpty(file.Id) ? file.Id : $"{file.FilterPath}{file.Name}";
         }
 
         private List<FileManagerDirectoryContent> GetDisplayFiles()
@@ -479,15 +491,16 @@ namespace TelegramDownloader.Shared.MobileFileManager
 
         private void ToggleSelection(FileManagerDirectoryContent file)
         {
-            if (_selectedIds.Contains(file.Id))
+            var fileId = GetFileUniqueId(file);
+            if (_selectedIds.Contains(fileId))
             {
                 SelectedItems.Remove(file);
-                _selectedIds.Remove(file.Id);
+                _selectedIds.Remove(fileId);
             }
             else
             {
                 SelectedItems.Add(file);
-                _selectedIds.Add(file.Id);
+                _selectedIds.Add(fileId);
             }
 
             OnSelectedItemsChanged.InvokeAsync(_selectedIds.ToArray());
@@ -505,7 +518,7 @@ namespace TelegramDownloader.Shared.MobileFileManager
         private void SelectAll()
         {
             SelectedItems = new List<FileManagerDirectoryContent>(DisplayFiles);
-            _selectedIds = new HashSet<string>(SelectedItems.Select(f => f.Id));
+            _selectedIds = new HashSet<string>(SelectedItems.Select(f => GetFileUniqueId(f)));
             ShowMoreMenu = false;
             OnSelectedItemsChanged.InvokeAsync(_selectedIds.ToArray());
             StateHasChanged();
@@ -955,6 +968,25 @@ namespace TelegramDownloader.Shared.MobileFileManager
 
             await OnPreloadFiles.InvokeAsync(args);
             ClearSelection();
+        }
+
+        private async Task AddToPlaylistItem(FileManagerDirectoryContent item)
+        {
+            var args = new MfmAddToPlaylistEventArgs
+            {
+                File = item,
+                Title = item.Name
+            };
+
+            await OnAddToPlaylist.InvokeAsync(args);
+            CloseContextMenu();
+        }
+
+        private bool IsAudioFile(FileManagerDirectoryContent file)
+        {
+            if (!file.IsFile || string.IsNullOrEmpty(file.Type)) return false;
+            var audioTypes = new HashSet<string> { ".mp3", ".ogg", ".flac", ".aac", ".wav" };
+            return audioTypes.Contains(file.Type.ToLower());
         }
 
         #endregion

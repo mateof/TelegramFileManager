@@ -106,4 +106,12 @@ namespace TelegramDownloader.Shared.MobileFileManager
         public FileManagerDirectoryContent[] Items { get; set; } = Array.Empty<FileManagerDirectoryContent>();
         public string Path { get; set; } = "/";
     }
+
+    public class MfmAddToPlaylistEventArgs
+    {
+        public FileManagerDirectoryContent? File { get; set; }
+        public string Url { get; set; } = string.Empty;
+        public string Title { get; set; } = string.Empty;
+        public string Type { get; set; } = "audio/mpeg";
+    }
 }

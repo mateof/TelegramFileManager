@@ -149,6 +149,126 @@
         50% { transform: scaleY(1); }
     }
 
+    /* Playlist Styles */
+    .audio-playlist {
+        max-height: 200px;
+        overflow-y: auto;
+        margin-bottom: 1rem;
+        border-radius: 0.5rem;
+        background: rgba(0, 0, 0, 0.2);
+    }
+
+    .audio-playlist::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .audio-playlist::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 3px;
+    }
+
+    .audio-playlist::-webkit-scrollbar-thumb {
+        background: rgba(233, 69, 96, 0.5);
+        border-radius: 3px;
+    }
+
+    .playlist-item {
+        display: flex;
+        align-items: center;
+        padding: 0.5rem 0.75rem;
+        cursor: pointer;
+        transition: background 0.2s ease;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        gap: 0.5rem;
+    }
+
+    .playlist-item:last-child {
+        border-bottom: none;
+    }
+
+    .playlist-item:hover {
+        background: rgba(233, 69, 96, 0.1);
+    }
+
+    .playlist-item.active {
+        background: rgba(233, 69, 96, 0.2);
+    }
+
+    .playlist-item-index {
+        color: rgba(255, 255, 255, 0.4);
+        font-size: 0.75rem;
+        width: 20px;
+        text-align: center;
+    }
+
+    .playlist-item.active .playlist-item-index {
+        color: #e94560;
+    }
+
+    .playlist-item-icon {
+        color: #e94560;
+        font-size: 0.875rem;
+    }
+
+    .playlist-item-title {
+        flex: 1;
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 0.85rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .playlist-item.active .playlist-item-title {
+        color: #fff;
+        font-weight: 500;
+    }
+
+    .playlist-item-remove {
+        color: rgba(255, 255, 255, 0.3);
+        background: none;
+        border: none;
+        padding: 0.25rem;
+        cursor: pointer;
+        opacity: 0;
+        transition: all 0.2s ease;
+    }
+
+    .playlist-item:hover .playlist-item-remove {
+        opacity: 1;
+    }
+
+    .playlist-item-remove:hover {
+        color: #e94560;
+    }
+
+    .playlist-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.5rem;
+        padding: 0 0.25rem;
+    }
+
+    .playlist-header-title {
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .playlist-header-count {
+        color: rgba(255, 255, 255, 0.4);
+        font-size: 0.75rem;
+    }
+
+    .playlist-empty {
+        text-align: center;
+        padding: 1.5rem;
+        color: rgba(255, 255, 255, 0.4);
+        font-size: 0.85rem;
+    }
+
     /* Custom Audio Controls */
     .audio-controls {
         background: linear-gradient(135deg, #0f3460 0%, #16213e 100%);
@@ -157,6 +277,38 @@
         display: flex;
         flex-direction: column;
         gap: 0.75rem;
+    }
+
+    .audio-main-controls {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 1rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .audio-btn-nav {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(255, 255, 255, 0.1);
+        color: white;
+        font-size: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .audio-btn-nav:hover {
+        background: rgba(233, 69, 96, 0.3);
+    }
+
+    .audio-btn-nav:disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
     }
 
     .audio-controls-row {
@@ -379,10 +531,18 @@
             </div>
 
             <div class="audio-controls">
-                <div class="audio-controls-row">
+                <div class="audio-main-controls">
+                    <button class="audio-btn-nav" @onclick="PlayPrevious" disabled="@(!CanPlayPrevious)">
+                        <i class="bi bi-skip-backward-fill"></i>
+                    </button>
                     <button class="audio-btn-play" @onclick="TogglePlayPause">
                         <i class="bi @(isPlaying ? "bi-pause-fill" : "bi-play-fill")"></i>
                     </button>
+                    <button class="audio-btn-nav" @onclick="PlayNext" disabled="@(!CanPlayNext)">
+                        <i class="bi bi-skip-forward-fill"></i>
+                    </button>
+                </div>
+                <div class="audio-controls-row">
                     <div class="audio-progress-container">
                         <div class="audio-progress-bar" @onclick="SeekAudio">
                             <div class="audio-progress-buffer" style="width: @(bufferPercent.ToString("F1", System.Globalization.CultureInfo.InvariantCulture))%"></div>
@@ -403,6 +563,36 @@
                     </div>
                 </div>
             </div>
+
+            @if (playlist.Count > 0)
+            {
+                <div class="playlist-header">
+                    <span class="playlist-header-title">Playlist</span>
+                    <span class="playlist-header-count">@playlist.Count @(playlist.Count == 1 ? "track" : "tracks")</span>
+                </div>
+                <div class="audio-playlist">
+                    @for (int i = 0; i < playlist.Count; i++)
+                    {
+                        var index = i;
+                        var item = playlist[i];
+                        <div class="playlist-item @(index == currentTrackIndex ? "active" : "")" @onclick="() => PlayTrack(index)">
+                            <span class="playlist-item-index">@(index + 1)</span>
+                            @if (index == currentTrackIndex && isPlaying)
+                            {
+                                <i class="bi bi-volume-up-fill playlist-item-icon"></i>
+                            }
+                            else
+                            {
+                                <i class="bi bi-music-note playlist-item-icon"></i>
+                            }
+                            <span class="playlist-item-title" title="@item.Title">@item.Title</span>
+                            <button class="playlist-item-remove" @onclick="() => RemoveFromPlaylist(index)" @onclick:stopPropagation="true">
+                                <i class="bi bi-x"></i>
+                            </button>
+                        </div>
+                    }
+                </div>
+            }
         </div>
     </BodyTemplate>
     <FooterTemplate>
@@ -436,6 +626,20 @@
     private string durationDisplay = "0:00";
     private CancellationTokenSource? progressCts;
 
+    // Playlist
+    private List<PlaylistItem> playlist = new();
+    private int currentTrackIndex = -1;
+
+    public class PlaylistItem
+    {
+        public string Url { get; set; } = "";
+        public string Type { get; set; } = "audio/mpeg";
+        public string Title { get; set; } = "";
+    }
+
+    private bool CanPlayPrevious => currentTrackIndex > 0;
+    private bool CanPlayNext => currentTrackIndex < playlist.Count - 1;
+
     public async Task ShowModal(string url, string type = "audio/mpeg", string title = "")
     {
         bool isSameTrack = audioUrl == url;
@@ -443,6 +647,18 @@
         audioUrl = url;
         audioType = string.IsNullOrEmpty(type) ? "audio/mpeg" : type;
         audioTitle = !string.IsNullOrEmpty(title) ? title : ExtractFileName(url);
+
+        // Añadir a playlist si no existe
+        var existingIndex = playlist.FindIndex(p => p.Url == url);
+        if (existingIndex < 0)
+        {
+            playlist.Add(new PlaylistItem { Url = url, Type = audioType, Title = audioTitle });
+            currentTrackIndex = playlist.Count - 1;
+        }
+        else
+        {
+            currentTrackIndex = existingIndex;
+        }
 
         await modal.ShowAsync();
         await Task.Delay(100);
@@ -601,10 +817,103 @@
         StateHasChanged();
     }
 
-    private void OnEnded()
+    private async void OnEnded()
     {
         isPlaying = false;
+        // Reproducir siguiente canción automáticamente
+        if (CanPlayNext)
+        {
+            await PlayNext();
+        }
         StateHasChanged();
+    }
+
+    // Playlist methods
+    private async Task PlayTrack(int index)
+    {
+        if (index >= 0 && index < playlist.Count)
+        {
+            currentTrackIndex = index;
+            var track = playlist[index];
+            audioUrl = track.Url;
+            audioType = track.Type;
+            audioTitle = track.Title;
+            progressPercent = 0;
+            currentTimeDisplay = "0:00";
+            await JSRuntime.InvokeVoidAsync("playAudioPlayer", audioUrl, audioType);
+            StateHasChanged();
+        }
+    }
+
+    private async Task PlayPrevious()
+    {
+        if (CanPlayPrevious)
+        {
+            await PlayTrack(currentTrackIndex - 1);
+        }
+    }
+
+    private async Task PlayNext()
+    {
+        if (CanPlayNext)
+        {
+            await PlayTrack(currentTrackIndex + 1);
+        }
+    }
+
+    private void RemoveFromPlaylist(int index)
+    {
+        if (index >= 0 && index < playlist.Count)
+        {
+            playlist.RemoveAt(index);
+
+            // Ajustar índice actual si es necesario
+            if (index < currentTrackIndex)
+            {
+                currentTrackIndex--;
+            }
+            else if (index == currentTrackIndex)
+            {
+                // Si se elimina la canción actual, no cambiar nada
+                // El audio sigue reproduciéndose pero ya no está en la lista
+                currentTrackIndex = -1;
+            }
+            StateHasChanged();
+        }
+    }
+
+    public void AddToPlaylist(string url, string type = "audio/mpeg", string title = "")
+    {
+        var item = new PlaylistItem
+        {
+            Url = url,
+            Type = string.IsNullOrEmpty(type) ? "audio/mpeg" : type,
+            Title = !string.IsNullOrEmpty(title) ? title : ExtractFileName(url)
+        };
+
+        // Evitar duplicados
+        if (!playlist.Any(p => p.Url == url))
+        {
+            playlist.Add(item);
+            StateHasChanged();
+        }
+    }
+
+    public void AddToPlaylistAndPlay(string url, string type = "audio/mpeg", string title = "")
+    {
+        var existingIndex = playlist.FindIndex(p => p.Url == url);
+
+        if (existingIndex >= 0)
+        {
+            // Ya existe, reproducir esa
+            _ = PlayTrack(existingIndex);
+        }
+        else
+        {
+            // Añadir y reproducir
+            AddToPlaylist(url, type, title);
+            _ = PlayTrack(playlist.Count - 1);
+        }
     }
 
     private string ExtractFileName(string url)
