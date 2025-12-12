@@ -197,8 +197,16 @@
     {
         try
         {
-            var width = await JSRuntime.InvokeAsync<int>("eval", "window.innerWidth");
-            _isMobileView = width < MobileBreakpoint;
+            // Check if config forces mobile file manager
+            if (GeneralConfigStatic.config.UseMobileFileManagerAlways)
+            {
+                _isMobileView = true;
+            }
+            else
+            {
+                var width = await JSRuntime.InvokeAsync<int>("eval", "window.innerWidth");
+                _isMobileView = width < MobileBreakpoint;
+            }
         }
         catch (Exception ex)
         {

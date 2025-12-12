@@ -87,6 +87,7 @@ namespace TelegramDownloader.Models
         public bool PreloadFilesOnStream { get; set; } = false;
         public bool ShouldShowPaginatedFileChannel { get; set; } = false;
         public bool hasFileManagerVirtualScroll { get; set; } = false;
+        public bool UseMobileFileManagerAlways { get; set; } = false;
         public List<long> FavouriteChannels { get; set; } = new List<long>();
         public WebDavModel webDav { get; set; } = new WebDavModel();
         
