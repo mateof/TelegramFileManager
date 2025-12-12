@@ -29,16 +29,25 @@
         <DropdownMenu>
             <DropdownItem @onclick="exportData" Type="DropdownItemType.Button"><i class="bi bi-cloud-download"></i> Export</DropdownItem>
             <DropdownItem @onclick="importData" Type="DropdownItemType.Button"><i class="bi bi-cloud-upload"></i> Import</DropdownItem>
-            @if (!isMyChannel && showRefresh)
+            @if (!isMyChannel)
             {
-                <DropdownItem @onclick="refreshData" Type="DropdownItemType.Button">
-                    
-                    <span class="position-relative badge rounded-pill bg-danger">
-                        Beta
-                        <span class="visually-hidden">Beta function</span>
-                    </span>
-                    <i class="bi bi-arrow-clockwise"></i> Refresh data
-                </DropdownItem>
+                @if (isRefreshing)
+                {
+                    <DropdownItem Type="DropdownItemType.Button" Disabled="true">
+                        <Spinner Type="SpinnerType.Border" Size="SpinnerSize.Small" Class="me-2" />
+                        Refreshing...
+                    </DropdownItem>
+                }
+                else if (showRefresh)
+                {
+                    <DropdownItem @onclick="refreshData" Type="DropdownItemType.Button">
+                        <span class="position-relative badge rounded-pill bg-danger">
+                            Beta
+                            <span class="visually-hidden">Beta function</span>
+                        </span>
+                        <i class="bi bi-arrow-clockwise"></i> Refresh data
+                    </DropdownItem>
+                }
             }
 
         </DropdownMenu>
@@ -76,6 +85,7 @@
     public string chatName { get; set; }
     private bool isMyChannel = true;
     private bool showRefresh = true;
+    private bool isRefreshing = false;
 
     NotificationModel nm = new NotificationModel();
 
@@ -95,7 +105,8 @@
     {
         try
         {
-            showRefresh = !fs.isChannelRefreshing(id);
+            isRefreshing = fs.isChannelRefreshing(id);
+            showRefresh = !isRefreshing;
             long channelId = Convert.ToInt64(id);
             chatName = ts.getChatName(channelId);
             isMyChannel = ts.isMyChat(channelId);
@@ -123,8 +134,19 @@
     }
     public async Task refreshData()
     {
+        isRefreshing = true;
         showRefresh = false;
         await InvokeAsync(StateHasChanged);
-        await fs.refreshChannelFIles(id);
+
+        try
+        {
+            await fs.refreshChannelFIles(id);
+        }
+        finally
+        {
+            isRefreshing = false;
+            showRefresh = true;
+            await InvokeAsync(StateHasChanged);
+        }
     }
 }
