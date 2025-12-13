@@ -19,7 +19,7 @@ RUN dotnet build "./TelegramDownloader.csproj" -c $BUILD_CONFIGURATION -o /app/b
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
 ARG VERSION=0.0.0.0
-RUN dotnet publish "./TelegramDownloader.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false,Version=$VERSION
+RUN dotnet publish "./TelegramDownloader.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false,InformationalVersion=$VERSION
 
 FROM base AS final
 WORKDIR /app
