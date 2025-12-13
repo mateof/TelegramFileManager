@@ -6,6 +6,10 @@ WORKDIR /app
 EXPOSE 80
 EXPOSE 443
 
+# Install ICU libraries for globalization support (required by BlazorBootstrap NumberInput)
+RUN apk add --no-cache icu-libs
+ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
+
 FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
 ARG BUILD_CONFIGURATION=Release
 ARG VERSION=0.0.0.0
