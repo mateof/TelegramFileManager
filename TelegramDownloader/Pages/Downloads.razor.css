@@ -48,77 +48,81 @@
     margin-right: auto;
 }
 
-/* Action buttons */
+/* Tab action buttons - these are different from table action buttons */
 .action-btn-group {
     display: flex;
     gap: 0.5rem;
 }
 
-.action-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 1rem;
-    border-radius: 0.5rem;
-    font-size: 0.875rem;
-    font-weight: 500;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    background: rgba(255, 255, 255, 0.05);
-    color: rgba(255, 255, 255, 0.8);
+.action-btn-group .action-btn {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 0.5rem !important;
+    padding: 0.5rem 1rem !important;
+    width: auto !important;
+    height: auto !important;
+    min-width: auto !important;
+    border-radius: 0.5rem !important;
+    font-size: 0.875rem !important;
+    font-weight: 500 !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    background: rgba(255, 255, 255, 0.05) !important;
+    color: rgba(255, 255, 255, 0.8) !important;
     cursor: pointer;
     transition: all 0.2s ease;
 }
 
-.action-btn:hover {
+.action-btn-group .action-btn:hover {
     transform: translateY(-1px);
 }
 
-.action-btn.clear {
-    border-color: rgba(40, 167, 69, 0.3);
-    color: #5dd879;
+.action-btn-group .action-btn.clear {
+    border-color: rgba(40, 167, 69, 0.3) !important;
+    color: #5dd879 !important;
 }
 
-.action-btn.clear:hover {
-    background: rgba(40, 167, 69, 0.15);
-    border-color: rgba(40, 167, 69, 0.5);
+.action-btn-group .action-btn.clear:hover {
+    background: rgba(40, 167, 69, 0.15) !important;
+    border-color: rgba(40, 167, 69, 0.5) !important;
     box-shadow: 0 4px 12px rgba(40, 167, 69, 0.2);
 }
 
-.action-btn.play {
-    border-color: rgba(23, 162, 184, 0.3);
-    color: #5bc0de;
+.action-btn-group .action-btn.play {
+    border-color: rgba(23, 162, 184, 0.3) !important;
+    color: #5bc0de !important;
 }
 
-.action-btn.play:hover {
-    background: rgba(23, 162, 184, 0.15);
-    border-color: rgba(23, 162, 184, 0.5);
+.action-btn-group .action-btn.play:hover {
+    background: rgba(23, 162, 184, 0.15) !important;
+    border-color: rgba(23, 162, 184, 0.5) !important;
     box-shadow: 0 4px 12px rgba(23, 162, 184, 0.2);
 }
 
-.action-btn.pause {
-    border-color: rgba(255, 193, 7, 0.3);
-    color: #ffc107;
+.action-btn-group .action-btn.pause {
+    border-color: rgba(255, 193, 7, 0.3) !important;
+    color: #ffc107 !important;
 }
 
-.action-btn.pause:hover {
-    background: rgba(255, 193, 7, 0.15);
-    border-color: rgba(255, 193, 7, 0.5);
+.action-btn-group .action-btn.pause:hover {
+    background: rgba(255, 193, 7, 0.15) !important;
+    border-color: rgba(255, 193, 7, 0.5) !important;
     box-shadow: 0 4px 12px rgba(255, 193, 7, 0.2);
 }
 
-.action-btn.stop {
-    border-color: rgba(220, 53, 69, 0.3);
-    color: #ff6b6b;
+.action-btn-group .action-btn.stop {
+    border-color: rgba(220, 53, 69, 0.3) !important;
+    color: #ff6b6b !important;
 }
 
-.action-btn.stop:hover {
-    background: rgba(220, 53, 69, 0.15);
-    border-color: rgba(220, 53, 69, 0.5);
+.action-btn-group .action-btn.stop:hover {
+    background: rgba(220, 53, 69, 0.15) !important;
+    border-color: rgba(220, 53, 69, 0.5) !important;
     box-shadow: 0 4px 12px rgba(220, 53, 69, 0.2);
 }
 
-.action-btn i {
-    font-size: 1rem;
+.action-btn-group .action-btn i {
+    font-size: 1rem !important;
+    color: inherit !important;
 }
 
 /* Custom tabs styling */
