@@ -1,253 +1,382 @@
 @inject IJSRuntime JSRuntime
 
 <style>
-    /* Video Player Modal Styles */
-    .video-modal-header {
-        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-        color: white;
-        border-radius: 0.5rem 0.5rem 0 0;
-        padding: 1rem 1.5rem;
-    }
-
-    .video-modal-header .video-title {
-        display: flex;
-        align-items: center;
-        gap: 0.75rem;
-        margin: 0;
-        font-size: 1rem;
-        font-weight: 500;
-    }
-
-    .video-modal-header .video-title i {
-        font-size: 1.5rem;
-        color: #e94560;
-        animation: video-pulse 2s ease-in-out infinite;
-    }
-
-    @@keyframes video-pulse {
-        0%, 100% { transform: scale(1); opacity: 1; }
-        50% { transform: scale(1.1); opacity: 0.8; }
-    }
-
-    .video-modal-header .video-filename {
-        max-width: 500px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    .video-modal-body {
-        background: #000;
-        padding: 0 !important;
+    /* Video Player Overlay */
+    .video-player-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.85);
+        backdrop-filter: blur(8px);
+        z-index: 1050;
         display: flex;
         align-items: center;
         justify-content: center;
-        min-height: 300px;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s ease;
+    }
+
+    .video-player-overlay.show {
+        opacity: 1;
+        visibility: visible;
+    }
+
+    .video-player-container {
+        width: 100%;
+        max-width: 1200px;
+        max-height: 90vh;
+        margin: 1rem;
+        background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+        border-radius: 1rem;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7),
+                    0 0 0 1px rgba(233, 69, 96, 0.1);
+        overflow: hidden;
+        transform: scale(0.95) translateY(20px);
+        transition: transform 0.3s ease;
         position: relative;
+        display: flex;
+        flex-direction: column;
     }
 
-    .video-modal-body video,
-    .video-modal-body .video-js {
-        width: 100% !important;
-        height: auto !important;
-        max-height: 70vh;
-        outline: none;
+    .video-player-overlay.show .video-player-container {
+        transform: scale(1) translateY(0);
     }
 
-    /* Video controls styling */
-    .video-modal-body video::-webkit-media-controls-panel {
-        background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
-    }
-
-    .video-modal-body video::-webkit-media-controls-play-button {
-        background-color: #e94560;
+    /* Close button */
+    .video-close-btn {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        width: 40px;
+        height: 40px;
         border-radius: 50%;
+        border: none;
+        background: rgba(0, 0, 0, 0.5);
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 1.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        z-index: 20;
+        backdrop-filter: blur(4px);
     }
 
-    .video-modal-body video::-webkit-media-controls-current-time-display,
-    .video-modal-body video::-webkit-media-controls-time-remaining-display {
+    .video-close-btn:hover {
+        background: rgba(233, 69, 96, 0.8);
+        color: #fff;
+        transform: scale(1.1);
+    }
+
+    /* Video wrapper */
+    .video-wrapper {
+        position: relative;
+        width: 100%;
+        background: #000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .video-wrapper video {
+        width: 100%;
+        max-height: 75vh;
+        outline: none;
+        display: block;
+    }
+
+    /* Video title bar */
+    .video-title-bar {
+        background: linear-gradient(135deg, rgba(15, 52, 96, 0.95) 0%, rgba(26, 26, 46, 0.95) 100%);
+        padding: 0.875rem 1.25rem;
+        padding-right: 4rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .video-title-icon {
+        width: 36px;
+        height: 36px;
+        background: linear-gradient(135deg, #e94560 0%, #c73659 100%);
+        border-radius: 0.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .video-title-icon i {
+        font-size: 1.1rem;
         color: #fff;
     }
 
-    .video-modal-footer {
-        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-        border-top: 1px solid rgba(255, 255, 255, 0.1);
-        padding: 0.75rem 1.5rem;
-        display: flex;
-        justify-content: flex-end;
-        gap: 0.5rem;
+    .video-title-text {
+        flex: 1;
+        min-width: 0;
     }
 
-    .video-modal-footer .btn {
-        border-radius: 0.5rem;
-        padding: 0.5rem 1.25rem;
-        font-weight: 500;
-        transition: all 0.2s ease;
+    .video-title-text h5 {
+        margin: 0;
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #fff;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
-    .video-modal-footer .btn-close-video {
-        background: linear-gradient(135deg, #e94560 0%, #c73659 100%);
-        border: none;
-        color: white;
+    .video-title-text span {
+        font-size: 0.75rem;
+        color: rgba(255, 255, 255, 0.5);
     }
 
-    .video-modal-footer .btn-close-video:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(233, 69, 96, 0.4);
+    /* Video controls overlay gradient */
+    .video-wrapper::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 100px;
+        background: linear-gradient(transparent, rgba(0, 0, 0, 0.3));
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.3s ease;
     }
 
+    .video-wrapper:hover::after {
+        opacity: 1;
+    }
+
+    /* Loading state */
     .video-loading {
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
         gap: 1rem;
-        color: #888;
-        padding: 3rem;
+        padding: 4rem 2rem;
+        color: rgba(255, 255, 255, 0.6);
     }
 
-    .video-loading i {
-        font-size: 3rem;
-        animation: pulse-video 1.5s infinite;
-    }
-
-    @@keyframes pulse-video {
-        0%, 100% { opacity: 0.5; transform: scale(1); }
-        50% { opacity: 1; transform: scale(1.1); }
-    }
-
-    /* Video info bar */
-    .video-info-bar {
-        background: linear-gradient(135deg, rgba(233, 69, 96, 0.1) 0%, rgba(15, 52, 96, 0.2) 100%);
-        border: 1px solid rgba(233, 69, 96, 0.2);
-        border-radius: 0.5rem;
-        padding: 0.5rem 1rem;
-        margin: 0.75rem;
-        color: #fff;
-        font-size: 0.85rem;
+    .video-loading-icon {
+        width: 80px;
+        height: 80px;
+        background: linear-gradient(135deg, #e94560 0%, #c73659 100%);
+        border-radius: 50%;
         display: flex;
         align-items: center;
-        gap: 0.5rem;
+        justify-content: center;
+        animation: video-pulse 2s ease-in-out infinite;
     }
 
-    .video-info-bar i {
-        color: #e94560;
+    .video-loading-icon i {
+        font-size: 2rem;
+        color: #fff;
+    }
+
+    @@keyframes video-pulse {
+        0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(233, 69, 96, 0.4); }
+        50% { transform: scale(1.05); box-shadow: 0 0 0 20px rgba(233, 69, 96, 0); }
+    }
+
+    .video-loading-text {
+        font-size: 0.95rem;
+        font-weight: 500;
+    }
+
+    /* Fullscreen button */
+    .video-fullscreen-btn {
+        position: absolute;
+        bottom: 1rem;
+        right: 1rem;
+        width: 36px;
+        height: 36px;
+        border-radius: 0.5rem;
+        border: none;
+        background: rgba(0, 0, 0, 0.5);
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        z-index: 15;
+        backdrop-filter: blur(4px);
+        opacity: 0;
+    }
+
+    .video-wrapper:hover .video-fullscreen-btn {
+        opacity: 1;
+    }
+
+    .video-fullscreen-btn:hover {
+        background: rgba(233, 69, 96, 0.8);
+        color: #fff;
     }
 
     /* Responsive */
-    @@media (max-width: 768px) {
-        .video-modal-header {
+    @@media (max-width: 992px) {
+        .video-player-container {
+            max-width: calc(100% - 1rem);
+            margin: 0.5rem;
+            border-radius: 0.75rem;
+        }
+
+        .video-wrapper video {
+            max-height: 60vh;
+        }
+
+        .video-title-bar {
             padding: 0.75rem 1rem;
+            padding-right: 3.5rem;
         }
 
-        .video-modal-header .video-title {
-            font-size: 0.9rem;
-        }
-
-        .video-modal-header .video-filename {
-            max-width: 200px;
-        }
-
-        .video-modal-body {
-            min-height: 200px;
-        }
-
-        .video-modal-body video,
-        .video-modal-body .video-js {
-            max-height: 50vh;
-        }
-
-        .video-modal-footer {
-            padding: 0.5rem 1rem;
-        }
-
-        .video-modal-footer .btn {
-            padding: 0.4rem 1rem;
-            font-size: 0.9rem;
+        .video-close-btn {
+            top: 0.75rem;
+            right: 0.75rem;
+            width: 36px;
+            height: 36px;
+            font-size: 1.1rem;
         }
     }
 
     @@media (max-width: 576px) {
-        .video-modal-header .video-title i {
-            font-size: 1.25rem;
+        .video-player-container {
+            max-width: 100%;
+            margin: 0;
+            border-radius: 0;
+            max-height: 100vh;
         }
 
-        .video-modal-header .video-filename {
-            max-width: 150px;
+        .video-wrapper video {
+            max-height: 50vh;
+        }
+
+        .video-title-bar {
+            padding: 0.625rem 0.875rem;
+            padding-right: 3rem;
+        }
+
+        .video-title-icon {
+            width: 32px;
+            height: 32px;
+        }
+
+        .video-title-icon i {
+            font-size: 1rem;
+        }
+
+        .video-title-text h5 {
             font-size: 0.85rem;
         }
 
-        .video-info-bar {
-            font-size: 0.75rem;
-            padding: 0.4rem 0.75rem;
+        .video-close-btn {
+            top: 0.5rem;
+            right: 0.5rem;
+            width: 32px;
+            height: 32px;
+            font-size: 1rem;
         }
     }
 </style>
 
-<Modal @ref="modal" UseStaticBackdrop="true" CloseOnEscape="false" Size="ModalSize.ExtraLarge" ShowCloseButton="false">
-    <HeaderTemplate>
-        <div class="video-modal-header w-100 d-flex justify-content-between align-items-center">
-            <h5 class="video-title">
+<div class="video-player-overlay @(isVisible ? "show" : "")" @onclick="OnOverlayClick">
+    <div class="video-player-container" @onclick:stopPropagation="true">
+        <button class="video-close-btn" @onclick="OnHideModalClick">
+            <i class="bi bi-x-lg"></i>
+        </button>
+
+        <div class="video-title-bar">
+            <div class="video-title-icon">
                 <i class="bi bi-play-circle-fill"></i>
-                <span class="video-filename" title="@fileName">@GetDisplayFileName()</span>
-            </h5>
-            <button type="button" class="btn-close btn-close-white" @onclick="OnHideModalClick" aria-label="Close"></button>
+            </div>
+            <div class="video-title-text">
+                <h5 title="@fileName">@GetDisplayFileName()</h5>
+                <span>Video Player</span>
+            </div>
         </div>
-    </HeaderTemplate>
-    <BodyTemplate>
-        <div class="video-modal-body">
+
+        <div class="video-wrapper">
             @if (!string.IsNullOrEmpty(fileUrl))
             {
                 <video id="videoPlayer"
                        controls
                        preload="auto"
-                       controlsList="nodownload">
+                       controlsList="nodownload"
+                       @onended="OnVideoEnded">
                     <source src="@fileUrl" type="@videoType" />
-                    <p>
-                        Your browser does not support the video element.
-                    </p>
+                    <p>Your browser does not support the video element.</p>
                 </video>
+                <button class="video-fullscreen-btn" @onclick="ToggleFullscreen" title="Fullscreen">
+                    <i class="bi bi-arrows-fullscreen"></i>
+                </button>
             }
             else
             {
                 <div class="video-loading">
-                    <i class="bi bi-film"></i>
-                    <span>Loading video...</span>
+                    <div class="video-loading-icon">
+                        <i class="bi bi-film"></i>
+                    </div>
+                    <span class="video-loading-text">Loading video...</span>
                 </div>
             }
         </div>
-    </BodyTemplate>
-    <FooterTemplate>
-        <div class="video-modal-footer w-100">
-            <button class="btn btn-close-video" @onclick="OnHideModalClick">
-                <i class="bi bi-x-lg me-2"></i>Close
-            </button>
-        </div>
-    </FooterTemplate>
-</Modal>
-
+    </div>
+</div>
 
 @code {
+    private bool isVisible = false;
     private string fileUrl = "";
     private string fileName = "";
     private string videoType = "video/mp4";
-
-    private Modal modal = default!;
 
     public async Task ShowModal(string file, string name = "", string type = "video/mp4")
     {
         fileUrl = file;
         fileName = !string.IsNullOrEmpty(name) ? name : ExtractFileName(file);
         videoType = !string.IsNullOrEmpty(type) ? type : "video/mp4";
-        await modal.ShowAsync();
+        isVisible = true;
+        StateHasChanged();
     }
 
     public async Task OnHideModalClick()
     {
         await JSRuntime.InvokeVoidAsync("stopVideoPlayer");
+        isVisible = false;
+        StateHasChanged();
+
+        // Small delay before clearing data to allow animation
+        await Task.Delay(300);
         fileUrl = "";
         fileName = "";
-        await modal.HideAsync();
+    }
+
+    private async Task OnOverlayClick()
+    {
+        await OnHideModalClick();
+    }
+
+    private void OnVideoEnded()
+    {
+        // Video finished playing
+        StateHasChanged();
+    }
+
+    private async Task ToggleFullscreen()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("toggleVideoFullscreen");
+        }
+        catch { }
     }
 
     private string ExtractFileName(string url)

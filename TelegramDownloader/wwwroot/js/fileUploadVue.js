@@ -700,3 +700,16 @@ window.stopVideoPlayer = () => {
         video.currentTime = 0;
     }
 }
+
+window.toggleVideoFullscreen = () => {
+    const video = document.getElementById('videoPlayer');
+    if (video) {
+        if (document.fullscreenElement) {
+            document.exitFullscreen();
+        } else {
+            video.requestFullscreen().catch(err => {
+                console.log('Error attempting fullscreen:', err);
+            });
+        }
+    }
+}
