@@ -165,3 +165,146 @@ main {
 .toast-container {
     z-index: 200 !important;
 }
+
+/* ===== Offcanvas Menu Styles ===== */
+::deep .offcanvas {
+    background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%) !important;
+    border-left: 1px solid rgba(255, 255, 255, 0.1) !important;
+    box-shadow: -5px 0 25px rgba(0, 0, 0, 0.5) !important;
+}
+
+::deep .offcanvas-header {
+    background: linear-gradient(135deg, #0f3460 0%, #1a1a2e 100%);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 1.25rem 1.5rem;
+}
+
+::deep .offcanvas-title {
+    color: #fff !important;
+    font-weight: 600;
+    font-size: 1.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+::deep .offcanvas-header .btn-close {
+    filter: invert(1);
+    opacity: 0.7;
+    transition: all 0.2s ease;
+}
+
+::deep .offcanvas-header .btn-close:hover {
+    opacity: 1;
+    transform: rotate(90deg);
+}
+
+::deep .offcanvas-body {
+    padding: 0 !important;
+}
+
+/* Menu items */
+::deep .offcanvas-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.5rem;
+    color: rgba(255, 255, 255, 0.8);
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    width: 100%;
+    text-align: left;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+::deep .offcanvas-menu-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    width: 3px;
+    background: #e94560;
+    transform: scaleY(0);
+    transition: transform 0.2s ease;
+}
+
+::deep .offcanvas-menu-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+    padding-left: 1.75rem;
+}
+
+::deep .offcanvas-menu-item:hover::before {
+    transform: scaleY(1);
+}
+
+::deep .offcanvas-menu-item i {
+    font-size: 1.25rem;
+    width: 1.5rem;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.5);
+    transition: color 0.2s ease;
+}
+
+::deep .offcanvas-menu-item:hover i {
+    color: #e94560;
+}
+
+::deep .offcanvas-menu-item .menu-text {
+    flex: 1;
+}
+
+::deep .offcanvas-menu-item .menu-badge {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-radius: 0.25rem;
+    background: linear-gradient(135deg, #e94560 0%, #c73659 100%);
+    color: #fff;
+}
+
+::deep .offcanvas-menu-item.danger {
+    color: rgba(255, 107, 107, 0.9);
+}
+
+::deep .offcanvas-menu-item.danger:hover {
+    background: rgba(255, 107, 107, 0.1);
+    color: #ff6b6b;
+}
+
+::deep .offcanvas-menu-item.danger::before {
+    background: #ff6b6b;
+}
+
+::deep .offcanvas-menu-item.danger i {
+    color: rgba(255, 107, 107, 0.7);
+}
+
+::deep .offcanvas-menu-item.danger:hover i {
+    color: #ff6b6b;
+}
+
+/* Menu section divider */
+::deep .offcanvas-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.1);
+    margin: 0.5rem 0;
+}
+
+/* Menu section title */
+::deep .offcanvas-section-title {
+    padding: 1rem 1.5rem 0.5rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: rgba(255, 255, 255, 0.4);
+}

@@ -123,22 +123,38 @@
 
         <TelegramDownloader.Pages.Modals.AudioPlayerModal @ref="audioPlayer" />
 
-        <Offcanvas @ref="offcanvas"
-        title="Menu">
+        <Offcanvas @ref="offcanvas" title="Menu">
             <BodyTemplate>
-                <div class="list-group list-group-flush">
-                    <button @onclick=' () => Navigateto("/config")' class="list-group-item list-group-item-action"><i class="bi bi-gear"></i> Configuration</button>
-                    <button @onclick=' () => Navigateto("/webdavinfo")' class="list-group-item list-group-item-action">
-                        <i class="bi bi-files-alt"></i> WebDav
-                        <span class="position-absolute top-50 start-50 translate-middle badge rounded-pill bg-danger">
-                            Beta
-                            <span class="visually-hidden">Beta function</span>
-                        </span>
-                    </button>
-                    <button @onclick=' () => Navigateto("/downloads")' class="list-group-item list-group-item-action"><i class="bi bi-cloud-download"></i> Tasks</button>
-                    <button @onclick=' () => Navigateto("/loglist")' class="list-group-item list-group-item-action"><i class="bi bi-file-earmark-text"></i> Logs</button>
-                    <a href="#" @onclick=" () => Logout()" class="list-group-item list-group-item-action list-group-item-warning"><i class="bi bi-box-arrow-right"></i> LogOut</a>
-                </div>
+                <div class="offcanvas-section-title">Navigation</div>
+
+                <button @onclick='() => NavigateAndClose("/config")' class="offcanvas-menu-item">
+                    <i class="bi bi-gear-fill"></i>
+                    <span class="menu-text">Configuration</span>
+                </button>
+
+                <button @onclick='() => NavigateAndClose("/webdavinfo")' class="offcanvas-menu-item">
+                    <i class="bi bi-hdd-network-fill"></i>
+                    <span class="menu-text">WebDav</span>
+                    <span class="menu-badge">Beta</span>
+                </button>
+
+                <button @onclick='() => NavigateAndClose("/downloads")' class="offcanvas-menu-item">
+                    <i class="bi bi-cloud-arrow-down-fill"></i>
+                    <span class="menu-text">Tasks</span>
+                </button>
+
+                <button @onclick='() => NavigateAndClose("/loglist")' class="offcanvas-menu-item">
+                    <i class="bi bi-journal-text"></i>
+                    <span class="menu-text">Logs</span>
+                </button>
+
+                <div class="offcanvas-divider"></div>
+                <div class="offcanvas-section-title">Account</div>
+
+                <button @onclick="LogoutAndClose" class="offcanvas-menu-item danger">
+                    <i class="bi bi-box-arrow-right"></i>
+                    <span class="menu-text">Log Out</span>
+                </button>
             </BodyTemplate>
         </Offcanvas>
         <TelegramDownloader.Pages.Modals.ImportDataModal isShared=true @ref="ImportModal" OnCloseCallback="reloadMenu"></TelegramDownloader.Pages.Modals.ImportDataModal>
@@ -355,12 +371,24 @@
         NavManager.NavigateTo(relativeUri);
     }
 
+    private async Task NavigateAndClose(string relativeUri)
+    {
+        await offcanvas.HideAsync();
+        NavManager.NavigateTo(relativeUri);
+    }
 
     private async void Logout()
     {
         await ts.logOff();
         NavManager.NavigateTo("/");
         StateHasChanged();
+    }
+
+    private async Task LogoutAndClose()
+    {
+        await offcanvas.HideAsync();
+        await ts.logOff();
+        NavManager.NavigateTo("/");
     }
 
     private async Task checkWorkingTasks() {
