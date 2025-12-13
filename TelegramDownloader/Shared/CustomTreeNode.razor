@@ -1,7 +1,7 @@
 @using TelegramDownloader.Models
 
 <div class="tree-node">
-    <div class="node-content @(IsSelected ? "selected" : "")" style="padding-left: @(Level * 10)px;" @onclick="SelectNode">
+    <div class="node-content @(IsSelected ? "selected" : "")" style="padding-left: @(Level * 12)px;" @onclick="SelectNode">
         @if (Node.HasChildren)
         {
             <span class="expand-icon" @onclick="ToggleExpand" @onclick:stopPropagation="true">

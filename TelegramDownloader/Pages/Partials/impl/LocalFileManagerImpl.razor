@@ -69,7 +69,6 @@
     </div>
 }
 
-<TelegramDownloader.Pages.Modals.UploadToTelegramModal @ref="Modal"></TelegramDownloader.Pages.Modals.UploadToTelegramModal>
 <TelegramDownloader.Pages.Modals.FileUploadModal @ref="ModalUpSer"></TelegramDownloader.Pages.Modals.FileUploadModal>
 <TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal @ref="mediaUrlModal"></TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal>
 <TelegramDownloader.Pages.Modals.VideoPlayerModal @ref=videoPlayer></TelegramDownloader.Pages.Modals.VideoPlayerModal>
@@ -94,7 +93,6 @@
     NotificationModel nm = new NotificationModel();
     public string[] ContextItems = new string[] { "Open", "Delete", "Download", "Rename", "Details", "Copy Media Url", "Add to Playlist" };
 
-    private Modals.UploadToTelegramModal Modal { get; set; }
     private Modals.FileUploadModal ModalUpSer { get; set; }
     private bool isMyChannel = false;
 
@@ -460,10 +458,7 @@
     {
         if (args.Item.Text == "Upload Telegram" && args.FileDetails.Count() > 0)
         {
-            Modal.id = id;
-            Modal.fileList = args.FileDetails;
-            Modal.filePath = args.FileDetails.FirstOrDefault().IsFile ? args.FileDetails.FirstOrDefault().FilterPath.Replace("\\", "/") + args.FileDetails.FirstOrDefault().Name : args.FileDetails.FirstOrDefault().FilterPath.Replace("\\", "/") + args.FileDetails.FirstOrDefault().Name + "/";
-            Modal.Open();
+            MainLayout.OpenUploadToTelegramModal(id, args.FileDetails.ToList());
         }
 
         if (args.Item.Text == "Upload To Local" && args.FileDetails.Count() > 0)
@@ -622,12 +617,7 @@
     {
         try
         {
-            Modal.id = id;
-            Modal.fileList = args.Files.ToList();
-            Modal.filePath = args.Files.FirstOrDefault()?.IsFile == true
-                ? args.Files.FirstOrDefault()?.FilterPath?.Replace("\\", "/") + args.Files.FirstOrDefault()?.Name
-                : args.Files.FirstOrDefault()?.FilterPath?.Replace("\\", "/") + args.Files.FirstOrDefault()?.Name + "/";
-            Modal.Open();
+            MainLayout.OpenUploadToTelegramModal(id, args.Files.ToList());
         }
         catch (Exception ex)
         {

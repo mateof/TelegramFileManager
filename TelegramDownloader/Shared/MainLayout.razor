@@ -164,6 +164,9 @@
     </main>
 </div>
 
+@* Upload to Telegram Modal - rendered outside .page to avoid stacking context issues *@
+<TelegramDownloader.Pages.Modals.UploadToTelegramModal @ref="uploadToTelegramModal" />
+
 @* Vue Upload Modal - rendered outside .page to avoid stacking context issues *@
 <div id="modalFileUploadVue">
     <TelegramDownloader.Pages.Modals.FileUploadModalTemplate></TelegramDownloader.Pages.Modals.FileUploadModalTemplate>
@@ -271,6 +274,7 @@
     private Offcanvas offcanvas = default!;
     private Pages.Modals.ImportDataModal ImportModal { get; set; }
     private Pages.Modals.AudioPlayerModal audioPlayer { get; set; } = default!;
+    private Pages.Modals.UploadToTelegramModal uploadToTelegramModal { get; set; } = default!;
     private NavMenu menu { get; set; }
     private VersionBadge versionBadge { get; set; }
     private bool active { get; set; } = true;
@@ -378,6 +382,18 @@
 
     // Método público para acceder al reproductor desde otros componentes
     public static Pages.Modals.AudioPlayerModal? GetAudioPlayer() => _instance?.audioPlayer;
+
+    // Upload to Telegram Modal - static methods
+    public static void OpenUploadToTelegramModal(string channelId, List<FileManagerDirectoryContent> files)
+    {
+        if (_instance?.uploadToTelegramModal != null)
+        {
+            _instance.uploadToTelegramModal.id = channelId;
+            _instance.uploadToTelegramModal.Open(files);
+        }
+    }
+
+    public static Pages.Modals.UploadToTelegramModal? GetUploadToTelegramModal() => _instance?.uploadToTelegramModal;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

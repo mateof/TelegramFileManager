@@ -713,3 +713,21 @@ window.blurActiveElement = () => {
         document.activeElement.blur();
     }
 }
+
+// Move modal to body to avoid stacking context issues
+window.moveToBody = (elementSelector) => {
+    const element = document.querySelector(elementSelector);
+    if (element && element.parentElement !== document.body) {
+        document.body.appendChild(element);
+    }
+}
+
+window.showUploadModal = () => {
+    const modal = document.querySelector('.upload-modal-overlay');
+    if (modal) {
+        // Move to body if not already there
+        if (modal.parentElement !== document.body) {
+            document.body.appendChild(modal);
+        }
+    }
+}

@@ -1,4 +1,4 @@
-﻿@using TL
+@using TL
 @using TelegramDownloader.Data
 @using TelegramDownloader.Models
 @using TelegramDownloader.Services
@@ -6,91 +6,477 @@
 
 @inject IFileService fs
 @inject ITelegramService ts
+@inject IJSRuntime JSRuntime
 
-<div class="modal @ModalClass" tabindex="-1" role="dialog" style="display:@ModalDisplay">
-    <div class="modal-dialog" role="document">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Select Folder</h5>
-                <button type="button" class="close" data-dismiss="modal" @onclick="() => Close()" aria-label="Close" style="border-color: transparent;background-color: transparent;">
-                    <span aria-hidden="true">&times;</span>
-                </button>
+<style>
+    /* Upload to Telegram Modal Overlay */
+    .upload-modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.85);
+        backdrop-filter: blur(8px);
+        z-index: 10600;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s ease;
+    }
+
+    .upload-modal-overlay.show {
+        opacity: 1;
+        visibility: visible;
+    }
+
+    .upload-modal-container {
+        width: 100%;
+        max-width: 550px;
+        max-height: 85vh;
+        margin: 1rem;
+        background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+        border-radius: 1rem;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7),
+                    0 0 0 1px rgba(233, 69, 96, 0.1);
+        overflow: visible;
+        transform: scale(0.95) translateY(20px);
+        transition: transform 0.3s ease;
+        position: relative;
+        top: auto;
+        left: auto;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .upload-modal-overlay.show .upload-modal-container {
+        transform: scale(1) translateY(0);
+    }
+
+    /* Close button */
+    .upload-close-btn {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(0, 0, 0, 0.5);
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 1.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        z-index: 20;
+        backdrop-filter: blur(4px);
+    }
+
+    .upload-close-btn:hover {
+        background: rgba(233, 69, 96, 0.8);
+        color: #fff;
+        transform: scale(1.1);
+    }
+
+    /* Header */
+    .upload-header {
+        background: linear-gradient(135deg, rgba(15, 52, 96, 0.95) 0%, rgba(26, 26, 46, 0.95) 100%);
+        padding: 1.25rem 1.5rem;
+        padding-right: 4rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 1rem 1rem 0 0;
+    }
+
+    .upload-header-icon {
+        width: 48px;
+        height: 48px;
+        background: linear-gradient(135deg, #e94560 0%, #c73659 100%);
+        border-radius: 0.75rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .upload-header-icon i {
+        font-size: 1.5rem;
+        color: #fff;
+    }
+
+    .upload-header-text h5 {
+        margin: 0;
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #fff;
+    }
+
+    .upload-header-text span {
+        font-size: 0.8rem;
+        color: rgba(255, 255, 255, 0.5);
+    }
+
+    /* Body */
+    .upload-body {
+        padding: 1.5rem;
+        overflow: visible;
+        flex: 1;
+    }
+
+    /* File list preview */
+    .upload-file-preview {
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 0.75rem;
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+        max-height: 180px;
+        overflow-y: auto;
+    }
+
+    .upload-file-preview-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.75rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .upload-file-preview-header span {
+        font-size: 0.85rem;
+        color: rgba(255, 255, 255, 0.7);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .upload-file-preview-header .badge {
+        background: linear-gradient(135deg, #e94560 0%, #c73659 100%);
+        color: #fff;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.375rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .upload-file-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .upload-file-item:last-child {
+        border-bottom: none;
+    }
+
+    .upload-file-item-icon {
+        width: 32px;
+        height: 32px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 0.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .upload-file-item-icon i {
+        font-size: 0.9rem;
+        color: rgba(255, 255, 255, 0.7);
+    }
+
+    .upload-file-item-name {
+        flex: 1;
+        font-size: 0.85rem;
+        color: rgba(255, 255, 255, 0.9);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .upload-file-item-size {
+        font-size: 0.75rem;
+        color: rgba(255, 255, 255, 0.5);
+        flex-shrink: 0;
+    }
+
+    /* Folder selection */
+    .upload-folder-section {
+        margin-bottom: 1rem;
+    }
+
+    .upload-folder-label {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.9rem;
+        font-weight: 500;
+        color: rgba(255, 255, 255, 0.9);
+        margin-bottom: 0.75rem;
+    }
+
+    .upload-folder-label i {
+        color: #e94560;
+    }
+
+    /* Footer */
+    .upload-footer {
+        padding: 1rem 1.5rem;
+        background: rgba(0, 0, 0, 0.2);
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+        border-radius: 0 0 1rem 1rem;
+    }
+
+    .upload-btn {
+        padding: 0.625rem 1.25rem;
+        border-radius: 0.5rem;
+        font-size: 0.9rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .upload-btn-cancel {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: rgba(255, 255, 255, 0.8);
+    }
+
+    .upload-btn-cancel:hover {
+        background: rgba(255, 255, 255, 0.15);
+        border-color: rgba(255, 255, 255, 0.3);
+        color: #fff;
+    }
+
+    .upload-btn-submit {
+        background: linear-gradient(135deg, #e94560 0%, #c73659 100%);
+        border: none;
+        color: #fff;
+    }
+
+    .upload-btn-submit:hover {
+        background: linear-gradient(135deg, #f25672 0%, #d84768 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(233, 69, 96, 0.4);
+    }
+
+    .upload-btn-submit:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+    }
+
+    /* Responsive */
+    @@media (max-width: 576px) {
+        .upload-modal-container {
+            max-width: 100%;
+            margin: 0;
+            border-radius: 0;
+            max-height: 100vh;
+            height: 100vh;
+        }
+
+        .upload-header {
+            padding: 1rem;
+            padding-right: 3.5rem;
+            border-radius: 0;
+        }
+
+        .upload-header-icon {
+            width: 40px;
+            height: 40px;
+        }
+
+        .upload-header-icon i {
+            font-size: 1.25rem;
+        }
+
+        .upload-header-text h5 {
+            font-size: 1rem;
+        }
+
+        .upload-body {
+            padding: 1rem;
+        }
+
+        .upload-footer {
+            padding: 1rem;
+            border-radius: 0;
+        }
+
+        .upload-close-btn {
+            top: 0.75rem;
+            right: 0.75rem;
+            width: 36px;
+            height: 36px;
+            font-size: 1.1rem;
+        }
+    }
+</style>
+
+<div class="upload-modal-overlay @(isVisible ? "show" : "")" @onclick="OnOverlayClick">
+    <div class="upload-modal-container" @onclick:stopPropagation="true">
+        <button class="upload-close-btn" @onclick="Close" title="Close">
+            <i class="bi bi-x-lg"></i>
+        </button>
+
+        <div class="upload-header">
+            <div class="upload-header-icon">
+                <i class="bi bi-cloud-upload-fill"></i>
             </div>
-            <div class="modal-body">
-                @if (ShowBackdrop)
+            <div class="upload-header-text">
+                <h5>Upload to Telegram</h5>
+                <span>Select destination folder</span>
+            </div>
+        </div>
+
+        <div class="upload-body">
+            @if (isVisible)
+            {
+                @if (fileList != null && fileList.Count > 0)
                 {
-                    <EditForm class="form-signin mb-4" Model="model" OnSubmit="Submit" FormName="downloadModelForm">
-                        <div>
-                            <TelegramDownloader.Shared.Ddtree idTree="tltree" id="@id" folderType="telegram" @ref="ddtree"></TelegramDownloader.Shared.Ddtree>
+                    <div class="upload-file-preview">
+                        <div class="upload-file-preview-header">
+                            <span><i class="bi bi-files"></i> Files to upload</span>
+                            <span class="badge">@fileList.Count</span>
                         </div>
-                    </EditForm>
+                        @foreach (var file in fileList.Take(10))
+                        {
+                            <div class="upload-file-item">
+                                <div class="upload-file-item-icon">
+                                    <i class="bi @GetFileIcon(file.Name)"></i>
+                                </div>
+                                <span class="upload-file-item-name" title="@file.Name">@file.Name</span>
+                                @if (file.Size > 0)
+                                {
+                                    <span class="upload-file-item-size">@FormatSize(file.Size)</span>
+                                }
+                            </div>
+                        }
+                        @if (fileList.Count > 10)
+                        {
+                            <div class="upload-file-item" style="justify-content: center; color: rgba(255,255,255,0.5); font-size: 0.8rem;">
+                                ... and @(fileList.Count - 10) more files
+                            </div>
+                        }
+                    </div>
                 }
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-primary" @onclick="() => Submit()">Save</button>
-                <button type="button" class="btn btn-secondary" data-dismiss="modal" @onclick="() => Close()">Close</button>
-            </div>
+
+                <div class="upload-folder-section">
+                    <label class="upload-folder-label">
+                        <i class="bi bi-folder-fill"></i>
+                        Destination Folder
+                    </label>
+                    <TelegramDownloader.Shared.Ddtree idTree="tltree" id="@id" folderType="telegram" @ref="ddtree"></TelegramDownloader.Shared.Ddtree>
+                </div>
+            }
+        </div>
+
+        <div class="upload-footer">
+            <button class="upload-btn upload-btn-cancel" @onclick="Close">
+                <i class="bi bi-x"></i>
+                Cancel
+            </button>
+            <button class="upload-btn upload-btn-submit" @onclick="Submit" disabled="@(fileList == null || fileList.Count == 0)">
+                <i class="bi bi-cloud-upload"></i>
+                Upload
+            </button>
         </div>
     </div>
 </div>
 
-
-
-
-
 @code {
+    private bool isVisible = false;
     public NewDownloadModel? model { get; set; }
     public Ddtree ddtree { get; set; }
+
     [Parameter]
     public string id { get; set; }
+
     public string filePath { get; set; }
     public List<FileManagerDirectoryContent> fileList { get; set; }
 
-    public string filename = "";
-    public string size = "";
-    public string ModalDisplay = "none;";
-    public string ModalClass = "";
-    public bool ShowBackdrop = false;
-
-
     protected override async Task OnInitializedAsync()
     {
-
         model ??= new();
-
     }
 
     public void Open()
     {
-        ModalDisplay = "block;";
-        ModalClass = "Show";
-        ShowBackdrop = true;
+        isVisible = true;
+        StateHasChanged();
+    }
+
+    public void Open(List<FileManagerDirectoryContent> files)
+    {
+        fileList = files;
+        isVisible = true;
         StateHasChanged();
     }
 
     public void Close()
     {
-        ModalDisplay = "none";
-        ModalClass = "";
-        ShowBackdrop = false;
+        isVisible = false;
         StateHasChanged();
+    }
+
+    private void OnOverlayClick()
+    {
+        Close();
     }
 
     private async Task Submit()
     {
-        // ts.
         fs.AddUploadFileFromServer(id, ddtree.selectedNode == null ? null : ddtree.selectedNode.FirstOrDefault(), fileList);
         Close();
-        // ts.DownloadFile(mc, model?.newName == "" ? null : model.newName, ddtree.selectedNode == null ? null : ddtree.selectedNode.FirstOrDefault());
-        // Model.type = await ts.checkAuth(Model.value, Model.type == "phone");
-        // Model.value = "";
-        // StateHasChanged();
-        // isLogin();
-        // Logger.LogInformation("Id = {Id}", Model?.Id);
+    }
+
+    private string GetFileIcon(string fileName)
+    {
+        if (string.IsNullOrEmpty(fileName)) return "bi-file-earmark";
+
+        var ext = Path.GetExtension(fileName).ToLowerInvariant();
+        return ext switch
+        {
+            ".mp4" or ".mkv" or ".avi" or ".mov" or ".wmv" or ".webm" => "bi-file-earmark-play",
+            ".mp3" or ".wav" or ".flac" or ".aac" or ".ogg" or ".m4a" => "bi-file-earmark-music",
+            ".jpg" or ".jpeg" or ".png" or ".gif" or ".bmp" or ".webp" or ".svg" => "bi-file-earmark-image",
+            ".pdf" => "bi-file-earmark-pdf",
+            ".doc" or ".docx" => "bi-file-earmark-word",
+            ".xls" or ".xlsx" => "bi-file-earmark-excel",
+            ".ppt" or ".pptx" => "bi-file-earmark-ppt",
+            ".zip" or ".rar" or ".7z" or ".tar" or ".gz" => "bi-file-earmark-zip",
+            ".txt" or ".md" or ".log" => "bi-file-earmark-text",
+            ".cs" or ".js" or ".ts" or ".py" or ".java" or ".cpp" or ".h" => "bi-file-earmark-code",
+            _ => "bi-file-earmark"
+        };
+    }
+
+    private string FormatSize(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB", "TB" };
+        int order = 0;
+        double size = bytes;
+        while (size >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            size /= 1024;
+        }
+        return $"{size:0.##} {sizes[order]}";
     }
 }
-@* 
-@if (ShowBackdrop)
-{
-    <div class="modal-backdrop fade show"></div>
-} *@

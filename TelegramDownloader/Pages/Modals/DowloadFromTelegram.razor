@@ -1,4 +1,4 @@
-﻿@using TL
+@using TL
 @using TelegramDownloader.Data
 @using TelegramDownloader.Data.db
 @using TelegramDownloader.Models
@@ -8,76 +8,575 @@
 @inject IFileService fs
 @inject ITelegramService ts
 
-<div class="modal @ModalClass" tabindex="-1" role="dialog" style="display:@ModalDisplay">
-    <div class="modal-dialog" role="document">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Select Folder</h5>
-                <button type="button" class="close" data-dismiss="modal" @onclick="() => Close()" aria-label="Close" style="border-color: transparent;background-color: transparent;">
-                    <span aria-hidden="true">&times;</span>
-                </button>
+<style>
+    /* Download from Telegram Modal Overlay */
+    .download-modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.85);
+        backdrop-filter: blur(8px);
+        z-index: 10600;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s ease;
+    }
+
+    .download-modal-overlay.show {
+        opacity: 1;
+        visibility: visible;
+    }
+
+    .download-modal-container {
+        width: 100%;
+        max-width: 550px;
+        max-height: 85vh;
+        margin: 1rem;
+        background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+        border-radius: 1rem;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7),
+                    0 0 0 1px rgba(79, 172, 254, 0.1);
+        overflow: visible;
+        transform: scale(0.95) translateY(20px);
+        transition: transform 0.3s ease;
+        position: relative;
+        top: auto;
+        left: auto;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .download-modal-overlay.show .download-modal-container {
+        transform: scale(1) translateY(0);
+    }
+
+    /* Close button */
+    .download-close-btn {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(0, 0, 0, 0.5);
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 1.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        z-index: 20;
+        backdrop-filter: blur(4px);
+    }
+
+    .download-close-btn:hover {
+        background: rgba(79, 172, 254, 0.8);
+        color: #fff;
+        transform: scale(1.1);
+    }
+
+    /* Header */
+    .download-header {
+        background: linear-gradient(135deg, rgba(15, 52, 96, 0.95) 0%, rgba(26, 26, 46, 0.95) 100%);
+        padding: 1.25rem 1.5rem;
+        padding-right: 4rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 1rem 1rem 0 0;
+    }
+
+    .download-header-icon {
+        width: 48px;
+        height: 48px;
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        border-radius: 0.75rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .download-header-icon i {
+        font-size: 1.5rem;
+        color: #fff;
+    }
+
+    .download-header-text h5 {
+        margin: 0;
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #fff;
+    }
+
+    .download-header-text span {
+        font-size: 0.8rem;
+        color: rgba(255, 255, 255, 0.5);
+    }
+
+    /* Body */
+    .download-body {
+        padding: 1.5rem;
+        overflow: visible;
+        flex: 1;
+    }
+
+    /* File list preview */
+    .download-file-preview {
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 0.75rem;
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+        max-height: 180px;
+        overflow-y: auto;
+    }
+
+    .download-file-preview-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 0.75rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .download-file-preview-header span {
+        font-size: 0.85rem;
+        color: rgba(255, 255, 255, 0.7);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .download-file-preview-header .badge {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        color: #fff;
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.375rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .download-file-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .download-file-item:last-child {
+        border-bottom: none;
+    }
+
+    .download-file-item-icon {
+        width: 32px;
+        height: 32px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 0.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .download-file-item-icon i {
+        font-size: 0.9rem;
+        color: rgba(255, 255, 255, 0.7);
+    }
+
+    .download-file-item-name {
+        flex: 1;
+        font-size: 0.85rem;
+        color: rgba(255, 255, 255, 0.9);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .download-file-item-size {
+        font-size: 0.75rem;
+        color: rgba(255, 255, 255, 0.5);
+        flex-shrink: 0;
+    }
+
+    /* Folder selection */
+    .download-folder-section {
+        margin-bottom: 1rem;
+    }
+
+    .download-folder-label {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.9rem;
+        font-weight: 500;
+        color: rgba(255, 255, 255, 0.9);
+        margin-bottom: 0.75rem;
+    }
+
+    .download-folder-label i {
+        color: #4facfe;
+    }
+
+    /* Footer */
+    .download-footer {
+        padding: 1rem 1.5rem;
+        background: rgba(0, 0, 0, 0.2);
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+        border-radius: 0 0 1rem 1rem;
+    }
+
+    .download-btn {
+        padding: 0.625rem 1.25rem;
+        border-radius: 0.5rem;
+        font-size: 0.9rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .download-btn-cancel {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: rgba(255, 255, 255, 0.8);
+    }
+
+    .download-btn-cancel:hover {
+        background: rgba(255, 255, 255, 0.15);
+        border-color: rgba(255, 255, 255, 0.3);
+        color: #fff;
+    }
+
+    .download-btn-submit {
+        background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+        border: none;
+        color: #fff;
+    }
+
+    .download-btn-submit:hover {
+        background: linear-gradient(135deg, #6fbfff 0%, #33f5ff 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(79, 172, 254, 0.4);
+    }
+
+    .download-btn-submit:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+        box-shadow: none;
+    }
+
+    /* Dark theme for Ddtree inside download modal */
+    .download-body .form-label {
+        display: none !important;
+    }
+
+    .download-body .mb-3 {
+        margin-bottom: 0 !important;
+    }
+
+    .download-body .custom-dropdown-tree {
+        position: relative;
+    }
+
+    .download-body .dropdown-header {
+        background: rgba(255, 255, 255, 0.08) !important;
+        border: 1px solid rgba(255, 255, 255, 0.15) !important;
+        color: rgba(255, 255, 255, 0.9) !important;
+        border-radius: 0.5rem !important;
+        padding: 0.75rem 1rem !important;
+        min-height: 44px !important;
+        transition: all 0.2s ease;
+    }
+
+    .download-body .dropdown-header:hover {
+        border-color: rgba(79, 172, 254, 0.5) !important;
+        background: rgba(255, 255, 255, 0.12) !important;
+    }
+
+    .download-body .selected-text {
+        color: rgba(255, 255, 255, 0.9) !important;
+    }
+
+    .download-body .dropdown-arrow {
+        color: rgba(255, 255, 255, 0.6) !important;
+    }
+
+    .download-body .dropdown-content {
+        background: #1a1a2e !important;
+        border: 1px solid rgba(255, 255, 255, 0.15) !important;
+        border-radius: 0.5rem !important;
+        margin-top: 0.25rem;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5) !important;
+        z-index: 10700 !important;
+    }
+
+    .download-body .tree-container {
+        padding: 0.5rem;
+    }
+
+    .download-body .tree-node {
+        color: rgba(255, 255, 255, 0.85);
+    }
+
+    .download-body .node-content {
+        padding-top: 0.5rem !important;
+        padding-right: 0.75rem !important;
+        padding-bottom: 0.5rem !important;
+        border-radius: 0.375rem !important;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        color: rgba(255, 255, 255, 0.85) !important;
+    }
+
+    .download-body .node-content:hover {
+        background: rgba(255, 255, 255, 0.1) !important;
+    }
+
+    .download-body .node-content.selected {
+        background: rgba(79, 172, 254, 0.25) !important;
+        color: #4facfe !important;
+    }
+
+    .download-body .expand-icon {
+        color: rgba(255, 255, 255, 0.6) !important;
+    }
+
+    .download-body .expand-icon:hover {
+        color: #4facfe !important;
+    }
+
+    .download-body .folder-icon {
+        color: #4facfe !important;
+    }
+
+    .download-body .node-text {
+        color: rgba(255, 255, 255, 0.9) !important;
+    }
+
+    .download-body .node-content.selected .node-text {
+        color: #4facfe !important;
+    }
+
+    .download-body .spinner-border {
+        color: #4facfe !important;
+    }
+
+    /* Responsive */
+    @@media (max-width: 576px) {
+        .download-modal-container {
+            max-width: 100%;
+            margin: 0;
+            border-radius: 0;
+            max-height: 100vh;
+            height: 100vh;
+        }
+
+        .download-header {
+            padding: 1rem;
+            padding-right: 3.5rem;
+            border-radius: 0;
+        }
+
+        .download-header-icon {
+            width: 40px;
+            height: 40px;
+        }
+
+        .download-header-icon i {
+            font-size: 1.25rem;
+        }
+
+        .download-header-text h5 {
+            font-size: 1rem;
+        }
+
+        .download-body {
+            padding: 1rem;
+        }
+
+        .download-footer {
+            padding: 1rem;
+            border-radius: 0;
+        }
+
+        .download-close-btn {
+            top: 0.75rem;
+            right: 0.75rem;
+            width: 36px;
+            height: 36px;
+            font-size: 1.1rem;
+        }
+    }
+</style>
+
+<div class="download-modal-overlay @(isVisible ? "show" : "")" @onclick="OnOverlayClick">
+    <div class="download-modal-container" @onclick:stopPropagation="true">
+        <button class="download-close-btn" @onclick="Close" title="Close">
+            <i class="bi bi-x-lg"></i>
+        </button>
+
+        <div class="download-header">
+            <div class="download-header-icon">
+                <i class="bi bi-cloud-download-fill"></i>
             </div>
-            <div class="modal-body">
-                @if (ShowBackdrop)
+            <div class="download-header-text">
+                <h5>Download to Local</h5>
+                <span>Select destination folder</span>
+            </div>
+        </div>
+
+        <div class="download-body">
+            @if (isVisible)
+            {
+                @if (fileList != null && fileList.Count > 0)
                 {
-                    <EditForm class="form-signin mb-4" Model="model" OnSubmit="Submit" FormName="downloadModelForm">
-                        <div>
-                            <TelegramDownloader.Shared.Ddtree idTree="tltree" id="@id" folderType="local" @ref="ddtree"></TelegramDownloader.Shared.Ddtree>
+                    <div class="download-file-preview">
+                        <div class="download-file-preview-header">
+                            <span><i class="bi bi-files"></i> Files to download</span>
+                            <span class="badge">@fileList.Count</span>
                         </div>
-                    </EditForm>
+                        @foreach (var file in fileList.Take(10))
+                        {
+                            <div class="download-file-item">
+                                <div class="download-file-item-icon">
+                                    <i class="bi @GetFileIcon(file.Name)"></i>
+                                </div>
+                                <span class="download-file-item-name" title="@file.Name">@file.Name</span>
+                                @if (file.Size > 0)
+                                {
+                                    <span class="download-file-item-size">@FormatSize(file.Size)</span>
+                                }
+                            </div>
+                        }
+                        @if (fileList.Count > 10)
+                        {
+                            <div class="download-file-item" style="justify-content: center; color: rgba(255,255,255,0.5); font-size: 0.8rem;">
+                                ... and @(fileList.Count - 10) more files
+                            </div>
+                        }
+                    </div>
                 }
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-primary" @onclick="() => Submit()">Save</button>
-                <button type="button" class="btn btn-secondary" data-dismiss="modal" @onclick="() => Close()">Close</button>
-            </div>
+                else if (chatMessages != null && chatMessages.Count > 0)
+                {
+                    <div class="download-file-preview">
+                        <div class="download-file-preview-header">
+                            <span><i class="bi bi-chat-dots"></i> Messages to download</span>
+                            <span class="badge">@chatMessages.Count</span>
+                        </div>
+                        @foreach (var msg in chatMessages.Take(10))
+                        {
+                            <div class="download-file-item">
+                                <div class="download-file-item-icon">
+                                    <i class="bi @(msg.isDocument ? "bi-file-earmark" : "bi-image")"></i>
+                                </div>
+                                <span class="download-file-item-name">@GetMessageDisplayName(msg)</span>
+                            </div>
+                        }
+                        @if (chatMessages.Count > 10)
+                        {
+                            <div class="download-file-item" style="justify-content: center; color: rgba(255,255,255,0.5); font-size: 0.8rem;">
+                                ... and @(chatMessages.Count - 10) more messages
+                            </div>
+                        }
+                    </div>
+                }
+
+                <div class="download-folder-section">
+                    <label class="download-folder-label">
+                        <i class="bi bi-folder-fill"></i>
+                        Destination Folder
+                    </label>
+                    <TelegramDownloader.Shared.Ddtree idTree="tltree" id="@id" folderType="local" @ref="ddtree"></TelegramDownloader.Shared.Ddtree>
+                </div>
+            }
+        </div>
+
+        <div class="download-footer">
+            <button class="download-btn download-btn-cancel" @onclick="Close">
+                <i class="bi bi-x"></i>
+                Cancel
+            </button>
+            <button class="download-btn download-btn-submit" @onclick="Submit" disabled="@(!HasFiles)">
+                <i class="bi bi-cloud-download"></i>
+                Download
+            </button>
         </div>
     </div>
 </div>
 
 @code {
+    private bool isVisible = false;
     public NewDownloadModel? model { get; set; }
     public Ddtree ddtree { get; set; }
+
     [Parameter]
     public string id { get; set; }
+
     [Parameter]
     public bool isShare { get; set; } = false;
+
     [Parameter]
     public BsonSharedInfoModel bsi { get; set; }
-    public string filePath { get; set; }
 
+    public string filePath { get; set; }
     public List<FileManagerDirectoryContent> fileList { get; set; }
     public List<ChatMessages> chatMessages { get; set; }
     public bool isDownloadingChatMessages { get; set; } = false;
 
-    public string filename = "";
-    public string size = "";
-    public string ModalDisplay = "none;";
-    public string ModalClass = "";
-    public bool ShowBackdrop = false;
-
+    private bool HasFiles => (fileList != null && fileList.Count > 0) || (chatMessages != null && chatMessages.Count > 0);
 
     protected override async Task OnInitializedAsync()
     {
-
         model ??= new();
-
     }
 
     public void Open()
     {
-        ModalDisplay = "block;";
-        ModalClass = "Show";
-        ShowBackdrop = true;
+        isVisible = true;
+        StateHasChanged();
+    }
+
+    public void Open(List<FileManagerDirectoryContent> files)
+    {
+        fileList = files;
+        isDownloadingChatMessages = false;
+        isVisible = true;
+        StateHasChanged();
+    }
+
+    public void Open(List<ChatMessages> messages)
+    {
+        chatMessages = messages;
+        isDownloadingChatMessages = true;
+        isVisible = true;
         StateHasChanged();
     }
 
     public void Close()
     {
-        ModalDisplay = "none";
-        ModalClass = "";
-        ShowBackdrop = false;
+        isVisible = false;
         StateHasChanged();
+    }
+
+    private void OnOverlayClick()
+    {
+        Close();
     }
 
     private async Task Submit()
@@ -88,12 +587,53 @@
             Close();
             return;
         }
-        // ts.
+
         if (isShare)
             fs.downloadFile(DbService.SHARED_DB_NAME, fileList.ToList(), ddtree.selectedNode == null ? null : ddtree.selectedNode.FirstOrDefault(), bsi.CollectionId, bsi.ChannelId);
         else
             fs.downloadFile(id, fileList.ToList(), ddtree.selectedNode == null ? null : ddtree.selectedNode.FirstOrDefault());
-        Close();
 
+        Close();
+    }
+
+    private string GetFileIcon(string fileName)
+    {
+        if (string.IsNullOrEmpty(fileName)) return "bi-file-earmark";
+
+        var ext = Path.GetExtension(fileName).ToLowerInvariant();
+        return ext switch
+        {
+            ".mp4" or ".mkv" or ".avi" or ".mov" or ".wmv" or ".webm" => "bi-file-earmark-play",
+            ".mp3" or ".wav" or ".flac" or ".aac" or ".ogg" or ".m4a" => "bi-file-earmark-music",
+            ".jpg" or ".jpeg" or ".png" or ".gif" or ".bmp" or ".webp" or ".svg" => "bi-file-earmark-image",
+            ".pdf" => "bi-file-earmark-pdf",
+            ".doc" or ".docx" => "bi-file-earmark-word",
+            ".xls" or ".xlsx" => "bi-file-earmark-excel",
+            ".ppt" or ".pptx" => "bi-file-earmark-ppt",
+            ".zip" or ".rar" or ".7z" or ".tar" or ".gz" => "bi-file-earmark-zip",
+            ".txt" or ".md" or ".log" => "bi-file-earmark-text",
+            ".cs" or ".js" or ".ts" or ".py" or ".java" or ".cpp" or ".h" => "bi-file-earmark-code",
+            _ => "bi-file-earmark"
+        };
+    }
+
+    private string FormatSize(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB", "TB" };
+        int order = 0;
+        double size = bytes;
+        while (size >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            size /= 1024;
+        }
+        return $"{size:0.##} {sizes[order]}";
+    }
+
+    private string GetMessageDisplayName(ChatMessages msg)
+    {
+        if (msg.isDocument)
+            return "Document";
+        return "Media file";
     }
 }
