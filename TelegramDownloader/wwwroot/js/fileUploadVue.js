@@ -475,6 +475,224 @@ window.addMultipleToAudioPlaylist = (items) => {
     DotNet.invokeMethodAsync('TelegramDownloader', 'AddMultipleToAudioPlaylist', items);
 }
 
+// ===== Media Session API for mobile/Bluetooth integration =====
+
+window.initMediaSession = (title, artist, album, artworkUrl) => {
+    if (!('mediaSession' in navigator)) {
+        console.log('Media Session API not supported');
+        return false;
+    }
+
+    try {
+        // Set metadata
+        navigator.mediaSession.metadata = new MediaMetadata({
+            title: title || 'Unknown Track',
+            artist: artist || 'TelegramFileManager',
+            album: album || 'Playlist',
+            artwork: artworkUrl ? [
+                { src: artworkUrl, sizes: '96x96', type: 'image/png' },
+                { src: artworkUrl, sizes: '128x128', type: 'image/png' },
+                { src: artworkUrl, sizes: '192x192', type: 'image/png' },
+                { src: artworkUrl, sizes: '256x256', type: 'image/png' },
+                { src: artworkUrl, sizes: '384x384', type: 'image/png' },
+                { src: artworkUrl, sizes: '512x512', type: 'image/png' }
+            ] : [
+                { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+                { src: '/icon-512.png', sizes: '512x512', type: 'image/png' }
+            ]
+        });
+
+        // Set up action handlers
+        navigator.mediaSession.setActionHandler('play', () => {
+            DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionAction', 'play');
+        });
+
+        navigator.mediaSession.setActionHandler('pause', () => {
+            DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionAction', 'pause');
+        });
+
+        navigator.mediaSession.setActionHandler('previoustrack', () => {
+            DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionAction', 'previoustrack');
+        });
+
+        navigator.mediaSession.setActionHandler('nexttrack', () => {
+            DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionAction', 'nexttrack');
+        });
+
+        navigator.mediaSession.setActionHandler('stop', () => {
+            DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionAction', 'stop');
+        });
+
+        // Seek handlers (for progress bar on lock screen)
+        try {
+            navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+                const skipTime = details.seekOffset || 10;
+                DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionSeek', -skipTime);
+            });
+
+            navigator.mediaSession.setActionHandler('seekforward', (details) => {
+                const skipTime = details.seekOffset || 10;
+                DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionSeek', skipTime);
+            });
+
+            navigator.mediaSession.setActionHandler('seekto', (details) => {
+                if (details.seekTime !== undefined) {
+                    DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionSeekTo', details.seekTime);
+                }
+            });
+        } catch (e) {
+            console.log('Seek handlers not supported:', e);
+        }
+
+        return true;
+    } catch (e) {
+        console.error('Error initializing Media Session:', e);
+        return false;
+    }
+}
+
+window.updateMediaSessionMetadata = (title, artist, album, artworkUrl) => {
+    if (!('mediaSession' in navigator)) return;
+
+    try {
+        navigator.mediaSession.metadata = new MediaMetadata({
+            title: title || 'Unknown Track',
+            artist: artist || 'TelegramFileManager',
+            album: album || 'Playlist',
+            artwork: artworkUrl ? [
+                { src: artworkUrl, sizes: '96x96', type: 'image/png' },
+                { src: artworkUrl, sizes: '128x128', type: 'image/png' },
+                { src: artworkUrl, sizes: '192x192', type: 'image/png' },
+                { src: artworkUrl, sizes: '256x256', type: 'image/png' },
+                { src: artworkUrl, sizes: '384x384', type: 'image/png' },
+                { src: artworkUrl, sizes: '512x512', type: 'image/png' }
+            ] : [
+                { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+                { src: '/icon-512.png', sizes: '512x512', type: 'image/png' }
+            ]
+        });
+    } catch (e) {
+        console.error('Error updating Media Session metadata:', e);
+    }
+}
+
+window.updateMediaSessionPlaybackState = (state) => {
+    if (!('mediaSession' in navigator)) return;
+
+    try {
+        // state: 'playing', 'paused', 'none'
+        navigator.mediaSession.playbackState = state;
+    } catch (e) {
+        console.error('Error updating playback state:', e);
+    }
+}
+
+window.updateMediaSessionPositionState = (duration, position, playbackRate) => {
+    if (!('mediaSession' in navigator)) return;
+
+    try {
+        if (duration > 0) {
+            navigator.mediaSession.setPositionState({
+                duration: duration,
+                playbackRate: playbackRate || 1,
+                position: Math.min(position, duration)
+            });
+        }
+    } catch (e) {
+        console.error('Error updating position state:', e);
+    }
+}
+
+window.clearMediaSession = () => {
+    if (!('mediaSession' in navigator)) return;
+
+    try {
+        navigator.mediaSession.metadata = null;
+        navigator.mediaSession.playbackState = 'none';
+    } catch (e) {
+        console.error('Error clearing Media Session:', e);
+    }
+}
+
+// ===== Audio Artwork Extraction =====
+
+// Cache for extracted artwork to avoid re-fetching
+window._artworkCache = {};
+
+window.extractAudioArtwork = (audioUrl) => {
+    return new Promise((resolve, reject) => {
+        // Check cache first
+        if (window._artworkCache[audioUrl]) {
+            resolve(window._artworkCache[audioUrl]);
+            return;
+        }
+
+        // Check if jsmediatags is available
+        if (typeof jsmediatags === 'undefined') {
+            console.log('jsmediatags library not loaded');
+            resolve(null);
+            return;
+        }
+
+        try {
+            jsmediatags.read(audioUrl, {
+                onSuccess: function(tag) {
+                    try {
+                        const picture = tag.tags.picture;
+                        if (picture) {
+                            // Convert array buffer to base64
+                            const base64String = picture.data.reduce((data, byte) => {
+                                return data + String.fromCharCode(byte);
+                            }, '');
+                            const base64 = btoa(base64String);
+                            const mimeType = picture.format || 'image/jpeg';
+                            const dataUrl = `data:${mimeType};base64,${base64}`;
+
+                            // Cache the result
+                            window._artworkCache[audioUrl] = dataUrl;
+                            resolve(dataUrl);
+                        } else {
+                            window._artworkCache[audioUrl] = null;
+                            resolve(null);
+                        }
+                    } catch (e) {
+                        console.error('Error processing artwork:', e);
+                        resolve(null);
+                    }
+                },
+                onError: function(error) {
+                    console.log('Error reading tags:', error.type, error.info);
+                    window._artworkCache[audioUrl] = null;
+                    resolve(null);
+                }
+            });
+        } catch (e) {
+            console.error('Error extracting artwork:', e);
+            resolve(null);
+        }
+    });
+}
+
+// Extract artwork and notify Blazor
+window.extractAndNotifyArtwork = async (audioUrl) => {
+    try {
+        const artworkUrl = await window.extractAudioArtwork(audioUrl);
+        return artworkUrl;
+    } catch (e) {
+        console.error('Error in extractAndNotifyArtwork:', e);
+        return null;
+    }
+}
+
+// Clear artwork cache for a specific URL or all
+window.clearArtworkCache = (audioUrl) => {
+    if (audioUrl) {
+        delete window._artworkCache[audioUrl];
+    } else {
+        window._artworkCache = {};
+    }
+}
+
 window.stopVideoPlayer = () => {
     const video = document.getElementById('videoPlayer');
     if (video) {

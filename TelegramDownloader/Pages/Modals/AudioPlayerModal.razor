@@ -109,6 +109,14 @@
         z-index: 0;
     }
 
+    .album-art-image {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 50%;
+        z-index: 0;
+    }
+
     @@keyframes album-rotate {
         from { transform: rotate(0deg); }
         to { transform: rotate(360deg); }
@@ -570,7 +578,14 @@
 
         <div class="audio-player-content">
             <div class="album-art @(isPlaying ? "playing" : "")">
-                <i class="bi bi-music-note-beamed"></i>
+                @if (!string.IsNullOrEmpty(artworkUrl))
+                {
+                    <img src="@artworkUrl" alt="Album Art" class="album-art-image" />
+                }
+                else
+                {
+                    <i class="bi bi-music-note-beamed"></i>
+                }
             </div>
 
             @if (!string.IsNullOrEmpty(audioTitle))
@@ -692,6 +707,10 @@
     private string durationDisplay = "0:00";
     private CancellationTokenSource? progressCts;
 
+    // Album artwork
+    private string? artworkUrl = null;
+    private bool isLoadingArtwork = false;
+
     // Playlist
     private List<PlaylistItem> playlist = new();
     private int currentTrackIndex = -1;
@@ -740,7 +759,11 @@
             isPlaying = false;
             progressPercent = 0;
             currentTimeDisplay = "0:00";
+            artworkUrl = null; // Reset artwork before loading new one
             await JSRuntime.InvokeVoidAsync("playAudioPlayer", audioUrl, audioType);
+
+            // Extract artwork and update Media Session (async, won't block playback)
+            _ = ExtractArtworkAndUpdateMediaSession(audioUrl);
         }
 
         // Start progress update
@@ -779,10 +802,12 @@
         if (isPlaying)
         {
             await JSRuntime.InvokeVoidAsync("pauseAudioPlayer");
+            await UpdateMediaSessionPlaybackState("paused");
         }
         else
         {
             await JSRuntime.InvokeVoidAsync("resumeAudioPlayer");
+            await UpdateMediaSessionPlaybackState("playing");
         }
     }
 
@@ -854,11 +879,24 @@
             var audioInfo = await JSRuntime.InvokeAsync<AudioInfo>("getAudioInfo");
             if (audioInfo != null)
             {
+                var wasPlaying = isPlaying;
                 isPlaying = audioInfo.IsPlaying;
                 progressPercent = audioInfo.Progress;
                 bufferPercent = audioInfo.BufferPercent;
                 currentTimeDisplay = FormatTime(audioInfo.CurrentTime);
                 durationDisplay = FormatTime(audioInfo.Duration);
+
+                // Update Media Session position for lock screen progress bar
+                if (audioInfo.Duration > 0)
+                {
+                    await UpdateMediaSessionPosition(audioInfo.Duration, audioInfo.CurrentTime);
+                }
+
+                // Update playback state if changed
+                if (wasPlaying != isPlaying)
+                {
+                    await UpdateMediaSessionPlaybackState(isPlaying ? "playing" : "paused");
+                }
             }
         }
         catch { }
@@ -916,9 +954,22 @@
             audioTitle = track.Title;
             progressPercent = 0;
             currentTimeDisplay = "0:00";
+            artworkUrl = null; // Reset artwork before loading new one
             await JSRuntime.InvokeVoidAsync("playAudioPlayer", audioUrl, audioType);
+
             StateHasChanged();
+
+            // Extract artwork from audio file (async, won't block playback)
+            _ = ExtractArtworkAndUpdateMediaSession(audioUrl);
         }
+    }
+
+    private async Task ExtractArtworkAndUpdateMediaSession(string url)
+    {
+        await ExtractArtwork(url);
+        // Update Media Session for mobile/Bluetooth with artwork
+        await InitializeMediaSession();
+        await UpdateMediaSessionPlaybackState("playing");
     }
 
     private async Task PlayPrevious()
@@ -1104,5 +1155,136 @@
     {
         if (string.IsNullOrEmpty(audioTitle)) return "";
         return audioTitle.Length > 50 ? audioTitle.Substring(0, 47) + "..." : audioTitle;
+    }
+
+    // ===== Artwork Extraction =====
+
+    private async Task ExtractArtwork(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return;
+
+        try
+        {
+            isLoadingArtwork = true;
+            var extractedArtwork = await JSRuntime.InvokeAsync<string?>("extractAndNotifyArtwork", url);
+            artworkUrl = extractedArtwork;
+            isLoadingArtwork = false;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch
+        {
+            artworkUrl = null;
+            isLoadingArtwork = false;
+        }
+    }
+
+    // ===== Media Session API Integration =====
+
+    private async Task InitializeMediaSession()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("initMediaSession", audioTitle, "TelegramFileManager", "Playlist", artworkUrl);
+        }
+        catch { }
+    }
+
+    private async Task UpdateMediaSessionMetadata()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("updateMediaSessionMetadata", audioTitle, "TelegramFileManager", "Playlist", artworkUrl);
+        }
+        catch { }
+    }
+
+    private async Task UpdateMediaSessionPlaybackState(string state)
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("updateMediaSessionPlaybackState", state);
+        }
+        catch { }
+    }
+
+    private async Task UpdateMediaSessionPosition(double duration, double position)
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("updateMediaSessionPositionState", duration, position, 1.0);
+        }
+        catch { }
+    }
+
+    // Media Session action handlers (called from MainLayout via JS)
+    public async Task ResumeFromMediaSession()
+    {
+        await JSRuntime.InvokeVoidAsync("resumeAudioPlayer");
+        isPlaying = true;
+        await UpdateMediaSessionPlaybackState("playing");
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public async Task PauseFromMediaSession()
+    {
+        await JSRuntime.InvokeVoidAsync("pauseAudioPlayer");
+        isPlaying = false;
+        await UpdateMediaSessionPlaybackState("paused");
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public async Task PlayPreviousFromMediaSession()
+    {
+        if (CanPlayPrevious)
+        {
+            await PlayTrack(currentTrackIndex - 1);
+        }
+    }
+
+    public async Task PlayNextFromMediaSession()
+    {
+        if (CanPlayNext)
+        {
+            await PlayTrack(currentTrackIndex + 1);
+        }
+    }
+
+    public async Task StopFromMediaSession()
+    {
+        await JSRuntime.InvokeVoidAsync("stopAudioPlayer");
+        isPlaying = false;
+        progressPercent = 0;
+        currentTimeDisplay = "0:00";
+        await UpdateMediaSessionPlaybackState("none");
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public async Task SeekRelativeFromMediaSession(double offsetSeconds)
+    {
+        try
+        {
+            var audioInfo = await JSRuntime.InvokeAsync<AudioInfo>("getAudioInfo");
+            if (audioInfo != null && audioInfo.Duration > 0)
+            {
+                var newTime = Math.Max(0, Math.Min(audioInfo.Duration, audioInfo.CurrentTime + offsetSeconds));
+                var percent = (newTime / audioInfo.Duration) * 100;
+                await JSRuntime.InvokeVoidAsync("seekAudioPlayer", percent);
+            }
+        }
+        catch { }
+    }
+
+    public async Task SeekToFromMediaSession(double positionSeconds)
+    {
+        try
+        {
+            var audioInfo = await JSRuntime.InvokeAsync<AudioInfo>("getAudioInfo");
+            if (audioInfo != null && audioInfo.Duration > 0)
+            {
+                var percent = (positionSeconds / audioInfo.Duration) * 100;
+                await JSRuntime.InvokeVoidAsync("seekAudioPlayer", percent);
+            }
+        }
+        catch { }
     }
 }

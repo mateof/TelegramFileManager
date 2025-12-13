@@ -332,6 +332,50 @@
         public string? title { get; set; }
     }
 
+    // Media Session API callbacks
+    [JSInvokable]
+    public static async Task MediaSessionAction(string action)
+    {
+        if (_instance?.audioPlayer == null) return;
+
+        switch (action)
+        {
+            case "play":
+                await _instance.audioPlayer.ResumeFromMediaSession();
+                break;
+            case "pause":
+                await _instance.audioPlayer.PauseFromMediaSession();
+                break;
+            case "previoustrack":
+                await _instance.audioPlayer.PlayPreviousFromMediaSession();
+                break;
+            case "nexttrack":
+                await _instance.audioPlayer.PlayNextFromMediaSession();
+                break;
+            case "stop":
+                await _instance.audioPlayer.StopFromMediaSession();
+                break;
+        }
+    }
+
+    [JSInvokable]
+    public static async Task MediaSessionSeek(double offsetSeconds)
+    {
+        if (_instance?.audioPlayer != null)
+        {
+            await _instance.audioPlayer.SeekRelativeFromMediaSession(offsetSeconds);
+        }
+    }
+
+    [JSInvokable]
+    public static async Task MediaSessionSeekTo(double positionSeconds)
+    {
+        if (_instance?.audioPlayer != null)
+        {
+            await _instance.audioPlayer.SeekToFromMediaSession(positionSeconds);
+        }
+    }
+
     // Método público para acceder al reproductor desde otros componentes
     public static Pages.Modals.AudioPlayerModal? GetAudioPlayer() => _instance?.audioPlayer;
 
