@@ -1,27 +1,1290 @@
-﻿
+@inject IJSRuntime JSRuntime
 
-<div class="modal" :class="{ modalshow: showAudioModal,  modalhide: !showAudioModal}" id="modalPlayer" tabindex="-1" aria-labelledby="Audio Player" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h1 class="modal-title fs-5" id="mplayer">Music Player</h1>
-                <button type="button" class="btn-close" v-on:click="closeModalPlayer()" data-bs-dismiss="modal" aria-label="Close"></button>
+<style>
+    /* Floating Audio Player */
+    .audio-player-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(4px);
+        z-index: 1050;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s ease;
+    }
+
+    .audio-player-overlay.show {
+        opacity: 1;
+        visibility: visible;
+    }
+
+    .audio-player-container {
+        width: 100%;
+        max-width: 400px;
+        margin: 1rem;
+        background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+        border-radius: 1.25rem;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5),
+                    0 0 0 1px rgba(233, 69, 96, 0.1);
+        overflow: hidden;
+        transform: scale(0.9) translateY(20px);
+        transition: transform 0.3s ease;
+        position: relative;
+    }
+
+    .audio-player-overlay.show .audio-player-container {
+        transform: scale(1) translateY(0);
+    }
+
+    /* Close button */
+    .audio-close-btn {
+        position: absolute;
+        top: 0.75rem;
+        right: 0.75rem;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        z-index: 10;
+    }
+
+    .audio-close-btn:hover {
+        background: rgba(233, 69, 96, 0.3);
+        color: #fff;
+        transform: rotate(90deg);
+    }
+
+    /* Player content */
+    .audio-player-content {
+        padding: 1.5rem;
+    }
+
+    /* Album art */
+    .album-art {
+        width: 120px;
+        height: 120px;
+        background: linear-gradient(135deg, #0f3460 0%, #e94560 100%);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1.25rem;
+        box-shadow: 0 8px 32px rgba(233, 69, 96, 0.3);
+        animation: album-rotate 8s linear infinite;
+        animation-play-state: paused;
+        position: relative;
+    }
+
+    .album-art::before {
+        content: '';
+        position: absolute;
+        width: 24px;
+        height: 24px;
+        background: #1a1a2e;
+        border-radius: 50%;
+        z-index: 1;
+    }
+
+    .album-art.playing {
+        animation-play-state: running;
+    }
+
+    .album-art i {
+        font-size: 2.5rem;
+        color: rgba(255, 255, 255, 0.9);
+        z-index: 0;
+    }
+
+    .album-art-image {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 50%;
+        z-index: 0;
+    }
+
+    @@keyframes album-rotate {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+
+    /* Audio title display */
+    .audio-title-display {
+        background: linear-gradient(135deg, rgba(233, 69, 96, 0.1) 0%, rgba(15, 52, 96, 0.2) 100%);
+        border: 1px solid rgba(233, 69, 96, 0.2);
+        border-radius: 0.75rem;
+        padding: 0.875rem 1rem;
+        margin-bottom: 1rem;
+        color: #fff;
+        font-weight: 500;
+        font-size: 0.9rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        overflow: hidden;
+    }
+
+    .audio-title-display i {
+        font-size: 1.125rem;
+        color: #e94560;
+        flex-shrink: 0;
+    }
+
+    .audio-title-display .title-wrapper {
+        flex: 1;
+        overflow: hidden;
+        position: relative;
+        mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+        -webkit-mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+    }
+
+    .audio-title-display .title-text {
+        white-space: nowrap;
+        display: inline-block;
+    }
+
+    .audio-title-display .title-text.scrolling {
+        animation: marquee-scroll 10s linear infinite;
+        padding-right: 50px;
+    }
+
+    .audio-title-display .title-text.scrolling::after {
+        content: attr(data-text);
+        position: absolute;
+        left: 100%;
+        padding-left: 50px;
+    }
+
+    @@keyframes marquee-scroll {
+        0% { transform: translateX(0); }
+        100% { transform: translateX(-50%); }
+    }
+
+    /* Visualizer */
+    .audio-visualizer {
+        height: 50px;
+        background: linear-gradient(135deg, rgba(233, 69, 96, 0.05) 0%, rgba(15, 52, 96, 0.1) 100%);
+        border-radius: 0.5rem;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        gap: 3px;
+        padding: 0.5rem;
+        overflow: hidden;
+    }
+
+    .audio-visualizer.paused .bar {
+        animation-play-state: paused;
+    }
+
+    .audio-visualizer .bar {
+        width: 4px;
+        background: linear-gradient(180deg, #e94560 0%, #0f3460 100%);
+        border-radius: 2px;
+        animation: equalizer 0.8s ease-in-out infinite;
+    }
+
+    .audio-visualizer .bar:nth-child(1) { height: 20%; animation-delay: 0s; }
+    .audio-visualizer .bar:nth-child(2) { height: 40%; animation-delay: 0.1s; }
+    .audio-visualizer .bar:nth-child(3) { height: 60%; animation-delay: 0.2s; }
+    .audio-visualizer .bar:nth-child(4) { height: 80%; animation-delay: 0.3s; }
+    .audio-visualizer .bar:nth-child(5) { height: 100%; animation-delay: 0.4s; }
+    .audio-visualizer .bar:nth-child(6) { height: 80%; animation-delay: 0.5s; }
+    .audio-visualizer .bar:nth-child(7) { height: 60%; animation-delay: 0.6s; }
+    .audio-visualizer .bar:nth-child(8) { height: 40%; animation-delay: 0.7s; }
+    .audio-visualizer .bar:nth-child(9) { height: 20%; animation-delay: 0.8s; }
+    .audio-visualizer .bar:nth-child(10) { height: 40%; animation-delay: 0.9s; }
+    .audio-visualizer .bar:nth-child(11) { height: 60%; animation-delay: 1s; }
+    .audio-visualizer .bar:nth-child(12) { height: 80%; animation-delay: 1.1s; }
+    .audio-visualizer .bar:nth-child(13) { height: 60%; animation-delay: 1.2s; }
+
+    @@keyframes equalizer {
+        0%, 100% { transform: scaleY(0.3); }
+        50% { transform: scaleY(1); }
+    }
+
+    /* Custom Audio Controls */
+    .audio-controls {
+        background: linear-gradient(135deg, #0f3460 0%, #16213e 100%);
+        border-radius: 0.75rem;
+        padding: 1rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .audio-main-controls {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 1rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .audio-btn-nav {
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(255, 255, 255, 0.1);
+        color: white;
+        font-size: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .audio-btn-nav:hover {
+        background: rgba(233, 69, 96, 0.3);
+    }
+
+    .audio-btn-nav:disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
+    }
+
+    .audio-controls-row {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .audio-btn-play {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        border: none;
+        background: linear-gradient(135deg, #e94560 0%, #c73659 100%);
+        color: white;
+        font-size: 1.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        flex-shrink: 0;
+    }
+
+    .audio-btn-play:hover {
+        transform: scale(1.1);
+        box-shadow: 0 4px 15px rgba(233, 69, 96, 0.4);
+    }
+
+    .audio-progress-container {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+
+    .audio-progress-bar {
+        width: 100%;
+        height: 6px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 3px;
+        cursor: pointer;
+        position: relative;
+    }
+
+    .audio-progress-buffer {
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 100%;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 3px;
+        transition: width 0.3s ease;
+    }
+
+    .audio-progress-fill {
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 100%;
+        background: linear-gradient(90deg, #e94560 0%, #ff6b6b 100%);
+        border-radius: 3px;
+        transition: width 0.1s linear;
+    }
+
+    .audio-progress-thumb {
+        position: absolute;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        width: 14px;
+        height: 14px;
+        background: #fff;
+        border-radius: 50%;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+        transition: transform 0.1s ease, box-shadow 0.2s ease;
+        z-index: 2;
+    }
+
+    .audio-progress-bar:hover .audio-progress-thumb {
+        transform: translate(-50%, -50%) scale(1.2);
+        box-shadow: 0 2px 10px rgba(233, 69, 96, 0.5);
+    }
+
+    .audio-progress-thumb::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 6px;
+        height: 6px;
+        background: #e94560;
+        border-radius: 50%;
+    }
+
+    .audio-time {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.75rem;
+        color: rgba(255, 255, 255, 0.7);
+    }
+
+    .audio-volume-container {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .audio-btn-volume {
+        background: none;
+        border: none;
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 1rem;
+        cursor: pointer;
+        padding: 0.25rem;
+    }
+
+    .audio-btn-volume:hover {
+        color: #e94560;
+    }
+
+    .audio-volume-slider {
+        width: 80px;
+        height: 4px;
+        -webkit-appearance: none;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 2px;
+        cursor: pointer;
+    }
+
+    .audio-volume-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 12px;
+        height: 12px;
+        background: #e94560;
+        border-radius: 50%;
+        cursor: pointer;
+    }
+
+    /* Playlist Styles */
+    .audio-playlist {
+        max-height: 180px;
+        overflow-y: auto;
+        margin-top: 1rem;
+        border-radius: 0.5rem;
+        background: rgba(0, 0, 0, 0.2);
+    }
+
+    .audio-playlist::-webkit-scrollbar {
+        width: 6px;
+    }
+
+    .audio-playlist::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 3px;
+    }
+
+    .audio-playlist::-webkit-scrollbar-thumb {
+        background: rgba(233, 69, 96, 0.5);
+        border-radius: 3px;
+    }
+
+    .playlist-item {
+        display: flex;
+        align-items: center;
+        padding: 0.5rem 0.75rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        gap: 0.5rem;
+        user-select: none;
+    }
+
+    .playlist-item:last-child {
+        border-bottom: none;
+    }
+
+    .playlist-item:hover {
+        background: rgba(233, 69, 96, 0.1);
+    }
+
+    .playlist-item.active {
+        background: rgba(233, 69, 96, 0.2);
+    }
+
+    /* Drag and drop styles */
+    .playlist-item.dragging {
+        opacity: 0.5;
+        background: rgba(233, 69, 96, 0.3);
+    }
+
+    .playlist-item.drag-over {
+        border-top: 2px solid #e94560;
+        margin-top: -2px;
+    }
+
+    .playlist-item-drag-handle {
+        color: rgba(255, 255, 255, 0.3);
+        font-size: 0.875rem;
+        cursor: grab;
+        padding: 0.25rem;
+        transition: color 0.2s ease;
+    }
+
+    .playlist-item-drag-handle:active {
+        cursor: grabbing;
+    }
+
+    .playlist-item:hover .playlist-item-drag-handle {
+        color: rgba(255, 255, 255, 0.6);
+    }
+
+    .playlist-item-index {
+        color: rgba(255, 255, 255, 0.4);
+        font-size: 0.75rem;
+        width: 20px;
+        text-align: center;
+    }
+
+    .playlist-item.active .playlist-item-index {
+        color: #e94560;
+    }
+
+    .playlist-item-icon {
+        color: #e94560;
+        font-size: 0.875rem;
+    }
+
+    .playlist-item-title {
+        flex: 1;
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 0.85rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .playlist-item.active .playlist-item-title {
+        color: #fff;
+        font-weight: 500;
+    }
+
+    .playlist-item-remove {
+        color: rgba(255, 255, 255, 0.3);
+        background: none;
+        border: none;
+        padding: 0.25rem;
+        cursor: pointer;
+        opacity: 0;
+        transition: all 0.2s ease;
+    }
+
+    .playlist-item:hover .playlist-item-remove {
+        opacity: 1;
+    }
+
+    .playlist-item-remove:hover {
+        color: #e94560;
+    }
+
+    .playlist-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 1rem;
+        padding: 0 0.25rem;
+    }
+
+    .playlist-header-title {
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .playlist-header-count {
+        color: rgba(255, 255, 255, 0.4);
+        font-size: 0.75rem;
+    }
+
+    /* Responsive */
+    @@media (max-width: 576px) {
+        .audio-player-container {
+            max-width: calc(100% - 2rem);
+            margin: 0.5rem;
+        }
+
+        .album-art {
+            width: 100px;
+            height: 100px;
+        }
+
+        .album-art::before {
+            width: 20px;
+            height: 20px;
+        }
+
+        .album-art i {
+            font-size: 2rem;
+        }
+
+        .audio-title-display {
+            font-size: 0.85rem;
+            padding: 0.75rem;
+        }
+
+        .audio-visualizer {
+            height: 40px;
+        }
+    }
+</style>
+
+<div class="audio-player-overlay @(isVisible ? "show" : "")" @onclick="OnOverlayClick">
+    <div class="audio-player-container" @onclick:stopPropagation="true">
+        <button class="audio-close-btn" @onclick="OnHideModalClick">
+            <i class="bi bi-x-lg"></i>
+        </button>
+
+        <div class="audio-player-content">
+            <div class="album-art @(isPlaying ? "playing" : "")">
+                @if (!string.IsNullOrEmpty(artworkUrl))
+                {
+                    <img src="@artworkUrl" alt="Album Art" class="album-art-image" />
+                }
+                else
+                {
+                    <i class="bi bi-music-note-beamed"></i>
+                }
             </div>
-            <div class="modal-body bodyplayer">
-                <div id="audioTitle" class="audio-title"></div>
-                <div id="winamp-container" style="padding-top: 1em;"></div>
-                <audio id="audiomusic" controls controlsList="nodownload" style="width: 100%;">
 
-                    <source id="audioSource" src="" type="audio/mpeg">
-                        
-                        Your browser does not support the audio element.
-                    </audio>
+            @if (!string.IsNullOrEmpty(audioTitle))
+            {
+                <div class="audio-title-display">
+                    <i class="bi bi-file-earmark-music"></i>
+                    <div class="title-wrapper">
+                        <span class="title-text @(audioTitle.Length > 35 ? "scrolling" : "")"
+                              title="@audioTitle"
+                              data-text="@audioTitle">@audioTitle</span>
+                    </div>
+                </div>
+            }
 
+            <div class="audio-visualizer @(isPlaying ? "" : "paused")">
+                @for (int i = 0; i < 13; i++)
+                {
+                    <div class="bar"></div>
+                }
             </div>
+
+            <div class="audio-controls">
+                <div class="audio-main-controls">
+                    <button class="audio-btn-nav" @onclick="PlayPrevious" disabled="@(!CanPlayPrevious)">
+                        <i class="bi bi-skip-backward-fill"></i>
+                    </button>
+                    <button class="audio-btn-play" @onclick="TogglePlayPause">
+                        <i class="bi @(isPlaying ? "bi-pause-fill" : "bi-play-fill")"></i>
+                    </button>
+                    <button class="audio-btn-nav" @onclick="PlayNext" disabled="@(!CanPlayNext)">
+                        <i class="bi bi-skip-forward-fill"></i>
+                    </button>
+                </div>
+                <div class="audio-controls-row">
+                    <div class="audio-progress-container">
+                        <div class="audio-progress-bar" @onclick="SeekAudio">
+                            <div class="audio-progress-buffer" style="width: @(bufferPercent.ToString("F1", System.Globalization.CultureInfo.InvariantCulture))%"></div>
+                            <div class="audio-progress-fill" style="width: @(progressPercent.ToString("F1", System.Globalization.CultureInfo.InvariantCulture))%"></div>
+                            <div class="audio-progress-thumb" style="left: @(progressPercent.ToString("F1", System.Globalization.CultureInfo.InvariantCulture))%"></div>
+                        </div>
+                        <div class="audio-time">
+                            <span>@currentTimeDisplay</span>
+                            <span>@durationDisplay</span>
+                        </div>
+                    </div>
+                    <div class="audio-volume-container">
+                        <button class="audio-btn-volume" @onclick="ToggleMute">
+                            <i class="bi @(isMuted ? "bi-volume-mute-fill" : "bi-volume-up-fill")"></i>
+                        </button>
+                        <input type="range" class="audio-volume-slider" min="0" max="100" value="@volume"
+                               @onchange="ChangeVolume" />
+                    </div>
+                </div>
+            </div>
+
+            @if (playlist.Count > 0)
+            {
+                <div class="playlist-header">
+                    <span class="playlist-header-title">Playlist</span>
+                    <span class="playlist-header-count">@playlist.Count @(playlist.Count == 1 ? "track" : "tracks")</span>
+                </div>
+                <div class="audio-playlist">
+                    @for (int i = 0; i < playlist.Count; i++)
+                    {
+                        var index = i;
+                        var item = playlist[i];
+                        <div class="playlist-item @(index == currentTrackIndex ? "active" : "") @(draggedIndex == index ? "dragging" : "") @(dragOverIndex == index ? "drag-over" : "")"
+                             draggable="true"
+                             @ondragstart="() => OnDragStart(index)"
+                             @ondragover:preventDefault="true"
+                             @ondragover="() => OnDragOver(index)"
+                             @ondragleave="OnDragLeave"
+                             @ondrop="() => OnDrop(index)"
+                             @ondragend="OnDragEnd"
+                             @onclick="() => PlayTrack(index)">
+                            <span class="playlist-item-drag-handle">
+                                <i class="bi bi-grip-vertical"></i>
+                            </span>
+                            <span class="playlist-item-index">@(index + 1)</span>
+                            @if (index == currentTrackIndex && isPlaying)
+                            {
+                                <i class="bi bi-volume-up-fill playlist-item-icon"></i>
+                            }
+                            else
+                            {
+                                <i class="bi bi-music-note playlist-item-icon"></i>
+                            }
+                            <span class="playlist-item-title" title="@item.Title">@item.Title</span>
+                            <button class="playlist-item-remove" @onclick="() => RemoveFromPlaylist(index)" @onclick:stopPropagation="true">
+                                <i class="bi bi-x"></i>
+                            </button>
+                        </div>
+                    }
+                </div>
+            }
         </div>
     </div>
 </div>
 
-@code {
+@* Audio element persistente fuera del modal *@
+<audio id="audioPlayer"
+       style="display: none;"
+       @onplay="OnPlay"
+       @onpause="OnPause"
+       @onended="OnEnded">
+</audio>
 
+@code {
+    private bool isVisible = false;
+    private string audioUrl = "";
+    private string audioType = "audio/mpeg";
+    private string audioTitle = "";
+    private bool isPlaying = false;
+    private bool isMuted = false;
+    private int volume = 100;
+    private double progressPercent = 0;
+    private double bufferPercent = 0;
+    private string currentTimeDisplay = "0:00";
+    private string durationDisplay = "0:00";
+    private CancellationTokenSource? progressCts;
+
+    // Album artwork
+    private string? artworkUrl = null;
+    private bool isLoadingArtwork = false;
+
+    // Playlist
+    private List<PlaylistItem> playlist = new();
+    private int currentTrackIndex = -1;
+
+    // Drag and drop state
+    private int? draggedIndex = null;
+    private int? dragOverIndex = null;
+
+    public class PlaylistItem
+    {
+        public string Url { get; set; } = "";
+        public string Type { get; set; } = "audio/mpeg";
+        public string Title { get; set; } = "";
+    }
+
+    private bool CanPlayPrevious => currentTrackIndex > 0;
+    private bool CanPlayNext => currentTrackIndex < playlist.Count - 1;
+
+    public async Task ShowModal(string url, string type = "audio/mpeg", string title = "")
+    {
+        bool isSameTrack = audioUrl == url;
+
+        audioUrl = url;
+        audioType = string.IsNullOrEmpty(type) ? "audio/mpeg" : type;
+        audioTitle = !string.IsNullOrEmpty(title) ? title : ExtractFileName(url);
+
+        // Add to playlist if not exists
+        var existingIndex = playlist.FindIndex(p => p.Url == url);
+        if (existingIndex < 0)
+        {
+            playlist.Add(new PlaylistItem { Url = url, Type = audioType, Title = audioTitle });
+            currentTrackIndex = playlist.Count - 1;
+        }
+        else
+        {
+            currentTrackIndex = existingIndex;
+        }
+
+        isVisible = true;
+        StateHasChanged();
+        await Task.Delay(100);
+
+        // Only auto-play if different track
+        if (!isSameTrack)
+        {
+            isPlaying = false;
+            progressPercent = 0;
+            currentTimeDisplay = "0:00";
+            artworkUrl = null; // Reset artwork before loading new one
+            await JSRuntime.InvokeVoidAsync("playAudioPlayer", audioUrl, audioType);
+
+            // Extract artwork and update Media Session (async, won't block playback)
+            _ = ExtractArtworkAndUpdateMediaSession(audioUrl);
+        }
+
+        // Start progress update
+        StartProgressTimer();
+        await UpdateProgress();
+    }
+
+    public async Task ShowCurrentModal()
+    {
+        // Show modal with current song without changing anything
+        if (!string.IsNullOrEmpty(audioUrl))
+        {
+            isVisible = true;
+            StateHasChanged();
+            await Task.Delay(100);
+            StartProgressTimer();
+            await UpdateProgress();
+        }
+    }
+
+    public async Task OnHideModalClick()
+    {
+        StopProgressTimer();
+        await JSRuntime.InvokeVoidAsync("closeAudioModal");
+        isVisible = false;
+        StateHasChanged();
+    }
+
+    private async Task OnOverlayClick()
+    {
+        await OnHideModalClick();
+    }
+
+    private async Task TogglePlayPause()
+    {
+        if (isPlaying)
+        {
+            await JSRuntime.InvokeVoidAsync("pauseAudioPlayer");
+            await UpdateMediaSessionPlaybackState("paused");
+        }
+        else
+        {
+            await JSRuntime.InvokeVoidAsync("resumeAudioPlayer");
+            await UpdateMediaSessionPlaybackState("playing");
+        }
+    }
+
+    private async Task SeekAudio(MouseEventArgs e)
+    {
+        var percent = e.OffsetX / 200.0 * 100;
+        if (percent < 0) percent = 0;
+        if (percent > 100) percent = 100;
+        await JSRuntime.InvokeVoidAsync("seekAudioPlayer", percent);
+        await UpdateProgress();
+    }
+
+    private async Task ChangeVolume(Microsoft.AspNetCore.Components.ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int newVolume))
+        {
+            volume = newVolume;
+            isMuted = volume == 0;
+            await JSRuntime.InvokeVoidAsync("setAudioVolume", volume / 100.0);
+        }
+    }
+
+    private async Task ToggleMute()
+    {
+        isMuted = !isMuted;
+        await JSRuntime.InvokeVoidAsync("setAudioMuted", isMuted);
+        StateHasChanged();
+    }
+
+    private void StartProgressTimer()
+    {
+        StopProgressTimer();
+        progressCts = new CancellationTokenSource();
+        _ = UpdateProgressLoop(progressCts.Token);
+    }
+
+    private async Task UpdateProgressLoop(CancellationToken token)
+    {
+        while (!token.IsCancellationRequested)
+        {
+            try
+            {
+                await UpdateProgress();
+                await InvokeAsync(StateHasChanged);
+                await Task.Delay(500, token);
+            }
+            catch (TaskCanceledException)
+            {
+                break;
+            }
+            catch
+            {
+                // Ignore other errors
+            }
+        }
+    }
+
+    private void StopProgressTimer()
+    {
+        progressCts?.Cancel();
+        progressCts?.Dispose();
+        progressCts = null;
+    }
+
+    private async Task UpdateProgress()
+    {
+        try
+        {
+            var audioInfo = await JSRuntime.InvokeAsync<AudioInfo>("getAudioInfo");
+            if (audioInfo != null)
+            {
+                var wasPlaying = isPlaying;
+                isPlaying = audioInfo.IsPlaying;
+                progressPercent = audioInfo.Progress;
+                bufferPercent = audioInfo.BufferPercent;
+                currentTimeDisplay = FormatTime(audioInfo.CurrentTime);
+                durationDisplay = FormatTime(audioInfo.Duration);
+
+                // Update Media Session position for lock screen progress bar
+                if (audioInfo.Duration > 0)
+                {
+                    await UpdateMediaSessionPosition(audioInfo.Duration, audioInfo.CurrentTime);
+                }
+
+                // Update playback state if changed
+                if (wasPlaying != isPlaying)
+                {
+                    await UpdateMediaSessionPlaybackState(isPlaying ? "playing" : "paused");
+                }
+            }
+        }
+        catch { }
+    }
+
+    private string FormatTime(double seconds)
+    {
+        if (double.IsNaN(seconds) || double.IsInfinity(seconds)) return "0:00";
+        var ts = TimeSpan.FromSeconds(seconds);
+        return ts.Hours > 0
+            ? $"{ts.Hours}:{ts.Minutes:D2}:{ts.Seconds:D2}"
+            : $"{ts.Minutes}:{ts.Seconds:D2}";
+    }
+
+    public class AudioInfo
+    {
+        public bool IsPlaying { get; set; }
+        public double CurrentTime { get; set; }
+        public double Duration { get; set; }
+        public double Progress { get; set; }
+        public double BufferPercent { get; set; }
+    }
+
+    private void OnPlay()
+    {
+        isPlaying = true;
+        StateHasChanged();
+    }
+
+    private void OnPause()
+    {
+        isPlaying = false;
+        StateHasChanged();
+    }
+
+    private async void OnEnded()
+    {
+        isPlaying = false;
+        if (CanPlayNext)
+        {
+            await PlayNext();
+        }
+        StateHasChanged();
+    }
+
+    // Playlist methods
+    private async Task PlayTrack(int index)
+    {
+        if (index >= 0 && index < playlist.Count)
+        {
+            currentTrackIndex = index;
+            var track = playlist[index];
+            audioUrl = track.Url;
+            audioType = track.Type;
+            audioTitle = track.Title;
+            progressPercent = 0;
+            currentTimeDisplay = "0:00";
+            artworkUrl = null; // Reset artwork before loading new one
+            await JSRuntime.InvokeVoidAsync("playAudioPlayer", audioUrl, audioType);
+
+            StateHasChanged();
+
+            // Extract artwork from audio file (async, won't block playback)
+            _ = ExtractArtworkAndUpdateMediaSession(audioUrl);
+        }
+    }
+
+    private async Task ExtractArtworkAndUpdateMediaSession(string url)
+    {
+        await ExtractArtwork(url);
+        // Update Media Session for mobile/Bluetooth with artwork
+        await InitializeMediaSession();
+        await UpdateMediaSessionPlaybackState("playing");
+    }
+
+    private async Task PlayPrevious()
+    {
+        if (CanPlayPrevious)
+        {
+            await PlayTrack(currentTrackIndex - 1);
+        }
+    }
+
+    private async Task PlayNext()
+    {
+        if (CanPlayNext)
+        {
+            await PlayTrack(currentTrackIndex + 1);
+        }
+    }
+
+    private void RemoveFromPlaylist(int index)
+    {
+        if (index >= 0 && index < playlist.Count)
+        {
+            playlist.RemoveAt(index);
+
+            if (index < currentTrackIndex)
+            {
+                currentTrackIndex--;
+            }
+            else if (index == currentTrackIndex)
+            {
+                currentTrackIndex = -1;
+            }
+            StateHasChanged();
+        }
+    }
+
+    public void AddToPlaylist(string url, string type = "audio/mpeg", string title = "")
+    {
+        var item = new PlaylistItem
+        {
+            Url = url,
+            Type = string.IsNullOrEmpty(type) ? "audio/mpeg" : type,
+            Title = !string.IsNullOrEmpty(title) ? title : ExtractFileName(url)
+        };
+
+        if (!playlist.Any(p => p.Url == url))
+        {
+            playlist.Add(item);
+            StateHasChanged();
+        }
+    }
+
+    public void AddToPlaylistAndPlay(string url, string type = "audio/mpeg", string title = "")
+    {
+        var existingIndex = playlist.FindIndex(p => p.Url == url);
+
+        if (existingIndex >= 0)
+        {
+            _ = PlayTrack(existingIndex);
+        }
+        else
+        {
+            AddToPlaylist(url, type, title);
+            _ = PlayTrack(playlist.Count - 1);
+        }
+    }
+
+    public void AddMultipleToPlaylist(List<PlaylistItem> items)
+    {
+        foreach (var item in items)
+        {
+            if (!playlist.Any(p => p.Url == item.Url))
+            {
+                playlist.Add(new PlaylistItem
+                {
+                    Url = item.Url,
+                    Type = string.IsNullOrEmpty(item.Type) ? "audio/mpeg" : item.Type,
+                    Title = !string.IsNullOrEmpty(item.Title) ? item.Title : ExtractFileName(item.Url)
+                });
+            }
+        }
+        StateHasChanged();
+    }
+
+    public void AddMultipleToPlaylist(IEnumerable<(string url, string type, string title)> items)
+    {
+        foreach (var (url, type, title) in items)
+        {
+            if (!playlist.Any(p => p.Url == url))
+            {
+                playlist.Add(new PlaylistItem
+                {
+                    Url = url,
+                    Type = string.IsNullOrEmpty(type) ? "audio/mpeg" : type,
+                    Title = !string.IsNullOrEmpty(title) ? title : ExtractFileName(url)
+                });
+            }
+        }
+        StateHasChanged();
+    }
+
+    // Drag and drop handlers
+    private void OnDragStart(int index)
+    {
+        draggedIndex = index;
+        StateHasChanged();
+    }
+
+    private void OnDragOver(int index)
+    {
+        if (draggedIndex.HasValue && draggedIndex.Value != index)
+        {
+            dragOverIndex = index;
+            StateHasChanged();
+        }
+    }
+
+    private void OnDragLeave()
+    {
+        dragOverIndex = null;
+        StateHasChanged();
+    }
+
+    private void OnDrop(int targetIndex)
+    {
+        if (draggedIndex.HasValue && draggedIndex.Value != targetIndex)
+        {
+            var sourceIndex = draggedIndex.Value;
+            var item = playlist[sourceIndex];
+
+            // Remove from source
+            playlist.RemoveAt(sourceIndex);
+
+            // Adjust target index if needed
+            var adjustedTargetIndex = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
+
+            // Insert at target
+            playlist.Insert(adjustedTargetIndex, item);
+
+            // Update current track index
+            if (currentTrackIndex == sourceIndex)
+            {
+                currentTrackIndex = adjustedTargetIndex;
+            }
+            else if (sourceIndex < currentTrackIndex && adjustedTargetIndex >= currentTrackIndex)
+            {
+                currentTrackIndex--;
+            }
+            else if (sourceIndex > currentTrackIndex && adjustedTargetIndex <= currentTrackIndex)
+            {
+                currentTrackIndex++;
+            }
+        }
+
+        draggedIndex = null;
+        dragOverIndex = null;
+        StateHasChanged();
+    }
+
+    private void OnDragEnd()
+    {
+        draggedIndex = null;
+        dragOverIndex = null;
+        StateHasChanged();
+    }
+
+    private string ExtractFileName(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return "";
+        try
+        {
+            var uri = new Uri(url);
+            var path = uri.LocalPath;
+            return System.IO.Path.GetFileName(path);
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
+    private string GetDisplayTitle()
+    {
+        if (string.IsNullOrEmpty(audioTitle)) return "";
+        return audioTitle.Length > 50 ? audioTitle.Substring(0, 47) + "..." : audioTitle;
+    }
+
+    // ===== Artwork Extraction =====
+
+    private async Task ExtractArtwork(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return;
+
+        try
+        {
+            isLoadingArtwork = true;
+            var extractedArtwork = await JSRuntime.InvokeAsync<string?>("extractAndNotifyArtwork", url);
+            artworkUrl = extractedArtwork;
+            isLoadingArtwork = false;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch
+        {
+            artworkUrl = null;
+            isLoadingArtwork = false;
+        }
+    }
+
+    // ===== Media Session API Integration =====
+
+    private async Task InitializeMediaSession()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("initMediaSession", audioTitle, "TelegramFileManager", "Playlist", artworkUrl);
+        }
+        catch { }
+    }
+
+    private async Task UpdateMediaSessionMetadata()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("updateMediaSessionMetadata", audioTitle, "TelegramFileManager", "Playlist", artworkUrl);
+        }
+        catch { }
+    }
+
+    private async Task UpdateMediaSessionPlaybackState(string state)
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("updateMediaSessionPlaybackState", state);
+        }
+        catch { }
+    }
+
+    private async Task UpdateMediaSessionPosition(double duration, double position)
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("updateMediaSessionPositionState", duration, position, 1.0);
+        }
+        catch { }
+    }
+
+    // Media Session action handlers (called from MainLayout via JS)
+    public async Task ResumeFromMediaSession()
+    {
+        await JSRuntime.InvokeVoidAsync("resumeAudioPlayer");
+        isPlaying = true;
+        await UpdateMediaSessionPlaybackState("playing");
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public async Task PauseFromMediaSession()
+    {
+        await JSRuntime.InvokeVoidAsync("pauseAudioPlayer");
+        isPlaying = false;
+        await UpdateMediaSessionPlaybackState("paused");
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public async Task PlayPreviousFromMediaSession()
+    {
+        if (CanPlayPrevious)
+        {
+            await PlayTrack(currentTrackIndex - 1);
+        }
+    }
+
+    public async Task PlayNextFromMediaSession()
+    {
+        if (CanPlayNext)
+        {
+            await PlayTrack(currentTrackIndex + 1);
+        }
+    }
+
+    public async Task StopFromMediaSession()
+    {
+        await JSRuntime.InvokeVoidAsync("stopAudioPlayer");
+        isPlaying = false;
+        progressPercent = 0;
+        currentTimeDisplay = "0:00";
+        await UpdateMediaSessionPlaybackState("none");
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public async Task SeekRelativeFromMediaSession(double offsetSeconds)
+    {
+        try
+        {
+            var audioInfo = await JSRuntime.InvokeAsync<AudioInfo>("getAudioInfo");
+            if (audioInfo != null && audioInfo.Duration > 0)
+            {
+                var newTime = Math.Max(0, Math.Min(audioInfo.Duration, audioInfo.CurrentTime + offsetSeconds));
+                var percent = (newTime / audioInfo.Duration) * 100;
+                await JSRuntime.InvokeVoidAsync("seekAudioPlayer", percent);
+            }
+        }
+        catch { }
+    }
+
+    public async Task SeekToFromMediaSession(double positionSeconds)
+    {
+        try
+        {
+            var audioInfo = await JSRuntime.InvokeAsync<AudioInfo>("getAudioInfo");
+            if (audioInfo != null && audioInfo.Duration > 0)
+            {
+                var percent = (positionSeconds / audioInfo.Duration) * 100;
+                await JSRuntime.InvokeVoidAsync("seekAudioPlayer", percent);
+            }
+        }
+        catch { }
+    }
 }

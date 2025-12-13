@@ -5426,6 +5426,7 @@ textarea.form-control-lg {
   width: max-content;
   max-width: 100%;
   pointer-events: none;
+  z-index:200 !important;
 }
 .toast-container > :not(:last-child) {
   margin-bottom: 0.75rem;

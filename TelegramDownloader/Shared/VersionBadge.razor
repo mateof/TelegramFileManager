@@ -1,0 +1,88 @@
+@using TelegramDownloader.Models.GitHub
+@using TelegramDownloader.Services.GitHub
+@inject GHService GHService
+
+<div class="version-badge-container">
+    <button class="btn btn-link version-badge @(HasUpdate ? "has-update" : "")" @onclick="ToggleModal" title="Version info">
+        <i class="bi bi-info-circle-fill"></i>
+        @if (HasUpdate)
+        {
+            <span class="update-indicator"></span>
+        }
+    </button>
+</div>
+
+<style>
+    .version-badge-container {
+        position: relative;
+        display: inline-block;
+    }
+
+    .version-badge {
+        color: var(--bs-info);
+        font-size: 1.25rem;
+        padding: 0.25rem 0.5rem;
+        position: relative;
+    }
+
+    .version-badge:hover {
+        color: var(--bs-primary);
+    }
+
+    .version-badge.has-update {
+        color: var(--bs-warning);
+    }
+
+    .update-indicator {
+        position: absolute;
+        top: 2px;
+        right: 2px;
+        width: 10px;
+        height: 10px;
+        background-color: var(--bs-danger);
+        border-radius: 50%;
+        animation: pulse 2s infinite;
+    }
+
+    @@keyframes pulse {
+        0% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.2); opacity: 0.7; }
+        100% { transform: scale(1); opacity: 1; }
+    }
+</style>
+
+@code {
+    [Parameter]
+    public bool ShowModal { get; set; } = false;
+
+    [Parameter]
+    public EventCallback<bool> ShowModalChanged { get; set; }
+
+    public VersionInfo? VersionInfo { get; private set; }
+    private bool HasUpdate => VersionInfo?.HasNewRelease == true || VersionInfo?.HasNewDev == true;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            VersionInfo = await GHService.GetVersionInfo();
+            StateHasChanged();
+        }
+    }
+
+    private async Task ToggleModal()
+    {
+        if (VersionInfo == null)
+        {
+            VersionInfo = await GHService.GetVersionInfo(forceRefresh: true);
+        }
+        ShowModal = true;
+        await ShowModalChanged.InvokeAsync(ShowModal);
+    }
+
+    public async Task CloseModal()
+    {
+        ShowModal = false;
+        await ShowModalChanged.InvokeAsync(ShowModal);
+    }
+}

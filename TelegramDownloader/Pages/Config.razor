@@ -1,169 +1,508 @@
-﻿
 @page "/config"
 @using TelegramDownloader.Data
 @using TelegramDownloader.Data.db
 @using TelegramDownloader.Models
+@implements IDisposable
 
 @inject IDbService db
 @inject ToastService toastService
 
-<h3>Config</h3>
-@if(Model != null)
-{
-    <div class="card text-dark bg-light mb-2" style="max-width: 45rem;">
-        <div class="card-header">Configuration</div>
-        <div class="card-body">
-            <EditForm Model="Model" OnValidSubmit="Submit">
-                <AntiforgeryToken />
-                <div>
-                    <div class="input-group mb-3">
-                        <span class="input-group-text"><i class="bi bi-hourglass-split"></i></span>
-                        <div class="form-floating">
-                            <InputNumber type="number" @bind-Value="Model!.TimeSleepBetweenTransactions" class="form-control" id="TimeSleepBetweenTransactions" placeholder="Sleep Time (ms)" />
-                            <label for="TimeSleepBetweenTransactions">Sleep Time(ms)</label>
-                        </div>
-
-                    </div>
-                </div>
-
-                <div>
-                    <div class="input-group mb-3">
-                        <span class="input-group-text"><i class="bi bi-download"></i></span>
-                        <div class="form-floating">
-                            <NumberInput TValue="int" @bind-Value="Model!.MaxSimultaneousDownloads" Min="1" Max="3" EnableMinMax="true" class="form-control" id="MaxSimultaneousDownloads" placeholder="Sleep Time (ms)" />
-                            <label for="MaxSimultaneousDownloads">Max. Simultaneous Downloads</label>
-                        </div>
-
-                    </div>
-                </div>
-
-                <div>
-                    <div class="form-check form-switch">
-                        <InputCheckbox @bind-Value="Model!.CheckHash" class="form-check-input" type="checkbox" id="CheckHash" />
-                        <label class="form-check-label" for="ShouldShowNotifications">Check Hash</label>
-                    </div>
-
-
-                </div>
-
-                <div>
-                    <div class="form-check form-switch">
-                        <InputCheckbox @bind-Value="Model!.ShouldNotify" class="form-check-input" type="checkbox" id="ShouldShowNotifications" />
-                        <label class="form-check-label" for="ShouldShowNotifications">Show Notifications</label>
-                    </div>
-
-
-                </div>
-
-                <div>
-                    <div class="form-check form-switch">
-                        <InputCheckbox @bind-Value="Model!.ShouldShowPaginatedFileChannel" class="form-check-input" type="checkbox" id="ShouldShowPaginatedFileChannel" />
-                        <label class="form-check-label" for="ShouldShowPaginatedFileChannel">Show File Page channel</label>
-                    </div>
-
-
-                </div>
-
-                <div>
-                    <div class="form-check form-switch">
-                        <InputCheckbox @bind-Value="Model!.ShouldShowLogInTerminal" class="form-check-input" type="checkbox" id="ShouldShowLogInTerminal" />
-                        <label class="form-check-label" for="ShouldShowLogInTerminal">Show log in terminal</label>
-                    </div>
-                </div>
-
-                <div>
-                    <div class="form-check form-switch">
-                        <InputCheckbox @bind-Value="Model!.ShouldShowCaptionPath" class="form-check-input" type="checkbox" id="CheckHash" />
-                        <label class="form-check-label" for="ShouldShowCaptionPath">Show relative path in Telegram msg caption</label>
-                    </div>
-                </div>
-
-                <div>
-                    <div class="form-check form-switch">
-                        <InputCheckbox @bind-Value="Model!.hasFileManagerVirtualScroll" class="form-check-input" type="checkbox" id="hasFileManagerVirtualScroll" />
-                        <label class="form-check-label" for="hasFileManagerVirtualScroll">File manager virtual scroll</label>
-                    </div>
-                </div>
-
-                <div>
-                    <div class="form-check form-switch">
-                        <InputCheckbox @bind-Value="Model!.PreloadFilesOnStream" class="form-check-input" type="checkbox" id="PreloadFilesOnStream" />
-                        <label class="form-check-label" for="PreloadFilesOnStream">Preload Files on Stream</label>
-                    </div>
-                </div>
-
-                <div>
-                    <div class="input-group mb-3">
-                        <span class="input-group-text"><i class="bi bi-upload"></i></span>
-                        <div class="form-floating">
-                            <NumberInput TValue="int" @bind-Value="Model!.MaxImageUploadSizeInMb" Min="0" Max="10" EnableMinMax="true" class="form-control" id="MaxImageUploadSizeInMb" placeholder="Max. Image Size" />
-                            <label for="MaxImageUploadSizeInMb">Max. Image File Size (Mb) to send as Image (if 0, All images will be sent as a file)</label>
-                        </div>
-
-                    </div>
-                </div>
-
-                <div>
-                    <div class="input-group mb-3">
-                        <span class="input-group-text"><i class="bi bi-download"></i></span>
-                        <div class="form-floating">
-                            <NumberInput TValue="int" @bind-Value="Model!.MaxPreloadFileSizeInMb" Min="0" Max="10000" EnableMinMax="true" class="form-control" id="MaxPreloadFileSizeInMb" placeholder="Max. preload file size" />
-                            <label for="MaxPreloadFileSizeInMb">downloads the entire file when it weighs less than indicated (Mb)</label>
-                        </div>
-
-                    </div>
-                </div>
-
-                <div>
-                    <div class="d-flex flex-row mb-3">
-                        @if (TelegramService.isPremium)
-                        {
-                            <RangeInput TValue="int" Id="splitsize" @bind-Value="Model.SplitSize" Min="0" Max="4" />
-                        }
-                        else
-                        {
-                            <RangeInput TValue="int" @bind-Value="Model.SplitSize" Min="0" Max="2" />
-                        }
-                        <Badge Color="BadgeColor.Primary" Class="ms-2" VisuallyHiddenText="splitsize">@Model.SplitSize</Badge>
-
-                        <label class="form-check-label" for="splitsize">Split in GB</label>
-                    </div>
-
-
-                </div>
-                <div>
-                    <button class="btn btn-info" type="submit">Save</button>
-                </div>
-            </EditForm>
-        </div>
-    </div>
-    
-}
-
-@code {
-
-    // [SupplyParameterFromForm]
-    public GeneralConfig Model { get; set; }
-
-    protected override async Task OnInitializedAsync() {
-        // Model ??= new();
-        Model = null;
-        await loadModel();
-
+<style>
+    .config-page {
+        max-width: 900px;
+        margin: 0 auto;
+        padding: 1rem;
     }
 
-    private async Task loadModel()
+    .config-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1.5rem;
+        padding-bottom: 1rem;
+        border-bottom: 2px solid var(--bs-primary);
+    }
+
+    .config-header i {
+        font-size: 2rem;
+        color: var(--bs-primary);
+    }
+
+    .config-header h3 {
+        margin: 0;
+        font-weight: 600;
+    }
+
+    .config-section {
+        background: var(--bs-body-bg);
+        border: 1px solid var(--bs-border-color);
+        border-radius: 0.75rem;
+        margin-bottom: 1.25rem;
+        overflow: hidden;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    }
+
+    .config-section-header {
+        background: linear-gradient(135deg, var(--bs-primary) 0%, color-mix(in srgb, var(--bs-primary) 80%, black) 100%);
+        color: white;
+        padding: 0.875rem 1.25rem;
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+        font-weight: 500;
+    }
+
+    .config-section-header i {
+        font-size: 1.25rem;
+        opacity: 0.9;
+    }
+
+    .config-section-body {
+        padding: 1.25rem;
+    }
+
+    .config-item {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        padding: 1rem;
+        margin: -0.25rem -0.5rem;
+        border-radius: 0.5rem;
+        transition: background 0.2s ease;
+    }
+
+    .config-item:hover {
+        background: var(--bs-tertiary-bg);
+    }
+
+    .config-item + .config-item {
+        border-top: 1px solid var(--bs-border-color-translucent);
+        margin-top: 0.5rem;
+        padding-top: 1.25rem;
+    }
+
+    .config-item-info {
+        flex: 1;
+        padding-right: 1rem;
+    }
+
+    .config-item-label {
+        font-weight: 500;
+        color: var(--bs-body-color);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-bottom: 0.25rem;
+    }
+
+    .config-item-label i {
+        color: var(--bs-primary);
+        font-size: 1rem;
+    }
+
+    .config-item-description {
+        font-size: 0.825rem;
+        color: var(--bs-secondary-color);
+        line-height: 1.4;
+    }
+
+    .config-item-control {
+        flex-shrink: 0;
+    }
+
+    .config-switch {
+        transform: scale(1.2);
+    }
+
+    .config-input-group {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .config-input-group .form-control,
+    .config-input-group .form-select {
+        width: auto;
+        min-width: 100px;
+    }
+
+    .config-range-group {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .config-range-value {
+        min-width: 40px;
+        text-align: center;
+        font-weight: 600;
+        color: var(--bs-primary);
+    }
+
+    .config-save-section {
+        position: sticky;
+        bottom: 1rem;
+        background: var(--bs-body-bg);
+        border: 1px solid var(--bs-border-color);
+        border-radius: 0.75rem;
+        padding: 1rem 1.25rem;
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+        box-shadow: 0 -4px 12px rgba(0,0,0,0.1);
+    }
+
+    .config-save-btn {
+        padding: 0.625rem 2rem;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .config-loading {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 300px;
+    }
+
+    @@media (max-width: 576px) {
+        .config-item {
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .config-item-info {
+            padding-right: 0;
+        }
+
+        .config-item-control {
+            align-self: flex-start;
+        }
+    }
+</style>
+
+<div class="config-page">
+    <div class="config-header">
+        <i class="bi bi-gear-fill"></i>
+        <h3>Configuration</h3>
+    </div>
+
+    @if (Model == null)
+    {
+        <div class="config-loading">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+        </div>
+    }
+    else
+    {
+        <EditForm Model="Model" OnValidSubmit="Submit">
+            <AntiforgeryToken />
+
+            <!-- Downloads Section -->
+            <div class="config-section">
+                <div class="config-section-header">
+                    <i class="bi bi-cloud-arrow-down"></i>
+                    <span>Downloads</span>
+                </div>
+                <div class="config-section-body">
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-speedometer2"></i>
+                                Max. Simultaneous Downloads
+                            </div>
+                            <div class="config-item-description">
+                                Number of files that can be downloaded at the same time (1-3)
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <NumberInput TValue="int" @bind-Value="Model!.MaxSimultaneousDownloads" Min="1" Max="3" EnableMinMax="true" class="form-control" style="width: 80px;" />
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-file-earmark-arrow-down"></i>
+                                Max. Preload File Size
+                            </div>
+                            <div class="config-item-description">
+                                Downloads entire file when smaller than this size (MB). Improves playback for small files.
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <div class="config-input-group">
+                                <NumberInput TValue="int" @bind-Value="Model!.MaxPreloadFileSizeInMb" Min="0" Max="10000" EnableMinMax="true" class="form-control" style="width: 100px;" />
+                                <span class="text-muted">MB</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-lightning"></i>
+                                Preload Files on Stream
+                            </div>
+                            <div class="config-item-description">
+                                Automatically preload files to cache when streaming
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputCheckbox @bind-Value="Model!.PreloadFilesOnStream" class="form-check-input config-switch" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Uploads Section -->
+            <div class="config-section">
+                <div class="config-section-header">
+                    <i class="bi bi-cloud-arrow-up"></i>
+                    <span>Uploads</span>
+                </div>
+                <div class="config-section-body">
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-image"></i>
+                                Max. Image Upload Size
+                            </div>
+                            <div class="config-item-description">
+                                Images larger than this will be sent as files instead of compressed images. Set to 0 to always send as file.
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <div class="config-input-group">
+                                <NumberInput TValue="int" @bind-Value="Model!.MaxImageUploadSizeInMb" Min="0" Max="10" EnableMinMax="true" class="form-control" style="width: 80px;" />
+                                <span class="text-muted">MB</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-scissors"></i>
+                                Split Large Files
+                            </div>
+                            <div class="config-item-description">
+                                Split files larger than this size into multiple parts. Set to 0 to disable.
+                                @if (TelegramService.isPremium)
+                                {
+                                    <span class="badge bg-warning text-dark ms-2">Premium: up to 4GB</span>
+                                }
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <div class="config-range-group">
+                                @if (TelegramService.isPremium)
+                                {
+                                    <RangeInput TValue="int" @bind-Value="Model.SplitSize" Min="0" Max="4" style="width: 120px;" />
+                                }
+                                else
+                                {
+                                    <RangeInput TValue="int" @bind-Value="Model.SplitSize" Min="0" Max="2" style="width: 120px;" />
+                                }
+                                <span class="config-range-value">@Model.SplitSize GB</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-chat-square-text"></i>
+                                Show Path in Caption
+                            </div>
+                            <div class="config-item-description">
+                                Include the relative file path in Telegram message captions
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputCheckbox @bind-Value="Model!.ShouldShowCaptionPath" class="form-check-input config-switch" />
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-hash"></i>
+                                Verify File Hash
+                            </div>
+                            <div class="config-item-description">
+                                Check file integrity after upload/download using hash verification
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputCheckbox @bind-Value="Model!.CheckHash" class="form-check-input config-switch" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- File Manager Section -->
+            <div class="config-section">
+                <div class="config-section-header">
+                    <i class="bi bi-folder2-open"></i>
+                    <span>File Manager</span>
+                </div>
+                <div class="config-section-body">
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-phone"></i>
+                                Use Mobile File Manager
+                            </div>
+                            <div class="config-item-description">
+                                Always use the mobile-optimized file manager interface, even on desktop
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputCheckbox @bind-Value="Model!.UseMobileFileManagerAlways" class="form-check-input config-switch" />
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-arrow-down-up"></i>
+                                Virtual Scroll
+                            </div>
+                            <div class="config-item-description">
+                                Enable virtual scrolling for better performance with large file lists
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputCheckbox @bind-Value="Model!.hasFileManagerVirtualScroll" class="form-check-input config-switch" />
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-files"></i>
+                                Paginated File View
+                            </div>
+                            <div class="config-item-description">
+                                Show files in paginated view instead of loading all at once
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputCheckbox @bind-Value="Model!.ShouldShowPaginatedFileChannel" class="form-check-input config-switch" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Interface Section -->
+            <div class="config-section">
+                <div class="config-section-header">
+                    <i class="bi bi-palette"></i>
+                    <span>Interface</span>
+                </div>
+                <div class="config-section-body">
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-bell"></i>
+                                Show Notifications
+                            </div>
+                            <div class="config-item-description">
+                                Display system notifications for completed operations
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputCheckbox @bind-Value="Model!.ShouldNotify" class="form-check-input config-switch" />
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-terminal"></i>
+                                Show Logs in Terminal
+                            </div>
+                            <div class="config-item-description">
+                                Output detailed logs to the terminal/console for debugging
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputCheckbox @bind-Value="Model!.ShouldShowLogInTerminal" class="form-check-input config-switch" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Advanced Section -->
+            <div class="config-section">
+                <div class="config-section-header">
+                    <i class="bi bi-sliders"></i>
+                    <span>Advanced</span>
+                </div>
+                <div class="config-section-body">
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-hourglass-split"></i>
+                                Transaction Delay
+                            </div>
+                            <div class="config-item-description">
+                                Delay between API transactions to avoid rate limiting (milliseconds)
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <div class="config-input-group">
+                                <InputNumber @bind-Value="Model!.TimeSleepBetweenTransactions" class="form-control" style="width: 100px;" />
+                                <span class="text-muted">ms</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Save Button -->
+            <div class="config-save-section">
+                <button class="btn btn-primary config-save-btn" type="submit">
+                    <i class="bi bi-check-lg"></i>
+                    Save Configuration
+                </button>
+            </div>
+        </EditForm>
+    }
+</div>
+
+@code {
+    public GeneralConfig Model { get; set; }
+    private bool _disposed = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Model = null;
+        await LoadModelAsync();
+    }
+
+    private async Task LoadModelAsync()
     {
         Model ??= await GeneralConfigStatic.Load(db);
-        await InvokeAsync(StateHasChanged);
+        if (!_disposed)
+        {
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private async Task Submit()
     {
         await GeneralConfigStatic.SaveChanges(db, Model);
-        toastService.Notify(new(ToastType.Success, $"The configuration has been saved") { Title = "Success", AutoHide = true });
-        //Logger.LogInformation("Id = {Id}", Model?.Id);
-        // Console.WriteLine(Model.TimeSleepBetweenTransactions);
-        // Console.WriteLine(Model.ShouldShowLogInTerminal);
+        toastService.Notify(new(ToastType.Success, "Configuration saved successfully") { Title = "Success", AutoHide = true });
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
     }
 }

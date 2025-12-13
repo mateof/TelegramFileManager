@@ -557,6 +557,52 @@ namespace TelegramDownloader.Data
 
         }
 
+        public async Task<FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>> CopyOrMoveItems(string dbName, Syncfusion.Blazor.FileManager.FileManagerDirectoryContent[] files, string targetPath, Syncfusion.Blazor.FileManager.FileManagerDirectoryContent targetData, bool isCopy)
+        {
+            try
+            {
+                FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> fm = new FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>();
+                var lista = new List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>();
+                foreach (var item in files)
+                {
+                    if (!item.IsFile)
+                    {
+                        var result = await copyAllDirectoryFiles(dbName, item.Id, targetData, targetPath + item.Name + "/");
+                        lista.Add(result.toFileManagerContentInCopy());
+                        if (!isCopy)
+                        {
+                            await _db.deleteEntry(dbName, item.Id);
+                        }
+                    }
+                    else
+                    {
+                        var result = await _db.copyItem(dbName, item.Id, targetData, targetPath, item.IsFile);
+                        lista.Add(result.toFileManagerContentInCopy());
+                        if (!isCopy)
+                        {
+                            await _db.deleteEntry(dbName, item.Id);
+                        }
+                    }
+                    await _db.addBytesToFolder(dbName, item.ParentId, item.Size);
+                }
+                fm.Files = lista;
+                return fm;
+            }
+            catch (Exception e)
+            {
+                _logger.LogError(e, "Error on CopyOrMoveItems");
+                if (e is MongoWriteException ex)
+                {
+                    if (ex.WriteError.Category == ServerErrorCategory.DuplicateKey)
+                    {
+                        NotificationModel nm = new NotificationModel();
+                        nm.sendEvent(new Notification("The file exist in the directory", "Duplicate", NotificationTypes.Error));
+                    }
+                }
+                throw e;
+            }
+        }
+
         private async Task<BsonFileManagerModel> copyAllDirectoryFiles(string dbName, string idfolder, Syncfusion.Blazor.FileManager.FileManagerDirectoryContent target, string targetPath, bool isCopy = true)
         {
             var result = await _db.copyItem(dbName, idfolder, target, targetPath, false);
@@ -1027,6 +1073,11 @@ namespace TelegramDownloader.Data
             return (await _db.createEntry(dbName, await _db.toBasonFile(args.Path, args.FolderName, args.ParentFolder))).Select(x => x.toFileManagerContent()).ToList();
         }
 
+        public async Task<List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>> createFolder(string dbName, string path, string folderName, Syncfusion.Blazor.FileManager.FileManagerDirectoryContent? parentFolder)
+        {
+            return (await _db.createEntry(dbName, await _db.toBasonFile(path, folderName, parentFolder))).Select(x => x.toFileManagerContent()).ToList();
+        }
+
         public async Task CreateDatabase(string id)
         {
             if (_ts.checkChannelExist(id))
@@ -1444,10 +1495,11 @@ namespace TelegramDownloader.Data
                     // if file or folder does not exist, it will be created
                     if ((await _db.getFileByPath(dbName, System.IO.Path.Combine(currentPath, file.Name))) == null)
                         await _db.createEntry(dbName, model);
+                    if (!parent.HasChild)
+                        await _db.setDirectoryHasChild(dbName, parent.Id);
                     if (file.IsFile)
                     {
                         await _db.addBytesToFolder(dbName, model.ParentId, model.Size);
-                        await _db.setDirectoryHasChild(dbName, parent.Id);
                         if (idt != null) idt.AddOne(file.Size);
                     }
                     else
@@ -1535,6 +1587,7 @@ namespace TelegramDownloader.Data
 
         public async Task refreshChannelFIles(string channelId, bool force = false)
         {
+            int totalNewMessages = 0;
             refreshMutex.WaitOne();
             refreshChannelList.Add(channelId);
             refreshMutex.ReleaseMutex();
@@ -1590,12 +1643,13 @@ namespace TelegramDownloader.Data
                     model.isSplit = false;
                     model.isEncrypted = false;
                     await _db.createEntry(channelId, model);
+                    totalNewMessages++;
                 }
             }
             refreshMutex.WaitOne();
             refreshChannelList.Remove(channelId);
             refreshMutex.ReleaseMutex();
-            _logger.LogInformation($"Finish Refresh channel with id: {channelId}");
+            _logger.LogInformation($"Finish Refresh channel with id: {channelId} with {totalNewMessages} new files added.");
 
             // Fix for CS1739: Removed the invalid 'autoHide' parameter and replaced it with the correct property assignment.
             ToastMessage tm = new ToastMessage
@@ -1603,8 +1657,9 @@ namespace TelegramDownloader.Data
                 Type = ToastType.Success,
                 IconName = IconName.CheckCircle,
                 Title = "Refresh channel files",
-                Message = "Files channel has been refreshed",
+                Message = $"Files channel has been refreshed with {totalNewMessages} new files added.",
                 AutoHide = true
+                
             };
             _toastService.Notify(tm);
         }
@@ -1769,6 +1824,13 @@ namespace TelegramDownloader.Data
             return result;
         }
 
+        public async Task<List<BsonFileManagerModel>> getTelegramFoldersByParentId(string dbName, string? parentId)
+        {
+            var result = await _db.getFoldersByParentId(dbName, parentId);
+
+            return result;
+        }
+
         private async Task<List<FolderModel>> getTelegramSubfolders(string id, List<BsonFileManagerModel> listFolders, string prevPath)
         {
             List<FolderModel> node = new List<FolderModel>();
@@ -1841,9 +1903,20 @@ namespace TelegramDownloader.Data
                 var childItem = fileDetails.Count > 0 && fileDetails[0] != null ? fileDetails[0] : Data
                 .Where(x => x.FilePath + "/" == path).First().toFileManagerContent();
                 response.CWD = childItem;
-                response.Files = Data
-                    .Where(x => x.ParentId == childItem.Id).Select(x => x.toFileManagerContent()).ToList();
 
+                // First try to find children in the query result (by ParentId)
+                var files = Data.Where(x => x.ParentId == childItem.Id).ToList();
+
+                // If no children found in query result, do a separate query by ParentId
+                // This handles the case where children's FilterPath format doesn't match the query path
+                if (files.Count == 0 && !string.IsNullOrEmpty(childItem.Id))
+                {
+                    files = collectionName == null
+                        ? await _db.getFilesByParentId(dbName, childItem.Id)
+                        : await _db.getFilesByParentId(dbName, childItem.Id, collectionName);
+                }
+
+                response.Files = files.Select(x => x.toFileManagerContent()).ToList();
             }
             await Task.Yield();
             return response;
@@ -1979,6 +2052,11 @@ namespace TelegramDownloader.Data
                     }
                 }
             _logger.LogInformation("File merge completed - DestName: {DestName}", destName);
+        }
+
+        public virtual Task<int> PreloadFilesToTemp(string channelId, List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> items)
+        {
+            throw new NotImplementedException("PreloadFilesToTemp is implemented in FileServiceV2");
         }
     }
 }

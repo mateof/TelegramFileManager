@@ -10,8 +10,7 @@
 @inject NavigationManager NavManager
 @inject IJSRuntime JS
 @inject ModalService ModalService
-@inject GHService ghService;
-@inject TransactionInfoService tis;
+@inject TransactionInfoService tis
 
 <PageTitle>TelegramFileManager</PageTitle>
 
@@ -24,19 +23,7 @@
         display: none;
     }
 
-    /* Sidebar toggle button */
-    .sidebar-toggle {
-        padding: 0.25rem 0.5rem;
-        font-size: 1.25rem;
-        color: #333;
-        text-decoration: none;
-        border: none;
-        background: transparent;
-    }
-
-    .sidebar-toggle:hover {
-        color: #007bff;
-    }
+    /* Sidebar toggle button - styles moved to MainLayout.razor.css */
 
     /* Sidebar collapsed state - desktop only */
     @@media (min-width: 2048px) {
@@ -86,69 +73,88 @@
     </div>
 
     <main>
-        <div class="top-row px-4 d-flex justify-content-end">
-            <button class="btn btn-link sidebar-toggle me-auto" @onclick="ToggleSidebar">
+        <div class="top-row px-3">
+            <button class="sidebar-toggle" @onclick="ToggleSidebar" title="@(sidebarCollapsed ? "Show sidebar" : "Hide sidebar")">
                 <i class="bi @(sidebarCollapsed ? "bi-list" : "bi-x-lg")"></i>
             </button>
-            @if(active) {
-                @if (tis.isUploading())
-                {
-                    <button class="btn water-fill-button upload @(GetUploadProgress() > 50 ? "filled-high" : "")"
-                            @onclick='() => Navigateto("/downloads")'>
-                        <span class="water-fill" style="height: @(GetUploadProgress())%;"></span>
-                        <span class="water-wave" style="height: @(GetUploadProgress())%;"></span>
-                        <span class="btn-content">
-                            <Icon Class="arrow" Name="IconName.ArrowUp"></Icon>
-                            <span>@tis.uploadSpeed</span>
-                        </span>
+
+            <div class="flex-grow-1"></div>
+
+            <div class="top-row-actions">
+                @if(active) {
+                    @if (tis.isUploading())
+                    {
+                        <button class="btn water-fill-button upload @(GetUploadProgress() > 50 ? "filled-high" : "")"
+                                @onclick='() => Navigateto("/downloads?tab=uploads")' title="Upload in progress">
+                            <span class="water-fill" style="height: @(GetUploadProgress())%;"></span>
+                            <span class="water-wave" style="height: @(GetUploadProgress())%;"></span>
+                            <span class="btn-content">
+                                <Icon Class="arrow" Name="IconName.ArrowUp"></Icon>
+                                <span>@tis.uploadSpeed</span>
+                            </span>
+                        </button>
+                    }
+                    @if(tis.isDownloading()) {
+                        <button class="btn water-fill-button download @(GetDownloadProgress() > 50 ? "filled-high" : "")"
+                                @onclick='() => Navigateto("/downloads?tab=downloads")' title="Download in progress">
+                            <span class="water-fill" style="height: @(GetDownloadProgress())%;"></span>
+                            <span class="water-wave" style="height: @(GetDownloadProgress())%;"></span>
+                            <span class="btn-content">
+                                <Icon Class="arrow" Name="IconName.ArrowDown"></Icon>
+                                <span>@tis.downloadSpeed</span>
+                            </span>
+                        </button>
+                    }
+                    <button class="status-indicator" @onclick='() => Navigateto("/downloads?tab=tasks")' title="View tasks">
+                        <Spinner Type="SpinnerType.Border" />
                     </button>
                 }
-                @if(tis.isDownloading()) {
-                    <button class="btn water-fill-button download @(GetDownloadProgress() > 50 ? "filled-high" : "")"
-                            @onclick='() => Navigateto("/downloads")'>
-                        <span class="water-fill" style="height: @(GetDownloadProgress())%;"></span>
-                        <span class="water-wave" style="height: @(GetDownloadProgress())%;"></span>
-                        <span class="btn-content">
-                            <Icon Class="arrow" Name="IconName.ArrowDown"></Icon>
-                            <span>@tis.downloadSpeed</span>
-                        </span>
-                    </button>
-                }
-                <Button Color="ButtonColor.None" Size="ButtonSize.Small" @onclick='() => Navigateto("/downloads")'>
-                    <Spinner Type="SpinnerType.Border" />
-                </Button>
-            }
-            <Button Color="ButtonColor.None" Size="ButtonSize.Small" @onclick="() => ShowModalVersion(ModalType.Info)">
-                <Icon Name="IconName.InfoCircleFill" Size="IconSize.x2" Color="IconColor.Info" />
-            </Button>
-            <button class="btn" type="button" @onclick="openOffCanvasMenu"><i class="bi bi-three-dots"></i></button>
+                <VersionBadge @ref="versionBadge" @bind-ShowModal="showVersionModal" />
+                <button class="menu-btn" type="button" @onclick="openOffCanvasMenu" title="Menu">
+                    <i class="bi bi-three-dots-vertical"></i>
+                </button>
+            </div>
         </div>
         <TelegramDownloader.Pages.Modals.ToastNotify></TelegramDownloader.Pages.Modals.ToastNotify>
 
         <article class="content px-4">
-            <div id="modalFileUploadVue">
-                <TelegramDownloader.Pages.Modals.FileUploadModalTemplate></TelegramDownloader.Pages.Modals.FileUploadModalTemplate>
-                <TelegramDownloader.Pages.Modals.AudioPlayerModal></TelegramDownloader.Pages.Modals.AudioPlayerModal>
-            </div>
             @Body
         </article>
 
-        <Offcanvas @ref="offcanvas"
-        title="Menu">
+        <TelegramDownloader.Pages.Modals.AudioPlayerModal @ref="audioPlayer" />
+
+        <Offcanvas @ref="offcanvas" title="Menu">
             <BodyTemplate>
-                <div class="list-group list-group-flush">
-                    <button @onclick=' () => Navigateto("/config")' class="list-group-item list-group-item-action"><i class="bi bi-gear"></i> Configuration</button>
-                    <button @onclick=' () => Navigateto("/webdavinfo")' class="list-group-item list-group-item-action">
-                        <i class="bi bi-files-alt"></i> WebDav
-                        <span class="position-absolute top-50 start-50 translate-middle badge rounded-pill bg-danger">
-                            Beta
-                            <span class="visually-hidden">Beta function</span>
-                        </span>
-                    </button>
-                    <button @onclick=' () => Navigateto("/downloads")' class="list-group-item list-group-item-action"><i class="bi bi-cloud-download"></i> Tasks</button>
-                    <button @onclick=' () => Navigateto("/loglist")' class="list-group-item list-group-item-action"><i class="bi bi-file-earmark-text"></i> Logs</button>
-                    <a href="#" @onclick=" () => Logout()" class="list-group-item list-group-item-action list-group-item-warning"><i class="bi bi-box-arrow-right"></i> LogOut</a>
-                </div>
+                <div class="offcanvas-section-title">Navigation</div>
+
+                <button @onclick='() => NavigateAndClose("/config")' class="offcanvas-menu-item">
+                    <i class="bi bi-gear-fill"></i>
+                    <span class="menu-text">Configuration</span>
+                </button>
+
+                <button @onclick='() => NavigateAndClose("/webdavinfo")' class="offcanvas-menu-item">
+                    <i class="bi bi-hdd-network-fill"></i>
+                    <span class="menu-text">WebDav</span>
+                    <span class="menu-badge">Beta</span>
+                </button>
+
+                <button @onclick='() => NavigateAndClose("/downloads")' class="offcanvas-menu-item">
+                    <i class="bi bi-cloud-arrow-down-fill"></i>
+                    <span class="menu-text">Tasks</span>
+                </button>
+
+                <button @onclick='() => NavigateAndClose("/loglist")' class="offcanvas-menu-item">
+                    <i class="bi bi-journal-text"></i>
+                    <span class="menu-text">Logs</span>
+                </button>
+
+                <div class="offcanvas-divider"></div>
+                <div class="offcanvas-section-title">Account</div>
+
+                <button @onclick="LogoutAndClose" class="offcanvas-menu-item danger">
+                    <i class="bi bi-box-arrow-right"></i>
+                    <span class="menu-text">Log Out</span>
+                </button>
             </BodyTemplate>
         </Offcanvas>
         <TelegramDownloader.Pages.Modals.ImportDataModal isShared=true @ref="ImportModal" OnCloseCallback="reloadMenu"></TelegramDownloader.Pages.Modals.ImportDataModal>
@@ -158,16 +164,220 @@
     </main>
 </div>
 
+@* Vue Upload Modal - rendered outside .page to avoid stacking context issues *@
+<div id="modalFileUploadVue">
+    <TelegramDownloader.Pages.Modals.FileUploadModalTemplate></TelegramDownloader.Pages.Modals.FileUploadModalTemplate>
+</div>
+
+@* Version Modal - rendered outside .page to avoid stacking context issues *@
+@if (showVersionModal)
+{
+    <div class="version-portal">
+        <div class="version-backdrop" @onclick="CloseVersionModal"></div>
+        <div class="version-dialog">
+            <div class="version-dialog-header">
+                <h5>Version Information</h5>
+                <button type="button" class="btn-close" @onclick="CloseVersionModal"></button>
+            </div>
+            <div class="version-dialog-body">
+                @if (versionBadge?.VersionInfo != null)
+                {
+                    var info = versionBadge.VersionInfo;
+                    <div class="version-current">
+                        <div class="version-label">Current Version</div>
+                        <div class="version-value">
+                            @if (info.IsDockerVersion)
+                            {
+                                <span class="badge bg-secondary me-2">Docker</span>
+                            }
+                            else if (info.IsDevVersion)
+                            {
+                                <span class="badge bg-warning text-dark me-2">Dev</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-success me-2">Release</span>
+                            }
+                            <code>@info.CurrentVersion</code>
+                        </div>
+                    </div>
+
+                    @if (info.LatestRelease != null)
+                    {
+                        <div class="version-section @(info.HasNewRelease ? "has-update" : "")">
+                            <div class="version-label">
+                                Latest Release
+                                @if (info.HasNewRelease)
+                                {
+                                    <span class="badge bg-primary ms-2">New!</span>
+                                }
+                            </div>
+                            <div class="version-value">
+                                <code>@info.LatestRelease.tag_name</code>
+                                <small class="text-muted ms-2">@info.LatestRelease.published_at.ToString("yyyy-MM-dd")</small>
+                            </div>
+                            @if (info.HasNewRelease)
+                            {
+                                <a href="@info.LatestRelease.html_url" target="_blank" class="btn btn-sm btn-outline-primary mt-2">
+                                    <i class="bi bi-box-arrow-up-right"></i> View Release
+                                </a>
+                            }
+                        </div>
+                    }
+
+                    @if (info.LatestDev != null)
+                    {
+                        <div class="version-section @(info.HasNewDev ? "has-update" : "")">
+                            <div class="version-label">
+                                Latest Dev
+                                @if (info.HasNewDev)
+                                {
+                                    <span class="badge bg-warning text-dark ms-2">New!</span>
+                                }
+                            </div>
+                            <div class="version-value">
+                                <code>@info.LatestDev.tag_name</code>
+                                <small class="text-muted ms-2">@info.LatestDev.published_at.ToString("yyyy-MM-dd")</small>
+                            </div>
+                            @if (info.HasNewDev && info.IsDevVersion)
+                            {
+                                <a href="@info.LatestDev.html_url" target="_blank" class="btn btn-sm btn-outline-warning mt-2">
+                                    <i class="bi bi-box-arrow-up-right"></i> View Dev Release
+                                </a>
+                            }
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="text-center py-3">
+                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                        <span class="ms-2">Loading version info...</span>
+                    </div>
+                }
+            </div>
+            <div class="version-dialog-footer">
+                <a href="https://github.com/mateof/TelegramFileManager/releases" target="_blank" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-github"></i> All Releases
+                </a>
+                <button class="btn btn-sm btn-secondary" @onclick="CloseVersionModal">Close</button>
+            </div>
+        </div>
+    </div>
+}
 
 @code {
 
     private Offcanvas offcanvas = default!;
     private Pages.Modals.ImportDataModal ImportModal { get; set; }
-    private GithubVersionModel LastVersion { get; set; }
+    private Pages.Modals.AudioPlayerModal audioPlayer { get; set; } = default!;
     private NavMenu menu { get; set; }
+    private VersionBadge versionBadge { get; set; }
     private bool active { get; set; } = true;
     private bool sidebarCollapsed { get; set; } = false;
     private bool navMenuCollapsed { get; set; } = true;
+    private bool showVersionModal { get; set; } = false;
+    private static MainLayout? _instance;
+    private bool _disposed = false;
+
+    protected override void OnInitialized()
+    {
+        _instance = this;
+    }
+
+    [JSInvokable]
+    public static async Task OpenAudioPlayer(string url, string type, string title)
+    {
+        if (_instance?.audioPlayer != null)
+        {
+            await _instance.audioPlayer.ShowModal(url, type, title);
+        }
+    }
+
+    [JSInvokable]
+    public static async Task OpenAudioPlayerCurrent()
+    {
+        if (_instance?.audioPlayer != null)
+        {
+            await _instance.audioPlayer.ShowCurrentModal();
+        }
+    }
+
+    [JSInvokable]
+    public static void AddToAudioPlaylist(string url, string type, string title)
+    {
+        _instance?.audioPlayer?.AddToPlaylist(url, type, title);
+    }
+
+    [JSInvokable]
+    public static void AddToAudioPlaylistAndPlay(string url, string type, string title)
+    {
+        _instance?.audioPlayer?.AddToPlaylistAndPlay(url, type, title);
+    }
+
+    [JSInvokable]
+    public static void AddMultipleToAudioPlaylist(PlaylistItemDto[] items)
+    {
+        if (_instance?.audioPlayer != null && items != null)
+        {
+            var playlistItems = items.Select(i => (i.url, i.type ?? "audio/mpeg", i.title ?? "")).ToList();
+            _instance.audioPlayer.AddMultipleToPlaylist(playlistItems);
+        }
+    }
+
+    public class PlaylistItemDto
+    {
+        public string url { get; set; } = string.Empty;
+        public string? type { get; set; }
+        public string? title { get; set; }
+    }
+
+    // Media Session API callbacks
+    [JSInvokable]
+    public static async Task MediaSessionAction(string action)
+    {
+        if (_instance?.audioPlayer == null) return;
+
+        switch (action)
+        {
+            case "play":
+                await _instance.audioPlayer.ResumeFromMediaSession();
+                break;
+            case "pause":
+                await _instance.audioPlayer.PauseFromMediaSession();
+                break;
+            case "previoustrack":
+                await _instance.audioPlayer.PlayPreviousFromMediaSession();
+                break;
+            case "nexttrack":
+                await _instance.audioPlayer.PlayNextFromMediaSession();
+                break;
+            case "stop":
+                await _instance.audioPlayer.StopFromMediaSession();
+                break;
+        }
+    }
+
+    [JSInvokable]
+    public static async Task MediaSessionSeek(double offsetSeconds)
+    {
+        if (_instance?.audioPlayer != null)
+        {
+            await _instance.audioPlayer.SeekRelativeFromMediaSession(offsetSeconds);
+        }
+    }
+
+    [JSInvokable]
+    public static async Task MediaSessionSeekTo(double positionSeconds)
+    {
+        if (_instance?.audioPlayer != null)
+        {
+            await _instance.audioPlayer.SeekToFromMediaSession(positionSeconds);
+        }
+    }
+
+    // Método público para acceder al reproductor desde otros componentes
+    public static Pages.Modals.AudioPlayerModal? GetAudioPlayer() => _instance?.audioPlayer;
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -176,7 +386,6 @@
             try
             {
                 if (!ts.checkUserLogin()) NavManager.NavigateTo("/", true);
-                LastVersion = await ghService.GetLastVersion();
             }
             catch (Exception e)
             {
@@ -194,20 +403,6 @@
     private async Task reloadMenu()
     {
         menu.RefreshChannels();
-    }
-
-
-    private async Task ShowModalVersion(ModalType modalType)
-    {
-        var modalOption = new ModalOption
-            {
-                Title = "Versión",
-                Message = GetType().Assembly.GetName().Version.ToString() == "0.0.0.0" ? "You have a docker version" : $@"Your versión is v{GetType().Assembly.GetName().Version.ToString()}
-[[Last version is {(LastVersion != null ? LastVersion.tag_name : "")}]]",
-                Type = modalType,
-            };
-
-        await ModalService.ShowAsync(modalOption);
     }
 
     private async Task openOffCanvasMenu()
@@ -238,6 +433,11 @@
         NavManager.NavigateTo(relativeUri);
     }
 
+    private async Task NavigateAndClose(string relativeUri)
+    {
+        await offcanvas.HideAsync();
+        NavManager.NavigateTo(relativeUri);
+    }
 
     private async void Logout()
     {
@@ -246,7 +446,15 @@
         StateHasChanged();
     }
 
+    private async Task LogoutAndClose()
+    {
+        await offcanvas.HideAsync();
+        await ts.logOff();
+        NavManager.NavigateTo("/");
+    }
+
     private async Task checkWorkingTasks() {
+        if (_disposed) return;
         active = tis.isWorking();
         await InvokeAsync(StateHasChanged);
     }
@@ -279,8 +487,18 @@
         StateHasChanged();
     }
 
+    private async Task CloseVersionModal()
+    {
+        showVersionModal = false;
+        if (versionBadge != null)
+        {
+            await versionBadge.CloseModal();
+        }
+    }
+
     public void Dispose()
     {
+        _disposed = true;
         tis.TaskEventChanged -= eventChangedWorkingTasks;
     }
 }

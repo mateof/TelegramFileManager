@@ -1,4 +1,4 @@
-﻿@using System.Web
+@using System.Web
 @using Microsoft.AspNetCore.Mvc
 @using Syncfusion.Blazor.Inputs
 @using System.Net.Mime
@@ -10,40 +10,95 @@
 @using TelegramDownloader.Pages.Modals
 @using TelegramDownloader.Pages.Partials
 @using TelegramDownloader.Services
+@using TelegramDownloader.Shared.MobileFileManager
 @inject IFileService fs
 @inject ITelegramService ts
 @inject ILogger<FileManager> Logger
 @inject IJSRuntime JSRuntime;
 @inject NavigationManager MyNavigationManager;
 
+@* Loading while detecting viewport *@
+@if (!_viewportDetected)
+{
+    <div style="display: flex; justify-content: center; align-items: center; height: 200px;">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
 
-<SfFileManager ID="remotefm" @ref="fm" TValue="FileManagerDirectoryContent"
-    ShowThumbnail="false"
-    SelectedItemsChanged="itemsChanged"
-    AllowDragAndDrop="false"
-    EnablePersistence="false"
-    EnableVirtualization="@hasVirtualScroll">
+@* Desktop FileManager - only render when viewport detected and not on mobile *@
+@if (_viewportDetected && !_isMobileView)
+{
+    <SfFileManager ID="remotefm" @ref="fm" TValue="FileManagerDirectoryContent"
+        ShowThumbnail="false"
+        SelectedItemsChanged="itemsChanged"
+        AllowDragAndDrop="false"
+        EnablePersistence="false"
+        EnableVirtualization="@hasVirtualScroll">
 
 
-    <FileManagerEvents TValue="FileManagerDirectoryContent"
-    ToolbarItemClicked="toolBarClicked"
-    ItemsMoving="ItemsMovingAsync"
-    ItemRenaming="ItemRenamingAsync"
-    Searching="SearchingAsync"
-    OnFileOpen="fileOpen"
-    FileSelection="FileSelectionAsync"
-    FileSelected="FileSelectedAsync"
-    OnRead="OnReadAsync"
-    FolderCreating="FolderCreatingAsync"
-    BeforeDownload="BeforeDownload"
-    ItemsDeleting="ItemsDeletingAsync"
-    ItemsUploaded="ItemsUploadedAsync"></FileManagerEvents>
-    <FileManagerUploadSettings MaxFileSize="@(long.MaxValue)" AutoUpload="true"></FileManagerUploadSettings>
-    <FileManagerToolbarSettings ToolbarItems="@Items"></FileManagerToolbarSettings>
-    <FileManagerContextMenuSettings Visible="@(!isShared || isMyChannel)" File="@ContextItems"></FileManagerContextMenuSettings>
-    <FileManagerSearchSettings FilterDelay="1200"></FileManagerSearchSettings>
-    <FileManagerPageSettings PageSize="50" NumericItemsCount="5"></FileManagerPageSettings>
-</SfFileManager>
+        <FileManagerEvents TValue="FileManagerDirectoryContent"
+        ToolbarItemClicked="toolBarClicked"
+        ItemsMoving="ItemsMovingAsync"
+        ItemRenaming="ItemRenamingAsync"
+        Searching="SearchingAsync"
+        OnFileOpen="fileOpen"
+        FileSelection="FileSelectionAsync"
+        FileSelected="FileSelectedAsync"
+        OnRead="OnReadAsync"
+        FolderCreating="FolderCreatingAsync"
+        BeforeDownload="BeforeDownload"
+        ItemsDeleting="ItemsDeletingAsync"
+        ItemsUploaded="ItemsUploadedAsync"
+        OnMenuClick="OnMenuClickAsync"></FileManagerEvents>
+        <FileManagerUploadSettings MaxFileSize="@(long.MaxValue)" AutoUpload="true"></FileManagerUploadSettings>
+        <FileManagerToolbarSettings ToolbarItems="@Items"></FileManagerToolbarSettings>
+        <FileManagerContextMenuSettings Visible="@(!isShared || isMyChannel)" File="@ContextItems"></FileManagerContextMenuSettings>
+        <FileManagerSearchSettings FilterDelay="1200"></FileManagerSearchSettings>
+        <FileManagerPageSettings PageSize="50" NumericItemsCount="5"></FileManagerPageSettings>
+    </SfFileManager>
+}
+
+@* Mobile FileManager *@
+@if (_viewportDetected && _isMobileView)
+{
+    <div class="mobile-fm-container">
+        <MobileFileManager @ref="mobileFileManager"
+            Id="@id"
+            IsShared="@isShared"
+            RootFolderName="Files"
+            CanCopy="@(!isShared || isMyChannel)"
+            CanCut="@(!isShared || isMyChannel)"
+            CanDelete="@(!isShared || isMyChannel)"
+            CanRename="@(!isShared || isMyChannel)"
+            CanCreate="@(!isShared || isMyChannel)"
+            CanUpload="false"
+            CanDownloadToLocal="true"
+            CanShareFile="@(isMyChannel && !isShared)"
+            CanShowInApp="true"
+            CanShowUrlMedia="true"
+            CanStrm="true"
+            CanPreload="@(!isShared)"
+            OnRead="OnMobileReadAsync"
+            OnItemsDeleting="OnMobileItemsDeletingAsync"
+            OnItemsMoving="OnMobileItemsMovingAsync"
+            OnItemRenaming="OnMobileItemRenamingAsync"
+            OnFolderCreating="OnMobileFolderCreatingAsync"
+            OnSearching="OnMobileSearchingAsync"
+            OnFileOpen="OnMobileFileOpenAsync"
+            OnBeforeDownload="OnMobileBeforeDownloadAsync"
+            OnDownloadToLocal="OnMobileDownloadToLocalAsync"
+            OnShareFile="OnMobileShareFileAsync"
+            OnShowInApp="OnMobileShowInAppAsync"
+            OnUrlMedia="OnMobileUrlMediaAsync"
+            OnStrm="OnMobileStrmAsync"
+            OnPreloadFiles="OnMobilePreloadFilesAsync"
+            CanAddToPlaylist="true"
+            OnAddToPlaylist="OnMobileAddToPlaylistAsync" />
+    </div>
+}
+
 <TelegramDownloader.Pages.Modals.DowloadFromTelegram @ref="Modal" isShare="@isShared" bsi="@bsi"></TelegramDownloader.Pages.Modals.DowloadFromTelegram>
 
 <TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal @ref="mediaUrlModal"></TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal>
@@ -69,11 +124,17 @@
 
     private MediaUrlModal mediaUrlModal { get; set; } = default!;
 
-    public string[] ContextItems = new string[] { "Open", "Delete", "Download", "Rename", "Details"};
+    public string[] ContextItems = new string[] { "Open", "Delete", "Download", "Rename", "Details", "Add to Playlist"};
     private bool isMyChannel = false;
 
     SfFileManager<FileManagerDirectoryContent> fm { get; set; }
+    MobileFileManager mobileFileManager { get; set; }
     NotificationModel nm = new NotificationModel();
+
+    // Mobile detection
+    private bool _isMobileView = false;
+    private bool _viewportDetected = false; // Don't render until viewport is detected
+    private const int MobileBreakpoint = 1920; // Custom breakpoint for mobile file manager
 
 
     public List<ToolBarItemModel> Items = new List<ToolBarItemModel>(){
@@ -81,6 +142,7 @@
         new ToolBarItemModel() { Name = "SortBy" },
         new ToolBarItemModel() { Name = "Refresh" },
         new ToolBarItemModel() { Name = "DownloadServer", Text="Download To Local", TooltipText="Download To local", PrefixIcon="e-icons e-download" },
+        new ToolBarItemModel() { Name = "Preload", Text="Preload", TooltipText="Preload files to cache", PrefixIcon="e-icons e-download" },
         new ToolBarItemModel() { Name = "Selection" },
         new ToolBarItemModel() { Name = "View" },
         new ToolBarItemModel() { Name = "Details" },
@@ -119,6 +181,8 @@
         if (firstRender)
         {
             _firstRenderComplete = true;
+            // Detect viewport size on first render
+            await DetectMobileView();
         }
 
         if (_needsRefresh && fm != null)
@@ -129,12 +193,44 @@
         }
     }
 
+    private async Task DetectMobileView()
+    {
+        try
+        {
+            // Check if config forces mobile file manager
+            if (GeneralConfigStatic.config.UseMobileFileManagerAlways)
+            {
+                _isMobileView = true;
+            }
+            else
+            {
+                var width = await JSRuntime.InvokeAsync<int>("eval", "window.innerWidth");
+                _isMobileView = width < MobileBreakpoint;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error detecting viewport size");
+            _isMobileView = false;
+        }
+        finally
+        {
+            _viewportDetected = true;
+            StateHasChanged();
+        }
+    }
+
     public async Task RefreshFileManager()
     {
         if (fm != null)
         {
             fm.Path = "/";
             await fm.RefreshFilesAsync();
+        }
+        if (mobileFileManager != null)
+        {
+            mobileFileManager.Path = "/";
+            await mobileFileManager.RefreshFilesAsync();
         }
     }
 
@@ -157,6 +253,7 @@
                 new ToolBarItemModel() { Name = "SortBy" },
                 new ToolBarItemModel() { Name = "Refresh" },
                 new ToolBarItemModel() { Name = "DownloadServer", Text="Download To Local", TooltipText="Download To local", PrefixIcon="e-icons e-download" },
+                new ToolBarItemModel() { Name = "Preload", Text="Preload", TooltipText="Preload files to cache", PrefixIcon="e-icons e-download" },
                 new ToolBarItemModel() { Name = "Selection" },
                 new ToolBarItemModel() { Name = "View" },
                 new ToolBarItemModel() { Name = "Details" },
@@ -206,10 +303,11 @@
 
     }
 
+    #region Desktop FileManager Events
+
     public async Task ItemRenamingAsync(ItemRenameEventArgs<FileManagerDirectoryContent> args)
     {
         args.Response = await fs.RenameFileOrFolder(id, args.File, args.NewName);
-        // args.Response = await FileManagerService.Rename(args.Path, args.File.Name, args.NewName, false, args.ShowFileExtension, args.File);
     }
 
     public async Task fileOpen(FileOpenEventArgs<FileManagerDirectoryContent> args)
@@ -219,7 +317,7 @@
         args.Cancel = true;
         if (args != null && args.FileDetails != null && args.FileDetails.IsFile && isAudioFile(args.FileDetails.Type.ToLower()))
         {
-            await playAudio(args);
+            await playAudio(args.FileDetails);
             return;
         }
 
@@ -232,21 +330,6 @@
         string filePath = getTempFileMediaUrl(args.FileDetails.Id, args.FileDetails.Name);
 
         await JSRuntime.InvokeVoidAsync("open", filePath, "_blank");
-    }
-
-    private bool isVideoFile(string fileExtension)
-    {
-        return new List<string> { ".mov", ".mp4", ".m4v", ".ogv", ".webm", ".flv", ".f4v" }.Contains(fileExtension);
-    }
-
-    private bool isAudioFile(string fileExtension)
-    {
-        return new List<string> { ".mp3", ".ogg", ".flac", ".aac", ".wav" }.Contains(fileExtension);
-    }
-
-    private async Task playAudio(FileOpenEventArgs<FileManagerDirectoryContent> args)
-    {
-        await JSRuntime.InvokeVoidAsync("openAudioPlayerModal", await getMediaUrl(args.FileDetails.Id, args.FileDetails.Name, args.FileDetails.Size), null, args.FileDetails.Name);
     }
 
     public async Task SearchingAsync(SearchEventArgs<FileManagerDirectoryContent> args)
@@ -297,33 +380,6 @@
         Console.WriteLine("");
     }
 
-    private async Task ShowMediaURLModal(string idFile, String name, long size, bool forcePreDownload = false)
-    {
-        mediaUrlModal.url = await getMediaUrl(idFile, name, size, forcePreDownload);
-        await mediaUrlModal.OnShowModalClick();
-    }
-
-    private async Task<string> getMediaUrl(string idFile, String name, long size, bool forcePreDownload = false)
-    {
-        BsonFileManagerModel item = null;
-        if (isShared)
-            item = await fs.getSharedItemById(id: idFile, collection: bsi.CollectionId);
-        else
-            item = await fs.getItemById(id, idFile);
-        string localdir = MyNavigationManager.BaseUri;
-        if (forcePreDownload || (HelperService.bytesToMegaBytes(size) <= GeneralConfigStatic.config.MaxPreloadFileSizeInMb && item != null && item.MessageId != null))
-        {
-            return new System.Uri(Path.Combine(localdir, "api/file/GetFile", name).Replace("\\", "/") + $"?idChannel={(isShared ? bsi.ChannelId : id)}&idFile={item.MessageId}").AbsoluteUri;
-        }
-        return new System.Uri(Path.Combine(localdir, "api/file/GetFileStream", isShared ? bsi.ChannelId : id, idFile, name).Replace("\\", "/")).AbsoluteUri;
-    }
-
-    private string getTempFileMediaUrl(string idFile, String name)
-    {
-        string localdir = MyNavigationManager.BaseUri;
-        return new System.Uri(Path.Combine(localdir, "api/file/GetFileByTfmIdNow", name).Replace("\\", "/") + $"?idChannel={(isShared ? bsi.ChannelId : id)}&idFile={idFile}").AbsoluteUri;
-    }
-
     public async Task toolBarClicked(ToolbarClickEventArgs<FileManagerDirectoryContent> args)
     {
         if (args.Item.Text == "Download To Local")
@@ -351,7 +407,16 @@
         {
             var file = args.FileDetails.FirstOrDefault();
             MyNavigationManager.NavigateTo($"/api/file/strm?idChannel={id}&path={file.FilterPath + file.Name + "/"}&host={MyNavigationManager.BaseUri}", true);
-            // await JSRuntime.InvokeVoidAsync("open", $"{MyNavigationManager.BaseUri}?idChannel={id}&path={args.FileDetails.FirstOrDefault().FilterPath}&host={MyNavigationManager.BaseUri}", "_blank");
+        }
+        if (args.Item.Text == "Preload" && args.FileDetails.Count() > 0)
+        {
+            nm.sendMessage("Preload", $"Starting preload of {args.FileDetails.Count()} items to cache...", NotificationTypes.Info);
+            var channelId = isShared ? bsi.ChannelId : id;
+            _ = Task.Run(async () =>
+            {
+                var count = await fs.PreloadFilesToTemp(channelId, args.FileDetails.ToList());
+                nm.sendMessage("Preload Complete", $"Preloaded {count} files to cache", NotificationTypes.Success);
+            });
         }
         Console.WriteLine("");
     }
@@ -399,6 +464,20 @@
         Console.WriteLine("");
     }
 
+    public async Task OnMenuClickAsync(MenuClickEventArgs<FileManagerDirectoryContent> args)
+    {
+        if (args.Item.Text == "Add to Playlist" && args.FileDetails.Count() == 1)
+        {
+            var file = args.FileDetails.First();
+            if (file.IsFile && isAudioFile(file.Type?.ToLower() ?? ""))
+            {
+                var url = await getMediaUrl(file.Id, file.Name, file.Size);
+                await JSRuntime.InvokeVoidAsync("addToAudioPlaylist", url, null, file.Name);
+                nm.sendMessage("Playlist", $"Added '{file.Name}' to playlist", NotificationTypes.Success);
+            }
+        }
+    }
+
     public async Task<string> ItemsUploadedAsync(ItemsUploadedEventArgs<FileManagerDirectoryContent> args)
     {
         try
@@ -417,10 +496,6 @@
 
     public async Task BeforeDownload(BeforeDownloadEventArgs<FileManagerDirectoryContent> args)
     {
-        // foreach (string name in args.DownloadData.Names)
-        // {
-
-        // }
         try
         {
             if (downloadToServer)
@@ -453,7 +528,7 @@
         try
         {
             FileManagerResponse<FileManagerDirectoryContent> response = new FileManagerResponse<FileManagerDirectoryContent>();
-            response.Files = await fs.createFolder(id, args); // await FileManagerService.Create(args.Path, args.FolderName, args.ParentFolder);
+            response.Files = await fs.createFolder(id, args);
             await Task.Yield();
             args.Response = response;
         }
@@ -478,20 +553,6 @@
             Logger.LogError(e, "Error on BeforeImageLoadAsync");
             nm.sendMessage("Error", "Error on BeforeImageLoadAsync", NotificationTypes.Error);
         }
-
-        // var i = 1;
-        // var result = await FileManagerService.GetImage(args.ImageUrl, false, args.FileDetails);
-        // result.FileStream.Position = 0;
-        // MemoryStream ms = new MemoryStream();
-        // await fs.getImage(args.ImageUrl, ms);
-
-
-        //     // var result = Task.Run(async () => await fs.getImage(args.ImageUrl, ms));
-        //     // result.Wait();
-        //     // ms.CopyTo(file);
-        // args.FileStream = ms;
-
-
     }
 
     private async Task OnReadAsync(ReadEventArgs<FileManagerDirectoryContent> args)
@@ -511,8 +572,356 @@
 
     }
 
+    #endregion
+
+    #region Mobile FileManager Events
+
+    private async Task OnMobileReadAsync(MfmReadEventArgs args)
+    {
+        try
+        {
+            args.Response = isShared
+                ? await fs.GetFilesPath(DbService.SHARED_DB_NAME, args.Path, null, bsi.CollectionId)
+                : await fs.GetFilesPath(id, args.Path, null);
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Error on OnMobileReadAsync");
+            nm.sendMessage("Error", "Error on OnMobileReadAsync", NotificationTypes.Error);
+        }
+    }
+
+    private async Task OnMobileItemsDeletingAsync(MfmDeleteEventArgs args)
+    {
+        try
+        {
+            foreach (var file in args.Files)
+            {
+                await fs.oneItemDeleteAsync(id, file);
+            }
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Error on OnMobileItemsDeletingAsync");
+            nm.sendMessage("Error", "Error on delete", NotificationTypes.Error);
+        }
+    }
+
+    private async Task OnMobileItemsMovingAsync(MfmMoveEventArgs args)
+    {
+        try
+        {
+            // Normalize paths to use forward slashes
+            var targetPath = args.TargetPath?.Replace("\\", "/") ?? "/";
+            var sourcePath = args.SourcePath?.Replace("\\", "/") ?? "/";
+
+            // Normalize FilterPath in files
+            var normalizedFiles = args.Files.Select(f => {
+                f.FilterPath = f.FilterPath?.Replace("\\", "/");
+                return f;
+            }).ToArray();
+
+            var targetData = args.TargetData;
+            if (targetData != null)
+            {
+                targetData.FilterPath = targetData.FilterPath?.Replace("\\", "/");
+            }
+            else
+            {
+                targetData = new FileManagerDirectoryContent
+                {
+                    FilterPath = targetPath,
+                    IsFile = false,
+                    Name = targetPath.TrimEnd('/').Split('/').LastOrDefault() ?? ""
+                };
+            }
+
+            args.Response = await fs.CopyOrMoveItems(id, normalizedFiles, targetPath, targetData, args.IsCopy);
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Error on OnMobileItemsMovingAsync");
+            nm.sendMessage("Error", "Error on move/copy", NotificationTypes.Error);
+        }
+    }
+
+    private async Task OnMobileItemRenamingAsync(MfmRenameEventArgs args)
+    {
+        try
+        {
+            if (args.File != null)
+            {
+                args.Response = await fs.RenameFileOrFolder(id, args.File, args.NewName);
+            }
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Error on OnMobileItemRenamingAsync");
+            nm.sendMessage("Error", "Error on rename", NotificationTypes.Error);
+        }
+    }
+
+    private async Task OnMobileFolderCreatingAsync(MfmFolderCreateEventArgs args)
+    {
+        try
+        {
+            FileManagerResponse<FileManagerDirectoryContent> response = new FileManagerResponse<FileManagerDirectoryContent>();
+
+            // Use the ParentFolder from args which has the correct Id
+            response.Files = await fs.createFolder(id, args.Path, args.FolderName, args.ParentFolder);
+
+            args.Response = response;
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Error on OnMobileFolderCreatingAsync");
+            nm.sendMessage("Error", "Error on create folder", NotificationTypes.Error);
+        }
+    }
+
+    private async Task OnMobileSearchingAsync(MfmSearchEventArgs args)
+    {
+        try
+        {
+            args.Response = isShared
+                ? await fs.SearchAsync(DbService.SHARED_DB_NAME, args.Path, args.SearchText, bsi.CollectionId)
+                : await fs.SearchAsync(id, args.Path, args.SearchText);
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Error on OnMobileSearchingAsync");
+            nm.sendMessage("Error", "Error on search", NotificationTypes.Error);
+        }
+    }
+
+    private async Task OnMobileFileOpenAsync(MfmFileOpenEventArgs args)
+    {
+        if (args.FileDetails == null || !args.FileDetails.IsFile)
+            return;
+
+        args.Cancel = true;
+
+        if (isAudioFile(args.FileDetails.Type?.ToLower() ?? ""))
+        {
+            await playAudio(args.FileDetails);
+            return;
+        }
+
+        if (isVideoFile(args.FileDetails.Type?.ToLower() ?? ""))
+        {
+            videoPlayer.ShowModal(await getMediaUrl(args.FileDetails.Id, args.FileDetails.Name, args.FileDetails.Size));
+            return;
+        }
+
+        string filePath = getTempFileMediaUrl(args.FileDetails.Id, args.FileDetails.Name);
+        await JSRuntime.InvokeVoidAsync("open", filePath, "_blank");
+    }
+
+    private async Task OnMobileBeforeDownloadAsync(MfmDownloadEventArgs args)
+    {
+        try
+        {
+            if (isShared)
+                await fs.downloadFile(DbService.SHARED_DB_NAME, args.Path, args.Names.ToList(), null, bsi.CollectionId);
+            else
+                await fs.downloadFile(id, args.Path, args.Names.ToList(), null);
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Error on OnMobileBeforeDownloadAsync");
+            nm.sendMessage("Error", "Error on download", NotificationTypes.Error);
+        }
+    }
+
+    private async Task OnMobileDownloadToLocalAsync(MfmDownloadToLocalEventArgs args)
+    {
+        try
+        {
+            Modal.id = id;
+            Modal.filePath = args.Files.FirstOrDefault()?.IsFile == true
+                ? args.Files.FirstOrDefault()?.FilterPath?.Replace("\\", "/")
+                : args.Files.FirstOrDefault()?.FilterPath?.Replace("\\", "/") + args.Files.FirstOrDefault()?.Name + "/";
+            Modal.fileList = args.Files.ToList();
+            Modal.Open();
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Error on OnMobileDownloadToLocalAsync");
+            nm.sendMessage("Error", "Error opening download dialog", NotificationTypes.Error);
+        }
+    }
+
+    private async Task OnMobileShareFileAsync(MfmShareFileEventArgs args)
+    {
+        try
+        {
+            if (args.File != null)
+            {
+                MyNavigationManager.NavigateTo("/api/file/share/" + id + $"?bsonId={args.File.Id}&fileName={args.File.Name}", true);
+            }
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Error on OnMobileShareFileAsync");
+            nm.sendMessage("Error", "Error sharing file", NotificationTypes.Error);
+        }
+    }
+
+    private async Task OnMobileShowInAppAsync(MfmShowInAppEventArgs args)
+    {
+        try
+        {
+            if (args.File != null)
+            {
+                var item = await fs.getItemById(id, args.File.Id);
+                if (item.IsFile)
+                    await JSRuntime.InvokeVoidAsync("open", $"tg://privatepost?channel={id}&post={item.MessageId ?? item.ListMessageId.FirstOrDefault()}", "_blank");
+            }
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Error on OnMobileShowInAppAsync");
+            nm.sendMessage("Error", "Error opening in app", NotificationTypes.Error);
+        }
+    }
+
+    private async Task OnMobileUrlMediaAsync(MfmUrlMediaEventArgs args)
+    {
+        try
+        {
+            if (args.File != null)
+            {
+                var fileType = args.File.Type?.ToLower() ?? "";
+                bool forcePreDownload = !(isAudioFile(fileType) || isVideoFile(fileType));
+                await ShowMediaURLModal(args.File.Id, args.File.Name, args.File.Size, forcePreDownload);
+            }
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Error on OnMobileUrlMediaAsync");
+            nm.sendMessage("Error", "Error showing media URL", NotificationTypes.Error);
+        }
+    }
+
+    private async Task OnMobileStrmAsync(MfmStrmEventArgs args)
+    {
+        try
+        {
+            if (args.Folder != null)
+            {
+                var path = args.Folder.FilterPath + args.Folder.Name + "/";
+                MyNavigationManager.NavigateTo($"/api/file/strm?idChannel={id}&path={path}&host={MyNavigationManager.BaseUri}", true);
+            }
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Error on OnMobileStrmAsync");
+            nm.sendMessage("Error", "Error generating STRM files", NotificationTypes.Error);
+        }
+        await Task.CompletedTask;
+    }
+
+    private async Task OnMobilePreloadFilesAsync(MfmPreloadFilesEventArgs args)
+    {
+        try
+        {
+            if (args.Items.Length > 0)
+            {
+                nm.sendMessage("Preload", $"Starting preload of {args.Items.Length} items to cache...", NotificationTypes.Info);
+                var channelId = isShared ? bsi.ChannelId : id;
+                _ = Task.Run(async () =>
+                {
+                    var count = await fs.PreloadFilesToTemp(channelId, args.Items.ToList());
+                    nm.sendMessage("Preload Complete", $"Preloaded {count} files to cache", NotificationTypes.Success);
+                });
+            }
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Error on OnMobilePreloadFilesAsync");
+            nm.sendMessage("Error", "Error preloading files", NotificationTypes.Error);
+        }
+    }
+
+    private async Task OnMobileAddToPlaylistAsync(MfmAddToPlaylistEventArgs args)
+    {
+        try
+        {
+            if (args.IsMultiple && args.Files.Length > 0)
+            {
+                int addedCount = 0;
+                foreach (var file in args.Files)
+                {
+                    var url = await getMediaUrl(file.Id, file.Name, file.Size);
+                    await JSRuntime.InvokeVoidAsync("addToAudioPlaylist", url, "audio/mpeg", file.Name);
+                    addedCount++;
+                }
+                nm.sendMessage("Playlist", $"Added {addedCount} tracks to playlist", NotificationTypes.Success);
+            }
+            else if (args.File != null)
+            {
+                var url = await getMediaUrl(args.File.Id, args.File.Name, args.File.Size);
+                await JSRuntime.InvokeVoidAsync("addToAudioPlaylist", url, null, args.File.Name);
+                nm.sendMessage("Playlist", $"Added '{args.File.Name}' to playlist", NotificationTypes.Success);
+            }
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Error on OnMobileAddToPlaylistAsync");
+            nm.sendMessage("Error", "Error adding to playlist", NotificationTypes.Error);
+        }
+    }
+
+    #endregion
+
+    #region Shared Helper Methods
+
+    private bool isVideoFile(string fileExtension)
+    {
+        return new List<string> { ".mov", ".mp4", ".m4v", ".ogv", ".webm", ".flv", ".f4v" }.Contains(fileExtension);
+    }
+
+    private bool isAudioFile(string fileExtension)
+    {
+        return new List<string> { ".mp3", ".ogg", ".flac", ".aac", ".wav" }.Contains(fileExtension);
+    }
+
+    private async Task playAudio(FileManagerDirectoryContent fileDetails)
+    {
+        await JSRuntime.InvokeVoidAsync("openAudioPlayerModal", await getMediaUrl(fileDetails.Id, fileDetails.Name, fileDetails.Size), null, fileDetails.Name);
+    }
+
+    private async Task ShowMediaURLModal(string idFile, String name, long size, bool forcePreDownload = false)
+    {
+        mediaUrlModal.url = await getMediaUrl(idFile, name, size, forcePreDownload);
+        await mediaUrlModal.OnShowModalClick();
+    }
+
+    private async Task<string> getMediaUrl(string idFile, String name, long size, bool forcePreDownload = false)
+    {
+        BsonFileManagerModel item = null;
+        if (isShared)
+            item = await fs.getSharedItemById(id: idFile, collection: bsi.CollectionId);
+        else
+            item = await fs.getItemById(id, idFile);
+        string localdir = MyNavigationManager.BaseUri;
+        if (forcePreDownload || (HelperService.bytesToMegaBytes(size) <= GeneralConfigStatic.config.MaxPreloadFileSizeInMb && item != null && item.MessageId != null))
+        {
+            return new System.Uri(Path.Combine(localdir, "api/file/GetFile", name).Replace("\\", "/") + $"?idChannel={(isShared ? bsi.ChannelId : id)}&idFile={item.MessageId}").AbsoluteUri;
+        }
+        return new System.Uri(Path.Combine(localdir, "api/file/GetFileStream", isShared ? bsi.ChannelId : id, idFile, name).Replace("\\", "/")).AbsoluteUri;
+    }
+
+    private string getTempFileMediaUrl(string idFile, String name)
+    {
+        string localdir = MyNavigationManager.BaseUri;
+        return new System.Uri(Path.Combine(localdir, "api/file/GetFileByTfmIdNow", name).Replace("\\", "/") + $"?idChannel={(isShared ? bsi.ChannelId : id)}&idFile={idFile}").AbsoluteUri;
+    }
+
     private void doToolbarItemInvisible(String name)
     {
         Items.Where(x => name.Equals(x.Name)).ToList().ForEach(x => x.Visible = false);
     }
+
+    #endregion
 }

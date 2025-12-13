@@ -38,6 +38,7 @@ services:
       api_id: ""
       hash_id: ""
       DOTNET_HOSTBUILDER__RELOADCONFIGONCHANGE: false
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
     restart: unless-stopped
     depends_on:
       - mongodb_container

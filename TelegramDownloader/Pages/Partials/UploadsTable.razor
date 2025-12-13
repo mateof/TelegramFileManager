@@ -7,77 +7,164 @@
 @inject TransactionInfoService tis
 
 <Grid @ref="grid"
-TItem="UploadModel"
-Class="table table-hover table-bordered table-striped"
-DataProvider="UploadsDataProvider"
-AllowFiltering="false"
-AllowPaging="true"
-AllowSorting="false"
-Responsive="true"
-ItemsPropertyName="_internalId">
+      TItem="UploadModel"
+      Class="table"
+      DataProvider="UploadsDataProvider"
+      AllowFiltering="false"
+      AllowPaging="true"
+      AllowSorting="false"
+      Responsive="true"
+      ItemsPropertyName="_internalId">
 
-   @*  <GridColumn TItem="UploadModel" Class="d-none d-md-table-cell" HeaderText="ID" PropertyName="id" SortString="id" SortKeySelector="item => item.id" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
-        @context.id
-    </GridColumn> *@
-    <GridColumn TItem="UploadModel" HeaderText="File" PropertyName="name" SortString="name" SortKeySelector="item => item.name" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
-        <Tooltip Class="me-4" Title="@context.path">@context.name</Tooltip>
-    </GridColumn>
-    <GridColumn TItem="UploadModel" HeaderText="State" PropertyName="state" SortString="state" SortKeySelector="item => item.state" FilterTextboxWidth="80">
-        @context.state
-    </GridColumn>
-    <GridColumn TItem="UploadModel" HeaderText="Action" PropertyName="action" SortString="action" SortKeySelector="item => item.action" FilterTextboxWidth="80">
-        @context.action
-    </GridColumn>
-    <GridColumn TItem="UploadModel" HeaderText="Progress" PropertyName="progress" SortString="progress" SortKeySelector="item => item.progress" FilterTextboxWidth="100">
-        <div class="progress">
-            <div class="progress-bar" role="progressbar" style="width: @context.progress%;" aria-valuenow="@context.progress" aria-valuemin="0" aria-valuemax="100">@context.progress%</div>
+    <GridColumn TItem="UploadModel" HeaderText="File" PropertyName="name" HeaderTextAlignment="Alignment.Start" TextAlignment="Alignment.Start">
+        <div class="file-name">
+            <div class="file-icon">
+                <i class="bi @GetFileIcon(context.name)"></i>
+            </div>
+            <div class="file-info">
+                <div class="file-title" title="@context.path">@context.name</div>
+                <div class="file-action">
+                    <i class="bi bi-arrow-up-circle"></i>
+                    @context.action
+                </div>
+            </div>
         </div>
     </GridColumn>
-    <GridColumn TItem="UploadModel" HeaderText="Size" PropertyName="Email" SortString="Email" SortKeySelector="item => item._transmittedString" FilterTextboxWidth="120">
-        @context._transmittedString of @context._sizeString
-    </GridColumn>
-    <GridColumn TItem="UploadModel" HeaderText="Actions">
-        @{
-            switch (context.state)
-            {
-                case StateTask.Working:
-                    <td>
-                        <div class="btn-group" role="group">
-                            <button class="btn btn-danger" @onclick="() => cancel(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Cancel task"><i class="bi bi-x"></i></button>
-                            <button class="btn btn-info" @onclick="() => infoModal.ShowModal(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Show Info"><i class="bi bi-info"></i></button>
-                        </div>
-                    </td>
-                    break;
-                case StateTask.Canceled:
-                case StateTask.Error:
-                    <td>
-                        <div class="btn-group" role="group">
-                            <button class="btn btn-info" @onclick="() => retry(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="retry task"><i class="bi bi-arrow-clockwise"></i></button>
-                            <button class="btn btn-danger" @onclick="() => deleteUpload(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="delete task"><i class="bi bi-trash"></i></button>
-                            <button class="btn btn-info" @onclick="() => infoModal.ShowModal(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Show Info"><i class="bi bi-info"></i></button>
-                        </div>
-                    </td>
-                    break;
-                default:
-                    <td>
-                        <div class="btn-group" role="group">
-                            <button class="btn btn-info" @onclick="() => infoModal.ShowModal(context)" data-bs-toggle="tooltip" data-bs-placement="top" title="Show Info"><i class="bi bi-info"></i></button>
-                        </div>
-                    </td>
-                    break;
-            }
-        }
 
+    <GridColumn TItem="UploadModel" HeaderText="Progress" PropertyName="progress">
+        <div class="progress-container">
+            <div class="progress-wrapper">
+                <div class="progress-stats">
+                    <span class="progress-percent @(context.progress >= 100 ? "complete" : "")">@context.progress%</span>
+                    <span class="progress-size">@context._transmittedString / @context._sizeString</span>
+                </div>
+                <div class="progress">
+                    <div class="progress-bar @GetProgressClass(context)"
+                         role="progressbar"
+                         style="width: @context.progress%;"
+                         aria-valuenow="@context.progress"
+                         aria-valuemin="0"
+                         aria-valuemax="100">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </GridColumn>
+
+    <GridColumn TItem="UploadModel" HeaderText="Status">
+        <span class="status-badge @GetStatusClass(context)">
+            <i class="bi @GetStatusIcon(context)"></i>
+            @GetStatusText(context)
+        </span>
+    </GridColumn>
+
+    <GridColumn TItem="UploadModel" HeaderText="Actions">
+        <div class="action-buttons">
+            @if (context.state == StateTask.Working)
+            {
+                <button class="action-btn cancel" @onclick="() => cancel(context)" title="Cancel">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            }
+
+            @if (context.state == StateTask.Canceled || context.state == StateTask.Error)
+            {
+                <button class="action-btn retry" @onclick="() => retry(context)" title="Retry">
+                    <i class="bi bi-arrow-clockwise"></i>
+                </button>
+                <button class="action-btn delete" @onclick="() => deleteUpload(context)" title="Delete">
+                    <i class="bi bi-trash3"></i>
+                </button>
+            }
+
+            <button class="action-btn info" @onclick="() => infoModal.ShowModal(context)" title="Info">
+                <i class="bi bi-info-lg"></i>
+            </button>
+        </div>
     </GridColumn>
 
 </Grid>
 
-<TelegramDownloader.Pages.Modals.InfoModals.UploadFileInfoModal @ref="infoModal"></TelegramDownloader.Pages.Modals.InfoModals.UploadFileInfoModal>
+<TelegramDownloader.Pages.Modals.InfoModals.UploadFileInfoModal @ref="infoModal" OnClose="OnModalClose"></TelegramDownloader.Pages.Modals.InfoModals.UploadFileInfoModal>
 
 @code {
+    [Parameter]
+    public EventCallback OnUploadModalClose { get; set; }
+
     public static List<UploadModel> lum = new List<UploadModel>();
     BlazorBootstrap.Grid<UploadModel> grid = default!;
     UploadFileInfoModal infoModal { get; set; }
+    private bool _disposed = false;
+
+    private string GetFileIcon(string fileName)
+    {
+        if (string.IsNullOrEmpty(fileName)) return "bi-file-earmark";
+
+        var ext = Path.GetExtension(fileName)?.ToLower();
+        return ext switch
+        {
+            ".mp4" or ".mkv" or ".avi" or ".mov" or ".wmv" or ".webm" => "bi-film",
+            ".mp3" or ".wav" or ".flac" or ".aac" or ".ogg" or ".m4a" => "bi-music-note-beamed",
+            ".jpg" or ".jpeg" or ".png" or ".gif" or ".bmp" or ".webp" => "bi-image",
+            ".pdf" => "bi-file-earmark-pdf",
+            ".doc" or ".docx" => "bi-file-earmark-word",
+            ".xls" or ".xlsx" => "bi-file-earmark-excel",
+            ".zip" or ".rar" or ".7z" or ".tar" or ".gz" => "bi-file-earmark-zip",
+            _ => "bi-file-earmark"
+        };
+    }
+
+    private string GetProgressClass(UploadModel um)
+    {
+        if (um.state == StateTask.Completed || um.progress >= 100) return "complete";
+        if (um.state == StateTask.Error || um.state == StateTask.Canceled) return "error";
+        return "";
+    }
+
+    private string GetStatusClass(UploadModel um)
+    {
+        return um.state switch
+        {
+            StateTask.Working => "working",
+            StateTask.Completed => "completed",
+            StateTask.Error => "error",
+            StateTask.Canceled => "canceled",
+            _ => "pending"
+        };
+    }
+
+    private string GetStatusIcon(UploadModel um)
+    {
+        return um.state switch
+        {
+            StateTask.Working => "bi-arrow-up-circle",
+            StateTask.Completed => "bi-check-circle",
+            StateTask.Error => "bi-exclamation-circle",
+            StateTask.Canceled => "bi-slash-circle",
+            _ => "bi-clock"
+        };
+    }
+
+    private string GetStatusText(UploadModel um)
+    {
+        return um.state switch
+        {
+            StateTask.Working => "Uploading",
+            StateTask.Completed => "Completed",
+            StateTask.Error => "Error",
+            StateTask.Canceled => "Canceled",
+            _ => "Pending"
+        };
+    }
+
+    private async Task OnModalClose()
+    {
+        await grid.RefreshDataAsync();
+        if (OnUploadModalClose.HasDelegate)
+        {
+            await OnUploadModalClose.InvokeAsync();
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -134,19 +221,20 @@ ItemsPropertyName="_internalId">
 
     void eventChangedUpload(object sender, UploadEventArgs e)
     {
+        if (_disposed) return;
         grid.RefreshDataAsync();
-        // grid.SelectedItemsChanged = new UploadModel();
-        // getUploadModels();
     }
 
     void eventChangedNew(object sender, System.EventArgs e)
     {
+        if (_disposed) return;
         checkNewEventsHandler();
         grid.RefreshDataAsync();
     }
 
     public void Dispose()
     {
+        _disposed = true;
         tis.EventChanged -= eventChangedNew;
         if (lum != null)
         {

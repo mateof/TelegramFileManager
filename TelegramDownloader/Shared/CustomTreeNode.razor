@@ -1,0 +1,94 @@
+@using TelegramDownloader.Models
+
+<div class="tree-node">
+    <div class="node-content @(IsSelected ? "selected" : "")" style="padding-left: @(Level * 10)px;" @onclick="SelectNode">
+        @if (Node.HasChildren)
+        {
+            <span class="expand-icon" @onclick="ToggleExpand" @onclick:stopPropagation="true">
+                @if (IsLoading)
+                {
+                    <span class="spinner-border spinner-border-sm" role="status"></span>
+                }
+                else
+                {
+                    @(IsExpanded ? "\u25BC" : "\u25B6")
+                }
+            </span>
+        }
+        else
+        {
+            <span class="expand-icon-placeholder"></span>
+        }
+        <svg class="folder-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/>
+        </svg>
+        <span class="node-text">@Node.Name</span>
+    </div>
+
+    @if (IsExpanded && Children != null)
+    {
+        @foreach (var child in Children)
+        {
+            <CustomTreeNode
+                Node="child"
+                OnNodeSelected="OnNodeSelected"
+                OnLoadChildren="OnLoadChildren"
+                Level="Level + 1"
+                SelectedNodeId="@SelectedNodeId" />
+        }
+    }
+</div>
+
+@code {
+    [Parameter]
+    public TreeNodeModel Node { get; set; }
+
+    [Parameter]
+    public int Level { get; set; }
+
+    [Parameter]
+    public EventCallback<TreeNodeModel> OnNodeSelected { get; set; }
+
+    [Parameter]
+    public Func<string, Task<List<TreeNodeModel>>> OnLoadChildren { get; set; }
+
+    [Parameter]
+    public string SelectedNodeId { get; set; }
+
+    private bool IsExpanded { get; set; } = false;
+    private bool IsLoading { get; set; } = false;
+    private List<TreeNodeModel> Children { get; set; }
+
+    private bool IsSelected => SelectedNodeId == Node.Id;
+
+    private async Task ToggleExpand()
+    {
+        if (!Node.HasChildren) return;
+
+        if (!IsExpanded && Children == null)
+        {
+            IsLoading = true;
+            StateHasChanged();
+
+            try
+            {
+                if (OnLoadChildren != null)
+                {
+                    Children = await OnLoadChildren(Node.OriginalId);
+                }
+            }
+            finally
+            {
+                IsLoading = false;
+            }
+        }
+
+        IsExpanded = !IsExpanded;
+        StateHasChanged();
+    }
+
+    private async Task SelectNode()
+    {
+        await OnNodeSelected.InvokeAsync(Node);
+    }
+}

@@ -4,59 +4,135 @@
 @inject IFileService fs;
 @inject ToastService toastService;
 
-<div class="modal @ModalClass" tabindex="-1" role="dialog" style="display:@ModalDisplay;">
-    <div class="modal-dialog modal-dialog-centered" role="document">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Import Channel Data</h5>
-                <button type="button" class="close" data-dismiss="modal" @onclick="() => Close()" aria-label="Close" style="border-color: transparent;background-color: transparent;">
-                    <span aria-hidden="true">&times;</span>
+@if (showModal)
+{
+    <div class="import-modal-overlay @(showModal ? "show" : "")" @onclick="Close">
+        <div class="import-modal-container" @onclick:stopPropagation="true">
+            <div class="import-modal-header">
+                <div class="import-modal-title">
+                    <i class="bi bi-cloud-upload"></i>
+                    <span>Import Channel Data</span>
+                </div>
+                <button type="button" class="import-modal-close" @onclick="Close">
+                    <i class="bi bi-x-lg"></i>
                 </button>
             </div>
-            <div class="modal-body">
-                <p>
-                    <label>
-                        Upload file to import:
-                        <InputFile @key=@(_inputFileId) OnChange="LoadFiles" />
+
+            <div class="import-modal-body">
+                @if (!isLoading && loadedFiles.Count == 0 && npe == null)
+                {
+                    <label class="import-drop-zone">
+                        <InputFile @key=@(_inputFileId) OnChange="LoadFiles" class="import-file-input" />
+                        <div class="import-drop-icon">
+                            <i class="bi bi-file-earmark-arrow-up"></i>
+                        </div>
+                        <div class="import-drop-text">
+                            @if (isShared)
+                            {
+                                <span>Drop your shared data file here</span>
+                            }
+                            else
+                            {
+                                <span>Drop your channel export file here</span>
+                            }
+                        </div>
+                        <div class="import-drop-hint">or click to browse</div>
+                        <div class="import-drop-formats">
+                            <span class="format-badge">.json</span>
+                            <span class="format-badge">.zip</span>
+                        </div>
                     </label>
-                </p>
+                }
 
                 @if (isLoading)
                 {
-                    <p>Progress: @string.Format("{0:P0}", progressPercent)</p>
+                    <div class="import-loading">
+                        <div class="import-loading-icon">
+                            <i class="bi bi-cloud-arrow-up"></i>
+                        </div>
+                        <div class="import-loading-text">Uploading file...</div>
+                        <div class="import-progress-container">
+                            <div class="import-progress">
+                                <div class="import-progress-bar" style="width: @(progressPercent * 100)%;"></div>
+                            </div>
+                            <span class="import-progress-text">@string.Format("{0:P0}", progressPercent)</span>
+                        </div>
+                    </div>
                 }
-                else
+
+                @if (!isLoading && loadedFiles.Count > 0)
                 {
-                    <ul>
+                    <div class="import-file-list">
                         @foreach (var file in loadedFiles)
                         {
-                            <li>
-                                <ul>
-                                    <li>Name: @file.Name</li>
-                                    <li>Last modified: @file.LastModified.ToString()</li>
-                                    <li>Size (bytes): @file.Size</li>
-                                    <li>Content type: @file.ContentType</li>
-                                </ul>
-                            </li>
+                            <div class="import-file-item">
+                                <div class="import-file-icon">
+                                    <i class="bi @GetFileIcon(file.Name)"></i>
+                                </div>
+                                <div class="import-file-info">
+                                    <div class="import-file-name">@file.Name</div>
+                                    <div class="import-file-meta">
+                                        <span><i class="bi bi-calendar3"></i> @file.LastModified.ToString("dd/MM/yyyy HH:mm")</span>
+                                        <span><i class="bi bi-hdd"></i> @FormatFileSize(file.Size)</span>
+                                    </div>
+                                </div>
+                                <div class="import-file-status">
+                                    <i class="bi bi-check-circle-fill"></i>
+                                </div>
+                            </div>
                         }
-                    </ul>
+                    </div>
                 }
 
                 @if (npe != null)
                 {
-                    <p>@npe.CompletedItems of @npe.TotalItems</p>
-                    <div class="progress">
-                        <div class="progress-bar" role="progressbar" style="width: @npe.Percent%;" aria-valuenow="@npe.Percent" aria-valuemin="0" aria-valuemax="100">@npe.Percent%</div>
+                    <div class="import-processing">
+                        <div class="import-processing-header">
+                            <i class="bi bi-gear-fill spinning"></i>
+                            <span>Processing data...</span>
+                        </div>
+                        <div class="import-processing-stats">
+                            <span class="import-stat-current">@npe.CompletedItems</span>
+                            <span class="import-stat-separator">/</span>
+                            <span class="import-stat-total">@npe.TotalItems</span>
+                            <span class="import-stat-label">items</span>
+                        </div>
+                        <div class="import-progress-container">
+                            <div class="import-progress processing">
+                                <div class="import-progress-bar" style="width: @npe.Percent%;"></div>
+                            </div>
+                            <span class="import-progress-text">@npe.Percent%</span>
+                        </div>
+                        @if (npe.Percent >= 100)
+                        {
+                            <div class="import-complete-message">
+                                <i class="bi bi-check-circle-fill"></i>
+                                <span>Import completed successfully!</span>
+                            </div>
+                        }
                     </div>
                 }
-
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-dismiss="modal" @onclick="() => Close()">Close</button>
+
+            <div class="import-modal-footer">
+                @if (npe != null && npe.Percent >= 100)
+                {
+                    <button type="button" class="import-btn import-btn-success" @onclick="Close">
+                        <i class="bi bi-check-lg"></i>
+                        <span>Done</span>
+                    </button>
+                }
+                else
+                {
+                    <button type="button" class="import-btn import-btn-secondary" @onclick="Close">
+                        <i class="bi bi-x-lg"></i>
+                        <span>Cancel</span>
+                    </button>
+                }
             </div>
         </div>
     </div>
-</div>
+}
 
 @code {
     [Parameter]
@@ -67,8 +143,7 @@
     public bool isShared { get; set; } = false;
     private string _inputFileId = Guid.NewGuid().ToString();
     NotificationProgressEvent? npe { get; set; } = null;
-    private string ModalDisplay = "none;";
-    private string ModalClass = "";
+    private bool showModal = false;
     private List<IBrowserFile> loadedFiles = new();
     private long maxFileSize = 1024 * 1024 * 500;
     private int maxAllowedFiles = 1;
@@ -77,8 +152,7 @@
 
     public async Task Open()
     {
-        ModalDisplay = "block;";
-        ModalClass = "Show";
+        showModal = true;
         loadedFiles.Clear();
         _inputFileId = Guid.NewGuid().ToString();
         npe = null;
@@ -88,13 +162,38 @@
 
     public async Task Close()
     {
-        ModalDisplay = "none";
-        ModalClass = "";
+        showModal = false;
         if (OnCloseCallback.HasDelegate)
         {
             await OnCloseCallback.InvokeAsync(null);
         }
         StateHasChanged();
+    }
+
+    private string GetFileIcon(string fileName)
+    {
+        if (string.IsNullOrEmpty(fileName)) return "bi-file-earmark";
+        var ext = Path.GetExtension(fileName)?.ToLower();
+        return ext switch
+        {
+            ".json" => "bi-filetype-json",
+            ".zip" => "bi-file-earmark-zip",
+            ".xml" => "bi-filetype-xml",
+            _ => "bi-file-earmark"
+        };
+    }
+
+    private string FormatFileSize(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB" };
+        int order = 0;
+        double size = bytes;
+        while (size >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            size /= 1024;
+        }
+        return $"{size:0.##} {sizes[order]}";
     }
 
     private async Task LoadFiles(InputFileChangeEventArgs e)

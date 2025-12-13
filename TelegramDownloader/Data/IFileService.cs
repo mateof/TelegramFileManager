@@ -8,8 +8,10 @@ namespace TelegramDownloader.Data
     public interface IFileService
     {
         Task<FileManagerResponse<FileManagerDirectoryContent>> CopyItems(string dbName, ItemsMoveEventArgs<FileManagerDirectoryContent> args);
+        Task<FileManagerResponse<FileManagerDirectoryContent>> CopyOrMoveItems(string dbName, FileManagerDirectoryContent[] files, string targetPath, FileManagerDirectoryContent targetData, bool isCopy);
         Task CreateDatabase(string id);
         Task<List<FileManagerDirectoryContent>> createFolder(string dbName, FolderCreateEventArgs<FileManagerDirectoryContent> args);
+        Task<List<FileManagerDirectoryContent>> createFolder(string dbName, string path, string folderName, FileManagerDirectoryContent? parentFolder);
         void cleanTempFolder();
         Task<BsonSharedInfoModel> GetSharedInfoById(string id);
         Task<BsonFileManagerModel> getSharedItemById(string id, string collection);
@@ -25,6 +27,7 @@ namespace TelegramDownloader.Data
         Task<MemoryStream> getImage(string dbName, string path, string fileName, MemoryStream ms = null, string? collectionId = null);
         Task<BsonFileManagerModel> getItemById(string dbName, string id);
         Task<List<BsonFileManagerModel>> getTelegramFolders(string dbName, string? parentId = null);
+        Task<List<BsonFileManagerModel>> getTelegramFoldersByParentId(string dbName, string? parentId);
         Task<List<ExpandoObject>> GetTelegramFoldersExpando(string id, string parentId);
         Task<String> CreateStrmFiles(string path, string dbName, string host);
         Task importData(string dbName, string path, GenericNotificationProgressModel gnp);
@@ -38,5 +41,6 @@ namespace TelegramDownloader.Data
         Task AddUploadFileFromServer(string dbName, string currentPath, List<FileManagerDirectoryContent> files, InfoDownloadTaksModel idt = null);
         Task refreshChannelFIles(string channelId, bool force = false);
         bool isChannelRefreshing(string channelId);
+        Task<int> PreloadFilesToTemp(string channelId, List<FileManagerDirectoryContent> items);
     }
 }
