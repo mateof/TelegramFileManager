@@ -847,7 +847,18 @@
     {
         try
         {
-            if (args.File != null)
+            if (args.IsMultiple && args.Files.Length > 0)
+            {
+                int addedCount = 0;
+                foreach (var file in args.Files)
+                {
+                    var url = await getMediaUrl(file.Id, file.Name, file.Size);
+                    await JSRuntime.InvokeVoidAsync("addToAudioPlaylist", url, "audio/mpeg", file.Name);
+                    addedCount++;
+                }
+                nm.sendMessage("Playlist", $"Added {addedCount} tracks to playlist", NotificationTypes.Success);
+            }
+            else if (args.File != null)
             {
                 var url = await getMediaUrl(args.File.Id, args.File.Name, args.File.Size);
                 await JSRuntime.InvokeVoidAsync("addToAudioPlaylist", url, null, args.File.Name);

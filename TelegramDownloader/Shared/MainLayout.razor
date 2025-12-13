@@ -315,6 +315,23 @@
         _instance?.audioPlayer?.AddToPlaylistAndPlay(url, type, title);
     }
 
+    [JSInvokable]
+    public static void AddMultipleToAudioPlaylist(PlaylistItemDto[] items)
+    {
+        if (_instance?.audioPlayer != null && items != null)
+        {
+            var playlistItems = items.Select(i => (i.url, i.type ?? "audio/mpeg", i.title ?? "")).ToList();
+            _instance.audioPlayer.AddMultipleToPlaylist(playlistItems);
+        }
+    }
+
+    public class PlaylistItemDto
+    {
+        public string url { get; set; } = string.Empty;
+        public string? type { get; set; }
+        public string? title { get; set; }
+    }
+
     // Método público para acceder al reproductor desde otros componentes
     public static Pages.Modals.AudioPlayerModal? GetAudioPlayer() => _instance?.audioPlayer;
 

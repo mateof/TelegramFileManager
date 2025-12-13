@@ -982,6 +982,25 @@ namespace TelegramDownloader.Shared.MobileFileManager
             CloseContextMenu();
         }
 
+        private async Task AddSelectedToPlaylist()
+        {
+            var audioFiles = SelectedItems.Where(f => IsAudioFile(f)).ToArray();
+            if (audioFiles.Length == 0) return;
+
+            var args = new MfmAddToPlaylistEventArgs
+            {
+                Files = audioFiles
+            };
+
+            await OnAddToPlaylist.InvokeAsync(args);
+            ClearSelection();
+        }
+
+        private bool HasSelectedAudioFiles()
+        {
+            return SelectedItems.Any(f => IsAudioFile(f));
+        }
+
         private bool IsAudioFile(FileManagerDirectoryContent file)
         {
             if (!file.IsFile || string.IsNullOrEmpty(file.Type)) return false;

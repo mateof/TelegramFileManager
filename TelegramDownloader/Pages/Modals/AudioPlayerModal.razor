@@ -417,9 +417,10 @@
         align-items: center;
         padding: 0.5rem 0.75rem;
         cursor: pointer;
-        transition: background 0.2s ease;
+        transition: all 0.2s ease;
         border-bottom: 1px solid rgba(255, 255, 255, 0.05);
         gap: 0.5rem;
+        user-select: none;
     }
 
     .playlist-item:last-child {
@@ -432,6 +433,33 @@
 
     .playlist-item.active {
         background: rgba(233, 69, 96, 0.2);
+    }
+
+    /* Drag and drop styles */
+    .playlist-item.dragging {
+        opacity: 0.5;
+        background: rgba(233, 69, 96, 0.3);
+    }
+
+    .playlist-item.drag-over {
+        border-top: 2px solid #e94560;
+        margin-top: -2px;
+    }
+
+    .playlist-item-drag-handle {
+        color: rgba(255, 255, 255, 0.3);
+        font-size: 0.875rem;
+        cursor: grab;
+        padding: 0.25rem;
+        transition: color 0.2s ease;
+    }
+
+    .playlist-item-drag-handle:active {
+        cursor: grabbing;
+    }
+
+    .playlist-item:hover .playlist-item-drag-handle {
+        color: rgba(255, 255, 255, 0.6);
     }
 
     .playlist-item-index {
@@ -609,7 +637,18 @@
                     {
                         var index = i;
                         var item = playlist[i];
-                        <div class="playlist-item @(index == currentTrackIndex ? "active" : "")" @onclick="() => PlayTrack(index)">
+                        <div class="playlist-item @(index == currentTrackIndex ? "active" : "") @(draggedIndex == index ? "dragging" : "") @(dragOverIndex == index ? "drag-over" : "")"
+                             draggable="true"
+                             @ondragstart="() => OnDragStart(index)"
+                             @ondragover:preventDefault="true"
+                             @ondragover="() => OnDragOver(index)"
+                             @ondragleave="OnDragLeave"
+                             @ondrop="() => OnDrop(index)"
+                             @ondragend="OnDragEnd"
+                             @onclick="() => PlayTrack(index)">
+                            <span class="playlist-item-drag-handle">
+                                <i class="bi bi-grip-vertical"></i>
+                            </span>
                             <span class="playlist-item-index">@(index + 1)</span>
                             @if (index == currentTrackIndex && isPlaying)
                             {
@@ -656,6 +695,10 @@
     // Playlist
     private List<PlaylistItem> playlist = new();
     private int currentTrackIndex = -1;
+
+    // Drag and drop state
+    private int? draggedIndex = null;
+    private int? dragOverIndex = null;
 
     public class PlaylistItem
     {
@@ -941,6 +984,105 @@
             AddToPlaylist(url, type, title);
             _ = PlayTrack(playlist.Count - 1);
         }
+    }
+
+    public void AddMultipleToPlaylist(List<PlaylistItem> items)
+    {
+        foreach (var item in items)
+        {
+            if (!playlist.Any(p => p.Url == item.Url))
+            {
+                playlist.Add(new PlaylistItem
+                {
+                    Url = item.Url,
+                    Type = string.IsNullOrEmpty(item.Type) ? "audio/mpeg" : item.Type,
+                    Title = !string.IsNullOrEmpty(item.Title) ? item.Title : ExtractFileName(item.Url)
+                });
+            }
+        }
+        StateHasChanged();
+    }
+
+    public void AddMultipleToPlaylist(IEnumerable<(string url, string type, string title)> items)
+    {
+        foreach (var (url, type, title) in items)
+        {
+            if (!playlist.Any(p => p.Url == url))
+            {
+                playlist.Add(new PlaylistItem
+                {
+                    Url = url,
+                    Type = string.IsNullOrEmpty(type) ? "audio/mpeg" : type,
+                    Title = !string.IsNullOrEmpty(title) ? title : ExtractFileName(url)
+                });
+            }
+        }
+        StateHasChanged();
+    }
+
+    // Drag and drop handlers
+    private void OnDragStart(int index)
+    {
+        draggedIndex = index;
+        StateHasChanged();
+    }
+
+    private void OnDragOver(int index)
+    {
+        if (draggedIndex.HasValue && draggedIndex.Value != index)
+        {
+            dragOverIndex = index;
+            StateHasChanged();
+        }
+    }
+
+    private void OnDragLeave()
+    {
+        dragOverIndex = null;
+        StateHasChanged();
+    }
+
+    private void OnDrop(int targetIndex)
+    {
+        if (draggedIndex.HasValue && draggedIndex.Value != targetIndex)
+        {
+            var sourceIndex = draggedIndex.Value;
+            var item = playlist[sourceIndex];
+
+            // Remove from source
+            playlist.RemoveAt(sourceIndex);
+
+            // Adjust target index if needed
+            var adjustedTargetIndex = sourceIndex < targetIndex ? targetIndex - 1 : targetIndex;
+
+            // Insert at target
+            playlist.Insert(adjustedTargetIndex, item);
+
+            // Update current track index
+            if (currentTrackIndex == sourceIndex)
+            {
+                currentTrackIndex = adjustedTargetIndex;
+            }
+            else if (sourceIndex < currentTrackIndex && adjustedTargetIndex >= currentTrackIndex)
+            {
+                currentTrackIndex--;
+            }
+            else if (sourceIndex > currentTrackIndex && adjustedTargetIndex <= currentTrackIndex)
+            {
+                currentTrackIndex++;
+            }
+        }
+
+        draggedIndex = null;
+        dragOverIndex = null;
+        StateHasChanged();
+    }
+
+    private void OnDragEnd()
+    {
+        draggedIndex = null;
+        dragOverIndex = null;
+        StateHasChanged();
     }
 
     private string ExtractFileName(string url)

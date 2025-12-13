@@ -470,6 +470,11 @@ window.addToAudioPlaylistAndPlay = (url, type = "audio/mpeg", title = "") => {
     DotNet.invokeMethodAsync('TelegramDownloader', 'AddToAudioPlaylistAndPlay', url, type, title);
 }
 
+window.addMultipleToAudioPlaylist = (items) => {
+    // items is an array of {url, type, title} objects
+    DotNet.invokeMethodAsync('TelegramDownloader', 'AddMultipleToAudioPlaylist', items);
+}
+
 window.stopVideoPlayer = () => {
     const video = document.getElementById('videoPlayer');
     if (video) {

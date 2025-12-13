@@ -672,7 +672,19 @@
     {
         try
         {
-            if (args.File != null && IsAudioFile(args.File.Type?.ToLower() ?? ""))
+            if (args.IsMultiple && args.Files.Length > 0)
+            {
+                string localdir = MyNavigationManager.BaseUri + FileService.STATICRELATIVELOCALDIR.Replace("\\", "/");
+                int addedCount = 0;
+                foreach (var file in args.Files)
+                {
+                    string url = new System.Uri((Path.Combine(localdir, file.FilterPath.Substring(1).Replace("\\", "/"), file.Name)).Replace("\\", "/")).AbsoluteUri;
+                    await JSRuntime.InvokeVoidAsync("addToAudioPlaylist", url, "audio/mpeg", file.Name);
+                    addedCount++;
+                }
+                nm.sendMessage("Playlist", $"Added {addedCount} tracks to playlist", NotificationTypes.Success);
+            }
+            else if (args.File != null && IsAudioFile(args.File.Type?.ToLower() ?? ""))
             {
                 string localdir = MyNavigationManager.BaseUri + FileService.STATICRELATIVELOCALDIR.Replace("\\", "/");
                 string url = new System.Uri((Path.Combine(localdir, args.File.FilterPath.Substring(1).Replace("\\", "/"), args.File.Name)).Replace("\\", "/")).AbsoluteUri;
