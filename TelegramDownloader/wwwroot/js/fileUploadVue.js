@@ -496,10 +496,7 @@ window.initMediaSession = (title, artist, album, artworkUrl) => {
                 { src: artworkUrl, sizes: '256x256', type: 'image/png' },
                 { src: artworkUrl, sizes: '384x384', type: 'image/png' },
                 { src: artworkUrl, sizes: '512x512', type: 'image/png' }
-            ] : [
-                { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
-                { src: '/icon-512.png', sizes: '512x512', type: 'image/png' }
-            ]
+            ] : []
         });
 
         // Set up action handlers
@@ -566,10 +563,7 @@ window.updateMediaSessionMetadata = (title, artist, album, artworkUrl) => {
                 { src: artworkUrl, sizes: '256x256', type: 'image/png' },
                 { src: artworkUrl, sizes: '384x384', type: 'image/png' },
                 { src: artworkUrl, sizes: '512x512', type: 'image/png' }
-            ] : [
-                { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
-                { src: '/icon-512.png', sizes: '512x512', type: 'image/png' }
-            ]
+            ] : []
         });
     } catch (e) {
         console.error('Error updating Media Session metadata:', e);
@@ -711,5 +705,11 @@ window.toggleVideoFullscreen = () => {
                 console.log('Error attempting fullscreen:', err);
             });
         }
+    }
+}
+
+window.blurActiveElement = () => {
+    if (document.activeElement && document.activeElement.blur) {
+        document.activeElement.blur();
     }
 }

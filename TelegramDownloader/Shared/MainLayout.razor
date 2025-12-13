@@ -429,12 +429,14 @@
 
     private async Task Navigateto(string relativeUri)
     {
+        await JS.InvokeVoidAsync("blurActiveElement");
         await offcanvas.HideAsync();
         NavManager.NavigateTo(relativeUri);
     }
 
     private async Task NavigateAndClose(string relativeUri)
     {
+        await JS.InvokeVoidAsync("blurActiveElement");
         await offcanvas.HideAsync();
         NavManager.NavigateTo(relativeUri);
     }
@@ -448,6 +450,7 @@
 
     private async Task LogoutAndClose()
     {
+        await JS.InvokeVoidAsync("blurActiveElement");
         await offcanvas.HideAsync();
         await ts.logOff();
         NavManager.NavigateTo("/");
