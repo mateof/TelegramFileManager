@@ -85,6 +85,9 @@
     SfFileManager<FileManagerDirectoryContent>? FileManager;
     private MobileFileManager? mobileFileManager;
 
+    // Static instance for JSInvokable
+    private static LocalFileManagerImpl? _currentInstance;
+
     private MediaUrlModal mediaUrlModal { get; set; } = default!;
     private VideoPlayerModal videoPlayer { get; set; } = default!;
 
@@ -149,6 +152,7 @@
         if (firstRender)
         {
             _firstRenderComplete = true;
+            _currentInstance = this;
             // Detect viewport size on first render
             await DetectMobileView();
         }
@@ -198,10 +202,28 @@
 
     public async Task RefreshFileManager()
     {
+        // Refresh desktop FileManager
         if (FileManager != null)
         {
-            FileManager.Path = "/";
             await FileManager.RefreshFilesAsync();
+        }
+
+        // Refresh mobile FileManager
+        if (mobileFileManager != null)
+        {
+            await mobileFileManager.RefreshFilesAsync();
+        }
+    }
+
+    [JSInvokable]
+    public static async Task RefreshFileManagerStatic()
+    {
+        if (_currentInstance != null)
+        {
+            await _currentInstance.InvokeAsync(async () =>
+            {
+                await _currentInstance.RefreshFileManager();
+            });
         }
     }
 
@@ -618,6 +640,8 @@
     {
         try
         {
+            ModalUpSer.id = id;
+            ModalUpSer.url = "/api/file/Upload";
             ModalUpSer.filePath = args.Path;
             ModalUpSer.Open();
         }

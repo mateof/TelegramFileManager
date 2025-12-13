@@ -1,68 +1,91 @@
-﻿@inject IJSRuntime JS
+@* Styles moved to site.css *@
+<div class="upload-modal-overlay" :class="{ modalshow: showModal, modalhide: !showModal }" v-if="showModal">
+    <div class="upload-modal-container" v-on:click.stop>
+        <div class="upload-modal-header">
+            <h5 class="upload-modal-title">
+                <i class="bi bi-cloud-arrow-up"></i>
+                Upload Files
+            </h5>
+            <button class="upload-modal-close" v-on:click="closeModal()">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </div>
 
-
-@* <script src="js/fileUploadVue.js"></script> *@
-@* @if (ShowBackdrop) { *@
-
-    <div class="modal" :class="{ modalshow: showModal,  modalhide: !showModal}" tabindex="-1" role="dialog" v-if="showModal">
-        <div class="modal-dialog" role="document">
-            <div class="modal-content">
-
-                <div class="modal-header">
-                    <h5 class="modal-title">Configure file</h5>
-                    <button type="button" class="close" data-dismiss="modal" v-on:click="closeModal()" aria-label="Close" style="border-color: transparent;background-color: transparent;">
-                        <span aria-hidden="true">&times;</span>
-                    </button>
+        <div class="upload-modal-body">
+            <!-- Drop Zone -->
+            <div class="upload-drop-zone"
+                 v-on:click="$refs.files.click()"
+                 v-on:dragover.prevent="onDragOver"
+                 v-on:dragleave="onDragLeave"
+                 v-on:drop.prevent="onDrop"
+                 :class="{ dragover: isDragging }">
+                <div class="upload-drop-icon">
+                    <i class="bi bi-cloud-arrow-up"></i>
                 </div>
+                <div class="upload-drop-text">Drop files here or click to browse</div>
+                <div class="upload-drop-hint">Supports any file type</div>
+                <input type="file"
+                       class="upload-drop-input"
+                       id="filesInput"
+                       ref="files"
+                       v-on:change="onChangeFileUpload()"
+                       multiple />
+            </div>
 
-                <div class="modal-body">
-
-                    <div>
-                        <label>
-                            File
-                            <input type="file" id="filesInput" ref="files" v-on:change="onChangeFileUpload()" multiple />
-                        </label>
-                    </div>
-                    <div v-for="filename in files" :key="filename">
-                        <div class="alert alert-light alert-dismissible fade show" role="alert">
-                            {{filename.file.name}}
-                            {{ bytes(filename.file.size) }}
-                            <div class="progress" style="height: 1px;">
-                                <div class="progress-bar" role="progressbar" :style="{ width: filename.progress + '%' }" aria-valuenow="25" aria-valuemin="0" aria-valuemax="100"></div>
-                            </div>
-                            <div v-if="filename.completed">
-                                <p>Completed</p>
-                            </div>
-
-                            <button type="button" class="btn-close" data-bs-dismiss="alert" v-on:click="deleteFile(filename.file.name)" aria-label="Close"></button>
+            <!-- File List -->
+            <div class="upload-file-list" v-if="files.length > 0">
+                <div class="upload-file-item"
+                     v-for="fileItem in files"
+                     :key="fileItem.file.name"
+                     :class="{ completed: fileItem.completed }">
+                    <div class="upload-file-header">
+                        <div class="upload-file-icon">
+                            <i class="bi" :class="getFileIcon(fileItem.file.name)"></i>
                         </div>
+                        <div class="upload-file-info">
+                            <div class="upload-file-name" :title="fileItem.file.name">{{ fileItem.file.name }}</div>
+                            <div class="upload-file-size">{{ bytes(fileItem.file.size) }}</div>
+                        </div>
+                        <button class="upload-file-remove"
+                                v-on:click="deleteFile(fileItem.file.name)"
+                                v-if="!fileItem.completed"
+                                title="Remove file">
+                            <i class="bi bi-x"></i>
+                        </button>
                     </div>
-
-
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" v-on:click="submitForm()">Upload</button>
-                    <button type="button" class="btn btn-secondary" data-dismiss="modal" v-on:click="closeModal()">Close</button>
+                    <div class="upload-file-progress">
+                        <div class="upload-file-progress-bar" :style="{ width: fileItem.progress + '%' }"></div>
+                    </div>
+                    <div class="upload-file-status">
+                        <span class="upload-file-percent" v-if="!fileItem.completed">{{ fileItem.progress }}%</span>
+                        <span class="upload-completed-badge" v-else>
+                            <i class="bi bi-check-circle-fill"></i>
+                            Completed
+                        </span>
+                        <span class="upload-file-bytes">{{ bytesProgress(fileItem.sended) }} / {{ bytes(fileItem.file.size) }}</span>
+                    </div>
                 </div>
             </div>
+
+            <!-- Empty State -->
+            <div class="upload-empty-state" v-else>
+                <i class="bi bi-inbox" style="font-size: 2rem; display: block; margin-bottom: 0.5rem; opacity: 0.5;"></i>
+                No files selected
+            </div>
+        </div>
+
+        <div class="upload-modal-footer">
+            <button class="upload-btn upload-btn-secondary" v-on:click="closeModal()">
+                <i class="bi bi-x-lg"></i>
+                Close
+            </button>
+            <button class="upload-btn upload-btn-primary"
+                    v-on:click="submitForm()"
+                    :disabled="files.length === 0 || isUploading">
+                <i class="bi bi-cloud-arrow-up"></i>
+                {{ isUploading ? 'Uploading...' : 'Upload' }}
+            </button>
         </div>
     </div>
+</div>
 
-@* }; *@
-
-
-
-
-@code {
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            await JS.InvokeAsync<IJSObjectReference>("import",
-                "/js/fileUploadVue.js?v=12");
-
-        }
-
-    }
-}

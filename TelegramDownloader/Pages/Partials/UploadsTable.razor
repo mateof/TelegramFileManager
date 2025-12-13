@@ -72,12 +72,24 @@ ItemsPropertyName="_internalId">
 
 </Grid>
 
-<TelegramDownloader.Pages.Modals.InfoModals.UploadFileInfoModal @ref="infoModal"></TelegramDownloader.Pages.Modals.InfoModals.UploadFileInfoModal>
+<TelegramDownloader.Pages.Modals.InfoModals.UploadFileInfoModal @ref="infoModal" OnClose="OnModalClose"></TelegramDownloader.Pages.Modals.InfoModals.UploadFileInfoModal>
 
 @code {
+    [Parameter]
+    public EventCallback OnUploadModalClose { get; set; }
+
     public static List<UploadModel> lum = new List<UploadModel>();
     BlazorBootstrap.Grid<UploadModel> grid = default!;
     UploadFileInfoModal infoModal { get; set; }
+
+    private async Task OnModalClose()
+    {
+        await grid.RefreshDataAsync();
+        if (OnUploadModalClose.HasDelegate)
+        {
+            await OnUploadModalClose.InvokeAsync();
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
