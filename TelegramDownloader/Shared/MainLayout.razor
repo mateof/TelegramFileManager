@@ -23,19 +23,7 @@
         display: none;
     }
 
-    /* Sidebar toggle button */
-    .sidebar-toggle {
-        padding: 0.25rem 0.5rem;
-        font-size: 1.25rem;
-        color: #333;
-        text-decoration: none;
-        border: none;
-        background: transparent;
-    }
-
-    .sidebar-toggle:hover {
-        color: #007bff;
-    }
+    /* Sidebar toggle button - styles moved to MainLayout.razor.css */
 
     /* Sidebar collapsed state - desktop only */
     @@media (min-width: 2048px) {
@@ -85,40 +73,47 @@
     </div>
 
     <main>
-        <div class="top-row px-4 d-flex justify-content-end">
-            <button class="btn btn-link sidebar-toggle me-auto" @onclick="ToggleSidebar">
+        <div class="top-row px-3">
+            <button class="sidebar-toggle" @onclick="ToggleSidebar" title="@(sidebarCollapsed ? "Show sidebar" : "Hide sidebar")">
                 <i class="bi @(sidebarCollapsed ? "bi-list" : "bi-x-lg")"></i>
             </button>
-            @if(active) {
-                @if (tis.isUploading())
-                {
-                    <button class="btn water-fill-button upload @(GetUploadProgress() > 50 ? "filled-high" : "")"
-                            @onclick='() => Navigateto("/downloads")'>
-                        <span class="water-fill" style="height: @(GetUploadProgress())%;"></span>
-                        <span class="water-wave" style="height: @(GetUploadProgress())%;"></span>
-                        <span class="btn-content">
-                            <Icon Class="arrow" Name="IconName.ArrowUp"></Icon>
-                            <span>@tis.uploadSpeed</span>
-                        </span>
+
+            <div class="flex-grow-1"></div>
+
+            <div class="top-row-actions">
+                @if(active) {
+                    @if (tis.isUploading())
+                    {
+                        <button class="btn water-fill-button upload @(GetUploadProgress() > 50 ? "filled-high" : "")"
+                                @onclick='() => Navigateto("/downloads")' title="Upload in progress">
+                            <span class="water-fill" style="height: @(GetUploadProgress())%;"></span>
+                            <span class="water-wave" style="height: @(GetUploadProgress())%;"></span>
+                            <span class="btn-content">
+                                <Icon Class="arrow" Name="IconName.ArrowUp"></Icon>
+                                <span>@tis.uploadSpeed</span>
+                            </span>
+                        </button>
+                    }
+                    @if(tis.isDownloading()) {
+                        <button class="btn water-fill-button download @(GetDownloadProgress() > 50 ? "filled-high" : "")"
+                                @onclick='() => Navigateto("/downloads")' title="Download in progress">
+                            <span class="water-fill" style="height: @(GetDownloadProgress())%;"></span>
+                            <span class="water-wave" style="height: @(GetDownloadProgress())%;"></span>
+                            <span class="btn-content">
+                                <Icon Class="arrow" Name="IconName.ArrowDown"></Icon>
+                                <span>@tis.downloadSpeed</span>
+                            </span>
+                        </button>
+                    }
+                    <button class="status-indicator" @onclick='() => Navigateto("/downloads")' title="View tasks">
+                        <Spinner Type="SpinnerType.Border" />
                     </button>
                 }
-                @if(tis.isDownloading()) {
-                    <button class="btn water-fill-button download @(GetDownloadProgress() > 50 ? "filled-high" : "")"
-                            @onclick='() => Navigateto("/downloads")'>
-                        <span class="water-fill" style="height: @(GetDownloadProgress())%;"></span>
-                        <span class="water-wave" style="height: @(GetDownloadProgress())%;"></span>
-                        <span class="btn-content">
-                            <Icon Class="arrow" Name="IconName.ArrowDown"></Icon>
-                            <span>@tis.downloadSpeed</span>
-                        </span>
-                    </button>
-                }
-                <Button Color="ButtonColor.None" Size="ButtonSize.Small" @onclick='() => Navigateto("/downloads")'>
-                    <Spinner Type="SpinnerType.Border" />
-                </Button>
-            }
-            <VersionBadge @ref="versionBadge" @bind-ShowModal="showVersionModal" />
-            <button class="btn" type="button" @onclick="openOffCanvasMenu"><i class="bi bi-three-dots"></i></button>
+                <VersionBadge @ref="versionBadge" @bind-ShowModal="showVersionModal" />
+                <button class="menu-btn" type="button" @onclick="openOffCanvasMenu" title="Menu">
+                    <i class="bi bi-three-dots-vertical"></i>
+                </button>
+            </div>
         </div>
         <TelegramDownloader.Pages.Modals.ToastNotify></TelegramDownloader.Pages.Modals.ToastNotify>
 

@@ -37,26 +37,43 @@ button.btn.water-fill-button {
     display: inline-flex !important;
     align-items: center !important;
     justify-content: center !important;
-    padding: 8px 16px !important;
-    border: 2px solid #007bff !important;
-    background-color: transparent !important;
+    padding: 0.5rem 1rem !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    background: rgba(255, 255, 255, 0.05) !important;
     background-image: none !important;
-    color: #007bff !important;
+    color: rgba(255, 255, 255, 0.9) !important;
     overflow: hidden !important;
-    min-width: 130px !important;
-    min-height: 40px !important;
-    border-radius: 4px !important;
+    min-width: 120px !important;
+    min-height: 36px !important;
+    border-radius: 0.5rem !important;
     cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    font-size: 0.875rem !important;
+}
+
+button.btn.water-fill-button:hover {
+    border-color: rgba(255, 255, 255, 0.3) !important;
+    transform: translateY(-1px) !important;
 }
 
 button.btn.water-fill-button.upload {
-    border-color: #28a745 !important;
-    color: #28a745 !important;
+    border-color: rgba(40, 167, 69, 0.5) !important;
+    color: #5dd879 !important;
+}
+
+button.btn.water-fill-button.upload:hover {
+    border-color: rgba(40, 167, 69, 0.7) !important;
+    box-shadow: 0 4px 12px rgba(40, 167, 69, 0.2) !important;
 }
 
 button.btn.water-fill-button.download {
-    border-color: #17a2b8 !important;
-    color: #17a2b8 !important;
+    border-color: rgba(23, 162, 184, 0.5) !important;
+    color: #5bc0de !important;
+}
+
+button.btn.water-fill-button.download:hover {
+    border-color: rgba(23, 162, 184, 0.7) !important;
+    box-shadow: 0 4px 12px rgba(23, 162, 184, 0.2) !important;
 }
 
 /* Water fill background layer */
