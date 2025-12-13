@@ -2,6 +2,7 @@
 @using TelegramDownloader.Data
 @using TelegramDownloader.Data.db
 @using TelegramDownloader.Models
+@implements IDisposable
 
 @inject IDbService db
 @inject ToastService toastService
@@ -477,6 +478,7 @@
 
 @code {
     public GeneralConfig Model { get; set; }
+    private bool _disposed = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -487,12 +489,20 @@
     private async Task LoadModelAsync()
     {
         Model ??= await GeneralConfigStatic.Load(db);
-        await InvokeAsync(StateHasChanged);
+        if (!_disposed)
+        {
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private async Task Submit()
     {
         await GeneralConfigStatic.SaveChanges(db, Model);
         toastService.Notify(new(ToastType.Success, "Configuration saved successfully") { Title = "Success", AutoHide = true });
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
     }
 }

@@ -99,6 +99,7 @@
     BlazorBootstrap.Grid<InfoDownloadTaksModel> grid = default!;
     public static List<InfoDownloadTaksModel> lpt = new List<InfoDownloadTaksModel>();
     TaskInfoModal infoModal { get; set; }
+    private bool _disposed = false;
 
     private string GetShortPath(string path)
     {
@@ -187,11 +188,13 @@
 
     void eventChangedPendingTask(object sender, InfoTaskEventArgs e)
     {
+        if (_disposed) return;
         grid.RefreshDataAsync();
     }
 
     void eventChangedNew(object sender, System.EventArgs e)
     {
+        if (_disposed) return;
         checkNewEventsHandler();
         grid.RefreshDataAsync();
     }
@@ -199,7 +202,8 @@
     private async Task cancel(InfoDownloadTaksModel idt)
     {
         idt.cancelTask();
-        await InvokeAsync(StateHasChanged);
+        if (!_disposed)
+            await InvokeAsync(StateHasChanged);
     }
 
     private async Task delete(InfoDownloadTaksModel idt)
@@ -209,13 +213,14 @@
 
     private async Task retry(InfoDownloadTaksModel idt)
     {
-        //um.thread.Interrupt();
         idt.Retry();
-        await InvokeAsync(StateHasChanged);
+        if (!_disposed)
+            await InvokeAsync(StateHasChanged);
     }
 
     public void Dispose()
     {
+        _disposed = true;
         tis.EventChanged -= eventChangedNew;
         foreach (InfoDownloadTaksModel pt in lpt)
         {

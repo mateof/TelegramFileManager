@@ -97,6 +97,7 @@
     public static List<DownloadModel> ldm = new List<DownloadModel>();
     BlazorBootstrap.Grid<DownloadModel> grid = default!;
     DownloadFileInfoModal infoModal { get; set; }
+    private bool _disposed = false;
 
     private string GetFileIcon(string fileName)
     {
@@ -220,17 +221,20 @@
 
     void eventChanged(object sender, DownloadEventArgs e)
     {
+        if (_disposed) return;
         grid.RefreshDataAsync();
     }
 
     void eventChangedNew(object sender, System.EventArgs e)
     {
+        if (_disposed) return;
         checkNewEventsHandler();
         grid.RefreshDataAsync();
     }
 
     public void Dispose()
     {
+        _disposed = true;
         tis.EventChanged -= eventChangedNew;
         foreach (DownloadModel dm in ldm)
         {

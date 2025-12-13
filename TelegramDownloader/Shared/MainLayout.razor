@@ -278,6 +278,7 @@
     private bool navMenuCollapsed { get; set; } = true;
     private bool showVersionModal { get; set; } = false;
     private static MainLayout? _instance;
+    private bool _disposed = false;
 
     protected override void OnInitialized()
     {
@@ -392,6 +393,7 @@
     }
 
     private async Task checkWorkingTasks() {
+        if (_disposed) return;
         active = tis.isWorking();
         await InvokeAsync(StateHasChanged);
     }
@@ -435,6 +437,7 @@
 
     public void Dispose()
     {
+        _disposed = true;
         tis.TaskEventChanged -= eventChangedWorkingTasks;
     }
 }

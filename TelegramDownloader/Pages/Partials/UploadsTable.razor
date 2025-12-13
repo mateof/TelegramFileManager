@@ -94,6 +94,7 @@
     public static List<UploadModel> lum = new List<UploadModel>();
     BlazorBootstrap.Grid<UploadModel> grid = default!;
     UploadFileInfoModal infoModal { get; set; }
+    private bool _disposed = false;
 
     private string GetFileIcon(string fileName)
     {
@@ -220,19 +221,20 @@
 
     void eventChangedUpload(object sender, UploadEventArgs e)
     {
+        if (_disposed) return;
         grid.RefreshDataAsync();
-        // grid.SelectedItemsChanged = new UploadModel();
-        // getUploadModels();
     }
 
     void eventChangedNew(object sender, System.EventArgs e)
     {
+        if (_disposed) return;
         checkNewEventsHandler();
         grid.RefreshDataAsync();
     }
 
     public void Dispose()
     {
+        _disposed = true;
         tis.EventChanged -= eventChangedNew;
         if (lum != null)
         {
