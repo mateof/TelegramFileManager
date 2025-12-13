@@ -3,8 +3,10 @@
 @using TelegramDownloader.Data
 @using TelegramDownloader.Models
 @using TelegramDownloader.Services
+@using Microsoft.AspNetCore.WebUtilities
 
 @inject TransactionInfoService tis
+@inject NavigationManager NavigationManager
 
 <div class="downloads-header">
     <h2 class="downloads-title">
@@ -42,8 +44,8 @@
     </div>
 </div>
 
-<Tabs>
-    <Tab Title="Pending Tasks" IsActive="true">
+<Tabs @ref="tabsRef" EnableFadeEffect="true">
+    <Tab Title="Pending Tasks" Name="tasks" IsActive="true">
         <Content>
             <div class="tab-actions">
                 <span class="tab-actions-title">Actions</span>
@@ -58,7 +60,7 @@
             <TelegramDownloader.Pages.Partials.TasksTable></TelegramDownloader.Pages.Partials.TasksTable>
         </Content>
     </Tab>
-    <Tab Title="Downloads">
+    <Tab Title="Downloads" Name="downloads">
         <Content>
             <div class="tab-actions">
                 <span class="tab-actions-title">Actions</span>
@@ -87,8 +89,8 @@
                     </button>
                 </div>
             </div>
-            <Tabs>
-                <Tab Title="Active">
+            <Tabs EnableFadeEffect="true">
+                <Tab Title="Active" IsActive="true">
                     <Content>
                         <TelegramDownloader.Pages.Partials.DownloadsTable isPending="false"></TelegramDownloader.Pages.Partials.DownloadsTable>
                     </Content>
@@ -101,7 +103,7 @@
             </Tabs>
         </Content>
     </Tab>
-    <Tab Title="Uploads">
+    <Tab Title="Uploads" Name="uploads">
         <Content>
             <div class="tab-actions">
                 <span class="tab-actions-title">Actions</span>
@@ -119,11 +121,40 @@
 
 
 @code {
-    protected override async Task OnInitializedAsync()
+    private Tabs tabsRef = default!;
+    private string activeTab = "tasks";
+    private bool tabInitialized = false;
+
+    protected override void OnInitialized()
     {
+        // Parse the query string to get the tab parameter
+        var uri = NavigationManager.ToAbsoluteUri(NavigationManager.Uri);
+        if (QueryHelpers.ParseQuery(uri.Query).TryGetValue("tab", out var tabValue))
+        {
+            var tab = tabValue.ToString().ToLower();
+            if (tab == "uploads" || tab == "downloads" || tab == "tasks")
+            {
+                activeTab = tab;
+            }
+        }
     }
 
-    
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && !tabInitialized && activeTab != "tasks")
+        {
+            tabInitialized = true;
+            try
+            {
+                await tabsRef.ShowTabByNameAsync(activeTab);
+            }
+            catch
+            {
+                // Ignore if tab not found
+            }
+        }
+    }
+
     async Task clearUploads()
     {
         tis.clearUploadCompleted();
@@ -138,7 +169,4 @@
     {
         tis.clearTasksCompleted();
     }
-
-    
-    
 }

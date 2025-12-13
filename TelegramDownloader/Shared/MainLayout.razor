@@ -85,7 +85,7 @@
                     @if (tis.isUploading())
                     {
                         <button class="btn water-fill-button upload @(GetUploadProgress() > 50 ? "filled-high" : "")"
-                                @onclick='() => Navigateto("/downloads")' title="Upload in progress">
+                                @onclick='() => Navigateto("/downloads?tab=uploads")' title="Upload in progress">
                             <span class="water-fill" style="height: @(GetUploadProgress())%;"></span>
                             <span class="water-wave" style="height: @(GetUploadProgress())%;"></span>
                             <span class="btn-content">
@@ -96,7 +96,7 @@
                     }
                     @if(tis.isDownloading()) {
                         <button class="btn water-fill-button download @(GetDownloadProgress() > 50 ? "filled-high" : "")"
-                                @onclick='() => Navigateto("/downloads")' title="Download in progress">
+                                @onclick='() => Navigateto("/downloads?tab=downloads")' title="Download in progress">
                             <span class="water-fill" style="height: @(GetDownloadProgress())%;"></span>
                             <span class="water-wave" style="height: @(GetDownloadProgress())%;"></span>
                             <span class="btn-content">
@@ -105,7 +105,7 @@
                             </span>
                         </button>
                     }
-                    <button class="status-indicator" @onclick='() => Navigateto("/downloads")' title="View tasks">
+                    <button class="status-indicator" @onclick='() => Navigateto("/downloads?tab=tasks")' title="View tasks">
                         <Spinner Type="SpinnerType.Border" />
                     </button>
                 }
