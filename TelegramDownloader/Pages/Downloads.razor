@@ -6,51 +6,111 @@
 
 @inject TransactionInfoService tis
 
+<div class="downloads-header">
+    <h2 class="downloads-title">
+        <i class="bi bi-cloud-arrow-down-fill"></i>
+        Tasks Manager
+    </h2>
+    <div class="stats-summary">
+        <div class="stat-card">
+            <div class="stat-icon pending">
+                <i class="bi bi-clock-history"></i>
+            </div>
+            <div class="stat-info">
+                <h4>@tis.getTotalTasks()</h4>
+                <p>Pending Tasks</p>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon downloads">
+                <i class="bi bi-download"></i>
+            </div>
+            <div class="stat-info">
+                <h4>@tis.getTotalDownloads(false)</h4>
+                <p>Downloads</p>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon uploads">
+                <i class="bi bi-upload"></i>
+            </div>
+            <div class="stat-info">
+                <h4>@tis.getTotalUploads()</h4>
+                <p>Uploads</p>
+            </div>
+        </div>
+    </div>
+</div>
+
 <Tabs>
     <Tab Title="Pending Tasks" IsActive="true">
         <Content>
-            <div style="padding: 1em">
-                <button class="btn btn-success" @onclick="clearTasks" data-bs-toggle="tooltip" data-bs-placement="top" title="Clear completed and error"><i class="bi bi-trash"></i> Clear</button>
+            <div class="tab-actions">
+                <span class="tab-actions-title">Actions</span>
+                <div class="action-btn-group">
+                    <button class="action-btn clear" @onclick="clearTasks" title="Clear completed and error">
+                        <i class="bi bi-trash3"></i>
+                        <span>Clear</span>
+                    </button>
+                </div>
             </div>
-            
+
             <TelegramDownloader.Pages.Partials.TasksTable></TelegramDownloader.Pages.Partials.TasksTable>
         </Content>
     </Tab>
     <Tab Title="Downloads">
         <Content>
-            <div style="padding: 1em">
-                <div class="btn-group" role="group" aria-label="Basic outlined example">
-                    <button class="btn btn-success" @onclick="clearDownloads" data-bs-toggle="tooltip" data-bs-placement="top" title="Clear completed and error"><i class="bi bi-trash"></i> Clear</button>
+            <div class="tab-actions">
+                <span class="tab-actions-title">Actions</span>
+                <div class="action-btn-group">
+                    <button class="action-btn clear" @onclick="clearDownloads" title="Clear completed and error">
+                        <i class="bi bi-trash3"></i>
+                        <span>Clear</span>
+                    </button>
                     @if (tis.isPauseDownloads)
                     {
-                        <button type="button" @onclick="() => tis.PlayDownloads()" class="btn btn-outline-primary"><i class="bi bi-play"></i></button>
-                    } else
-                    {
-                        <button type="button" @onclick="() => tis.PauseDownloads()" class="btn btn-outline-primary"><i class="bi bi-pause"></i></button>
+                        <button class="action-btn play" @onclick="() => tis.PlayDownloads()" title="Resume downloads">
+                            <i class="bi bi-play-fill"></i>
+                            <span>Play</span>
+                        </button>
                     }
-                    <button type="button" @onclick="() => tis.StopDownloads()" class="btn btn-outline-primary"><i class="bi bi-stop"></i></button>
+                    else
+                    {
+                        <button class="action-btn pause" @onclick="() => tis.PauseDownloads()" title="Pause downloads">
+                            <i class="bi bi-pause-fill"></i>
+                            <span>Pause</span>
+                        </button>
+                    }
+                    <button class="action-btn stop" @onclick="() => tis.StopDownloads()" title="Stop all downloads">
+                        <i class="bi bi-stop-fill"></i>
+                        <span>Stop</span>
+                    </button>
                 </div>
-                
             </div>
             <Tabs>
-                <Tab Title="Downloads">
+                <Tab Title="Active">
                     <Content>
                         <TelegramDownloader.Pages.Partials.DownloadsTable isPending="false"></TelegramDownloader.Pages.Partials.DownloadsTable>
                     </Content>
                 </Tab>
-                <Tab Title="Pending">
+                <Tab Title="Queue">
                     <Content>
                         <TelegramDownloader.Pages.Partials.DownloadsTable isPending="true"></TelegramDownloader.Pages.Partials.DownloadsTable>
                     </Content>
                 </Tab>
             </Tabs>
-            
         </Content>
     </Tab>
     <Tab Title="Uploads">
         <Content>
-            <div style="padding: 1em">
-                <button class="btn btn-success" @onclick="clearUploads" data-bs-toggle="tooltip" data-bs-placement="top" title="Clear completed and error"><i class="bi bi-trash"></i> Clear</button>
+            <div class="tab-actions">
+                <span class="tab-actions-title">Actions</span>
+                <div class="action-btn-group">
+                    <button class="action-btn clear" @onclick="clearUploads" title="Clear completed and error">
+                        <i class="bi bi-trash3"></i>
+                        <span>Clear</span>
+                    </button>
+                </div>
             </div>
             <TelegramDownloader.Pages.Partials.UploadsTable></TelegramDownloader.Pages.Partials.UploadsTable>
         </Content>
