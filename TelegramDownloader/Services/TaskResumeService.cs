@@ -20,14 +20,18 @@ namespace TelegramDownloader.Services
 
         public async Task StartAsync(CancellationToken cancellationToken)
         {
-            _logger.LogInformation("TaskResumeService starting - checking for pending tasks");
+            _logger.LogInformation("========== TaskResumeService STARTING ==========");
+            _logger.LogInformation("AutoResumeOnStartup config value: {Value}", GeneralConfigStatic.config?.AutoResumeOnStartup);
+            _logger.LogInformation("EnableTaskPersistence config value: {Value}", GeneralConfigStatic.config?.EnableTaskPersistence);
 
             // Check if auto-resume is enabled
             if (!(GeneralConfigStatic.config?.AutoResumeOnStartup ?? true))
             {
-                _logger.LogInformation("Auto-resume on startup is disabled");
+                _logger.LogWarning("Auto-resume on startup is DISABLED in config - skipping task resume");
                 return;
             }
+
+            _logger.LogInformation("Auto-resume is ENABLED - will resume tasks in background");
 
             // Run in background to not block application startup
             _ = Task.Run(async () =>
@@ -38,15 +42,19 @@ namespace TelegramDownloader.Services
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Error during task resume");
+                    _logger.LogError(ex, "CRITICAL ERROR during task resume: {Message}", ex.Message);
                 }
             }, cancellationToken);
         }
 
         private async Task ResumeTasksAsync(CancellationToken cancellationToken)
         {
+            _logger.LogInformation("ResumeTasksAsync - Starting, waiting 5 seconds for services...");
+
             // Wait a bit for services to be fully initialized
             await Task.Delay(5000, cancellationToken);
+
+            _logger.LogInformation("ResumeTasksAsync - Creating service scope...");
 
             using var scope = _serviceProvider.CreateScope();
             var telegramService = scope.ServiceProvider.GetRequiredService<ITelegramService>();
@@ -54,45 +62,58 @@ namespace TelegramDownloader.Services
             var fileService = scope.ServiceProvider.GetRequiredService<IFileService>();
             var transactionInfo = scope.ServiceProvider.GetRequiredService<TransactionInfoService>();
 
+            _logger.LogInformation("ResumeTasksAsync - Services resolved. Persistence enabled: {Enabled}, FileService type: {Type}",
+                persistence.IsEnabled, fileService.GetType().Name);
+
             // Wait for Telegram session to be ready
             var maxWaitTime = TimeSpan.FromSeconds(60);
             var waited = TimeSpan.Zero;
             var checkInterval = TimeSpan.FromSeconds(3);
 
-            _logger.LogInformation("Waiting for Telegram session to be ready...");
+            _logger.LogInformation("Waiting for Telegram session to be ready (max {MaxWait}s)...", maxWaitTime.TotalSeconds);
 
             while (!telegramService.checkUserLogin() && waited < maxWaitTime)
             {
                 if (cancellationToken.IsCancellationRequested)
+                {
+                    _logger.LogWarning("Cancellation requested while waiting for Telegram session");
                     return;
+                }
 
-                _logger.LogDebug("Waiting for Telegram session... {Waited}s", waited.TotalSeconds);
+                _logger.LogInformation("Waiting for Telegram session... {Waited}s elapsed", waited.TotalSeconds);
                 await Task.Delay(checkInterval, cancellationToken);
                 waited += checkInterval;
             }
 
             if (!telegramService.checkUserLogin())
             {
-                _logger.LogWarning("Telegram session not ready after {MaxWait}s - tasks will not be resumed automatically. " +
+                _logger.LogWarning("Telegram session NOT ready after {MaxWait}s - tasks will NOT be resumed automatically. " +
                     "They will resume when user logs in.", maxWaitTime.TotalSeconds);
                 return;
             }
 
-            _logger.LogInformation("Telegram session ready - loading pending tasks");
+            _logger.LogInformation("========== Telegram session READY - Loading pending tasks from MongoDB ==========");
 
             // Cleanup stale tasks first
             await persistence.CleanupStaleTasks();
 
             // Load pending tasks
+            _logger.LogInformation("Calling LoadPendingTasks...");
             var pendingTasks = await persistence.LoadPendingTasks();
+            _logger.LogInformation("LoadPendingTasks returned {Count} tasks", pendingTasks?.Count ?? 0);
 
-            if (pendingTasks.Count == 0)
+            if (pendingTasks == null || pendingTasks.Count == 0)
             {
-                _logger.LogInformation("No pending tasks to resume");
+                _logger.LogInformation("========== No pending tasks found in MongoDB - nothing to resume ==========");
                 return;
             }
 
-            _logger.LogInformation("Found {Count} pending tasks to resume", pendingTasks.Count);
+            _logger.LogInformation("========== Found {Count} pending tasks to resume ==========", pendingTasks.Count);
+            foreach (var t in pendingTasks)
+            {
+                _logger.LogInformation("  - Task: {Name}, Type: {Type}, State: {State}, Channel: {Channel}, Progress: {Progress}%",
+                    t.Name, t.Type, t.State, t.ChannelId, t.Progress);
+            }
 
             // Group tasks by type for better processing
             var downloads = pendingTasks.Where(t => t.Type == TaskType.Download).ToList();
@@ -223,10 +244,13 @@ namespace TelegramDownloader.Services
             // Note: FileServiceV2.downloadFromTelegramV2 will need modification to accept resumeOffset
             if (fileService is FileServiceV2 fsv2)
             {
+                _logger.LogInformation("FileService is FileServiceV2 - setting up download callback");
+
                 // Add to pending list with the existing internal ID
                 downloadModel.callbacks = new Callbacks();
                 downloadModel.callbacks.callback = async () =>
                 {
+                    _logger.LogInformation("Download callback executing for: {Name}", task.Name);
                     await fsv2.DownloadFileNowV2WithOffset(
                         task.ChannelId,
                         task.MessageId ?? (task.MessageIds?.FirstOrDefault() ?? 0),
@@ -235,11 +259,17 @@ namespace TelegramDownloader.Services
                         resumeOffset);
                 };
 
+                _logger.LogInformation("Adding download to pending list: {Name}, InternalId: {Id}",
+                    downloadModel.name, downloadModel._internalId);
+
                 transactionInfo.addToPendingDownloadList(downloadModel, atFirst: false, chekDownloads: true);
+
+                _logger.LogInformation("Download added to pending list successfully: {Name}", task.Name);
             }
             else
             {
-                _logger.LogWarning("FileService is not FileServiceV2 - cannot resume with offset");
+                _logger.LogWarning("FileService is NOT FileServiceV2 (actual type: {Type}) - cannot resume with offset",
+                    fileService.GetType().Name);
                 // Fallback: restart download from beginning
                 // This would require implementing resume in FileService as well
             }
