@@ -101,11 +101,11 @@
     private bool _viewportDetected = false;
     private const int MobileBreakpoint = 1920; // Custom breakpoint for mobile file manager
 
-    // Use relative URLs to work correctly with reverse proxies (HTTP/HTTPS)
-    private string FileOperationsUrl => "/api/file/FileOperations";
-    private string UploadUrl => "/api/file/Upload";
-    private string DownloadUrl => "/api/file/Download";
-    private string GetImageUrl => "/api/file/GetImage";
+    // Use NavigationManager.BaseUri to build absolute URLs that work with both direct access and reverse proxies
+    private string FileOperationsUrl => $"{NavManager.BaseUri}api/file/FileOperations";
+    private string UploadUrl => $"{NavManager.BaseUri}api/file/Upload";
+    private string DownloadUrl => $"{NavManager.BaseUri}api/file/Download";
+    private string GetImageUrl => $"{NavManager.BaseUri}api/file/GetImage";
 
 
     public List<ToolBarItemModel> Items = new List<ToolBarItemModel>(){
