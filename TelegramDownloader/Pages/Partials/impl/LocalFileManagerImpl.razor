@@ -11,8 +11,8 @@
 @inject ILogger<FileManager> Logger;
 @inject NavigationManager NavManager
 
-@* Loading while detecting viewport *@
-@if (!_viewportDetected)
+@* Loading while detecting viewport and base URL *@
+@if (!_viewportDetected || string.IsNullOrEmpty(_baseUrl))
 {
     <div style="display: flex; justify-content: center; align-items: center; height: 200px;">
         <div class="spinner-border text-primary" role="status">
@@ -21,8 +21,8 @@
     </div>
 }
 
-@* Desktop FileManager - only render when viewport detected and not on mobile *@
-@if (_viewportDetected && !_isMobileView)
+@* Desktop FileManager - only render when viewport detected, base URL ready, and not on mobile *@
+@if (_viewportDetected && !string.IsNullOrEmpty(_baseUrl) && !_isMobileView)
 {
     <SfFileManager @ref="FileManager" ID="localfm" TValue="FileManagerDirectoryContent">
         <FileManagerAjaxSettings Url="@FileOperationsUrl"
@@ -39,7 +39,7 @@
 }
 
 @* Mobile FileManager *@
-@if (_viewportDetected && _isMobileView)
+@if (_viewportDetected && !string.IsNullOrEmpty(_baseUrl) && _isMobileView)
 {
     <div class="mobile-fm-container">
         <MobileFileManager @ref="mobileFileManager"
@@ -101,11 +101,12 @@
     private bool _viewportDetected = false;
     private const int MobileBreakpoint = 1920; // Custom breakpoint for mobile file manager
 
-    // Use NavigationManager.BaseUri to build absolute URLs that work with both direct access and reverse proxies
-    private string FileOperationsUrl => $"{NavManager.BaseUri}api/file/FileOperations";
-    private string UploadUrl => $"{NavManager.BaseUri}api/file/Upload";
-    private string DownloadUrl => $"{NavManager.BaseUri}api/file/Download";
-    private string GetImageUrl => $"{NavManager.BaseUri}api/file/GetImage";
+    // URLs will be set from JavaScript to get the actual browser origin
+    private string _baseUrl = "";
+    private string FileOperationsUrl => $"{_baseUrl}/api/file/FileOperations";
+    private string UploadUrl => $"{_baseUrl}/api/file/Upload";
+    private string DownloadUrl => $"{_baseUrl}/api/file/Download";
+    private string GetImageUrl => $"{_baseUrl}/api/file/GetImage";
 
 
     public List<ToolBarItemModel> Items = new List<ToolBarItemModel>(){
@@ -150,8 +151,16 @@
         {
             _firstRenderComplete = true;
             _currentInstance = this;
+
+            // Get actual browser origin via JavaScript (works correctly with reverse proxies)
+            _baseUrl = await JSRuntime.InvokeAsync<string>("eval", "window.location.origin");
+            Logger.LogInformation($"LocalFileManager BaseUrl: {_baseUrl}");
+
             // Detect viewport size on first render
             await DetectMobileView();
+
+            // Force re-render to apply the URLs
+            StateHasChanged();
         }
 
         if (_needsRefresh && FileManager != null)
