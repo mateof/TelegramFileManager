@@ -82,10 +82,15 @@ builder.Services.AddBlazorBootstrap();
 
 var app = builder.Build();
 
-app.UseForwardedHeaders(new ForwardedHeadersOptions
+// Configure forwarded headers for reverse proxy support (HTTPS via nginx, traefik, etc.)
+var forwardedHeadersOptions = new ForwardedHeadersOptions
 {
-    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
-});
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost
+};
+// Clear default limits to accept forwarded headers from any proxy
+forwardedHeadersOptions.KnownNetworks.Clear();
+forwardedHeadersOptions.KnownProxies.Clear();
+app.UseForwardedHeaders(forwardedHeadersOptions);
 
 using (var scope = app.Services.CreateScope())
 {
