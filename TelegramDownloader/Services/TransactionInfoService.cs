@@ -19,6 +19,7 @@ namespace TelegramDownloader.Services
         public List<DownloadModel> downloadModels = new List<DownloadModel>();
         public List<DownloadModel> pendingDownloadModels = new List<DownloadModel>();
         public List<UploadModel> uploadModels = new List<UploadModel>();
+        public List<UploadModel> pendingUploadModels = new List<UploadModel>();
         public List<InfoDownloadTaksModel> infoDownloadTaksModel = new List<InfoDownloadTaksModel>();
         public String downloadSpeed = "0 KB/s";
         public String uploadSpeed = "0 KB/s";
@@ -30,6 +31,7 @@ namespace TelegramDownloader.Services
         private int speedHistoryCount = 0;
 
         private static Mutex PendingDownloadMutex = new Mutex();
+        private static Mutex PendingUploadMutex = new Mutex();
         private static Mutex PendingUploadInfoTaskMutex = new Mutex();
         private static Mutex DownloadBytesMutex = new Mutex();
         private static Mutex UploadBytesMutex = new Mutex();
@@ -357,16 +359,35 @@ namespace TelegramDownloader.Services
             return isPending ? pendingDownloadModels.Count() : downloadModels.Count();
         }
 
-        public List<UploadModel> GetUploadModels(int pageNumber, int pageSize)
+        public List<UploadModel> GetUploadModels(int pageNumber, int pageSize, bool isPending = false)
         {
-            if (uploadModels.Count() == 0 || uploadModels.Count() < (pageNumber) * pageSize)
-                return uploadModels;
-            return uploadModels.Skip(pageNumber * pageSize).Take(pageSize).ToList(); //.GetRange(pageNumber * pageSize, pageSize);
+            var sourceList = isPending ? pendingUploadModels : uploadModels;
+            if (sourceList.Count() == 0 || sourceList.Count() < (pageNumber) * pageSize)
+                return sourceList;
+            return sourceList.Skip(pageNumber * pageSize).Take(pageSize).ToList();
         }
 
-        public int getTotalUploads()
+        public int getTotalUploads(bool isPending = false)
         {
-            return uploadModels.Count();
+            return isPending ? pendingUploadModels.Count() : uploadModels.Count();
+        }
+
+        public void addToPendingUploadList(UploadModel uploadModel)
+        {
+            PendingUploadMutex.WaitOne();
+            pendingUploadModels.Add(uploadModel);
+            PendingUploadMutex.ReleaseMutex();
+            EventChanged?.Invoke(this, new EventArgs());
+            TaskEventChanged?.Invoke(null, EventArgs.Empty);
+        }
+
+        public void deletePendingUploadInList(UploadModel uploadModel)
+        {
+            PendingUploadMutex.WaitOne();
+            pendingUploadModels.Remove(uploadModel);
+            PendingUploadMutex.ReleaseMutex();
+            EventChanged?.Invoke(this, new EventArgs());
+            TaskEventChanged?.Invoke(null, EventArgs.Empty);
         }
 
         public void deleteDownloadInList(DownloadModel downloadModel)

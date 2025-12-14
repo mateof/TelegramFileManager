@@ -114,7 +114,18 @@
                     </button>
                 </div>
             </div>
-            <TelegramDownloader.Pages.Partials.UploadsTable></TelegramDownloader.Pages.Partials.UploadsTable>
+            <Tabs EnableFadeEffect="true">
+                <Tab Title="Active" IsActive="true">
+                    <Content>
+                        <TelegramDownloader.Pages.Partials.UploadsTable isPending="false"></TelegramDownloader.Pages.Partials.UploadsTable>
+                    </Content>
+                </Tab>
+                <Tab Title="Queue">
+                    <Content>
+                        <TelegramDownloader.Pages.Partials.UploadsTable isPending="true"></TelegramDownloader.Pages.Partials.UploadsTable>
+                    </Content>
+                </Tab>
+            </Tabs>
         </Content>
     </Tab>
 </Tabs>
