@@ -63,6 +63,10 @@ builder.Services.AddSingleton<TransactionInfoService>();
 builder.Services.AddSingleton<FileManagerService>();
 builder.Services.AddSingleton<GHService>();
 
+// Task persistence services
+builder.Services.AddSingleton<ITaskPersistenceService, TaskPersistenceService>();
+builder.Services.AddHostedService<TaskResumeService>();
+
 ServiceLocator.ServiceProvider = builder.Services.BuildServiceProvider();
 builder.Services.AddBlazorBootstrap();
 

@@ -220,9 +220,18 @@ namespace TelegramDownloader.Services
 
         public void addToDownloadList(DownloadModel downloadModel)
         {
+            PendingDownloadMutex.WaitOne(10000);
+            // Check if already exists to avoid duplicate key errors in UI
+            if (downloadModels.Any(d => d._internalId == downloadModel._internalId))
+            {
+                PendingDownloadMutex.ReleaseMutex();
+                _logger.LogDebug("Download already in list, skipping - Name: {Name}, InternalId: {Id}",
+                    downloadModel.name, downloadModel._internalId);
+                return;
+            }
+
             _logger.LogInformation("Adding to download list - Name: {Name}, Size: {SizeMB:F2}MB",
                 downloadModel.name, downloadModel._size / (1024.0 * 1024.0));
-            PendingDownloadMutex.WaitOne(10000);
             downloadModels.Insert(0, downloadModel);
             PendingDownloadMutex.ReleaseMutex();
             EventChanged?.Invoke(this, new EventArgs());
@@ -231,9 +240,20 @@ namespace TelegramDownloader.Services
 
         public void addToPendingDownloadList(DownloadModel downloadModel, bool atFirst = false, bool chekDownloads = true)
         {
+            PendingDownloadMutex.WaitOne(10000);
+            // Check if already exists to avoid duplicate key errors in UI
+            if (pendingDownloadModels.Any(d => d._internalId == downloadModel._internalId))
+            {
+                PendingDownloadMutex.ReleaseMutex();
+                _logger.LogDebug("Download already in pending list, skipping - Name: {Name}, InternalId: {Id}",
+                    downloadModel.name, downloadModel._internalId);
+                if (chekDownloads)
+                    CheckPendingDownloads();
+                return;
+            }
+
             _logger.LogDebug("Adding to pending download list - Name: {Name}, AtFirst: {AtFirst}, PendingCount: {Count}",
                 downloadModel.name, atFirst, pendingDownloadModels.Count + 1);
-            PendingDownloadMutex.WaitOne(10000);
             if (atFirst)
                 pendingDownloadModels.Insert(0, downloadModel);
             else
@@ -318,6 +338,14 @@ namespace TelegramDownloader.Services
 
         public void addToUploadList(UploadModel uploadModel)
         {
+            // Check if already exists to avoid duplicate key errors in UI
+            if (uploadModels.Any(u => u._internalId == uploadModel._internalId))
+            {
+                _logger.LogDebug("Upload already in list, skipping - Name: {Name}, InternalId: {Id}",
+                    uploadModel.name, uploadModel._internalId);
+                return;
+            }
+
             _logger.LogInformation("Adding to upload list - Name: {Name}, Size: {SizeMB:F2}MB",
                 uploadModel.name, uploadModel._size / (1024.0 * 1024.0));
             uploadModels.Insert(0, uploadModel);
@@ -375,6 +403,15 @@ namespace TelegramDownloader.Services
         public void addToPendingUploadList(UploadModel uploadModel)
         {
             PendingUploadMutex.WaitOne();
+            // Check if already exists to avoid duplicate key errors in UI
+            if (pendingUploadModels.Any(u => u._internalId == uploadModel._internalId))
+            {
+                PendingUploadMutex.ReleaseMutex();
+                _logger.LogDebug("Upload already in pending list, skipping - Name: {Name}, InternalId: {Id}",
+                    uploadModel.name, uploadModel._internalId);
+                return;
+            }
+
             pendingUploadModels.Add(uploadModel);
             PendingUploadMutex.ReleaseMutex();
             EventChanged?.Invoke(this, new EventArgs());
@@ -406,6 +443,26 @@ namespace TelegramDownloader.Services
             PendingDownloadMutex.ReleaseMutex();
             EventChanged?.Invoke(this, new EventArgs());
             TaskEventChanged.Invoke(null, EventArgs.Empty);
+        }
+
+        public void ClearPendingDownloads()
+        {
+            _logger.LogInformation("Clearing all pending downloads - Count: {Count}", pendingDownloadModels.Count);
+            PendingDownloadMutex.WaitOne();
+            pendingDownloadModels.Clear();
+            PendingDownloadMutex.ReleaseMutex();
+            EventChanged?.Invoke(this, new EventArgs());
+            TaskEventChanged.Invoke(null, EventArgs.Empty);
+        }
+
+        public void ClearPendingUploads()
+        {
+            _logger.LogInformation("Clearing all pending uploads - Count: {Count}", pendingUploadModels.Count);
+            PendingUploadMutex.WaitOne();
+            pendingUploadModels.Clear();
+            PendingUploadMutex.ReleaseMutex();
+            EventChanged?.Invoke(this, new EventArgs());
+            TaskEventChanged?.Invoke(null, EventArgs.Empty);
         }
 
         public void deleteInfoDownloadTaskFromList(InfoDownloadTaksModel idt)

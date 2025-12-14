@@ -2,10 +2,12 @@
 @using TelegramDownloader.Data
 @using TelegramDownloader.Data.db
 @using TelegramDownloader.Models
+@using TelegramDownloader.Services
 @implements IDisposable
 
 @inject IDbService db
 @inject ToastService toastService
+@inject TransactionInfoService tis
 
 <style>
     .config-page {
@@ -438,6 +440,119 @@
                 </div>
             </div>
 
+            <!-- Task Persistence Section -->
+            <div class="config-section">
+                <div class="config-section-header">
+                    <i class="bi bi-arrow-repeat"></i>
+                    <span>Task Persistence</span>
+                </div>
+                <div class="config-section-body">
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-database"></i>
+                                Enable Task Persistence
+                            </div>
+                            <div class="config-item-description">
+                                Save download/upload tasks to database to survive application restarts
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputCheckbox @bind-Value="Model!.EnableTaskPersistence" class="form-check-input config-switch" />
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-play-circle"></i>
+                                Auto-Resume on Startup
+                            </div>
+                            <div class="config-item-description">
+                                Automatically resume pending tasks when the application starts
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputCheckbox @bind-Value="Model!.AutoResumeOnStartup" class="form-check-input config-switch" />
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-clock-history"></i>
+                                Progress Save Interval
+                            </div>
+                            <div class="config-item-description">
+                                How often to save task progress to database (seconds). Lower values = more precise resume, higher values = less DB load.
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <div class="config-input-group">
+                                <NumberInput TValue="int" @bind-Value="Model!.TaskPersistenceDebounceSeconds" Min="1" Max="60" EnableMinMax="true" class="form-control" style="width: 80px;" />
+                                <span class="text-muted">sec</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-trash3"></i>
+                                Stale Task Cleanup
+                            </div>
+                            <div class="config-item-description">
+                                Automatically delete failed/stuck tasks older than this many days
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <div class="config-input-group">
+                                <NumberInput TValue="int" @bind-Value="Model!.StaleTaskCleanupDays" Min="1" Max="30" EnableMinMax="true" class="form-control" style="width: 80px;" />
+                                <span class="text-muted">days</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-cloud-arrow-down"></i>
+                                Pending Downloads
+                            </div>
+                            <div class="config-item-description">
+                                Clear all pending downloads from the queue
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <button type="button" class="btn btn-outline-danger btn-sm d-flex align-items-center gap-2" @onclick="ClearPendingDownloads" disabled="@(pendingDownloadsCount == 0)">
+                                <i class="bi bi-trash3"></i>
+                                Clear
+                                <span class="badge bg-secondary">@pendingDownloadsCount</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-database-x"></i>
+                                Persisted Tasks
+                            </div>
+                            <div class="config-item-description">
+                                Clear all persisted tasks from the database (tasks saved for resume after restart)
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <button type="button" class="btn btn-outline-danger btn-sm d-flex align-items-center gap-2" @onclick="ClearPersistedTasks" disabled="@(persistedTasksCount == 0)">
+                                <i class="bi bi-trash3"></i>
+                                Clear
+                                <span class="badge bg-secondary">@persistedTasksCount</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Advanced Section -->
             <div class="config-section">
                 <div class="config-section-header">
@@ -480,10 +595,15 @@
     public GeneralConfig Model { get; set; }
     private bool _disposed = false;
 
+    // Task counters
+    private int pendingDownloadsCount = 0;
+    private int persistedTasksCount = 0;
+
     protected override async Task OnInitializedAsync()
     {
         Model = null;
         await LoadModelAsync();
+        await RefreshCounters();
     }
 
     private async Task LoadModelAsync()
@@ -493,6 +613,40 @@
         {
             await InvokeAsync(StateHasChanged);
         }
+    }
+
+    private async Task RefreshCounters()
+    {
+        pendingDownloadsCount = tis.getTotalDownloads(isPending: true);
+
+        try
+        {
+            var persistedTasks = await db.GetAllPendingTasks();
+            persistedTasksCount = persistedTasks?.Count ?? 0;
+        }
+        catch
+        {
+            persistedTasksCount = 0;
+        }
+
+        if (!_disposed)
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task ClearPendingDownloads()
+    {
+        tis.ClearPendingDownloads();
+        await RefreshCounters();
+        toastService.Notify(new(ToastType.Success, "Pending downloads cleared") { Title = "Success", AutoHide = true });
+    }
+
+    private async Task ClearPersistedTasks()
+    {
+        await db.ClearAllTasks();
+        await RefreshCounters();
+        toastService.Notify(new(ToastType.Success, "Persisted tasks cleared") { Title = "Success", AutoHide = true });
     }
 
     private async Task Submit()

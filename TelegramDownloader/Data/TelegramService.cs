@@ -26,6 +26,7 @@ namespace TelegramDownloader.Data
         private const int FILESPLITSIZE = 524288; // 512 * 1024;
         private TransactionInfoService _tis { get; set; }
         private IDbService _db { get; set; }
+        private ITaskPersistenceService _persistence { get; set; }
         private static WTelegram.Client client = null;
         private static Messages_Chats chats = null;
         private static List<ChatViewBase> favouriteChannels = new List<ChatViewBase>();
@@ -33,11 +34,12 @@ namespace TelegramDownloader.Data
         private ILogger<IFileService> _logger { get; set; }
 
 
-        public TelegramService(TransactionInfoService tis, IDbService db, ILogger<IFileService> logger)
+        public TelegramService(TransactionInfoService tis, IDbService db, ILogger<IFileService> logger, ITaskPersistenceService persistence)
         {
             _tis = tis;
             _db = db;
             _logger = logger;
+            _persistence = persistence;
             // createDownloadFolder();
             mut.WaitOne();
             if (client == null)
@@ -341,16 +343,39 @@ namespace TelegramDownloader.Data
             um.startDate = DateTime.Now;
             um._transmitted = 0;
             _tis.addToUploadList(um);
+
+            // Persist the upload task
+            try
+            {
+                um.OnProgressPersist = async (transmitted, progress, state) =>
+                {
+                    await _persistence.UpdateProgress(um._internalId, transmitted, progress, state);
+                };
+                await _persistence.PersistUpload(um, chatId, um.path);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to persist upload task - continuing without persistence");
+            }
+
             try
             {
                 var inputFile = await client.UploadFileAsync(file, fileName, um.ProgressCallback);
                 var result = await client.SendMediaAsync(peer, caption ?? fileName, inputFile, mimeType);
                 _logger.LogInformation("File upload completed - FileName: {FileName}, MessageId: {MessageId}", fileName, result.id);
+
+                // Mark task as completed
+                await _persistence.MarkCompleted(um._internalId);
+
                 return result;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "File upload failed - FileName: {FileName}, ChatId: {ChatId}", fileName, chatId);
+
+                // Mark task as error
+                await _persistence.MarkError(um._internalId, ex.Message);
+
                 throw;
             }
         }
@@ -800,6 +825,129 @@ namespace TelegramDownloader.Data
 
 
             }
+            return null;
+        }
+
+        public async Task<Stream> DownloadFileAndReturnWithOffset(ChatMessages message, Stream ms = null, string fileName = null, string folder = null, DownloadModel model = null, long offset = 0)
+        {
+            if (model == null)
+            {
+                model = new DownloadModel();
+                model.tis = _tis;
+            }
+
+            model.m = message;
+            model.channel = message.user;
+
+            if (message.message.media is MessageMediaDocument { document: TL.Document document })
+            {
+                model._size = document.size;
+                model._transmitted = offset;
+                var filename = fileName ?? document.Filename;
+                filename ??= $"{document.id}.{document.mime_type[(document.mime_type.IndexOf('/') + 1)..]}";
+                if (model.name == null)
+                    model.name = filename;
+
+                _logger.LogInformation("Starting document download with offset - FileName: {FileName}, Size: {SizeMB:F2}MB, Offset: {Offset}",
+                    filename, document.size / (1024.0 * 1024.0), offset);
+
+                if (offset == 0)
+                {
+                    // No offset - use standard download
+                    MemoryStream dest = new MemoryStream();
+                    await client.DownloadFileAsync(document, ms ?? dest, null, model.ProgressCallback);
+                    _logger.LogInformation("Document download completed - FileName: {FileName}", filename);
+                    return ms ?? dest;
+                }
+
+                // Offset-based download using Upload_GetFile API
+                Stream targetStream = ms ?? new MemoryStream();
+                long currentOffset = offset;
+                long totalSize = document.size;
+
+                InputDocument inputFile = document;
+                var location = new InputDocumentFileLocation
+                {
+                    id = inputFile.id,
+                    access_hash = inputFile.access_hash,
+                    file_reference = inputFile.file_reference,
+                    thumb_size = ""
+                };
+
+                _logger.LogInformation("Resuming download from offset {Offset} of {TotalSize} bytes", currentOffset, totalSize);
+
+                while (currentOffset < totalSize)
+                {
+                    int chunkSize = FILESPLITSIZE; // 512KB chunks
+                    if (currentOffset + chunkSize > totalSize)
+                    {
+                        // Adjust last chunk size (must be multiple of 4096 for Telegram API)
+                        long remaining = totalSize - currentOffset;
+                        chunkSize = (int)((remaining + 4095) / 4096 * 4096); // Round up to 4096
+                        if (chunkSize > FILESPLITSIZE)
+                            chunkSize = FILESPLITSIZE;
+                    }
+
+                    Upload_FileBase file = null;
+                    try
+                    {
+                        file = await client.Upload_GetFile(location, currentOffset, limit: chunkSize);
+                    }
+                    catch (RpcException ex) when (ex.Code == 303 && ex.Message == "FILE_MIGRATE_X")
+                    {
+                        _logger.LogWarning("DC migration required, switching to DC {DC}", -ex.X);
+                        client = await client.GetClientForDC(-ex.X, true);
+                        file = await client.Upload_GetFile(location, currentOffset, limit: chunkSize);
+                    }
+                    catch (RpcException ex) when (ex.Code == 400 && ex.Message == "OFFSET_INVALID")
+                    {
+                        _logger.LogError(ex, "OFFSET_INVALID at offset {Offset} - file may have changed", currentOffset);
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Download error at offset {Offset}", currentOffset);
+                        throw;
+                    }
+
+                    if (file is Upload_File uploadFile)
+                    {
+                        var fileBytes = uploadFile.bytes;
+                        if (fileBytes.Length == 0)
+                        {
+                            _logger.LogInformation("Received empty chunk - download complete at offset {Offset}", currentOffset);
+                            break;
+                        }
+
+                        // Write to stream - for append mode, the stream position should already be at the end
+                        await targetStream.WriteAsync(fileBytes, 0, fileBytes.Length);
+                        currentOffset += fileBytes.Length;
+                        model._transmitted = currentOffset;
+
+                        // Call progress callback
+                        model.ProgressCallback(currentOffset, totalSize);
+
+                        continue;
+                    }
+
+                    throw new InvalidOperationException("Unexpected file type returned from Telegram API.");
+                }
+
+                _logger.LogInformation("Document download with offset completed - FileName: {FileName}, FinalOffset: {Offset}",
+                    filename, currentOffset);
+                return targetStream;
+            }
+            else if (message.message.media is MessageMediaPhoto { photo: Photo photo })
+            {
+                // Photos don't support resume - they're small enough to re-download
+                _logger.LogInformation("Photo download (no resume support) - PhotoId: {PhotoId}", photo.id);
+                var filename = $"{photo.id}.jpg";
+                MemoryStream dest = new MemoryStream();
+                var type = await client.DownloadFileAsync(photo, ms ?? dest, (PhotoSizeBase)null, model.ProgressCallback);
+                dest.Close();
+                return ms ?? dest;
+            }
+
             return null;
         }
 

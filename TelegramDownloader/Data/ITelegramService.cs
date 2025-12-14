@@ -19,6 +19,7 @@ namespace TelegramDownloader.Data
         Task<string> DownloadFile(ChatMessages message, string fileName = null, string folder = null, DownloadModel model = null, bool shouldAddToList = false);
         Task<Byte[]> DownloadFileStream(Message message, long offset, int limit);
         Task<Stream> DownloadFileAndReturn(ChatMessages message, Stream ms = null, string fileName = null, string folder = null, DownloadModel model = null);
+        Task<Stream> DownloadFileAndReturnWithOffset(ChatMessages message, Stream ms = null, string fileName = null, string folder = null, DownloadModel model = null, long offset = 0);
         Task<List<ChatViewBase>> GetFouriteChannels(bool mustRefresh = true);
         Task AddFavouriteChannel(long id);
         Task RemoveFavouriteChannel(long id);

@@ -90,7 +90,13 @@ namespace TelegramDownloader.Models
         public bool UseMobileFileManagerAlways { get; set; } = false;
         public List<long> FavouriteChannels { get; set; } = new List<long>();
         public WebDavModel webDav { get; set; } = new WebDavModel();
-        
+
+        // Task Persistence Settings
+        public bool EnableTaskPersistence { get; set; } = true;
+        public int TaskPersistenceDebounceSeconds { get; set; } = 5;
+        public int StaleTaskCleanupDays { get; set; } = 7;
+        public bool AutoResumeOnStartup { get; set; } = true;
+
     }
 
     public class TLConfig

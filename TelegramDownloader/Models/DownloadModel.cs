@@ -8,6 +8,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using BlazorBootstrap;
 using System.Threading;
+using MongoDB.Bson.Serialization.Attributes;
 
 namespace TelegramDownloader.Models
 {
@@ -21,6 +22,7 @@ namespace TelegramDownloader.Models
         public DateTime endnDate { get; set; } = DateTime.Now;
         public string _internalId { get; set; } = Guid.NewGuid().ToString();
         public string id {  get; set; }
+        public string channelId { get; set; }
         public bool isUpload {  get; set; }
         public List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files { get; set; }
         public Callbacks callbacks { get; set; }
@@ -154,6 +156,21 @@ namespace TelegramDownloader.Models
         public DateTime endnDate { get; set; }
         public TransactionInfoService tis { get; set; }
 
+        // Persistence context - not serialized to MongoDB
+        [BsonIgnore]
+        public string PersistenceChannelId { get; set; }
+        [BsonIgnore]
+        public int? PersistenceMessageId { get; set; }
+        [BsonIgnore]
+        public bool PersistenceIsSplit { get; set; }
+        [BsonIgnore]
+        public List<int> PersistenceMessageIds { get; set; }
+        [BsonIgnore]
+        public int PersistenceCurrentPartIndex { get; set; }
+        [BsonIgnore]
+        public List<int> PersistenceCompletedPartIndices { get; set; } = new List<int>();
+        [BsonIgnore]
+        public Action<long, int, StateTask> OnProgressPersist { get; set; }
 
         public DownloadModel(string? name = null)
         {
@@ -180,6 +197,10 @@ namespace TelegramDownloader.Models
             _transmittedString = HelperService.SizeSuffix(transmitted);
             progress = Convert.ToInt32(transmitted * 100 / totalSize);
             EventChanged?.Invoke(this, new DownloadEventArgs());
+
+            // Notify persistence service of progress
+            OnProgressPersist?.Invoke(_transmitted, progress, state);
+
             if (transmitted == totalSize)
             {
                 endnDate = DateTime.Now;
@@ -241,6 +262,18 @@ namespace TelegramDownloader.Models
         public DateTime endnDate { get; set; }
         public TransactionInfoService tis { get; set; }
 
+        // Persistence context - not serialized to MongoDB
+        [BsonIgnore]
+        public string PersistenceChannelId { get; set; }
+        [BsonIgnore]
+        public string PersistenceSourcePath { get; set; }
+        [BsonIgnore]
+        public string PersistenceDbFilePath { get; set; }
+        [BsonIgnore]
+        public string PersistenceParentId { get; set; }
+        [BsonIgnore]
+        public Action<long, int, StateTask> OnProgressPersist { get; set; }
+
         public virtual void ProgressCallback(long transmitted, long totalSize)
         {
             if (state == StateTask.Canceled)
@@ -252,6 +285,10 @@ namespace TelegramDownloader.Models
             _transmittedString = HelperService.SizeSuffix(transmitted);
             progress = Convert.ToInt32(transmitted * 100 / totalSize);
             EventChanged?.Invoke(this, new UploadEventArgs());
+
+            // Notify persistence service of progress
+            OnProgressPersist?.Invoke(_transmitted, progress, state);
+
             if (transmitted == totalSize)
             {
                 endnDate = DateTime.Now;

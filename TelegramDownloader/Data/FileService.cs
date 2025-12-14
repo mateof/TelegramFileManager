@@ -232,18 +232,20 @@ namespace TelegramDownloader.Data
         protected ILogger<IFileService> _logger { get; set; }
         protected TransactionInfoService _tis { get; set; }
         protected ToastService _toastService { get; set;  }
+        protected ITaskPersistenceService _persistence { get; set; }
         private static Mutex refreshMutex = new Mutex();
 
-        const int MaxSize = 1024 * 1024 * 1000; // 1GB 
+        const int MaxSize = 1024 * 1024 * 1000; // 1GB
 
 
-        public FileService(ITelegramService ts, IDbService db, ILogger<IFileService> logger, TransactionInfoService tis, ToastService toastService)
+        public FileService(ITelegramService ts, IDbService db, ILogger<IFileService> logger, TransactionInfoService tis, ToastService toastService, ITaskPersistenceService persistence)
         {
             _ts = ts;
             _db = db;
             _tis = tis;
             _toastService = toastService;
             _logger = logger;
+            _persistence = persistence;
             createTempFolder();
         }
 
@@ -1227,6 +1229,18 @@ namespace TelegramDownloader.Data
             }
             idt.callbacks = new Callbacks();
             idt.callbacks.callback = async () => await UploadFileFromServer(dbName, currentPath, files, idt);
+
+            // Persist the batch task
+            try
+            {
+                idt.channelId = dbName;
+                await _persistence.PersistBatchTask(idt);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to persist batch task - continuing without persistence");
+            }
+
             _tis.addToInfoDownloadTaskList(idt);
             _tis.CheckPendingUploadInfoTasks();
         }
