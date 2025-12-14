@@ -102,10 +102,10 @@
     private const int MobileBreakpoint = 1920; // Custom breakpoint for mobile file manager
 
     // Use relative URLs to work correctly with reverse proxies (HTTP/HTTPS)
-    private string FileOperationsUrl => "api/file/FileOperations";
-    private string UploadUrl => "api/file/Upload";
-    private string DownloadUrl => "api/file/Download";
-    private string GetImageUrl => "api/file/GetImage";
+    private string FileOperationsUrl => "/api/file/FileOperations";
+    private string UploadUrl => "/api/file/Upload";
+    private string DownloadUrl => "/api/file/Download";
+    private string GetImageUrl => "/api/file/GetImage";
 
 
     public List<ToolBarItemModel> Items = new List<ToolBarItemModel>(){
