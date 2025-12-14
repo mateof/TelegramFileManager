@@ -18,8 +18,13 @@ namespace TelegramDownloader.Services
             _logger = logger;
         }
 
+        private CancellationToken _cancellationToken;
+        private bool _hasResumedTasks = false;
+
         public async Task StartAsync(CancellationToken cancellationToken)
         {
+            _cancellationToken = cancellationToken;
+
             _logger.LogInformation("========== TaskResumeService STARTING ==========");
             _logger.LogInformation("AutoResumeOnStartup config value: {Value}", GeneralConfigStatic.config?.AutoResumeOnStartup);
             _logger.LogInformation("EnableTaskPersistence config value: {Value}", GeneralConfigStatic.config?.EnableTaskPersistence);
@@ -31,33 +36,75 @@ namespace TelegramDownloader.Services
                 return;
             }
 
-            _logger.LogInformation("Auto-resume is ENABLED - will resume tasks in background");
+            _logger.LogInformation("Auto-resume is ENABLED - subscribing to OnUserLoggedIn event");
 
-            // Run in background to not block application startup
+            // Subscribe to the login event
+            TelegramService.OnUserLoggedIn += OnUserLoggedIn;
+
+            // Also try to resume immediately in case user is already logged in
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    await ResumeTasksAsync(cancellationToken);
+                    // Wait a bit for services to initialize
+                    await Task.Delay(3000, cancellationToken);
+                    await TryResumeTasksAsync();
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "CRITICAL ERROR during task resume: {Message}", ex.Message);
+                    _logger.LogError(ex, "Error during initial task resume attempt: {Message}", ex.Message);
                 }
             }, cancellationToken);
         }
 
-        private async Task ResumeTasksAsync(CancellationToken cancellationToken)
+        private async void OnUserLoggedIn(object sender, EventArgs e)
         {
-            _logger.LogInformation("ResumeTasksAsync - Starting, waiting 5 seconds for services...");
+            _logger.LogInformation("========== OnUserLoggedIn event received ==========");
 
-            // Wait a bit for services to be fully initialized
-            await Task.Delay(5000, cancellationToken);
+            if (_hasResumedTasks)
+            {
+                _logger.LogInformation("Tasks already resumed - skipping");
+                return;
+            }
 
-            _logger.LogInformation("ResumeTasksAsync - Creating service scope...");
+            try
+            {
+                await TryResumeTasksAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error resuming tasks after login: {Message}", ex.Message);
+            }
+        }
+
+        private async Task TryResumeTasksAsync()
+        {
+            if (_hasResumedTasks)
+            {
+                _logger.LogInformation("Tasks already resumed - skipping");
+                return;
+            }
 
             using var scope = _serviceProvider.CreateScope();
             var telegramService = scope.ServiceProvider.GetRequiredService<ITelegramService>();
+
+            if (!telegramService.checkUserLogin())
+            {
+                _logger.LogInformation("Telegram session not ready yet - waiting for user login");
+                return;
+            }
+
+            _logger.LogInformation("Telegram session is ready - proceeding to resume tasks");
+            _hasResumedTasks = true;
+
+            await ResumeTasksAsync(_cancellationToken);
+        }
+
+        private async Task ResumeTasksAsync(CancellationToken cancellationToken)
+        {
+            _logger.LogInformation("========== ResumeTasksAsync - Starting ==========");
+
+            using var scope = _serviceProvider.CreateScope();
             var persistence = scope.ServiceProvider.GetRequiredService<ITaskPersistenceService>();
             var fileService = scope.ServiceProvider.GetRequiredService<IFileService>();
             var transactionInfo = scope.ServiceProvider.GetRequiredService<TransactionInfoService>();
@@ -65,34 +112,7 @@ namespace TelegramDownloader.Services
             _logger.LogInformation("ResumeTasksAsync - Services resolved. Persistence enabled: {Enabled}, FileService type: {Type}",
                 persistence.IsEnabled, fileService.GetType().Name);
 
-            // Wait for Telegram session to be ready
-            var maxWaitTime = TimeSpan.FromSeconds(60);
-            var waited = TimeSpan.Zero;
-            var checkInterval = TimeSpan.FromSeconds(3);
-
-            _logger.LogInformation("Waiting for Telegram session to be ready (max {MaxWait}s)...", maxWaitTime.TotalSeconds);
-
-            while (!telegramService.checkUserLogin() && waited < maxWaitTime)
-            {
-                if (cancellationToken.IsCancellationRequested)
-                {
-                    _logger.LogWarning("Cancellation requested while waiting for Telegram session");
-                    return;
-                }
-
-                _logger.LogInformation("Waiting for Telegram session... {Waited}s elapsed", waited.TotalSeconds);
-                await Task.Delay(checkInterval, cancellationToken);
-                waited += checkInterval;
-            }
-
-            if (!telegramService.checkUserLogin())
-            {
-                _logger.LogWarning("Telegram session NOT ready after {MaxWait}s - tasks will NOT be resumed automatically. " +
-                    "They will resume when user logs in.", maxWaitTime.TotalSeconds);
-                return;
-            }
-
-            _logger.LogInformation("========== Telegram session READY - Loading pending tasks from MongoDB ==========");
+            _logger.LogInformation("========== Loading pending tasks from MongoDB ==========");
 
             // Cleanup stale tasks first
             await persistence.CleanupStaleTasks();
@@ -331,7 +351,8 @@ namespace TelegramDownloader.Services
 
         public Task StopAsync(CancellationToken cancellationToken)
         {
-            _logger.LogInformation("TaskResumeService stopping");
+            _logger.LogInformation("TaskResumeService stopping - unsubscribing from events");
+            TelegramService.OnUserLoggedIn -= OnUserLoggedIn;
             return Task.CompletedTask;
         }
     }

@@ -33,6 +33,9 @@ namespace TelegramDownloader.Data
         private static Mutex mut = new Mutex();
         private ILogger<IFileService> _logger { get; set; }
 
+        // Event that fires when user successfully logs in
+        public static event EventHandler OnUserLoggedIn;
+
 
         public TelegramService(TransactionInfoService tis, IDbService db, ILogger<IFileService> logger, ITaskPersistenceService persistence)
         {
@@ -126,6 +129,18 @@ namespace TelegramDownloader.Data
                 // splitSizeGB = 4;
             }
             _logger.LogInformation("Login successful - User: {UserId}, Premium: {IsPremium}", client.User.id, isPremium);
+
+            // Fire the login event to notify subscribers (like TaskResumeService)
+            try
+            {
+                OnUserLoggedIn?.Invoke(this, EventArgs.Empty);
+                _logger.LogInformation("OnUserLoggedIn event fired");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error firing OnUserLoggedIn event");
+            }
+
             return "ok";
         }
         /// <summary>
@@ -803,7 +818,7 @@ namespace TelegramDownloader.Data
                 // using var fileStream = File.Create(filename);
                 MemoryStream dest = new MemoryStream();
                 // using var dest = new FileStream($"{Path.Combine(folder != null ? folder : Path.Combine(Environment.CurrentDirectory, "download"), filename)}", FileMode.Create, FileAccess.Write);
-                await client.DownloadFileAsync(document, ms ?? dest, null, model.ProgressCallback);
+                await client.DownloadFileAsync(document, ms ?? dest, (PhotoSizeBase)null, model.ProgressCallback);
                 _logger.LogInformation("Document download completed - FileName: {FileName}", filename);
                 return ms ?? dest;
             }
@@ -855,7 +870,7 @@ namespace TelegramDownloader.Data
                 {
                     // No offset - use standard download
                     MemoryStream dest = new MemoryStream();
-                    await client.DownloadFileAsync(document, ms ?? dest, null, model.ProgressCallback);
+                    await client.DownloadFileAsync(document, ms ?? dest, (PhotoSizeBase)null, model.ProgressCallback);
                     _logger.LogInformation("Document download completed - FileName: {FileName}", filename);
                     return ms ?? dest;
                 }
@@ -976,7 +991,7 @@ namespace TelegramDownloader.Data
                 _logger.LogInformation("Starting file download to disk - FileName: {FileName}, Size: {SizeMB:F2}MB", filename, document.size / (1024.0 * 1024.0));
                 // using var fileStream = File.Create(filename);
                 using var dest = new FileStream($"{Path.Combine(folder != null ? folder : Path.Combine(Environment.CurrentDirectory, "local", "temp"), filename)}", FileMode.Create, FileAccess.Write);
-                await client.DownloadFileAsync(document, dest, null, model.ProgressCallback);
+                await client.DownloadFileAsync(document, dest, (PhotoSizeBase)null, model.ProgressCallback);
 
                 _logger.LogInformation("File download to disk completed - FileName: {FileName}", filename);
             }
