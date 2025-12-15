@@ -108,6 +108,7 @@ namespace TelegramDownloader.Services
             var persistence = scope.ServiceProvider.GetRequiredService<ITaskPersistenceService>();
             var fileService = scope.ServiceProvider.GetRequiredService<IFileService>();
             var transactionInfo = scope.ServiceProvider.GetRequiredService<TransactionInfoService>();
+            var telegramService = scope.ServiceProvider.GetRequiredService<ITelegramService>();
 
             _logger.LogInformation("ResumeTasksAsync - Services resolved. Persistence enabled: {Enabled}, FileService type: {Type}",
                 persistence.IsEnabled, fileService.GetType().Name);
@@ -169,7 +170,7 @@ namespace TelegramDownloader.Services
 
                 try
                 {
-                    await ResumeUpload(task, fileService, persistence, transactionInfo);
+                    await ResumeUpload(task, fileService, persistence, transactionInfo, telegramService);
                 }
                 catch (Exception ex)
                 {
@@ -299,7 +300,8 @@ namespace TelegramDownloader.Services
             PersistedTaskModel task,
             IFileService fileService,
             ITaskPersistenceService persistence,
-            TransactionInfoService transactionInfo)
+            TransactionInfoService transactionInfo,
+            ITelegramService telegramService)
         {
             _logger.LogInformation("Resuming upload: {Name} (uploads restart from beginning due to Telegram API limitation)",
                 task.Name);
@@ -318,6 +320,8 @@ namespace TelegramDownloader.Services
             uploadModel.tis = transactionInfo;
             uploadModel._transmitted = 0; // Reset to 0
             uploadModel.progress = 0;
+            uploadModel.state = StateTask.Pending;
+            uploadModel.startDate = DateTime.Now;
 
             // Set up persistence callback
             uploadModel.OnProgressPersist = async (transmitted, progress, state) =>
@@ -325,13 +329,37 @@ namespace TelegramDownloader.Services
                 await persistence.UpdateProgress(task.InternalId, transmitted, progress, state);
             };
 
-            // For uploads, we need to re-queue them
-            // This is a simplified version - full implementation would integrate with FileService
-            _logger.LogInformation("Upload task {Name} will be restarted (Telegram doesn't support upload resume)",
-                task.Name);
+            _logger.LogInformation("Starting upload for {Name} to channel {ChannelId}", task.Name, task.ChannelId);
 
-            // Mark as pending to be picked up by user action or re-queue
-            await persistence.UpdateProgress(task.InternalId, 0, 0, StateTask.Pending);
+            // Execute the upload asynchronously
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    using var fileStream = new FileStream(task.SourcePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+
+                    _logger.LogInformation("Upload callback executing for: {Name}, Size: {Size} bytes",
+                        task.Name, fileStream.Length);
+
+                    var message = await telegramService.uploadFile(
+                        task.ChannelId,
+                        fileStream,
+                        task.Name,
+                        um: uploadModel);
+
+                    _logger.LogInformation("Upload completed successfully for {Name}, MessageId: {MessageId}",
+                        task.Name, message?.id);
+
+                    // Mark task as completed
+                    await persistence.MarkCompleted(task.InternalId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Upload failed for {Name}: {Message}", task.Name, ex.Message);
+                    uploadModel.state = StateTask.Error;
+                    await persistence.MarkError(task.InternalId, ex.Message);
+                }
+            });
         }
 
         private async Task ResumeBatchTask(
