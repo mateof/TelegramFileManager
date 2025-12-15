@@ -1914,8 +1914,37 @@ namespace TelegramDownloader.Data
             else
             {
                 List<BsonFileManagerModel> Data = collectionName == null ? await _db.getAllFilesInDirectoryPath2(dbName, path) : await _db.getAllFilesInDirectoryPath2(dbName, path, collectionName);
-                var childItem = fileDetails.Count > 0 && fileDetails[0] != null ? fileDetails[0] : Data
-                .Where(x => x.FilePath + "/" == path).First().toFileManagerContent();
+
+                Syncfusion.Blazor.FileManager.FileManagerDirectoryContent? childItem = null;
+
+                if (fileDetails.Count > 0 && fileDetails[0] != null)
+                {
+                    childItem = fileDetails[0];
+                }
+                else
+                {
+                    // Try to find the folder matching the path
+                    var matchingFolder = Data.FirstOrDefault(x => x.FilePath + "/" == path)
+                        ?? Data.FirstOrDefault(x => x.FilePath == path.TrimEnd('/'));
+
+                    if (matchingFolder != null)
+                    {
+                        childItem = matchingFolder.toFileManagerContent();
+                    }
+                    else
+                    {
+                        // If no matching folder found, return empty response
+                        response.CWD = new Syncfusion.Blazor.FileManager.FileManagerDirectoryContent
+                        {
+                            Name = path.Split('/').LastOrDefault(s => !string.IsNullOrEmpty(s)) ?? "Unknown",
+                            FilterPath = path,
+                            IsFile = false
+                        };
+                        response.Files = new List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>();
+                        return response;
+                    }
+                }
+
                 response.CWD = childItem;
 
                 // First try to find children in the query result (by ParentId)

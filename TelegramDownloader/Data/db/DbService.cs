@@ -567,7 +567,13 @@ namespace TelegramDownloader.Data.db
         {
             if (collectionName == null)
                 collectionName = "directory";
-            var update = new UpdateDefinitionBuilder<BsonFileManagerModel>().Set(n => n.Name, newName);
+
+            // Calculate new FilePath (FilterPath + newName)
+            string newFilePath = filePath + newName;
+
+            var update = new UpdateDefinitionBuilder<BsonFileManagerModel>()
+                .Set(n => n.Name, newName)
+                .Set(n => n.FilePath, newFilePath);
             await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).UpdateOneAsync(Builders<BsonFileManagerModel>.Filter.Where(x => x.Id == id), update);
             if (!isFile)
             {

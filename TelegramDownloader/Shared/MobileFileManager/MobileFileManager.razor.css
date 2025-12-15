@@ -259,6 +259,14 @@
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none; /* Firefox */
     -ms-overflow-style: none; /* IE/Edge */
+    transition: left 0.3s ease;
+}
+
+/* On wide screens where sidebar is on the side, account for sidebar width */
+@media (min-width: 2049px) {
+    .mfm-bottom-bar {
+        left: max(280px, 20%); /* Match sidebar min-width and width */
+    }
 }
 
 .mfm-bottom-bar::-webkit-scrollbar {
@@ -794,7 +802,14 @@
     left: 0;
     right: 0;
     z-index: 99;
-    transition: bottom 0.2s ease;
+    transition: bottom 0.2s ease, left 0.3s ease;
+}
+
+/* On wide screens where sidebar is on the side, account for sidebar width */
+@media (min-width: 2049px) {
+    .mfm-pagination {
+        left: max(280px, 20%); /* Match sidebar min-width and width */
+    }
 }
 
 /* Move pagination up when action bar is visible */
