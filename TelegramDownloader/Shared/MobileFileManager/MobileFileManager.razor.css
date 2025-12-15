@@ -214,11 +214,14 @@
 .mfm-content.mfm-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    align-items: start;
+    align-content: start;
     gap: 12px;
     padding: 12px;
     max-height: calc(100vh - 130px);
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
+    background-color: var(--bs-body-bg, #fff);
 }
 
 /* Loading & Empty states */

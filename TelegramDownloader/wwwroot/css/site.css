@@ -795,13 +795,19 @@ a, .btn-link {
 /* These styles need to be global to penetrate into Grid component templates */
 
 /* Grid container - target both .grid class and blazor-bootstrap specific */
-/* Exclude .stats-grid from dark background */
-.grid:not(.stats-grid),
+/* Exclude .stats-grid and .mfm-grid (mobile file manager) from dark background */
+.grid:not(.stats-grid):not(.mfm-grid),
 .bb-grid,
-[class*="grid"]:not(.stats-grid):not(.info-page *) {
-    background: rgba(26, 26, 46, 0.8) !important;
+[class*="grid"]:not(.stats-grid):not(.mfm-grid):not(.mfm-content):not(.info-page *) {
+    background: white !important;
     border-radius: 0.5rem;
     overflow: hidden;
+}
+
+/* Mobile File Manager - override dark background */
+.mfm-content.mfm-grid,
+.mfm-grid {
+    background: var(--bs-body-bg, #fff) !important;
 }
 
 /* Table base styles - aggressive overrides */
