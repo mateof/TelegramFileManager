@@ -5,6 +5,9 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.FileProviders;
+using Serilog;
+using Serilog.Debugging;
+using Serilog.Events;
 using Syncfusion.Blazor;
 using System.Net;
 using System.Net.Http;
@@ -50,7 +53,41 @@ if (!Directory.Exists(FileService.LOCALDIR))
     Directory.CreateDirectory(FileService.LOCALDIR);
 }
 
-builder.Logging.AddLog4Net("log4net.config");
+// Configure Serilog
+var mongoConnectionString = GeneralConfigStatic.tlconfig?.mongo_connection_string
+    ?? Environment.GetEnvironmentVariable("connectionString")
+    ?? "mongodb://localhost:27017";
+
+// Enable Serilog self-logging for debugging
+SelfLog.Enable(msg => Console.WriteLine($"[Serilog] {msg}"));
+
+// Get application version from assembly
+var appVersion = typeof(Program).Assembly.GetName().Version?.ToString() ?? "Unknown";
+
+// Create MongoDB client and get logs database
+var mongoClient = new MongoDB.Driver.MongoClient(mongoConnectionString);
+var logsDatabase = mongoClient.GetDatabase("TFM_Logs");
+
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Information()
+    .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
+    .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
+    .MinimumLevel.Override("System", LogEventLevel.Warning)
+    .Enrich.FromLogContext()
+    .Enrich.WithProperty("AppVersion", appVersion)
+    .WriteTo.Console(
+        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {SourceContext} - {Message:lj}{NewLine}{Exception}")
+    .WriteTo.MongoDBBson(cfg =>
+    {
+        cfg.SetMongoDatabase(logsDatabase);
+        cfg.SetCollectionName("logs");
+    })
+    .CreateLogger();
+
+builder.Host.UseSerilog();
+
+// Log application startup
+Log.Information("TelegramFileManager starting up. MongoDB logs database: TFM_Logs");
 
 
 // Add services to the container.
@@ -66,6 +103,10 @@ builder.Services.AddSingleton<GHService>();
 // Task persistence services
 builder.Services.AddSingleton<ITaskPersistenceService, TaskPersistenceService>();
 builder.Services.AddHostedService<TaskResumeService>();
+
+// Log query service
+builder.Services.AddSingleton<ILogQueryService>(sp =>
+    new LogQueryService(mongoConnectionString, sp.GetRequiredService<ILogger<LogQueryService>>()));
 
 ServiceLocator.ServiceProvider = builder.Services.BuildServiceProvider();
 builder.Services.AddBlazorBootstrap();
@@ -155,4 +196,17 @@ app.MapControllers();
 app.MapBlazorHub();
 app.MapFallbackToPage("/_Host");
 
-app.Run();
+try
+{
+    Log.Information("TelegramFileManager application started");
+    app.Run();
+}
+catch (Exception ex)
+{
+    Log.Fatal(ex, "Application terminated unexpectedly");
+}
+finally
+{
+    Log.Information("TelegramFileManager application shutting down");
+    Log.CloseAndFlush();
+}

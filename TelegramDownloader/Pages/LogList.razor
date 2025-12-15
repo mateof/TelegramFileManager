@@ -1,88 +1,492 @@
-﻿@page "/loglist"
+@page "/logs"
+@page "/loglist"
 @using TelegramDownloader.Services
-@inject NavigationManager NavigationManager
+@using TelegramDownloader.Models
+@inject ILogQueryService LogService
+@inject IJSRuntime JS
+@implements IDisposable
 
-<h3>Log List</h3>
-
-<Grid @ref="grid"
-      TItem="FileInfo"
-      Class="table table-hover table-bordered table-striped"
-      DataProvider="DataProvider"
-      AllowFiltering="false"
-      AllowPaging="true"
-      AllowSorting="false"
-      Responsive="true">
-
-    <GridColumn TItem="FileInfo" HeaderText="Name" PropertyName="Name" SortString="Name" SortKeySelector="item => item.Name" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
-        @context.Name
-    </GridColumn>
-    <GridColumn TItem="FileInfo" HeaderText="Created" PropertyName="CreationTime" SortString="CreationTime" SortKeySelector="item => item.CreationTime" FilterTextboxWidth="50" HeaderTextAlignment="Alignment.Center" TextAlignment="Alignment.Center">
-        @context.CreationTime.ToLocalTime().ToLongDateString() @context.CreationTime.ToLocalTime().ToLongTimeString()
-    </GridColumn>
-    <GridColumn TItem="FileInfo" HeaderText="Updated" PropertyName="LastWriteTime" SortString="LastWriteTime" SortKeySelector="item => item.LastWriteTime" FilterTextboxWidth="80">
-        @context.LastWriteTime.ToLocalTime().ToLongDateString() @context.LastWriteTime.ToLocalTime().ToLongTimeString()
-    </GridColumn>
-    <GridColumn TItem="FileInfo" HeaderText="Size" PropertyName="Length" SortString="Length" SortKeySelector="item => item.Length" FilterTextboxWidth="80">
-        @HelperService.SizeSuffix(context.Length)
-    </GridColumn>
-    <GridColumn TItem="FileInfo" HeaderText="Actions">
-        <div class="btn-group btn-group-sm" role="group" aria-label="Small button group">
-            <a type="button" class="btn btn-outline-dark" href="@($"/api/log/Download?fileName={context.Name}&show=1")" target="blank"><i class="bi bi-eye"></i></a>
-            <button class="btn btn-outline-warning" @onclick="@(e => getFileLog(context))"><i class="bi bi-download"></i></button>
+<div class="log-viewer">
+    <!-- Header with statistics -->
+    <div class="log-stats-bar">
+        <div class="stat-item total">
+            <i class="bi bi-list-ul"></i>
+            <span>@(stats?.TotalLogs.ToString("N0") ?? "0") logs</span>
         </div>
-    </GridColumn>
+        <div class="stat-item errors">
+            <i class="bi bi-x-circle-fill"></i>
+            <span>@(stats?.ErrorCount.ToString("N0") ?? "0") errors</span>
+        </div>
+        <div class="stat-item warnings">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <span>@(stats?.WarningCount.ToString("N0") ?? "0") warnings</span>
+        </div>
+        <div class="stat-item info">
+            <i class="bi bi-info-circle-fill"></i>
+            <span>@(stats?.InfoCount.ToString("N0") ?? "0") info</span>
+        </div>
+    </div>
 
-</Grid>
+    <!-- Filters -->
+    <div class="log-filters">
+        <div class="filter-row">
+            <!-- Search -->
+            <div class="filter-item search-box">
+                <i class="bi bi-search"></i>
+                <input type="text" @bind="searchText" @bind:event="oninput"
+                       @onkeyup="OnSearchKeyUp" placeholder="Search in messages..." />
+                @if (!string.IsNullOrEmpty(searchText))
+                {
+                    <button class="clear-search" @onclick="ClearSearch">
+                        <i class="bi bi-x"></i>
+                    </button>
+                }
+            </div>
 
+            <!-- Level -->
+            <div class="filter-item">
+                <select class="form-select" @bind="selectedLevel" @bind:after="ApplyFilters">
+                    <option value="">All Levels</option>
+                    <option value="Debug">Debug</option>
+                    <option value="Information">Info</option>
+                    <option value="Warning">Warning</option>
+                    <option value="Error">Error</option>
+                </select>
+            </div>
+
+            <!-- Logger -->
+            <div class="filter-item">
+                <select class="form-select" @bind="selectedLogger" @bind:after="ApplyFilters">
+                    <option value="">All Components</option>
+                    @foreach (var logger in loggerNames)
+                    {
+                        <option value="@logger">@GetShortLoggerName(logger)</option>
+                    }
+                </select>
+            </div>
+
+            <!-- Version -->
+            <div class="filter-item">
+                <select class="form-select" @bind="selectedVersion" @bind:after="ApplyFilters">
+                    <option value="">All Versions</option>
+                    @foreach (var version in versions)
+                    {
+                        <option value="@version">@version</option>
+                    }
+                </select>
+            </div>
+
+            <!-- Date From -->
+            <div class="filter-item date-filter">
+                <label>From:</label>
+                <input type="datetime-local" class="form-control" @bind="fromDate" @bind:after="ApplyFilters" step="1" />
+            </div>
+
+            <!-- Date To -->
+            <div class="filter-item date-filter">
+                <label>To:</label>
+                <input type="datetime-local" class="form-control" @bind="toDate" @bind:after="ApplyFilters" step="1" />
+            </div>
+
+            <!-- Quick time filters -->
+            <div class="filter-item quick-filters">
+                <button class="btn btn-sm btn-outline-info" @onclick="() => SetTimeRange(5)" title="Last 5 minutes">5m</button>
+                <button class="btn btn-sm btn-outline-info" @onclick="() => SetTimeRange(15)" title="Last 15 minutes">15m</button>
+                <button class="btn btn-sm btn-outline-info" @onclick="() => SetTimeRange(60)" title="Last hour">1h</button>
+                <button class="btn btn-sm btn-outline-info" @onclick="() => SetTimeRange(1440)" title="Last 24 hours">24h</button>
+            </div>
+
+            <!-- Actions -->
+            <div class="filter-actions">
+                <button class="btn btn-outline-secondary" @onclick="ClearFilters" title="Clear all filters">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+                <button class="btn btn-outline-primary" @onclick="RefreshLogs" title="Refresh">
+                    <i class="bi bi-arrow-clockwise @(isLoading ? "spinning" : "")"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Log Grid -->
+    @if (isLoading && logs.Count == 0)
+    {
+        <div class="loading-container">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <p>Loading logs...</p>
+        </div>
+    }
+    else if (logs.Count == 0)
+    {
+        <div class="empty-state">
+            <i class="bi bi-inbox"></i>
+            <h4>No logs found</h4>
+            <p>Try adjusting your filters or wait for new log entries.</p>
+        </div>
+    }
+    else
+    {
+        <div class="log-table-container">
+            <table class="log-table">
+                <thead>
+                    <tr>
+                        <th class="col-time">Time</th>
+                        <th class="col-level">Level</th>
+                        <th class="col-version">Version</th>
+                        <th class="col-logger">Component</th>
+                        <th class="col-message">Message</th>
+                        <th class="col-actions"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var log in logs)
+                    {
+                        <tr class="log-row @log.Level.ToLower()">
+                            <td class="col-time">
+                                <span class="log-time">@log.Timestamp.ToLocalTime().ToString("HH:mm:ss")</span>
+                                <span class="log-date">@log.Timestamp.ToLocalTime().ToString("yyyy-MM-dd")</span>
+                            </td>
+                            <td class="col-level">
+                                <span class="badge @GetLevelBadgeClass(log.Level)">
+                                    <i class="bi @GetLevelIcon(log.Level)"></i>
+                                    @GetLevelDisplayName(log.Level)
+                                </span>
+                            </td>
+                            <td class="col-version">
+                                <span class="version-badge">@log.Version</span>
+                            </td>
+                            <td class="col-logger">
+                                <span class="logger-name" title="@log.Logger">@log.ShortLogger</span>
+                            </td>
+                            <td class="col-message">
+                                <div class="message-content @(log.Level == "Error" ? "error" : "")">
+                                    @TruncateMessage(log.Message, 150)
+                                    @if (!string.IsNullOrEmpty(log.Exception))
+                                    {
+                                        <i class="bi bi-bug-fill exception-icon" title="Has exception"></i>
+                                    }
+                                </div>
+                            </td>
+                            <td class="col-actions">
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="() => ShowLogDetail(log)" title="View details">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="log-pagination">
+            <div class="pagination-info">
+                Showing @((currentPage - 1) * pageSize + 1) - @Math.Min(currentPage * pageSize, totalCount) of @totalCount.ToString("N0") logs
+            </div>
+            <div class="pagination-controls">
+                <button class="btn btn-sm btn-outline-secondary" disabled="@(currentPage <= 1)" @onclick="() => GoToPage(1)">
+                    <i class="bi bi-chevron-double-left"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" disabled="@(currentPage <= 1)" @onclick="() => GoToPage(currentPage - 1)">
+                    <i class="bi bi-chevron-left"></i>
+                </button>
+                <span class="page-info">Page @currentPage of @totalPages</span>
+                <button class="btn btn-sm btn-outline-secondary" disabled="@(currentPage >= totalPages)" @onclick="() => GoToPage(currentPage + 1)">
+                    <i class="bi bi-chevron-right"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" disabled="@(currentPage >= totalPages)" @onclick="() => GoToPage(totalPages)">
+                    <i class="bi bi-chevron-double-right"></i>
+                </button>
+                <select class="form-select page-size-select" @bind="pageSize" @bind:after="OnPageSizeChanged">
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                    <option value="200">200</option>
+                </select>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Detail Modal -->
+<Modal @ref="detailModal" Title="Log Details" Size="ModalSize.ExtraLarge">
+    <BodyTemplate>
+        @if (selectedLog != null)
+        {
+            <div class="log-detail">
+                <div class="detail-header">
+                    <span class="badge @GetLevelBadgeClass(selectedLog.Level) badge-lg">
+                        <i class="bi @GetLevelIcon(selectedLog.Level)"></i>
+                        @selectedLog.Level
+                    </span>
+                    <span class="detail-time">@selectedLog.Timestamp.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss.fff")</span>
+                </div>
+
+                <div class="detail-section">
+                    <label>Component</label>
+                    <code>@selectedLog.Logger</code>
+                </div>
+
+                <div class="detail-section">
+                    <label>Version</label>
+                    <code>@selectedLog.Version</code>
+                </div>
+
+                <div class="detail-section">
+                    <label>Message</label>
+                    <pre class="log-message-full">@selectedLog.Message</pre>
+                </div>
+
+                @if (!string.IsNullOrEmpty(selectedLog.Exception))
+                {
+                    <div class="detail-section exception-section">
+                        <label><i class="bi bi-bug-fill"></i> Exception</label>
+                        <pre class="exception-trace">@selectedLog.Exception</pre>
+                    </div>
+                }
+
+                @if (selectedLog.Properties != null)
+                {
+                    <div class="detail-section">
+                        <label>Properties</label>
+                        <pre class="properties-json">@FormatProperties(selectedLog.Properties)</pre>
+                    </div>
+                }
+            </div>
+        }
+    </BodyTemplate>
+    <FooterTemplate>
+        <button class="btn btn-secondary" @onclick="CloseModal">Close</button>
+    </FooterTemplate>
+</Modal>
 
 @code {
+    private List<LogEntry> logs = new();
+    private List<string> loggerNames = new();
+    private List<string> versions = new();
+    private LogStats? stats;
+    private Modal detailModal = default!;
+    private LogEntry? selectedLog;
 
-    BlazorBootstrap.Grid<FileInfo> grid = default!;
+    // Filters
+    private string searchText = "";
+    private string selectedLevel = "";
+    private string selectedLogger = "";
+    private string selectedVersion = "";
+    private DateTime? fromDate;
+    private DateTime? toDate;
+
+    // Pagination
+    private int currentPage = 1;
+    private int pageSize = 50;
+    private int totalCount = 0;
+    private int totalPages => pageSize > 0 ? (int)Math.Ceiling(totalCount / (double)pageSize) : 0;
+
+    // State
+    private bool isLoading = false;
+    private System.Timers.Timer? searchDebounceTimer;
+    private CancellationTokenSource? searchCts;
 
     protected override async Task OnInitializedAsync()
     {
+        // Initialize with last 5 minutes by default
+        fromDate = DateTime.Now.AddMinutes(-5);
+        toDate = DateTime.Now;
+
+        await LoadLoggerNames();
+        await LoadVersions();
+        await LoadStats();
+        await LoadLogs();
     }
 
-    private async Task<GridDataProviderResult<FileInfo>> DataProvider(GridDataProviderRequest<FileInfo> request)
+    private async Task LoadLogs()
     {
-        FilesAndCount fac = getLogs(request.PageNumber - 1, request.PageSize);
-        return await Task.FromResult(new GridDataProviderResult<FileInfo> { Data = fac.files, TotalCount = fac.totalFiles });//request.ApplyTo(uploads));
-    }
+        isLoading = true;
+        StateHasChanged();
 
-    public async Task getFileLog(FileInfo f)
-    {
-        NavigationManager.NavigateTo($"/api/log/Download?fileName={f.Name}", true);
-    }
-
-    private FilesAndCount getLogs(int pageNumber, int pageSize)
-    {
-        FilesAndCount fac = new FilesAndCount();
-        List<string> totalLogs = Directory.GetFiles(Path.Combine(Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? AppDomain.CurrentDomain.BaseDirectory, "logs")).ToList();
-        totalLogs.Reverse();
-        fac.totalFiles = totalLogs.Count();
-
-        if (fac.totalFiles == 0 || fac.totalFiles < (pageNumber) * pageSize)
+        try
         {
-            fac.files = PathToFileInfoList(totalLogs);
-            return fac;
-        }
-        fac.files = PathToFileInfoList(totalLogs.Skip(pageNumber * pageSize).Take(pageSize).ToList());
-        return fac;
-    }
+            var request = new LogQueryRequest
+            {
+                Page = currentPage,
+                PageSize = pageSize,
+                FromDate = fromDate,
+                ToDate = toDate,
+                Level = string.IsNullOrEmpty(selectedLevel) ? null : selectedLevel,
+                Logger = string.IsNullOrEmpty(selectedLogger) ? null : selectedLogger,
+                Version = string.IsNullOrEmpty(selectedVersion) ? null : selectedVersion,
+                SearchText = string.IsNullOrEmpty(searchText) ? null : searchText,
+                DescendingOrder = true
+            };
 
-    private List<FileInfo> PathToFileInfoList(List<string> pathList)
-    {
-        List<FileInfo> fileInfoList = new List<FileInfo>();
-        foreach(string path in pathList)
+            var result = await LogService.GetLogs(request);
+            logs = result.Logs;
+            totalCount = result.TotalCount;
+        }
+        finally
         {
-            fileInfoList.Add(new FileInfo(path));
+            isLoading = false;
+            StateHasChanged();
         }
-        return fileInfoList;
     }
 
-    class FilesAndCount
+    private async Task LoadLoggerNames()
     {
-        public List<FileInfo> files { get; set; }
-        public int totalFiles { get; set; }
+        loggerNames = await LogService.GetLoggerNames();
+    }
+
+    private async Task LoadVersions()
+    {
+        versions = await LogService.GetVersions();
+    }
+
+    private async Task LoadStats()
+    {
+        stats = await LogService.GetStats();
+    }
+
+    private async Task RefreshLogs()
+    {
+        await LoadStats();
+        await LoadLogs();
+    }
+
+    private async Task SetTimeRange(int minutes)
+    {
+        fromDate = DateTime.Now.AddMinutes(-minutes);
+        toDate = DateTime.Now;
+        currentPage = 1;
+        await LoadLogs();
+    }
+
+    private async Task ApplyFilters()
+    {
+        currentPage = 1;
+        await LoadLogs();
+    }
+
+    private async Task ClearFilters()
+    {
+        searchText = "";
+        selectedLevel = "";
+        selectedLogger = "";
+        selectedVersion = "";
+        fromDate = null;
+        toDate = null;
+        currentPage = 1;
+        await LoadLogs();
+    }
+
+    private async Task ClearSearch()
+    {
+        searchText = "";
+        await ApplyFilters();
+    }
+
+    private async Task OnSearchKeyUp(KeyboardEventArgs e)
+    {
+        // Debounce search
+        searchDebounceTimer?.Stop();
+        searchDebounceTimer?.Dispose();
+
+        searchDebounceTimer = new System.Timers.Timer(300);
+        searchDebounceTimer.Elapsed += async (s, ev) =>
+        {
+            searchDebounceTimer?.Stop();
+            await InvokeAsync(async () =>
+            {
+                currentPage = 1;
+                await LoadLogs();
+            });
+        };
+        searchDebounceTimer.AutoReset = false;
+        searchDebounceTimer.Start();
+    }
+
+    private async Task GoToPage(int page)
+    {
+        if (page < 1) page = 1;
+        if (page > totalPages) page = totalPages;
+        currentPage = page;
+        await LoadLogs();
+    }
+
+    private async Task OnPageSizeChanged()
+    {
+        currentPage = 1;
+        await LoadLogs();
+    }
+
+    private async Task ShowLogDetail(LogEntry log)
+    {
+        selectedLog = log;
+        await detailModal.ShowAsync();
+    }
+
+    private async Task CloseModal()
+    {
+        await detailModal.HideAsync();
+    }
+
+    private string GetLevelBadgeClass(string level) => level switch
+    {
+        "Error" or "Fatal" => "bg-danger",
+        "Warning" => "bg-warning text-dark",
+        "Information" => "bg-info text-dark",
+        "Debug" or "Verbose" => "bg-secondary",
+        _ => "bg-light text-dark"
+    };
+
+    private string GetLevelIcon(string level) => level switch
+    {
+        "Error" or "Fatal" => "bi-x-circle-fill",
+        "Warning" => "bi-exclamation-triangle-fill",
+        "Information" => "bi-info-circle-fill",
+        "Debug" or "Verbose" => "bi-bug",
+        _ => "bi-record-circle"
+    };
+
+    private string GetLevelDisplayName(string level) => level switch
+    {
+        "Information" => "Info",
+        "Verbose" => "Debug",
+        _ => level
+    };
+
+    private string GetShortLoggerName(string logger)
+    {
+        if (string.IsNullOrEmpty(logger)) return "Unknown";
+        var parts = logger.Split('.');
+        return parts.Length > 0 ? parts[^1] : logger;
+    }
+
+    private string TruncateMessage(string message, int maxLength)
+    {
+        if (string.IsNullOrEmpty(message)) return "";
+        if (message.Length <= maxLength) return message;
+        return message.Substring(0, maxLength) + "...";
+    }
+
+    private string FormatProperties(MongoDB.Bson.BsonDocument? properties)
+    {
+        if (properties == null) return "{}";
+        try
+        {
+            var dict = properties.ToDictionary();
+            return System.Text.Json.JsonSerializer.Serialize(dict, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        }
+        catch
+        {
+            return properties.ToString() ?? "{}";
+        }
+    }
+
+    public void Dispose()
+    {
+        searchDebounceTimer?.Dispose();
+        searchCts?.Cancel();
+        searchCts?.Dispose();
     }
 }

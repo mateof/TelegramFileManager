@@ -1906,3 +1906,642 @@ table.table tbody td,
         grid-template-columns: 1fr;
     }
 }
+
+/* ===== Log Viewer Styles ===== */
+.log-viewer {
+    padding: 1rem;
+    background: #0f0f1a;
+    min-height: calc(100vh - 60px);
+}
+
+/* Stats Bar */
+.log-stats-bar {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+}
+
+.log-stats-bar .stat-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 1rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.log-stats-bar .stat-item.total {
+    border-color: rgba(99, 102, 241, 0.3);
+    background: rgba(99, 102, 241, 0.1);
+}
+
+.log-stats-bar .stat-item.total i {
+    color: #818cf8;
+}
+
+.log-stats-bar .stat-item.errors {
+    border-color: rgba(239, 68, 68, 0.3);
+    background: rgba(239, 68, 68, 0.1);
+}
+
+.log-stats-bar .stat-item.errors i {
+    color: #f87171;
+}
+
+.log-stats-bar .stat-item.warnings {
+    border-color: rgba(245, 158, 11, 0.3);
+    background: rgba(245, 158, 11, 0.1);
+}
+
+.log-stats-bar .stat-item.warnings i {
+    color: #fbbf24;
+}
+
+.log-stats-bar .stat-item.info {
+    border-color: rgba(59, 130, 246, 0.3);
+    background: rgba(59, 130, 246, 0.1);
+}
+
+.log-stats-bar .stat-item.info i {
+    color: #60a5fa;
+}
+
+/* Log Filters */
+.log-filters {
+    background: rgba(26, 26, 46, 0.8);
+    border-radius: 0.75rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.log-filters .filter-row {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.log-filters .filter-item {
+    flex: 1;
+    min-width: 150px;
+}
+
+.log-filters .filter-item.search-box {
+    flex: 2;
+    min-width: 250px;
+    position: relative;
+}
+
+.log-filters .search-box i {
+    position: absolute;
+    left: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: rgba(255, 255, 255, 0.4);
+    pointer-events: none;
+}
+
+.log-filters .search-box input {
+    width: 100%;
+    padding: 0.5rem 2.5rem 0.5rem 2.25rem;
+    border-radius: 0.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+    font-size: 0.875rem;
+    transition: all 0.2s ease;
+}
+
+.log-filters .search-box input:focus {
+    outline: none;
+    border-color: rgba(233, 69, 96, 0.5);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.log-filters .search-box input::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.log-filters .search-box .clear-search {
+    position: absolute;
+    right: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    background: rgba(255, 255, 255, 0.1);
+    border: none;
+    border-radius: 50%;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.6);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.log-filters .search-box .clear-search:hover {
+    background: rgba(233, 69, 96, 0.3);
+    color: #fff;
+}
+
+.log-filters .form-select {
+    padding: 0.5rem 2rem 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.log-filters .form-select:focus {
+    outline: none;
+    border-color: rgba(233, 69, 96, 0.5);
+    box-shadow: none;
+}
+
+.log-filters .form-select option {
+    background: #1a1a2e;
+    color: #fff;
+}
+
+.log-filters .filter-item.date-filter {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    min-width: 220px;
+}
+
+.log-filters .filter-item.date-filter label {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.75rem;
+    white-space: nowrap;
+}
+
+.log-filters .filter-item.date-filter input[type="datetime-local"] {
+    padding: 0.45rem 0.5rem;
+    border-radius: 0.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+    font-size: 0.75rem;
+    flex: 1;
+    min-width: 180px;
+}
+
+.log-filters .filter-item.date-filter input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+    filter: invert(1) opacity(0.6);
+    cursor: pointer;
+}
+
+.log-filters .filter-item.date-filter input[type="datetime-local"]:focus {
+    outline: none;
+    border-color: rgba(233, 69, 96, 0.5);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.log-filters .filter-item.quick-filters {
+    display: flex;
+    gap: 0.25rem;
+    min-width: auto;
+    flex: 0;
+}
+
+.log-filters .quick-filters .btn {
+    padding: 0.35rem 0.5rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+}
+
+.log-filters .filter-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.log-filters .filter-actions .btn {
+    padding: 0.5rem 0.75rem;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+}
+
+.log-filters .filter-actions .btn i.spinning {
+    animation: spin 1s linear infinite;
+}
+
+/* Log Table Container */
+.log-table-container {
+    background: rgba(26, 26, 46, 0.9);
+    border-radius: 0.75rem;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.log-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.log-table thead th {
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    color: rgba(255, 255, 255, 0.9);
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 0.875rem 1rem;
+    border-bottom: 2px solid rgba(233, 69, 96, 0.3);
+    text-align: left;
+    white-space: nowrap;
+}
+
+.log-table .col-time { width: 140px; }
+.log-table .col-level { width: 100px; }
+.log-table .col-version { width: 90px; }
+.log-table .col-logger { width: 150px; }
+.log-table .col-message { width: auto; }
+.log-table .col-actions { width: 60px; }
+
+.log-table .version-badge {
+    font-family: 'SF Mono', 'Consolas', monospace;
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.7);
+    background: rgba(99, 102, 241, 0.2);
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+}
+
+.log-table tbody tr.log-row {
+    transition: all 0.2s ease;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.log-table tbody tr.log-row:hover {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.log-table tbody td {
+    padding: 0.75rem 1rem;
+    vertical-align: middle;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+/* Log row level colors */
+.log-table tbody tr.log-row.error {
+    background: rgba(239, 68, 68, 0.08);
+}
+
+.log-table tbody tr.log-row.error:hover {
+    background: rgba(239, 68, 68, 0.12);
+}
+
+.log-table tbody tr.log-row.warning {
+    background: rgba(245, 158, 11, 0.05);
+}
+
+.log-table tbody tr.log-row.warning:hover {
+    background: rgba(245, 158, 11, 0.1);
+}
+
+/* Time column */
+.log-table .col-time .log-time {
+    display: block;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    font-size: 0.85rem;
+    color: #fff;
+}
+
+.log-table .col-time .log-date {
+    display: block;
+    font-size: 0.7rem;
+    color: rgba(255, 255, 255, 0.4);
+    margin-top: 0.125rem;
+}
+
+/* Level badges */
+.log-table .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.3rem 0.6rem;
+    border-radius: 0.375rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.log-table .badge i {
+    font-size: 0.65rem;
+}
+
+.log-table .badge.bg-danger {
+    background: rgba(239, 68, 68, 0.2) !important;
+    color: #f87171 !important;
+}
+
+.log-table .badge.bg-warning {
+    background: rgba(245, 158, 11, 0.2) !important;
+    color: #fbbf24 !important;
+}
+
+.log-table .badge.bg-info {
+    background: rgba(59, 130, 246, 0.2) !important;
+    color: #60a5fa !important;
+}
+
+.log-table .badge.bg-secondary {
+    background: rgba(107, 114, 128, 0.2) !important;
+    color: #9ca3af !important;
+}
+
+.log-table .badge.bg-light {
+    background: rgba(255, 255, 255, 0.1) !important;
+    color: rgba(255, 255, 255, 0.7) !important;
+}
+
+/* Logger name */
+.log-table .logger-name {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.7);
+    display: block;
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Message content */
+.log-table .message-content {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.85);
+    line-height: 1.4;
+    word-break: break-word;
+}
+
+.log-table .message-content.error {
+    color: #f87171;
+}
+
+.log-table .message-content .exception-icon {
+    color: #f87171;
+    margin-left: 0.5rem;
+    font-size: 0.75rem;
+}
+
+/* Action buttons */
+.log-table .col-actions .btn {
+    padding: 0.375rem 0.5rem;
+    border-radius: 0.375rem;
+}
+
+/* Loading and Empty states */
+.log-viewer .loading-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4rem 2rem;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.log-viewer .loading-container p {
+    margin-top: 1rem;
+    font-size: 0.9rem;
+}
+
+.log-viewer .empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 4rem 2rem;
+    background: rgba(26, 26, 46, 0.8);
+    border-radius: 0.75rem;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.log-viewer .empty-state i {
+    font-size: 4rem;
+    color: rgba(255, 255, 255, 0.15);
+    margin-bottom: 1rem;
+}
+
+.log-viewer .empty-state h4 {
+    color: rgba(255, 255, 255, 0.8);
+    margin-bottom: 0.5rem;
+}
+
+.log-viewer .empty-state p {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.9rem;
+    margin: 0;
+}
+
+/* Pagination */
+.log-pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1rem;
+    background: rgba(26, 26, 46, 0.8);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 0 0 0.75rem 0.75rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.log-pagination .pagination-info {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.85rem;
+}
+
+.log-pagination .pagination-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.log-pagination .pagination-controls .btn {
+    padding: 0.375rem 0.625rem;
+    border-radius: 0.375rem;
+    font-size: 0.8rem;
+}
+
+.log-pagination .page-info {
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 0.85rem;
+    padding: 0 0.75rem;
+}
+
+.log-pagination .page-size-select {
+    width: auto;
+    padding: 0.375rem 2rem 0.375rem 0.75rem;
+    border-radius: 0.375rem;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+    font-size: 0.8rem;
+}
+
+.log-pagination .page-size-select option {
+    background: #1a1a2e;
+    color: #fff;
+}
+
+/* Log Detail Modal */
+.log-detail {
+    color: #1f2937;
+}
+
+.log-detail .detail-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.log-detail .detail-header .badge-lg {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+}
+
+.log-detail .detail-time {
+    color: #6b7280;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    font-size: 0.875rem;
+}
+
+.log-detail .detail-section {
+    margin-bottom: 1.25rem;
+}
+
+.log-detail .detail-section label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #6b7280;
+    margin-bottom: 0.5rem;
+}
+
+.log-detail .detail-section code {
+    display: inline-block;
+    padding: 0.375rem 0.75rem;
+    background: #f3f4f6;
+    border-radius: 0.375rem;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    font-size: 0.85rem;
+    color: #374151;
+}
+
+.log-detail .log-message-full {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    font-size: 0.85rem;
+    color: #374151;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 200px;
+    overflow-y: auto;
+    margin: 0;
+}
+
+.log-detail .exception-section {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    border-radius: 0.5rem;
+    padding: 1rem;
+}
+
+.log-detail .exception-section label {
+    color: #dc2626;
+}
+
+.log-detail .exception-section label i {
+    margin-right: 0.375rem;
+}
+
+.log-detail .exception-trace {
+    background: #1f2937;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    font-size: 0.8rem;
+    color: #f87171;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 300px;
+    overflow-y: auto;
+    margin: 0;
+}
+
+.log-detail .properties-json {
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    font-family: 'SF Mono', 'Consolas', monospace;
+    font-size: 0.8rem;
+    color: #374151;
+    white-space: pre-wrap;
+    max-height: 200px;
+    overflow-y: auto;
+    margin: 0;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .log-stats-bar {
+        justify-content: center;
+    }
+
+    .log-filters .filter-row {
+        flex-direction: column;
+    }
+
+    .log-filters .filter-item {
+        width: 100%;
+        min-width: unset;
+    }
+
+    .log-filters .filter-item.search-box {
+        min-width: unset;
+    }
+
+    .log-filters .filter-actions {
+        width: 100%;
+        justify-content: flex-end;
+    }
+
+    .log-table-container {
+        overflow-x: auto;
+    }
+
+    .log-table {
+        min-width: 700px;
+    }
+
+    .log-pagination {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .log-pagination .pagination-controls {
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+}
