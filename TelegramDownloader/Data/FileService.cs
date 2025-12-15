@@ -386,7 +386,11 @@ namespace TelegramDownloader.Data
                 await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size);
             }
 
-            await _db.checkAndSetDirectoryHasChild(dbName, args.Files.FirstOrDefault().ParentId);
+            var firstFile = args.Files.FirstOrDefault();
+            if (firstFile != null)
+            {
+                await _db.checkAndSetDirectoryHasChild(dbName, firstFile.ParentId);
+            }
             return await GetFilesPath(dbName, args.Path);
         }
 
@@ -1903,11 +1907,25 @@ namespace TelegramDownloader.Data
             if (path == "/")
             {
                 List<BsonFileManagerModel> Data = collectionName == null ? await _db.getAllFiles(dbName) : await _db.getAllFiles(dbName, collectionName);
-                string ParentId = Data
-                    .Where(x => string.IsNullOrEmpty(x.ParentId))
-                    .Select(x => x.Id).First();
-                response.CWD = Data
-                    .Where(x => string.IsNullOrEmpty(x.ParentId)).First().toFileManagerContent();
+
+                // Find root element (element with no ParentId)
+                var rootElement = Data.FirstOrDefault(x => string.IsNullOrEmpty(x.ParentId));
+
+                if (rootElement == null)
+                {
+                    // No root element found, return empty response
+                    response.CWD = new Syncfusion.Blazor.FileManager.FileManagerDirectoryContent
+                    {
+                        Name = "Root",
+                        FilterPath = "/",
+                        IsFile = false
+                    };
+                    response.Files = new List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>();
+                    return response;
+                }
+
+                string ParentId = rootElement.Id;
+                response.CWD = rootElement.toFileManagerContent();
                 response.Files = Data
                     .Where(x => x.ParentId == ParentId).Select(x => x.toFileManagerContent()).ToList();
             }
@@ -2038,11 +2056,22 @@ namespace TelegramDownloader.Data
 
         private async Task<List<string>> splitFileStreamAsync(string path, string name, int splitSize)
         {
+            var originalFileInfo = new System.IO.FileInfo(System.IO.Path.Combine(path, name));
+            long originalFileSize = originalFileInfo.Length;
+
             _logger.LogInformation("Starting file split - FileName: {FileName}, SizeMB: {SizeMB:F2}, SplitSizeMB: {SplitSizeMB}",
-                name, new System.IO.FileInfo(System.IO.Path.Combine(path, name)).Length / (1024.0 * 1024.0), splitSize / (1024 * 1024));
+                name, originalFileSize / (1024.0 * 1024.0), splitSize / (1024 * 1024));
+
             int _gb = TelegramService.splitSizeGB;
+            long partSize = (long)splitSize * _gb; // Size of each part in bytes
+            int expectedParts = (int)Math.Ceiling((double)originalFileSize / partSize);
+
+            // Check for existing split parts from a previous failed run
+            var existingParts = CheckExistingSplitParts(path, name, originalFileSize, partSize, expectedParts);
+
             List<string> listPath = new List<string>();
             byte[] buffer = new byte[splitSize];
+
             using (FileStream fs = new FileStream(System.IO.Path.Combine(path, name), FileMode.Open, FileAccess.Read, FileShare.Read))
             {
                 SplitModel sm = new SplitModel();
@@ -2051,13 +2080,33 @@ namespace TelegramDownloader.Data
                 sm._transmitted = 0;
                 _tis.addToUploadList(sm);
                 int index = 1;
+
                 while (fs.Position < fs.Length)
                 {
                     string partPath = System.IO.Path.Combine(path, $"({index})" + name);
+
+                    // Check if this part already exists and is valid
+                    if (existingParts.TryGetValue(index, out var existingPartInfo) && existingPartInfo.isValid)
+                    {
+                        _logger.LogInformation("Reusing existing split part {PartNumber}/{TotalParts} - Size: {SizeMB:F2} MB",
+                            index, expectedParts, existingPartInfo.size / (1024.0 * 1024.0));
+
+                        // Skip this part in the source file
+                        fs.Position += existingPartInfo.size;
+                        listPath.Add(partPath);
+                        sm.ProgressCallback(fs.Position, fs.Length);
+                        index++;
+                        continue;
+                    }
+
+                    // Delete existing invalid part if exists
                     if (File.Exists(partPath))
                     {
+                        _logger.LogDebug("Deleting invalid existing part: {PartPath}", partPath);
                         File.Delete(partPath);
                     }
+
+                    // Create new part
                     int gb = _gb;
                     while (fs.Position < fs.Length && gb > 0)
                     {
@@ -2070,14 +2119,70 @@ namespace TelegramDownloader.Data
                         sm.ProgressCallback(fs.Position, fs.Length);
                     }
 
-
-                    // await fs.CopyToAsync(fsPart, Convert.ToInt32(Math.Min(splitSize, fs.Length - fs.Position)));
                     listPath.Add(partPath);
                     index++;
                 }
             }
-            _logger.LogInformation("File split completed - FileName: {FileName}, Parts: {PartsCount}", name, listPath.Count);
+
+            int reusedParts = existingParts.Count(p => p.Value.isValid);
+            _logger.LogInformation("File split completed - FileName: {FileName}, Parts: {PartsCount}, ReusedParts: {ReusedParts}",
+                name, listPath.Count, reusedParts);
             return listPath;
+        }
+
+        /// <summary>
+        /// Checks for existing split parts from a previous failed run and validates their sizes
+        /// </summary>
+        private Dictionary<int, (long size, bool isValid)> CheckExistingSplitParts(string path, string name, long originalFileSize, long partSize, int expectedParts)
+        {
+            var existingParts = new Dictionary<int, (long size, bool isValid)>();
+
+            for (int i = 1; i <= expectedParts; i++)
+            {
+                string partPath = System.IO.Path.Combine(path, $"({i})" + name);
+                if (File.Exists(partPath))
+                {
+                    var partInfo = new System.IO.FileInfo(partPath);
+                    long actualSize = partInfo.Length;
+
+                    // Calculate expected size for this part
+                    long expectedSize;
+                    if (i < expectedParts)
+                    {
+                        // Not the last part - should be full partSize
+                        expectedSize = partSize;
+                    }
+                    else
+                    {
+                        // Last part - calculate remaining size
+                        expectedSize = originalFileSize - (partSize * (expectedParts - 1));
+                    }
+
+                    bool isValid = actualSize == expectedSize;
+
+                    existingParts[i] = (actualSize, isValid);
+
+                    if (isValid)
+                    {
+                        _logger.LogDebug("Found valid existing part {PartNumber}/{TotalParts} - Size: {SizeMB:F2} MB",
+                            i, expectedParts, actualSize / (1024.0 * 1024.0));
+                    }
+                    else
+                    {
+                        _logger.LogWarning("Found invalid existing part {PartNumber}/{TotalParts} - Expected: {ExpectedMB:F2} MB, Actual: {ActualMB:F2} MB",
+                            i, expectedParts, expectedSize / (1024.0 * 1024.0), actualSize / (1024.0 * 1024.0));
+                    }
+                }
+            }
+
+            if (existingParts.Any())
+            {
+                int validCount = existingParts.Count(p => p.Value.isValid);
+                _logger.LogInformation("Found {TotalExisting} existing split parts, {ValidCount} are valid and will be reused",
+                    existingParts.Count, validCount);
+            }
+
+            return existingParts;
         }
 
         private async Task mergeFileStreamAsync(List<string> pathList, string destName)
