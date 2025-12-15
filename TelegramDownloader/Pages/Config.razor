@@ -3,11 +3,13 @@
 @using TelegramDownloader.Data.db
 @using TelegramDownloader.Models
 @using TelegramDownloader.Services
+@using Microsoft.Extensions.Hosting
 @implements IDisposable
 
 @inject IDbService db
 @inject ToastService toastService
 @inject TransactionInfoService tis
+@inject IHostApplicationLifetime applicationLifetime
 
 <style>
     .config-page {
@@ -580,6 +582,45 @@
                 </div>
             </div>
 
+            <!-- System Section -->
+            <div class="config-section">
+                <div class="config-section-header">
+                    <i class="bi bi-pc-display"></i>
+                    <span>System</span>
+                </div>
+                <div class="config-section-body">
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-arrow-clockwise"></i>
+                                Restart Application
+                            </div>
+                            <div class="config-item-description">
+                                Restart the application. Useful after configuration changes or to resolve issues.
+                                @if (isRestarting)
+                                {
+                                    <span class="badge bg-warning text-dark ms-2">Restarting...</span>
+                                }
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <button type="button" class="btn btn-outline-warning btn-sm d-flex align-items-center gap-2" @onclick="RestartApplication" disabled="@isRestarting">
+                                @if (isRestarting)
+                                {
+                                    <span class="spinner-border spinner-border-sm" role="status"></span>
+                                    <span>Restarting...</span>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-arrow-clockwise"></i>
+                                    <span>Restart</span>
+                                }
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Save Button -->
             <div class="config-save-section">
                 <button class="btn btn-primary config-save-btn" type="submit">
@@ -594,6 +635,7 @@
 @code {
     public GeneralConfig Model { get; set; }
     private bool _disposed = false;
+    private bool isRestarting = false;
 
     // Task counters
     private int pendingDownloadsCount = 0;
@@ -653,6 +695,20 @@
     {
         await GeneralConfigStatic.SaveChanges(db, Model);
         toastService.Notify(new(ToastType.Success, "Configuration saved successfully") { Title = "Success", AutoHide = true });
+    }
+
+    private async Task RestartApplication()
+    {
+        isRestarting = true;
+        await InvokeAsync(StateHasChanged);
+
+        toastService.Notify(new(ToastType.Warning, "Application is restarting...") { Title = "Restart", AutoHide = false });
+
+        // Small delay to allow the toast to be shown
+        await Task.Delay(1500);
+
+        // Stop the application - the container/service will restart it automatically
+        applicationLifetime.StopApplication();
     }
 
     public void Dispose()
