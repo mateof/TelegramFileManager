@@ -113,6 +113,9 @@ builder.Services.AddHostedService<TaskResumeService>();
 builder.Services.AddSingleton<ILogQueryService>(sp =>
     new LogQueryService(mongoConnectionString, sp.GetRequiredService<ILogger<LogQueryService>>()));
 
+// System metrics service
+builder.Services.AddSingleton<ISystemMetricsService, SystemMetricsService>();
+
 ServiceLocator.ServiceProvider = builder.Services.BuildServiceProvider();
 builder.Services.AddBlazorBootstrap();
 
