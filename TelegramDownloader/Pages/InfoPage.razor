@@ -5,6 +5,7 @@
 @using TelegramDownloader.Services
 @inject ITelegramService ts
 @inject IFileService fs
+@inject IJSRuntime JSRuntime
 
 @if(user != null)
 {
@@ -208,5 +209,11 @@
     {
         fs.cleanTempFolder();
         await calculateTempDirSize();
+        await TriggerCelebration();
+    }
+
+    private async Task TriggerCelebration()
+    {
+        await JSRuntime.InvokeVoidAsync("triggerConfetti");
     }
 }
