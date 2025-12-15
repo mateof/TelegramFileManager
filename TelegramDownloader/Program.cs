@@ -5,6 +5,9 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.FileProviders;
+using MongoDB.Bson;
+using MongoDB.Bson.Serialization;
+using MongoDB.Bson.Serialization.Serializers;
 using Serilog;
 using Serilog.Debugging;
 using Serilog.Events;
@@ -17,6 +20,9 @@ using TelegramDownloader.Models;
 using TelegramDownloader.Services;
 using TelegramDownloader.Services.GitHub;
 using TL;
+
+// Register Guid serializer for MongoDB to handle Guid types in log properties
+BsonSerializer.RegisterSerializer(new GuidSerializer(BsonType.String));
 
 var extensionProvider = new FileExtensionContentTypeProvider();
 foreach(var mime in FileService.MIMETypesDictionary)
