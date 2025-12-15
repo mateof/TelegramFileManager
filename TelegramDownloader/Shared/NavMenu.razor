@@ -422,6 +422,9 @@
             <button class="sidebar-action-btn" @onclick="RefreshChannels" title="Refresh channels">
                 <i class="bi bi-arrow-clockwise"></i>
             </button>
+            <button class="sidebar-action-btn" @onclick="HandleCreateChannel" title="Create Channel">
+                <i class="bi bi-plus-circle"></i>
+            </button>
             <button class="sidebar-action-btn" @onclick="showPlayer" title="Audio Player">
                 <i class="bi bi-music-note-beamed"></i>
             </button>
@@ -644,6 +647,7 @@
 
     [Parameter] public EventCallback OnClickCallback { get; set; }
     [Parameter] public EventCallback OnClickOpenImportCallback { get; set; }
+    [Parameter] public EventCallback OnClickCreateChannelCallback { get; set; }
     [Parameter] public EventCallback<bool> OnCollapseChanged { get; set; }
 
     Tabs tabs = default!;
@@ -734,6 +738,15 @@
         if (OnClickOpenImportCallback.HasDelegate)
         {
             await OnClickOpenImportCallback.InvokeAsync(null);
+        }
+    }
+
+    private async Task HandleCreateChannel()
+    {
+        ToggleNavMenu();
+        if (OnClickCreateChannelCallback.HasDelegate)
+        {
+            await OnClickCreateChannelCallback.InvokeAsync(null);
         }
     }
 

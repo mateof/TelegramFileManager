@@ -69,7 +69,7 @@
 
 <div class="page @(sidebarCollapsed ? "sidebar-collapsed" : "")">
     <div class="sidebar @(sidebarCollapsed ? "collapsed" : "") @(navMenuCollapsed ? "nav-collapsed" : "")">
-        <NavMenu @ref="menu" OnClickCallback="openOffCanvasMenu" OnClickOpenImportCallback="openImportModalMenu" OnCollapseChanged="OnNavMenuCollapseChanged" />
+        <NavMenu @ref="menu" OnClickCallback="openOffCanvasMenu" OnClickOpenImportCallback="openImportModalMenu" OnClickCreateChannelCallback="openCreateChannelModal" OnCollapseChanged="OnNavMenuCollapseChanged" />
     </div>
 
     <main>
@@ -158,6 +158,7 @@
             </BodyTemplate>
         </Offcanvas>
         <TelegramDownloader.Pages.Modals.ImportDataModal isShared=true @ref="ImportModal" OnCloseCallback="reloadMenu"></TelegramDownloader.Pages.Modals.ImportDataModal>
+        <TelegramDownloader.Pages.Modals.CreateChannelModal @ref="CreateChannelModal" OnChannelCreated="reloadMenu" />
 
         <Modal IsServiceModal="true" />
         <Toasts class="p-3" AutoHide="true" Delay="4000" Placement="ToastsPlacement.TopRight" />
@@ -273,6 +274,7 @@
 
     private Offcanvas offcanvas = default!;
     private Pages.Modals.ImportDataModal ImportModal { get; set; }
+    private Pages.Modals.CreateChannelModal CreateChannelModal { get; set; }
     private Pages.Modals.AudioPlayerModal audioPlayer { get; set; } = default!;
     private Pages.Modals.UploadToTelegramModal uploadToTelegramModal { get; set; } = default!;
     private NavMenu menu { get; set; }
@@ -429,6 +431,11 @@
     private async Task openImportModalMenu()
     {
         await ImportModal.Open();
+    }
+
+    private void openCreateChannelModal()
+    {
+        CreateChannelModal?.Open();
     }
 
     private async Task openImportMenu()

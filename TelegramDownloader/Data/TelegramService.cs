@@ -1104,5 +1104,46 @@ namespace TelegramDownloader.Data
 
         //    return telegramChatDocuments;
         //}
+
+        public async Task<TL.Channel?> CreateChannel(string title, string about)
+        {
+            try
+            {
+                _logger.LogInformation("Creating channel with title: {Title}", title);
+
+                // Create a new channel (broadcast = true for channel, false for megagroup/supergroup)
+                var updates = await client.Channels_CreateChannel(
+                    title: title,
+                    about: about,
+                    broadcast: true,  // true = channel, false = megagroup
+                    megagroup: false,
+                    for_import: false
+                );
+
+                // Extract the created channel from the updates
+                if (updates is Updates updatesObj)
+                {
+                    var channel = updatesObj.chats.Values.OfType<TL.Channel>().FirstOrDefault();
+                    if (channel != null)
+                    {
+                        _logger.LogInformation("Channel created successfully: {ChannelId} - {Title}", channel.ID, channel.Title);
+
+                        // Refresh the chat list to include the new channel
+                        chats = null;
+                        await getAllChats();
+
+                        return channel;
+                    }
+                }
+
+                _logger.LogWarning("Channel creation returned unexpected result type");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating channel: {Title}", title);
+                throw;
+            }
+        }
     }
 }
