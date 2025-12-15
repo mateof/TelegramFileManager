@@ -1,12 +1,15 @@
 ﻿@page "/downloads"
 
 @using TelegramDownloader.Data
+@using TelegramDownloader.Data.db
 @using TelegramDownloader.Models
 @using TelegramDownloader.Services
 @using Microsoft.AspNetCore.WebUtilities
 
 @inject TransactionInfoService tis
 @inject NavigationManager NavigationManager
+@inject ITaskPersistenceService taskPersistence
+@inject IDbService dbService
 
 <div class="downloads-header">
     <h2 class="downloads-title">
@@ -20,7 +23,7 @@
             </div>
             <div class="stat-info">
                 <h4>@tis.getTotalTasks()</h4>
-                <p>Pending Tasks</p>
+                <p>Batch Tasks</p>
             </div>
         </div>
         <div class="stat-card">
@@ -39,6 +42,15 @@
             <div class="stat-info">
                 <h4>@tis.getTotalUploads()</h4>
                 <p>Uploads</p>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon persisted">
+                <i class="bi bi-database"></i>
+            </div>
+            <div class="stat-info">
+                <h4>@persistedTasksCount</h4>
+                <p>Saved Tasks</p>
             </div>
         </div>
     </div>
@@ -128,13 +140,31 @@
             </Tabs>
         </Content>
     </Tab>
+    <Tab Title="Saved Tasks" Name="persisted">
+        <Content>
+            <div class="tab-actions">
+                <span class="tab-actions-title">Persisted Tasks</span>
+                <div class="action-btn-group">
+                    <button class="action-btn clear" @onclick="ClearAllPersistedTasks" title="Clear all persisted tasks">
+                        <i class="bi bi-trash3"></i>
+                        <span>Clear All</span>
+                    </button>
+                </div>
+            </div>
+            <TelegramDownloader.Pages.Partials.PersistedTasksTable @ref="persistedTasksTable"></TelegramDownloader.Pages.Partials.PersistedTasksTable>
+        </Content>
+    </Tab>
 </Tabs>
 
+<ConfirmDialog @ref="confirmDialog" />
 
 @code {
     private Tabs tabsRef = default!;
     private string activeTab = "tasks";
     private bool tabInitialized = false;
+    private int persistedTasksCount = 0;
+    private TelegramDownloader.Pages.Partials.PersistedTasksTable persistedTasksTable;
+    private ConfirmDialog confirmDialog = default!;
 
     protected override void OnInitialized()
     {
@@ -143,10 +173,28 @@
         if (QueryHelpers.ParseQuery(uri.Query).TryGetValue("tab", out var tabValue))
         {
             var tab = tabValue.ToString().ToLower();
-            if (tab == "uploads" || tab == "downloads" || tab == "tasks")
+            if (tab == "uploads" || tab == "downloads" || tab == "tasks" || tab == "persisted")
             {
                 activeTab = tab;
             }
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPersistedTasksCount();
+    }
+
+    private async Task LoadPersistedTasksCount()
+    {
+        try
+        {
+            var tasks = await taskPersistence.LoadPendingTasks();
+            persistedTasksCount = tasks?.Count ?? 0;
+        }
+        catch
+        {
+            persistedTasksCount = 0;
         }
     }
 
@@ -179,5 +227,27 @@
     async Task clearTasks()
     {
         tis.clearTasksCompleted();
+    }
+
+    async Task ClearAllPersistedTasks()
+    {
+        var confirmed = await confirmDialog.ShowAsync(
+            title: "Clear All Saved Tasks",
+            message1: "Are you sure you want to delete all saved tasks from the database?",
+            message2: "This action cannot be undone.");
+
+        if (confirmed)
+        {
+            try
+            {
+                await dbService.ClearAllTasks();
+                persistedTasksCount = 0;
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                // Log error
+            }
+        }
     }
 }

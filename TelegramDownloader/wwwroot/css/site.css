@@ -798,12 +798,11 @@ a, .btn-link {
 /* Exclude .stats-grid and .mfm-grid (mobile file manager) from dark background */
 .grid:not(.stats-grid):not(.mfm-grid),
 .bb-grid,
-[class*="grid"]:not(.stats-grid):not(.mfm-grid):not(.mfm-content):not(.info-page *) {
-    background: white !important;
+[class*="grid"]:not(.stats-grid):not(.mfm-grid):not(.mfm-content):not(.info-page *):not(.bb-grid-pagination-text):not(.resources-grid):not(.mfm-item):not(.mfm-item-grid) {
+    background: rgba(26, 26, 46, 0.8) !important;
     border-radius: 0.5rem;
     overflow: hidden;
 }
-
 /* Mobile File Manager - override dark background */
 .mfm-content.mfm-grid,
 .mfm-grid {

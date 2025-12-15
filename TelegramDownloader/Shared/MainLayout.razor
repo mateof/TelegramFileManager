@@ -143,6 +143,11 @@
                     <span class="menu-text">Tasks</span>
                 </button>
 
+                <button @onclick='() => NavigateAndClose("/downloads?tab=persisted")' class="offcanvas-menu-item">
+                    <i class="bi bi-database"></i>
+                    <span class="menu-text">Saved Tasks</span>
+                </button>
+
                 <button @onclick='() => NavigateAndClose("/loglist")' class="offcanvas-menu-item">
                     <i class="bi bi-journal-text"></i>
                     <span class="menu-text">Logs</span>
