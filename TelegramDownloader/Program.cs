@@ -6,8 +6,6 @@ using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.Extensions.FileProviders;
 using MongoDB.Bson;
-using MongoDB.Bson.Serialization;
-using MongoDB.Bson.Serialization.Serializers;
 using Serilog;
 using Serilog.Debugging;
 using Serilog.Events;
@@ -16,13 +14,14 @@ using System.Net;
 using System.Net.Http;
 using TelegramDownloader.Data;
 using TelegramDownloader.Data.db;
+using TelegramDownloader.Helpers;
 using TelegramDownloader.Models;
 using TelegramDownloader.Services;
 using TelegramDownloader.Services.GitHub;
 using TL;
 
-// Register Guid serializer for MongoDB to handle Guid types in log properties
-BsonSerializer.RegisterSerializer(new GuidSerializer(BsonType.String));
+// Register Guid type mapper for MongoDB to handle Guid types in log properties (used by Serilog sink)
+BsonTypeMapper.RegisterCustomTypeMapper(typeof(Guid), new GuidTypeMapper());
 
 var extensionProvider = new FileExtensionContentTypeProvider();
 foreach(var mime in FileService.MIMETypesDictionary)

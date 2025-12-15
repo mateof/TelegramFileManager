@@ -18,7 +18,7 @@
             </p>
             <div class="version-badge">
                 <i class="bi bi-tag"></i>
-                v1.0.0
+                v@AppVersion
             </div>
         </div>
 
@@ -186,6 +186,7 @@
     private User user { get; set; }
     private DirectorySizeModel? dirSize { get; set; }
     private bool showFilesBreakdown { get; set; } = false;
+    private string AppVersion => typeof(Program).Assembly.GetName().Version?.ToString() ?? "0.0.0";
 
     private void ToggleFilesBreakdown()
     {
