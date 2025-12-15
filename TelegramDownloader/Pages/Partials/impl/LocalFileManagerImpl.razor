@@ -1,4 +1,5 @@
-﻿@using TelegramDownloader.Data
+﻿@using System.Web
+@using TelegramDownloader.Data
 @using TelegramDownloader.Models
 @using TelegramDownloader.Pages.Modals
 @using TelegramDownloader.Pages.Modals.InfoModals
@@ -65,7 +66,8 @@
                            OnUploadToLocal="OnMobileUploadToLocalAsync"
                            OnUrlMedia="OnMobileUrlMediaAsync"
                            CanAddToPlaylist="true"
-                           OnAddToPlaylist="OnMobileAddToPlaylistAsync" />
+                           OnAddToPlaylist="OnMobileAddToPlaylistAsync"
+                           OnPathChanged="OnMobilePathChanged" />
     </div>
 }
 
@@ -203,6 +205,48 @@
         {
             _viewportDetected = true;
             StateHasChanged();
+
+            // After viewport is detected, navigate to path from URL if present
+            await NavigateToPathFromUrl();
+        }
+    }
+
+    private async Task NavigateToPathFromUrl()
+    {
+        try
+        {
+            var uri = new Uri(MyNavigationManager.Uri);
+            var query = HttpUtility.ParseQueryString(uri.Query);
+            var pathFromUrl = query["path"];
+
+            if (!string.IsNullOrEmpty(pathFromUrl) && mobileFileManager != null)
+            {
+                // Decode the path and ensure it ends with /
+                var decodedPath = Uri.UnescapeDataString(pathFromUrl);
+                if (!decodedPath.EndsWith("/"))
+                    decodedPath += "/";
+
+                await mobileFileManager.NavigateToPathSilent(decodedPath);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error navigating to path from URL");
+        }
+    }
+
+    private void OnMobilePathChanged(string path)
+    {
+        try
+        {
+            // Update URL without triggering navigation
+            var baseUri = MyNavigationManager.Uri.Split('?')[0];
+            var newUrl = path == "/" ? baseUri : $"{baseUri}?path={Uri.EscapeDataString(path)}";
+            MyNavigationManager.NavigateTo(newUrl, forceLoad: false, replace: true);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error updating URL with path");
         }
     }
 

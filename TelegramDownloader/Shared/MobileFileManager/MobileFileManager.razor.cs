@@ -118,6 +118,9 @@ namespace TelegramDownloader.Shared.MobileFileManager
         [Parameter]
         public EventCallback<MfmAddToPlaylistEventArgs> OnAddToPlaylist { get; set; }
 
+        [Parameter]
+        public EventCallback<string> OnPathChanged { get; set; }
+
         #endregion
 
         #region State
@@ -395,6 +398,7 @@ namespace TelegramDownloader.Shared.MobileFileManager
             ClearSelection();
             ResetPagination();
             await LoadFiles();
+            await OnPathChanged.InvokeAsync(CurrentPath);
         }
 
         private async Task GoBack()
@@ -427,6 +431,7 @@ namespace TelegramDownloader.Shared.MobileFileManager
             ClearSelection();
             ResetPagination();
             await LoadFiles();
+            await OnPathChanged.InvokeAsync(CurrentPath);
         }
 
         private async Task OnFileClick(FileManagerDirectoryContent file)
@@ -467,6 +472,7 @@ namespace TelegramDownloader.Shared.MobileFileManager
             ClearSelection();
             ResetPagination();
             await LoadFiles();
+            await OnPathChanged.InvokeAsync(CurrentPath);
         }
 
         private async Task OpenFile(FileManagerDirectoryContent file)
@@ -1295,6 +1301,21 @@ namespace TelegramDownloader.Shared.MobileFileManager
         {
             get => CurrentPath;
             set => CurrentPath = value;
+        }
+
+        /// <summary>
+        /// Navigates to the specified path without triggering OnPathChanged event.
+        /// Useful when initializing from URL to avoid infinite loops.
+        /// </summary>
+        public async Task NavigateToPathSilent(string path)
+        {
+            if (string.IsNullOrEmpty(path) || path == CurrentPath)
+                return;
+
+            CurrentPath = NormalizePath(path);
+            ClearSelection();
+            ResetPagination();
+            await LoadFiles();
         }
 
         #endregion
