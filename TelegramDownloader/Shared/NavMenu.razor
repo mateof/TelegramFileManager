@@ -48,35 +48,29 @@
     }
 
     .sidebar-toggler {
-        width: 34px;
-        height: 34px;
-        border-radius: 50%;
+        width: 36px;
+        height: 36px;
+        border-radius: 0.5rem;
         display: flex;
         align-items: center;
         justify-content: center;
-        color: rgba(255, 255, 255, 0.85);
-        background: linear-gradient(135deg, rgba(233, 69, 96, 0.8) 0%, rgba(233, 69, 96, 0.6) 100%);
-        border: none;
-        box-shadow: 0 2px 8px rgba(233, 69, 96, 0.3);
+        color: rgba(255, 255, 255, 0.7);
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
         cursor: pointer;
-        transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        transition: all 0.2s ease;
     }
 
     .sidebar-toggler i {
-        font-size: 1rem;
-        transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        font-size: 1.1rem;
+        transition: transform 0.2s ease;
     }
 
     .sidebar-toggler:hover {
-        background: linear-gradient(135deg, rgba(233, 69, 96, 1) 0%, rgba(233, 69, 96, 0.8) 100%);
-        color: #fff;
-        transform: scale(1.1);
-        box-shadow: 0 4px 16px rgba(233, 69, 96, 0.4);
-    }
-
-    .sidebar-toggler:active {
-        transform: scale(0.95);
-        box-shadow: 0 2px 4px rgba(233, 69, 96, 0.3);
+        background: rgba(233, 69, 96, 0.2);
+        border-color: rgba(233, 69, 96, 0.3);
+        color: #e94560;
+        transform: scale(1.05);
     }
 
     .sidebar-toggler:hover i {
