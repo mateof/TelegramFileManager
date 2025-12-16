@@ -75,6 +75,21 @@ namespace TelegramDownloader.Services
             return uploadModels.Any(x => x.state == StateTask.Working);
         }
 
+        public bool isSplitting()
+        {
+            return uploadModels.Any(x => x.state == StateTask.Working && (x is SplitModel || x.action == "Splitting"));
+        }
+
+        public bool isCalculatingHash()
+        {
+            return uploadModels.Any(x => x.state == StateTask.Working && (x is Md5Model || x is XxHashModel || x.action == "MD5 Calc" || x.action == "XxHash Calc"));
+        }
+
+        public bool isRealUploading()
+        {
+            return uploadModels.Any(x => x.state == StateTask.Working && x.action == "Upload");
+        }
+
         public bool isDownloading()
         {
             return downloadModels.Any(x => x.state == StateTask.Working);

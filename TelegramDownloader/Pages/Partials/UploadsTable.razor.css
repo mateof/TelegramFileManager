@@ -257,8 +257,31 @@
     color: #ffc107;
 }
 
+::deep .status-badge.splitting {
+    background: rgba(168, 85, 247, 0.2);
+    color: #a855f7;
+}
+
+::deep .status-badge.splitting i {
+    animation: spin 1s linear infinite;
+}
+
+::deep .status-badge.calculating {
+    background: rgba(59, 130, 246, 0.2);
+    color: #3b82f6;
+}
+
+::deep .status-badge.calculating i {
+    animation: pulse 1s ease-in-out infinite;
+}
+
 ::deep .status-badge i {
     font-size: 0.6rem;
+}
+
+/* Progress bar for splitting */
+::deep .progress-bar.splitting {
+    background: linear-gradient(90deg, #a855f7 0%, #c084fc 100%);
 }
 
 /* Action buttons */
@@ -310,8 +333,33 @@
     color: #5bc0de;
 }
 
+::deep .action-btn.splitting {
+    background: rgba(168, 85, 247, 0.2);
+    border-color: rgba(168, 85, 247, 0.3);
+    color: #a855f7;
+    cursor: not-allowed;
+}
+
+::deep .action-btn.splitting:hover {
+    transform: none;
+}
+
 ::deep .action-btn i {
     font-size: 0.875rem;
+}
+
+::deep .action-btn i.spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
 }
 
 /* Empty state */

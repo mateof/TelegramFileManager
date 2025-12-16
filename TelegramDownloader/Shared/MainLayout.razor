@@ -82,7 +82,23 @@
 
             <div class="top-row-actions">
                 @if(active) {
-                    @if (tis.isUploading())
+                    @if (tis.isSplitting())
+                    {
+                        <button class="btn status-btn splitting"
+                                @onclick='() => Navigateto("/downloads?tab=uploads")' title="Splitting file...">
+                            <i class="bi bi-scissors spin"></i>
+                            <span>Splitting</span>
+                        </button>
+                    }
+                    else if (tis.isCalculatingHash())
+                    {
+                        <button class="btn status-btn calculating"
+                                @onclick='() => Navigateto("/downloads?tab=uploads")' title="Calculating hash...">
+                            <i class="bi bi-calculator"></i>
+                            <span>Hashing</span>
+                        </button>
+                    }
+                    else if (tis.isUploading())
                     {
                         <button class="btn water-fill-button upload @(GetUploadProgress() > 50 ? "filled-high" : "")"
                                 @onclick='() => Navigateto("/downloads?tab=uploads")' title="Upload in progress">

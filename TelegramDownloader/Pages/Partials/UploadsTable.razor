@@ -60,7 +60,13 @@
 
     <GridColumn TItem="UploadModel" HeaderText="Actions">
         <div class="action-buttons">
-            @if (context.state == StateTask.Working && !isPending)
+            @if (IsSplitting(context) && context.state == StateTask.Working && !isPending)
+            {
+                <button class="action-btn splitting" disabled title="Splitting file...">
+                    <i class="bi bi-scissors spin"></i>
+                </button>
+            }
+            else if (context.state == StateTask.Working && !isPending)
             {
                 <button class="action-btn cancel" @onclick="() => cancel(context)" title="Cancel">
                     <i class="bi bi-x-lg"></i>
@@ -121,16 +127,29 @@
         };
     }
 
+    private bool IsSplitting(UploadModel um)
+    {
+        return um is SplitModel || um.action == "Splitting";
+    }
+
+    private bool IsMd5Calculating(UploadModel um)
+    {
+        return um is Md5Model || um.action == "MD5 Calc" || um is XxHashModel || um.action == "XxHash Calc";
+    }
+
     private string GetProgressClass(UploadModel um)
     {
         if (um.state == StateTask.Completed || um.progress >= 100) return "complete";
         if (um.state == StateTask.Error || um.state == StateTask.Canceled) return "error";
+        if (IsSplitting(um)) return "splitting";
         return "";
     }
 
     private string GetStatusClass(UploadModel um, bool isPending)
     {
         if (isPending) return "pending";
+        if (IsSplitting(um) && um.state == StateTask.Working) return "splitting";
+        if (IsMd5Calculating(um) && um.state == StateTask.Working) return "calculating";
         return um.state switch
         {
             StateTask.Working => "working",
@@ -144,6 +163,8 @@
     private string GetStatusIcon(UploadModel um, bool isPending)
     {
         if (isPending) return "bi-clock";
+        if (IsSplitting(um) && um.state == StateTask.Working) return "bi-scissors";
+        if (IsMd5Calculating(um) && um.state == StateTask.Working) return "bi-calculator";
         return um.state switch
         {
             StateTask.Working => "bi-arrow-up-circle",
@@ -157,6 +178,8 @@
     private string GetStatusText(UploadModel um, bool isPending)
     {
         if (isPending) return "In Queue";
+        if (IsSplitting(um) && um.state == StateTask.Working) return "Splitting";
+        if (IsMd5Calculating(um) && um.state == StateTask.Working) return um.action;
         return um.state switch
         {
             StateTask.Working => "Uploading",
