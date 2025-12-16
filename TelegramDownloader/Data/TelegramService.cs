@@ -95,10 +95,23 @@ namespace TelegramDownloader.Data
                 var downloadSessionPath = UserService.USERDATAFOLDER + "/WTelegram_download.session";
 
                 // Copy the main session file if download session doesn't exist
+                // Use FileShare.ReadWrite to allow reading while the main client has it open
                 if (!File.Exists(downloadSessionPath) && File.Exists(mainSessionPath))
                 {
-                    File.Copy(mainSessionPath, downloadSessionPath, overwrite: true);
-                    _logger.LogInformation("Created download client session from main session");
+                    try
+                    {
+                        // Read with FileShare.ReadWrite to avoid locking conflicts
+                        using (var sourceStream = new FileStream(mainSessionPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                        using (var destStream = new FileStream(downloadSessionPath, FileMode.Create, FileAccess.Write, FileShare.None))
+                        {
+                            await sourceStream.CopyToAsync(destStream);
+                        }
+                        _logger.LogInformation("Created download client session from main session");
+                    }
+                    catch (Exception copyEx)
+                    {
+                        _logger.LogWarning(copyEx, "Could not copy session file, download client will create new session");
+                    }
                 }
 
                 downloadClient = new WTelegram.Client(
