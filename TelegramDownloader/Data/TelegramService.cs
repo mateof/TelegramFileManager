@@ -210,23 +210,53 @@ namespace TelegramDownloader.Data
         }
 
         /// <summary>
-        /// Handles invalid session during download - resets download client and returns main client
+        /// Handles invalid session during download - tries to re-authenticate, if not possible resets and uses main client
         /// </summary>
-        private WTelegram.Client HandleInvalidDownloadSession(Exception ex)
+        private async Task<WTelegram.Client> HandleInvalidDownloadSessionAsync(Exception ex)
         {
-            _logger.LogWarning(ex, "Download client session is invalid, resetting and using main client");
+            _logger.LogWarning(ex, "Download client error detected, checking if session is still valid");
             downloadClientMut.WaitOne();
             try
             {
-                downloadClient?.Dispose();
-                downloadClient = null;
-                DeleteDownloadSession();
+                if (downloadClient == null)
+                {
+                    return client;
+                }
+
+                // Try to verify if the session is still valid by attempting login
+                try
+                {
+                    var loginResult = await downloadClient.Login(null);
+                    if (loginResult == null)
+                    {
+                        // Session is still valid (already authenticated), might have been a transient error
+                        _logger.LogInformation("Download client session is still valid, continuing to use it");
+                        return downloadClient;
+                    }
+                    else
+                    {
+                        // Login returned something (phone_number, verification_code, etc.) - session needs re-auth
+                        _logger.LogWarning("Download client session requires re-authentication (returned: {Result}), switching to main client", loginResult);
+                        downloadClient?.Dispose();
+                        downloadClient = null;
+                        DeleteDownloadSession();
+                        return client;
+                    }
+                }
+                catch (Exception loginEx)
+                {
+                    // Login attempt failed - session is definitely invalid
+                    _logger.LogWarning(loginEx, "Download client login check failed, session is invalid, switching to main client");
+                    downloadClient?.Dispose();
+                    downloadClient = null;
+                    DeleteDownloadSession();
+                    return client;
+                }
             }
             finally
             {
                 downloadClientMut.ReleaseMutex();
             }
-            return client;
         }
 
         /// <summary>
@@ -949,8 +979,8 @@ namespace TelegramDownloader.Data
                             }
                             catch (Exception ex) when (IsSessionInvalidException(ex))
                             {
-                                _logger.LogWarning(ex, "Download client session invalid, switching to main client");
-                                dlClient = HandleInvalidDownloadSession(ex);
+                                _logger.LogWarning(ex, "Download client session error, verifying session validity");
+                                dlClient = await HandleInvalidDownloadSessionAsync(ex);
                                 file = await dlClient.Upload_GetFile(location, currentOffset, limit: totalDownloadBytes);
                             }
                             catch (Exception ex)
@@ -1118,8 +1148,8 @@ namespace TelegramDownloader.Data
                     }
                     catch (Exception ex) when (IsSessionInvalidException(ex))
                     {
-                        _logger.LogWarning(ex, "Download client session invalid, switching to main client");
-                        dlClient = HandleInvalidDownloadSession(ex);
+                        _logger.LogWarning(ex, "Download client session error, verifying session validity");
+                        dlClient = await HandleInvalidDownloadSessionAsync(ex);
                         file = await dlClient.Upload_GetFile(location, currentOffset, limit: chunkSize);
                     }
                     catch (Exception ex)
