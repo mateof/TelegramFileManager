@@ -232,7 +232,9 @@ namespace TelegramDownloader.Models
 
         public void RetryCallback()
         {
+            state = StateTask.Working;
             startDate = DateTime.Now;
+            EventChanged?.Invoke(this, new DownloadEventArgs());
             callbacks.callback.Invoke();
         }
     }
