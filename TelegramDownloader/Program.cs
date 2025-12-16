@@ -53,6 +53,9 @@ if (!Directory.Exists(UserService.USERDATAFOLDER))
     Directory.CreateDirectory(UserService.USERDATAFOLDER);
 }
 
+// Copy main session to download session at startup (before Telegram client locks the file)
+TelegramService.CopySessionForDownloadClient();
+
 if (!Directory.Exists(FileService.LOCALDIR))
 {
     Directory.CreateDirectory(FileService.LOCALDIR);

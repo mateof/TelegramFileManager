@@ -91,49 +91,142 @@ namespace TelegramDownloader.Data
                 if (downloadClient != null)
                     return downloadClient;
 
-                var mainSessionPath = UserService.USERDATAFOLDER + "/WTelegram.session";
                 var downloadSessionPath = UserService.USERDATAFOLDER + "/WTelegram_download.session";
 
-                // Copy the main session file if download session doesn't exist
-                // Use FileShare.ReadWrite to allow reading while the main client has it open
-                if (!File.Exists(downloadSessionPath) && File.Exists(mainSessionPath))
-                {
-                    try
-                    {
-                        // Read with FileShare.ReadWrite to avoid locking conflicts
-                        using (var sourceStream = new FileStream(mainSessionPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-                        using (var destStream = new FileStream(downloadSessionPath, FileMode.Create, FileAccess.Write, FileShare.None))
-                        {
-                            await sourceStream.CopyToAsync(destStream);
-                        }
-                        _logger.LogInformation("Created download client session from main session");
-                    }
-                    catch (Exception copyEx)
-                    {
-                        _logger.LogWarning(copyEx, "Could not copy session file, download client will create new session");
-                    }
-                }
-
+                // Create a new client with its own session file
+                // It will authenticate using the same credentials as the main client
                 downloadClient = new WTelegram.Client(
                     Convert.ToInt32(GeneralConfigStatic.tlconfig?.api_id ?? Environment.GetEnvironmentVariable("api_id")),
                     GeneralConfigStatic.tlconfig?.hash_id ?? Environment.GetEnvironmentVariable("hash_id"),
                     downloadSessionPath);
 
-                // Login the download client (should auto-login from session)
-                await downloadClient.LoginUserIfNeeded();
-                _logger.LogInformation("Download client initialized successfully - separate connection for downloads");
-
-                return downloadClient;
+                // If download session already exists, try to use it
+                // Otherwise, it will need to authenticate (which might require user interaction on first use)
+                if (File.Exists(downloadSessionPath))
+                {
+                    try
+                    {
+                        await downloadClient.LoginUserIfNeeded();
+                        _logger.LogInformation("Download client initialized from existing session");
+                        return downloadClient;
+                    }
+                    catch (Exception loginEx)
+                    {
+                        _logger.LogWarning(loginEx, "Could not login download client from existing session, deleting invalid session and using main client");
+                        downloadClient?.Dispose();
+                        downloadClient = null;
+                        // Delete the invalid session file so it won't be tried again
+                        DeleteDownloadSession();
+                        return client;
+                    }
+                }
+                else
+                {
+                    // No existing download session - use main client to avoid auth prompts
+                    _logger.LogInformation("No download session exists, using main client for downloads");
+                    downloadClient?.Dispose();
+                    downloadClient = null;
+                    return client;
+                }
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Failed to create dedicated download client, falling back to main client");
+                downloadClient?.Dispose();
+                downloadClient = null;
                 return client;
             }
             finally
             {
                 downloadClientMut.ReleaseMutex();
             }
+        }
+
+        /// <summary>
+        /// Copies the main session file to the download session at startup, before Telegram client locks the file.
+        /// This should be called in Program.cs before the TelegramService is created.
+        /// </summary>
+        public static void CopySessionForDownloadClient()
+        {
+            var mainSessionPath = UserService.USERDATAFOLDER + "/WTelegram.session";
+            var downloadSessionPath = UserService.USERDATAFOLDER + "/WTelegram_download.session";
+
+            try
+            {
+                if (File.Exists(mainSessionPath))
+                {
+                    // Copy the main session to download session
+                    File.Copy(mainSessionPath, downloadSessionPath, overwrite: true);
+                    Console.WriteLine($"[TelegramService] Copied main session to download session");
+                }
+                else
+                {
+                    Console.WriteLine($"[TelegramService] Main session does not exist, skipping download session copy");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[TelegramService] Failed to copy session for download client: {ex.Message}");
+                // If copy fails, delete the download session to ensure we use main client
+                DeleteDownloadSession();
+            }
+        }
+
+        /// <summary>
+        /// Deletes the download session file (used when session becomes invalid)
+        /// </summary>
+        public static void DeleteDownloadSession()
+        {
+            try
+            {
+                var downloadSessionPath = UserService.USERDATAFOLDER + "/WTelegram_download.session";
+                if (File.Exists(downloadSessionPath))
+                {
+                    File.Delete(downloadSessionPath);
+                    Console.WriteLine($"[TelegramService] Deleted download session file");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[TelegramService] Failed to delete download session file: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Checks if an exception indicates an invalid/expired session
+        /// </summary>
+        private static bool IsSessionInvalidException(Exception ex)
+        {
+            if (ex is RpcException rpcEx)
+            {
+                // Common auth errors that indicate session is invalid
+                return rpcEx.Message.Contains("AUTH_KEY_UNREGISTERED") ||
+                       rpcEx.Message.Contains("AUTH_KEY_INVALID") ||
+                       rpcEx.Message.Contains("AUTH_KEY_DUPLICATED") ||
+                       rpcEx.Message.Contains("SESSION_EXPIRED") ||
+                       rpcEx.Message.Contains("USER_DEACTIVATED");
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Handles invalid session during download - resets download client and returns main client
+        /// </summary>
+        private WTelegram.Client HandleInvalidDownloadSession(Exception ex)
+        {
+            _logger.LogWarning(ex, "Download client session is invalid, resetting and using main client");
+            downloadClientMut.WaitOne();
+            try
+            {
+                downloadClient?.Dispose();
+                downloadClient = null;
+                DeleteDownloadSession();
+            }
+            finally
+            {
+                downloadClientMut.ReleaseMutex();
+            }
+            return client;
         }
 
         /// <summary>
@@ -854,6 +947,12 @@ namespace TelegramDownloader.Data
                                 _logger.LogError(ex, "OFFSET_INVALID - CurrentOffset: {Offset}, TotalLimit: {Limit}", currentOffset, totalLimit);
                                 throw;
                             }
+                            catch (Exception ex) when (IsSessionInvalidException(ex))
+                            {
+                                _logger.LogWarning(ex, "Download client session invalid, switching to main client");
+                                dlClient = HandleInvalidDownloadSession(ex);
+                                file = await dlClient.Upload_GetFile(location, currentOffset, limit: totalDownloadBytes);
+                            }
                             catch (Exception ex)
                             {
                                 _logger.LogError(ex, "Download Error - CurrentOffset: {Offset}, TotalLimit: {Limit}", currentOffset, totalLimit);
@@ -1016,6 +1115,12 @@ namespace TelegramDownloader.Data
                     {
                         _logger.LogError(ex, "OFFSET_INVALID at offset {Offset} - file may have changed", currentOffset);
                         throw;
+                    }
+                    catch (Exception ex) when (IsSessionInvalidException(ex))
+                    {
+                        _logger.LogWarning(ex, "Download client session invalid, switching to main client");
+                        dlClient = HandleInvalidDownloadSession(ex);
+                        file = await dlClient.Upload_GetFile(location, currentOffset, limit: chunkSize);
                     }
                     catch (Exception ex)
                     {
