@@ -28,12 +28,26 @@ jobs:
         username: ${{github.actor}}
         password: ${{secrets.GHCR}}
 
-    - name: Build and Push the Docker image
+    - name: Build and Push Full Image (with FFmpeg)
       run: |
         VERSION=${{ steps.version.outputs.version }}
+        echo "Building full image with FFmpeg support..."
         docker build ./TelegramDownloader -f ./TelegramDownloader/Dockerfile \
           --build-arg VERSION=$VERSION \
+          --build-arg INCLUDE_FFMPEG=true \
           --tag ghcr.io/mateof/telegramfilemanager:${{github.ref_name}} \
           --tag ghcr.io/mateof/telegramfilemanager:latest
         docker push ghcr.io/mateof/telegramfilemanager:${{github.ref_name}}
         docker push ghcr.io/mateof/telegramfilemanager:latest
+
+    - name: Build and Push Lite Image (without FFmpeg)
+      run: |
+        VERSION=${{ steps.version.outputs.version }}
+        echo "Building lite image without FFmpeg..."
+        docker build ./TelegramDownloader -f ./TelegramDownloader/Dockerfile \
+          --build-arg VERSION=$VERSION \
+          --build-arg INCLUDE_FFMPEG=false \
+          --tag ghcr.io/mateof/telegramfilemanager:${{github.ref_name}}-lite \
+          --tag ghcr.io/mateof/telegramfilemanager:latest-lite
+        docker push ghcr.io/mateof/telegramfilemanager:${{github.ref_name}}-lite
+        docker push ghcr.io/mateof/telegramfilemanager:latest-lite
