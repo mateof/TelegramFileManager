@@ -39,13 +39,40 @@ namespace TelegramDownloader.Services
             return await Task.Run(
                 () =>
                     {
+                        if (!dirInfo.Exists)
+                        {
+                            return new DirectorySizeModel()
+                            {
+                                SizeBytes = 0,
+                                SizeWithSuffix = "0 bytes",
+                                TotalElements = 0,
+                                FilesByType = new List<FileTypeInfo>()
+                            };
+                        }
+
                         var TotalElements = dirInfo.GetFiles("*.*", SearchOption.AllDirectories);
                         var TotalSize = TotalElements.Sum(file => file.Length);
+
+                        // Group files by category
+                        var filesByCategory = TotalElements
+                            .GroupBy(f => FileTypeInfo.GetCategory(f.Extension))
+                            .Select(g => new FileTypeInfo
+                            {
+                                Category = g.Key,
+                                Icon = FileTypeInfo.GetIcon(g.Key),
+                                Count = g.Count(),
+                                SizeBytes = g.Sum(f => f.Length),
+                                SizeWithSuffix = SizeSuffix(g.Sum(f => f.Length))
+                            })
+                            .OrderByDescending(x => x.SizeBytes)
+                            .ToList();
+
                         return new DirectorySizeModel()
                         {
                             SizeBytes = TotalSize,
                             SizeWithSuffix = SizeSuffix(TotalSize),
-                            TotalElements = TotalElements.Count()
+                            TotalElements = TotalElements.Count(),
+                            FilesByType = filesByCategory
                         };
                     }
                 );

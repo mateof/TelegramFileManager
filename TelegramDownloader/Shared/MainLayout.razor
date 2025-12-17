@@ -69,20 +69,36 @@
 
 <div class="page @(sidebarCollapsed ? "sidebar-collapsed" : "")">
     <div class="sidebar @(sidebarCollapsed ? "collapsed" : "") @(navMenuCollapsed ? "nav-collapsed" : "")">
-        <NavMenu @ref="menu" OnClickCallback="openOffCanvasMenu" OnClickOpenImportCallback="openImportModalMenu" OnCollapseChanged="OnNavMenuCollapseChanged" />
+        <NavMenu @ref="menu" OnClickCallback="openOffCanvasMenu" OnClickOpenImportCallback="openImportModalMenu" OnClickCreateChannelCallback="openCreateChannelModal" OnCollapseChanged="OnNavMenuCollapseChanged" />
     </div>
 
     <main>
         <div class="top-row px-3">
             <button class="sidebar-toggle" @onclick="ToggleSidebar" title="@(sidebarCollapsed ? "Show sidebar" : "Hide sidebar")">
-                <i class="bi @(sidebarCollapsed ? "bi-list" : "bi-x-lg")"></i>
+                <i class="bi @(sidebarCollapsed ? "bi-chevron-right" : "bi-chevron-left")"></i>
             </button>
 
             <div class="flex-grow-1"></div>
 
             <div class="top-row-actions">
                 @if(active) {
-                    @if (tis.isUploading())
+                    @if (tis.isSplitting())
+                    {
+                        <button class="btn status-btn splitting"
+                                @onclick='() => Navigateto("/downloads?tab=uploads")' title="Splitting file...">
+                            <i class="bi bi-scissors spin"></i>
+                            <span>Splitting</span>
+                        </button>
+                    }
+                    else if (tis.isCalculatingHash())
+                    {
+                        <button class="btn status-btn calculating"
+                                @onclick='() => Navigateto("/downloads?tab=uploads")' title="Calculating hash...">
+                            <i class="bi bi-calculator"></i>
+                            <span>Hashing</span>
+                        </button>
+                    }
+                    else if (tis.isUploading())
                     {
                         <button class="btn water-fill-button upload @(GetUploadProgress() > 50 ? "filled-high" : "")"
                                 @onclick='() => Navigateto("/downloads?tab=uploads")' title="Upload in progress">
@@ -143,6 +159,11 @@
                     <span class="menu-text">Tasks</span>
                 </button>
 
+                <button @onclick='() => NavigateAndClose("/downloads?tab=persisted")' class="offcanvas-menu-item">
+                    <i class="bi bi-database"></i>
+                    <span class="menu-text">Saved Tasks</span>
+                </button>
+
                 <button @onclick='() => NavigateAndClose("/loglist")' class="offcanvas-menu-item">
                     <i class="bi bi-journal-text"></i>
                     <span class="menu-text">Logs</span>
@@ -158,11 +179,15 @@
             </BodyTemplate>
         </Offcanvas>
         <TelegramDownloader.Pages.Modals.ImportDataModal isShared=true @ref="ImportModal" OnCloseCallback="reloadMenu"></TelegramDownloader.Pages.Modals.ImportDataModal>
+        <TelegramDownloader.Pages.Modals.CreateChannelModal @ref="CreateChannelModal" OnChannelCreated="reloadMenu" />
 
         <Modal IsServiceModal="true" />
         <Toasts class="p-3" AutoHide="true" Delay="4000" Placement="ToastsPlacement.TopRight" />
     </main>
 </div>
+
+@* Upload to Telegram Modal - rendered outside .page to avoid stacking context issues *@
+<TelegramDownloader.Pages.Modals.UploadToTelegramModal @ref="uploadToTelegramModal" />
 
 @* Vue Upload Modal - rendered outside .page to avoid stacking context issues *@
 <div id="modalFileUploadVue">
@@ -270,7 +295,9 @@
 
     private Offcanvas offcanvas = default!;
     private Pages.Modals.ImportDataModal ImportModal { get; set; }
+    private Pages.Modals.CreateChannelModal CreateChannelModal { get; set; }
     private Pages.Modals.AudioPlayerModal audioPlayer { get; set; } = default!;
+    private Pages.Modals.UploadToTelegramModal uploadToTelegramModal { get; set; } = default!;
     private NavMenu menu { get; set; }
     private VersionBadge versionBadge { get; set; }
     private bool active { get; set; } = true;
@@ -379,6 +406,18 @@
     // Método público para acceder al reproductor desde otros componentes
     public static Pages.Modals.AudioPlayerModal? GetAudioPlayer() => _instance?.audioPlayer;
 
+    // Upload to Telegram Modal - static methods
+    public static void OpenUploadToTelegramModal(string channelId, List<FileManagerDirectoryContent> files)
+    {
+        if (_instance?.uploadToTelegramModal != null)
+        {
+            _instance.uploadToTelegramModal.id = channelId;
+            _instance.uploadToTelegramModal.Open(files);
+        }
+    }
+
+    public static Pages.Modals.UploadToTelegramModal? GetUploadToTelegramModal() => _instance?.uploadToTelegramModal;
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
@@ -415,6 +454,11 @@
         await ImportModal.Open();
     }
 
+    private void openCreateChannelModal()
+    {
+        CreateChannelModal?.Open();
+    }
+
     private async Task openImportMenu()
     {
         await offcanvas.ShowAsync();
@@ -429,12 +473,14 @@
 
     private async Task Navigateto(string relativeUri)
     {
+        await JS.InvokeVoidAsync("blurActiveElement");
         await offcanvas.HideAsync();
         NavManager.NavigateTo(relativeUri);
     }
 
     private async Task NavigateAndClose(string relativeUri)
     {
+        await JS.InvokeVoidAsync("blurActiveElement");
         await offcanvas.HideAsync();
         NavManager.NavigateTo(relativeUri);
     }
@@ -448,6 +494,7 @@
 
     private async Task LogoutAndClose()
     {
+        await JS.InvokeVoidAsync("blurActiveElement");
         await offcanvas.HideAsync();
         await ts.logOff();
         NavManager.NavigateTo("/");

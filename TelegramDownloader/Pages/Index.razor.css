@@ -1,0 +1,424 @@
+/* ===== Login Page Styles ===== */
+
+/* Background gradient */
+.login-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+    padding: 1rem;
+}
+
+/* Login card */
+.login-card {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 1.5rem;
+    padding: 2.5rem;
+    width: 100%;
+    max-width: 400px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+/* Logo container */
+.logo-container {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.logo-container img {
+    width: 120px;
+    height: 120px;
+    object-fit: contain;
+    filter: drop-shadow(0 10px 20px rgba(0, 136, 204, 0.3));
+    animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+}
+
+/* Title */
+.login-title {
+    color: #fff;
+    font-size: 1.75rem;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: 0.5rem;
+}
+
+.login-subtitle {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.9rem;
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+/* Form styles */
+.login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.form-group label {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.form-group ::deep input,
+.form-group ::deep .iti {
+    width: 100%;
+}
+
+.form-group ::deep input {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 0.75rem;
+    padding: 0.875rem 1rem;
+    color: #fff;
+    font-size: 1rem;
+    transition: all 0.2s ease;
+}
+
+.form-group ::deep input:focus {
+    outline: none;
+    border-color: #0088cc;
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 0 0 3px rgba(0, 136, 204, 0.2);
+}
+
+.form-group ::deep input::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+}
+
+/* intl-tel-input overrides */
+::deep .iti {
+    width: 100%;
+}
+
+::deep .iti__country-list {
+    background: #1a1a2e !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    border-radius: 0.5rem;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+    max-height: 250px;
+}
+
+::deep .iti__country {
+    padding: 8px 10px;
+    color: #fff !important;
+}
+
+::deep .iti__country:hover,
+::deep .iti__country.iti__highlight {
+    background: rgba(0, 136, 204, 0.3) !important;
+}
+
+::deep .iti__country-name {
+    color: #fff !important;
+}
+
+::deep .iti__dial-code {
+    color: rgba(255, 255, 255, 0.6) !important;
+}
+
+::deep .iti__selected-flag {
+    background: transparent !important;
+    border-radius: 0.5rem 0 0 0.5rem;
+}
+
+::deep .iti__selected-flag:hover,
+::deep .iti__selected-flag:focus {
+    background: rgba(255, 255, 255, 0.1) !important;
+}
+
+::deep .iti__arrow {
+    border-top-color: rgba(255, 255, 255, 0.7) !important;
+}
+
+::deep .iti__arrow--up {
+    border-bottom-color: rgba(255, 255, 255, 0.7) !important;
+}
+
+::deep .iti__search-input {
+    background: rgba(255, 255, 255, 0.1) !important;
+    border: 1px solid rgba(255, 255, 255, 0.2) !important;
+    color: #fff !important;
+    border-radius: 0.375rem;
+    padding: 8px 12px;
+}
+
+::deep .iti__search-input::placeholder {
+    color: rgba(255, 255, 255, 0.5) !important;
+}
+
+::deep .iti__search-input:focus {
+    outline: none;
+    border-color: #0088cc !important;
+}
+
+::deep .iti--separate-dial-code .iti__selected-dial-code {
+    color: #fff !important;
+}
+
+::deep .iti__divider {
+    border-bottom-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Buttons */
+.button-group {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.btn-primary-custom {
+    flex: 1;
+    background: linear-gradient(135deg, #0088cc 0%, #0066aa 100%);
+    border: none;
+    border-radius: 0.75rem;
+    padding: 0.875rem 1.5rem;
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+}
+
+.btn-primary-custom:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px rgba(0, 136, 204, 0.3);
+}
+
+.btn-primary-custom:active {
+    transform: translateY(0);
+}
+
+.btn-secondary-custom {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 0.75rem;
+    padding: 0.875rem 1.5rem;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-secondary-custom:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.3);
+    color: #fff;
+}
+
+.btn-danger-custom {
+    background: rgba(233, 69, 96, 0.2);
+    border: 1px solid rgba(233, 69, 96, 0.3);
+    border-radius: 0.75rem;
+    padding: 0.875rem 1.5rem;
+    color: #e94560;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-danger-custom:hover {
+    background: rgba(233, 69, 96, 0.3);
+    border-color: rgba(233, 69, 96, 0.5);
+}
+
+/* Success state */
+.success-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: rgba(16, 185, 129, 0.2);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: #10b981;
+    padding: 0.75rem 1.25rem;
+    border-radius: 2rem;
+    font-weight: 500;
+    margin-bottom: 1rem;
+}
+
+.success-badge i {
+    font-size: 1.25rem;
+}
+
+/* QR Code */
+.qr-container {
+    margin-top: 1.5rem;
+    padding: 1rem;
+    background: #fff;
+    border-radius: 1rem;
+    display: inline-block;
+}
+
+.qr-container img {
+    display: block;
+    max-width: 200px;
+}
+
+/* ===== Loading/Checking State ===== */
+.loading-container {
+    text-align: center;
+    padding: 2rem 0;
+}
+
+.loading-spinner {
+    position: relative;
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.loading-spinner::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+}
+
+.loading-spinner::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: 3px solid transparent;
+    border-top-color: #0088cc;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.loading-logo {
+    width: 36px;
+    height: 36px;
+    object-fit: contain;
+}
+
+.loading-text {
+    color: #fff;
+    font-size: 1.25rem;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+}
+
+.loading-subtext {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.875rem;
+}
+
+/* Pulse dots animation */
+.loading-dots {
+    display: inline-flex;
+    gap: 0.25rem;
+    margin-left: 0.25rem;
+}
+
+.loading-dots span {
+    width: 4px;
+    height: 4px;
+    background: #0088cc;
+    border-radius: 50%;
+    animation: pulse 1.4s ease-in-out infinite;
+}
+
+.loading-dots span:nth-child(1) { animation-delay: 0s; }
+.loading-dots span:nth-child(2) { animation-delay: 0.2s; }
+.loading-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes pulse {
+    0%, 80%, 100% {
+        transform: scale(0.6);
+        opacity: 0.5;
+    }
+    40% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* Step indicator */
+.step-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.step {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+    transition: all 0.3s ease;
+}
+
+.step.active {
+    width: 24px;
+    border-radius: 4px;
+    background: #0088cc;
+}
+
+.step.completed {
+    background: #10b981;
+}
+
+/* Input icons */
+.input-with-icon {
+    position: relative;
+}
+
+.input-with-icon i {
+    position: absolute;
+    left: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.input-with-icon input {
+    padding-left: 2.75rem;
+}
+
+/* Footer link */
+.login-footer {
+    margin-top: 2rem;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.8rem;
+}
+
+.login-footer a {
+    color: #0088cc;
+    text-decoration: none;
+}
+
+.login-footer a:hover {
+    text-decoration: underline;
+}

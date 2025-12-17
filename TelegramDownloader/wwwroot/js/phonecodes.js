@@ -10,3 +10,14 @@ function loadCountries() {
 function getNumber() {
     return iti.getNumber();
 }
+
+function focusElement(elementId) {
+    const element = document.getElementById(elementId);
+    if (element) {
+        element.focus();
+        // Also select all text if it's an input
+        if (element.select) {
+            element.select();
+        }
+    }
+}

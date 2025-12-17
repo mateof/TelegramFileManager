@@ -19,6 +19,7 @@ namespace TelegramDownloader.Services
         public List<DownloadModel> downloadModels = new List<DownloadModel>();
         public List<DownloadModel> pendingDownloadModels = new List<DownloadModel>();
         public List<UploadModel> uploadModels = new List<UploadModel>();
+        public List<UploadModel> pendingUploadModels = new List<UploadModel>();
         public List<InfoDownloadTaksModel> infoDownloadTaksModel = new List<InfoDownloadTaksModel>();
         public String downloadSpeed = "0 KB/s";
         public String uploadSpeed = "0 KB/s";
@@ -30,6 +31,7 @@ namespace TelegramDownloader.Services
         private int speedHistoryCount = 0;
 
         private static Mutex PendingDownloadMutex = new Mutex();
+        private static Mutex PendingUploadMutex = new Mutex();
         private static Mutex PendingUploadInfoTaskMutex = new Mutex();
         private static Mutex DownloadBytesMutex = new Mutex();
         private static Mutex UploadBytesMutex = new Mutex();
@@ -71,6 +73,21 @@ namespace TelegramDownloader.Services
         public bool isUploading()
         {
             return uploadModels.Any(x => x.state == StateTask.Working);
+        }
+
+        public bool isSplitting()
+        {
+            return uploadModels.Any(x => x.state == StateTask.Working && (x is SplitModel || x.action == "Splitting"));
+        }
+
+        public bool isCalculatingHash()
+        {
+            return uploadModels.Any(x => x.state == StateTask.Working && (x is Md5Model || x is XxHashModel || x.action == "MD5 Calc" || x.action == "XxHash Calc"));
+        }
+
+        public bool isRealUploading()
+        {
+            return uploadModels.Any(x => x.state == StateTask.Working && x.action == "Upload");
         }
 
         public bool isDownloading()
@@ -206,32 +223,52 @@ namespace TelegramDownloader.Services
         public void setDownloadSpeed(String speed)
         {
             downloadSpeed = speed;
-            TaskEventChanged.Invoke(null, EventArgs.Empty);
+            TaskEventChanged?.Invoke(null, EventArgs.Empty);
         }
 
         public void setUploadSpeed(String speed)
         {
             //_logger.LogInformation("Set bytes speed upload {0}", speed);
             uploadSpeed = speed;
-            TaskEventChanged.Invoke(null, EventArgs.Empty);
+            TaskEventChanged?.Invoke(null, EventArgs.Empty);
         }
 
         public void addToDownloadList(DownloadModel downloadModel)
         {
+            PendingDownloadMutex.WaitOne(10000);
+            // Check if already exists to avoid duplicate key errors in UI
+            if (downloadModels.Any(d => d._internalId == downloadModel._internalId))
+            {
+                PendingDownloadMutex.ReleaseMutex();
+                _logger.LogDebug("Download already in list, skipping - Name: {Name}, InternalId: {Id}",
+                    downloadModel.name, downloadModel._internalId);
+                return;
+            }
+
             _logger.LogInformation("Adding to download list - Name: {Name}, Size: {SizeMB:F2}MB",
                 downloadModel.name, downloadModel._size / (1024.0 * 1024.0));
-            PendingDownloadMutex.WaitOne(10000);
             downloadModels.Insert(0, downloadModel);
             PendingDownloadMutex.ReleaseMutex();
             EventChanged?.Invoke(this, new EventArgs());
-            TaskEventChanged.Invoke(null, EventArgs.Empty);
+            TaskEventChanged?.Invoke(null, EventArgs.Empty);
         }
 
         public void addToPendingDownloadList(DownloadModel downloadModel, bool atFirst = false, bool chekDownloads = true)
         {
+            PendingDownloadMutex.WaitOne(10000);
+            // Check if already exists to avoid duplicate key errors in UI
+            if (pendingDownloadModels.Any(d => d._internalId == downloadModel._internalId))
+            {
+                PendingDownloadMutex.ReleaseMutex();
+                _logger.LogDebug("Download already in pending list, skipping - Name: {Name}, InternalId: {Id}",
+                    downloadModel.name, downloadModel._internalId);
+                if (chekDownloads)
+                    CheckPendingDownloads();
+                return;
+            }
+
             _logger.LogDebug("Adding to pending download list - Name: {Name}, AtFirst: {AtFirst}, PendingCount: {Count}",
                 downloadModel.name, atFirst, pendingDownloadModels.Count + 1);
-            PendingDownloadMutex.WaitOne(10000);
             if (atFirst)
                 pendingDownloadModels.Insert(0, downloadModel);
             else
@@ -252,7 +289,7 @@ namespace TelegramDownloader.Services
                 dm.Pause();
             }
             PendingDownloadMutex.ReleaseMutex();
-            TaskEventChanged.Invoke(null, EventArgs.Empty);
+            TaskEventChanged?.Invoke(null, EventArgs.Empty);
         }
 
         public void PlayDownloads()
@@ -276,7 +313,7 @@ namespace TelegramDownloader.Services
             }
             pendingDownloadModels.Clear();
             PendingDownloadMutex.ReleaseMutex();
-            TaskEventChanged.Invoke(null, EventArgs.Empty);
+            TaskEventChanged?.Invoke(null, EventArgs.Empty);
         }
 
         public async Task CheckPendingDownloads()
@@ -295,7 +332,7 @@ namespace TelegramDownloader.Services
             }
             PendingDownloadMutex.ReleaseMutex();
             EventChanged?.Invoke(this, new EventArgs());
-            TaskEventChanged.Invoke(null, EventArgs.Empty);
+            TaskEventChanged?.Invoke(null, EventArgs.Empty);
         }
 
         public async Task CheckPendingUploadInfoTasks()
@@ -311,23 +348,31 @@ namespace TelegramDownloader.Services
             }
             PendingUploadInfoTaskMutex.ReleaseMutex();
             EventChanged?.Invoke(this, new EventArgs());
-            TaskEventChanged.Invoke(null, EventArgs.Empty);
+            TaskEventChanged?.Invoke(null, EventArgs.Empty);
         }
 
         public void addToUploadList(UploadModel uploadModel)
         {
+            // Check if already exists to avoid duplicate key errors in UI
+            if (uploadModels.Any(u => u._internalId == uploadModel._internalId))
+            {
+                _logger.LogDebug("Upload already in list, skipping - Name: {Name}, InternalId: {Id}",
+                    uploadModel.name, uploadModel._internalId);
+                return;
+            }
+
             _logger.LogInformation("Adding to upload list - Name: {Name}, Size: {SizeMB:F2}MB",
                 uploadModel.name, uploadModel._size / (1024.0 * 1024.0));
             uploadModels.Insert(0, uploadModel);
             EventChanged?.Invoke(this, new EventArgs());
-            TaskEventChanged.Invoke(null, EventArgs.Empty);
+            TaskEventChanged?.Invoke(null, EventArgs.Empty);
         }
 
         public void deleteUploadInList(UploadModel uploadModel)
         {
             uploadModels.Remove(uploadModel);
             EventChanged?.Invoke(this, new EventArgs());
-            TaskEventChanged.Invoke(null, EventArgs.Empty);
+            TaskEventChanged?.Invoke(null, EventArgs.Empty);
         }
 
         public void addToInfoDownloadTaskList(InfoDownloadTaksModel infoDownloadModel)
@@ -357,16 +402,44 @@ namespace TelegramDownloader.Services
             return isPending ? pendingDownloadModels.Count() : downloadModels.Count();
         }
 
-        public List<UploadModel> GetUploadModels(int pageNumber, int pageSize)
+        public List<UploadModel> GetUploadModels(int pageNumber, int pageSize, bool isPending = false)
         {
-            if (uploadModels.Count() == 0 || uploadModels.Count() < (pageNumber) * pageSize)
-                return uploadModels;
-            return uploadModels.Skip(pageNumber * pageSize).Take(pageSize).ToList(); //.GetRange(pageNumber * pageSize, pageSize);
+            var sourceList = isPending ? pendingUploadModels : uploadModels;
+            if (sourceList.Count() == 0 || sourceList.Count() < (pageNumber) * pageSize)
+                return sourceList;
+            return sourceList.Skip(pageNumber * pageSize).Take(pageSize).ToList();
         }
 
-        public int getTotalUploads()
+        public int getTotalUploads(bool isPending = false)
         {
-            return uploadModels.Count();
+            return isPending ? pendingUploadModels.Count() : uploadModels.Count();
+        }
+
+        public void addToPendingUploadList(UploadModel uploadModel)
+        {
+            PendingUploadMutex.WaitOne();
+            // Check if already exists to avoid duplicate key errors in UI
+            if (pendingUploadModels.Any(u => u._internalId == uploadModel._internalId))
+            {
+                PendingUploadMutex.ReleaseMutex();
+                _logger.LogDebug("Upload already in pending list, skipping - Name: {Name}, InternalId: {Id}",
+                    uploadModel.name, uploadModel._internalId);
+                return;
+            }
+
+            pendingUploadModels.Add(uploadModel);
+            PendingUploadMutex.ReleaseMutex();
+            EventChanged?.Invoke(this, new EventArgs());
+            TaskEventChanged?.Invoke(null, EventArgs.Empty);
+        }
+
+        public void deletePendingUploadInList(UploadModel uploadModel)
+        {
+            PendingUploadMutex.WaitOne();
+            pendingUploadModels.Remove(uploadModel);
+            PendingUploadMutex.ReleaseMutex();
+            EventChanged?.Invoke(this, new EventArgs());
+            TaskEventChanged?.Invoke(null, EventArgs.Empty);
         }
 
         public void deleteDownloadInList(DownloadModel downloadModel)
@@ -375,7 +448,7 @@ namespace TelegramDownloader.Services
             downloadModels.Remove(downloadModel);
             PendingDownloadMutex.ReleaseMutex();
             EventChanged?.Invoke(this, new EventArgs());
-            TaskEventChanged.Invoke(null, EventArgs.Empty);
+            TaskEventChanged?.Invoke(null, EventArgs.Empty);
         }
 
         public void deletePendingDownloadInList(DownloadModel downloadModel)
@@ -384,7 +457,27 @@ namespace TelegramDownloader.Services
             pendingDownloadModels.Remove(downloadModel);
             PendingDownloadMutex.ReleaseMutex();
             EventChanged?.Invoke(this, new EventArgs());
-            TaskEventChanged.Invoke(null, EventArgs.Empty);
+            TaskEventChanged?.Invoke(null, EventArgs.Empty);
+        }
+
+        public void ClearPendingDownloads()
+        {
+            _logger.LogInformation("Clearing all pending downloads - Count: {Count}", pendingDownloadModels.Count);
+            PendingDownloadMutex.WaitOne();
+            pendingDownloadModels.Clear();
+            PendingDownloadMutex.ReleaseMutex();
+            EventChanged?.Invoke(this, new EventArgs());
+            TaskEventChanged?.Invoke(null, EventArgs.Empty);
+        }
+
+        public void ClearPendingUploads()
+        {
+            _logger.LogInformation("Clearing all pending uploads - Count: {Count}", pendingUploadModels.Count);
+            PendingUploadMutex.WaitOne();
+            pendingUploadModels.Clear();
+            PendingUploadMutex.ReleaseMutex();
+            EventChanged?.Invoke(this, new EventArgs());
+            TaskEventChanged?.Invoke(null, EventArgs.Empty);
         }
 
         public void deleteInfoDownloadTaskFromList(InfoDownloadTaksModel idt)
@@ -393,7 +486,7 @@ namespace TelegramDownloader.Services
             infoDownloadTaksModel.Remove(idt);
             PendingUploadInfoTaskMutex.ReleaseMutex();
             EventChanged?.Invoke(this, new EventArgs());
-            TaskEventChanged.Invoke(null, EventArgs.Empty);
+            TaskEventChanged?.Invoke(null, EventArgs.Empty);
         }
 
         public List<InfoDownloadTaksModel> getInfoDownloadTaksModel(int pageNumber, int pageSize)

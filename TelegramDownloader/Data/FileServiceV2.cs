@@ -27,10 +27,10 @@ namespace TelegramDownloader.Data
         IDbService db,
         ILogger<IFileService> logger,
         TransactionInfoService tis,
-        ToastService toastService
-    ) : base(ts, db, logger, tis, toastService)
+        ToastService toastService,
+        ITaskPersistenceService persistence
+    ) : base(ts, db, logger, tis, toastService, persistence)
         {
-           
         }
 
         public override async Task downloadFile(string dbName, List<FileManagerDirectoryContent> files, string targetPath, string? collectionId = null, string? channelId = null)
@@ -133,15 +133,43 @@ namespace TelegramDownloader.Data
             {
                 model.channelName = "Public or Shared";
             }
+
+            // Setup persistence
+            model.OnProgressPersist = async (transmitted, progress, state) =>
+            {
+                try
+                {
+                    await _persistence.UpdateProgress(model._internalId, transmitted, progress, state);
+                }
+                catch { }
+            };
+
+            // Persist download task
+            try
+            {
+                await _persistence.PersistDownload(model, dbName, messageId, file);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to persist download task - continuing without persistence");
+            }
+
             var tcs = new TaskCompletionSource<bool>();
 
             EventHandler handler = null;
-            handler = (sender, args) =>
+            handler = async (sender, args) =>
             {
                 if (model.state == StateTask.Completed)
                 {
                     model.EventStatechanged -= handler;
+                    await _persistence.MarkCompleted(model._internalId);
                     tcs.SetResult(true);
+                }
+                else if (model.state == StateTask.Error || model.state == StateTask.Canceled)
+                {
+                    model.EventStatechanged -= handler;
+                    await _persistence.MarkError(model._internalId, model.state.ToString());
+                    tcs.TrySetResult(false);
                 }
             };
 
@@ -171,6 +199,46 @@ namespace TelegramDownloader.Data
                 await _ts.DownloadFileAndReturn(cm, ms: fs, model: model);
             }
 
+        }
+
+        /// <summary>
+        /// Download file with support for resuming from a specific byte offset
+        /// </summary>
+        public async Task DownloadFileNowV2WithOffset(string dbName, int messageId, string destPath, DownloadModel model, long resumeOffset = 0)
+        {
+            TL.Message m = await _ts.getMessageFile(dbName, messageId);
+            ChatMessages cm = new ChatMessages();
+            cm.message = m;
+            model.startDate = DateTime.Now;
+
+            cm.user = null;
+            cm.isDocument = false;
+            if (m.media is MessageMediaDocument { document: Document document })
+            {
+                cm.isDocument = true;
+                model._size = document.size;
+                model._sizeString = Services.HelperService.SizeSuffix(document.size);
+            }
+
+            // Determine file mode based on resume offset
+            FileMode fileMode = resumeOffset > 0 ? FileMode.Append : FileMode.Create;
+
+            _logger.LogInformation("DownloadFileNowV2WithOffset - File: {Name}, Offset: {Offset}, Mode: {Mode}",
+                model.name, resumeOffset, fileMode);
+
+            using (FileStream fs = new FileStream(destPath, fileMode, FileAccess.Write, FileShare.ReadWrite))
+            {
+                // If resuming, validate file size
+                if (resumeOffset > 0 && fs.Length < resumeOffset)
+                {
+                    // File is smaller than expected offset - restart from current file size
+                    resumeOffset = fs.Length;
+                    model._transmitted = resumeOffset;
+                    model._transmittedString = Services.HelperService.SizeSuffix(resumeOffset);
+                }
+
+                await _ts.DownloadFileAndReturnWithOffset(cm, ms: fs, model: model, offset: resumeOffset);
+            }
         }
 
         public override async Task<int> PreloadFilesToTemp(string channelId, List<FileManagerDirectoryContent> items)

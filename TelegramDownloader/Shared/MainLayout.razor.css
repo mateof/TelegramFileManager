@@ -52,17 +52,24 @@ main {
     color: rgba(255, 255, 255, 0.7);
     background: rgba(255, 255, 255, 0.05);
     border: 1px solid rgba(255, 255, 255, 0.1);
+    cursor: pointer;
     transition: all 0.2s ease;
 }
 
 .top-row ::deep .sidebar-toggle:hover {
-    background: rgba(255, 255, 255, 0.1);
-    color: #fff;
+    background: rgba(233, 69, 96, 0.2);
+    border-color: rgba(233, 69, 96, 0.3);
+    color: #e94560;
     transform: scale(1.05);
 }
 
 .top-row ::deep .sidebar-toggle i {
     font-size: 1.25rem;
+    transition: transform 0.2s ease;
+}
+
+.top-row ::deep .sidebar-toggle:hover i {
+    transform: translateX(-2px);
 }
 
 /* Action buttons group */
@@ -113,6 +120,54 @@ main {
     height: 1rem;
     border-width: 2px;
     color: #e94560;
+}
+
+/* Status buttons (splitting, calculating) */
+.top-row ::deep .status-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.375rem 0.875rem;
+    border-radius: 2rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    border: 1px solid;
+    transition: all 0.2s ease;
+}
+
+.top-row ::deep .status-btn.splitting {
+    background: rgba(168, 85, 247, 0.15);
+    border-color: rgba(168, 85, 247, 0.3);
+    color: #c084fc;
+}
+
+.top-row ::deep .status-btn.splitting:hover {
+    background: rgba(168, 85, 247, 0.25);
+    border-color: rgba(168, 85, 247, 0.5);
+}
+
+.top-row ::deep .status-btn.calculating {
+    background: rgba(59, 130, 246, 0.15);
+    border-color: rgba(59, 130, 246, 0.3);
+    color: #60a5fa;
+}
+
+.top-row ::deep .status-btn.calculating:hover {
+    background: rgba(59, 130, 246, 0.25);
+    border-color: rgba(59, 130, 246, 0.5);
+}
+
+.top-row ::deep .status-btn i {
+    font-size: 1rem;
+}
+
+.top-row ::deep .status-btn i.spin {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
 
 @media (max-width: 2048px) {

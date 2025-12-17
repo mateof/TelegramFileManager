@@ -68,12 +68,13 @@
     </li>
 </ul>
 
-<TelegramDownloader.Pages.Partials.impl.FileManagerImpl id="@id"></TelegramDownloader.Pages.Partials.impl.FileManagerImpl>
+<TelegramDownloader.Pages.Partials.impl.FileManagerImpl @ref="fileManagerImpl" id="@id"></TelegramDownloader.Pages.Partials.impl.FileManagerImpl>
 <TelegramDownloader.Pages.Modals.ImportDataModal id="@id" @ref="ImportModal"></TelegramDownloader.Pages.Modals.ImportDataModal>
 <TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal @ref="mediaUrlModal" title="WebDav URL" url="@webDavUrl"></TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal>
 
 @code {
     private Modals.ImportDataModal ImportModal { get; set; }
+    private TelegramDownloader.Pages.Partials.impl.FileManagerImpl fileManagerImpl { get; set; } = default!;
     [Parameter]
     public string id { get; set; }
     private MediaUrlModal mediaUrlModal { get; set; } = default!;
@@ -141,6 +142,12 @@
         try
         {
             await fs.refreshChannelFIles(id);
+
+            // Refresh the file manager to show updated data
+            if (fileManagerImpl != null)
+            {
+                await fileManagerImpl.RefreshFileManager();
+            }
         }
         finally
         {

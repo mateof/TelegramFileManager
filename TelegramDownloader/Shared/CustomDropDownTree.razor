@@ -55,7 +55,9 @@
 
     protected override async Task OnParametersSetAsync()
     {
-        if (RootNodes == null && !string.IsNullOrEmpty(DbName))
+        // Load root nodes if we have a LoadChildrenFunc and haven't loaded yet
+        // DbName can be empty for local folder types
+        if (RootNodes == null && LoadChildrenFunc != null)
         {
             await LoadRootNodes();
         }

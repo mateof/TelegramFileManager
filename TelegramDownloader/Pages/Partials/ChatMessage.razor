@@ -6,56 +6,66 @@
 @inject NavigationManager NavManager
 
 @if(mess != null) {
-    <div aria-live="polite" aria-atomic="true" class="bottom-0 start-0" style="padding-bottom: 10px;">
-        <div class="toast-container position-static">
-            <div class="toast" style="display: block !important; width: 600px;">
-                <div class="toast-header">
-                    @* <img src="@(msg.media)" class="rounded me-2" alt="..."> *@
-                    <strong class="me-auto">@mess.user</strong>
-                    <small style="padding-right: 5px;">@mess.message.edit_date.ToShortDateString()</small>
-                    @if (mess.message.media is MessageMediaDocument { document: Document document })
-                    {
-                        <span>@HelperService.SizeSuffix(document.size)</span>
-                        <div class="dropdown">
-                            <button class="btn" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                <svg width="12" height="14" fill="currentColor" class="bi bi-three-dots-vertical" viewBox="0 0 16 16">
-                                    <path d="M9.5 13a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm0-5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z" />
-                                </svg>
-                            </button>
-                            <ul class="dropdown-menu">
-                                <li><span class="dropdown-item" @onclick="() => modal.Open(mess)">Download</span></li>
-                                <li><span class="dropdown-item" @onclick="() => save(mess)">Download Now</span></li>
-                            </ul>
-                        </div>
-                    }
-
+    <div class="message-card">
+        <!-- Message Header -->
+        <div class="message-header">
+            <div class="message-header-left">
+                <div class="message-avatar">
+                    @GetUserInitial()
                 </div>
-                <div class="toast-body">
-                    <div>
-                        <div>
-                            @if (mess.message.media is MessageMediaDocument { document: Document document2 })
-                            {
-                                <span>@document2.Filename</span>
-                            }
-                        </div>
-                        <div>
-                            @if (mess.message.media is MessageMediaPhoto { photo: Photo photo })
-                            {
-                                <img alt="@photo.id" style="max-width:-webkit-fill-available;" src="/img/telegram/@($"{photo.id}.jpg")" />
-
-                            }
-                        </div>
-                        <div>
-                            @* @{
-                                            Regex rrg = new Regex(@"(https?://[^\s]+)");
-                                        }
-                                        @((MarkupString)rrg.Replace(msg.message, "<a href=\"$1\">$1</a>").Replace("\n", "<br>")) *@
-                            @((MarkupString)mess.htmlMessage.Replace("\n", "<br>"))
-                        </div>
-                        @* <div>@msg.media</div> *@
-                    </div>
+                <div class="message-info">
+                    <div class="message-sender">@GetUserName()</div>
+                    <div class="message-date">@GetFormattedDate()</div>
                 </div>
             </div>
+            <div class="message-header-right">
+                @if (mess.message.media is MessageMediaDocument { document: Document document })
+                {
+                    <div class="file-size-badge">
+                        <i class="bi bi-file-earmark"></i>
+                        @HelperService.SizeSuffix(document.size)
+                    </div>
+                    <div class="message-actions dropdown">
+                        <button class="btn-actions" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-three-dots-vertical"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><span class="dropdown-item" @onclick="() => modal.Open(mess)"><i class="bi bi-download"></i> Download with options</span></li>
+                            <li><span class="dropdown-item" @onclick="() => save(mess)"><i class="bi bi-lightning"></i> Quick download</span></li>
+                        </ul>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Message Body -->
+        <div class="message-body">
+            @if (mess.message.media is MessageMediaDocument { document: Document document2 })
+            {
+                <div class="file-info">
+                    <div class="file-icon @GetFileTypeClass(document2.Filename)">
+                        <i class="bi @GetFileIcon(document2.Filename)"></i>
+                    </div>
+                    <div class="file-details">
+                        <div class="file-name">@document2.Filename</div>
+                        <div class="file-meta">@GetFileExtension(document2.Filename)</div>
+                    </div>
+                </div>
+            }
+
+            @if (mess.message.media is MessageMediaPhoto { photo: Photo photo })
+            {
+                <div class="photo-container">
+                    <img alt="@photo.id" src="/img/telegram/@($"{photo.id}.jpg")" />
+                </div>
+            }
+
+            @if(!string.IsNullOrWhiteSpace(mess.htmlMessage))
+            {
+                <div class="message-text">
+                    @((MarkupString)mess.htmlMessage.Replace("\n", "<br>"))
+                </div>
+            }
         </div>
     </div>
 }
@@ -70,5 +80,71 @@
     public async Task save(ChatMessages cm)
     {
         await ts.DownloadFile(cm);
+    }
+
+    private string GetUserInitial()
+    {
+        var userName = GetUserName();
+        if (string.IsNullOrWhiteSpace(userName)) return "?";
+        return userName.Substring(0, 1).ToUpper();
+    }
+
+    private string GetUserName()
+    {
+        if (mess?.user == null) return "";
+        return mess.user switch
+        {
+            User u => string.IsNullOrEmpty(u.first_name) ? u.username ?? "" : u.first_name,
+            Channel ch => ch.title ?? ch.username ?? "",
+            Chat c => c.title ?? "",
+            _ => mess.user.ToString() ?? ""
+        };
+    }
+
+    private string GetFormattedDate()
+    {
+        if (mess?.message == null) return "";
+        var date = mess.message.edit_date != default ? mess.message.edit_date : mess.message.date;
+        return date.ToString("MMM dd, yyyy HH:mm");
+    }
+
+    private string GetFileExtension(string filename)
+    {
+        if (string.IsNullOrWhiteSpace(filename)) return "File";
+        var ext = System.IO.Path.GetExtension(filename);
+        return string.IsNullOrWhiteSpace(ext) ? "File" : ext.ToUpper().TrimStart('.');
+    }
+
+    private string GetFileTypeClass(string filename)
+    {
+        if (string.IsNullOrWhiteSpace(filename)) return "document";
+        var ext = System.IO.Path.GetExtension(filename)?.ToLower();
+        return ext switch
+        {
+            ".mp4" or ".mkv" or ".avi" or ".mov" or ".webm" or ".wmv" => "video",
+            ".mp3" or ".flac" or ".wav" or ".ogg" or ".m4a" or ".aac" => "audio",
+            ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp" or ".bmp" => "image",
+            ".zip" or ".rar" or ".7z" or ".tar" or ".gz" => "archive",
+            ".pdf" or ".doc" or ".docx" or ".txt" or ".xls" or ".xlsx" => "document",
+            _ => "document"
+        };
+    }
+
+    private string GetFileIcon(string filename)
+    {
+        if (string.IsNullOrWhiteSpace(filename)) return "bi-file-earmark";
+        var ext = System.IO.Path.GetExtension(filename)?.ToLower();
+        return ext switch
+        {
+            ".mp4" or ".mkv" or ".avi" or ".mov" or ".webm" or ".wmv" => "bi-film",
+            ".mp3" or ".flac" or ".wav" or ".ogg" or ".m4a" or ".aac" => "bi-music-note-beamed",
+            ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp" or ".bmp" => "bi-image",
+            ".zip" or ".rar" or ".7z" or ".tar" or ".gz" => "bi-file-zip",
+            ".pdf" => "bi-file-pdf",
+            ".doc" or ".docx" => "bi-file-word",
+            ".xls" or ".xlsx" => "bi-file-excel",
+            ".txt" => "bi-file-text",
+            _ => "bi-file-earmark"
+        };
     }
 }

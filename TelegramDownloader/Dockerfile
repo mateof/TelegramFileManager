@@ -6,8 +6,16 @@ WORKDIR /app
 EXPOSE 80
 EXPOSE 443
 
+# Build argument to optionally include FFmpeg (default: true)
+# Set to "false" to create a lighter image without video transcoding support
+ARG INCLUDE_FFMPEG=true
+
 # Install ICU libraries for globalization support (required by BlazorBootstrap NumberInput)
-RUN apk add --no-cache icu-libs
+# Optionally install FFmpeg for video transcoding support (MKV, AVI, WMV, etc.)
+RUN apk add --no-cache icu-libs && \
+    if [ "$INCLUDE_FFMPEG" = "true" ]; then \
+        apk add --no-cache ffmpeg; \
+    fi
 ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build

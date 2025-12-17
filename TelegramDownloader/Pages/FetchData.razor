@@ -9,34 +9,65 @@
 @inject NavigationManager NavManager;
 @inject PreloadService PreloadService;
 
-<PageTitle>Chat</PageTitle>
+<PageTitle>Chat Messages</PageTitle>
 
 @if (m == null)
 {
-    <p><em>Seleciona un canal</em></p>
+    <div class="chat-page">
+        <div class="empty-state">
+            <i class="bi bi-chat-dots"></i>
+            <h3>Select a channel</h3>
+            <p>Choose a channel from the sidebar to view messages</p>
+        </div>
+    </div>
 }
 else
 {
+    <div class="chat-page">
+        <!-- Header -->
+        <div class="chat-header">
+            <div class="chat-header-left">
+                <h2><i class="bi bi-chat-text"></i> Messages</h2>
+                @if(m.Count > 0)
+                {
+                    <span class="message-count">@m.Count loaded</span>
+                }
+            </div>
+            <div class="toggle-container">
+                <Switch @bind-Value="showAll" @ref="allMessageSwitch" @oninput="ShowAllChanged" Label="Load all messages" />
+            </div>
+        </div>
 
-    <div>
-        @if(m != null)
+        <!-- Messages List -->
+        @if(m.Count > 0)
         {
-            <Switch @bind-Value="showAll" @ref="allMessageSwitch" @oninput="ShowAllChanged" Label="Show all messages" />
-            @foreach (var mess in m)
-            {
+            <div class="messages-list">
+                @foreach (var mess in m)
+                {
+                    <TelegramDownloader.Pages.Partials.ChatMessage mess="@mess" modal="Modal" />
+                }
+            </div>
 
-                <TelegramDownloader.Pages.Partials.ChatMessage mess="@mess" modal="Modal" />
-
-            }
             @if (!showAll)
             {
-                <button type="button" class="btn btn-outline-secondary" @onclick="moreElements"> More elements </button>
+                <div class="load-more-container">
+                    <button type="button" class="btn-load-more" @onclick="moreElements">
+                        <i class="bi bi-arrow-down-circle"></i>
+                        Load more messages
+                    </button>
+                </div>
             }
-            
         }
-
+        else
+        {
+            <div class="empty-state">
+                <i class="bi bi-inbox"></i>
+                <h3>No messages</h3>
+                <p>This channel doesn't have any messages yet</p>
+            </div>
+        }
     </div>
-    
+
     <TelegramDownloader.Pages.Modals.DownloadModal @ref="Modal"></TelegramDownloader.Pages.Modals.DownloadModal>
 }
 

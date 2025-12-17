@@ -1,6 +1,7 @@
 ﻿using MongoDB.Driver;
 using MongoDB.Bson;
 using TelegramDownloader.Models;
+using TelegramDownloader.Models.Persistence;
 using Syncfusion.Blazor.FileManager;
 using System.Text.RegularExpressions;
 using MongoDB.Driver.Linq;
@@ -19,6 +20,7 @@ namespace TelegramDownloader.Data.db
         private readonly ILogger<DbService> _logger;
 
         private const string CONFIG_DB_NAME = "TCCONFIG";
+        private const string TASKS_COLLECTION = "tasks";
 
         public const string SHARED_DB_NAME = "TFM-SHARED";
 
@@ -565,7 +567,13 @@ namespace TelegramDownloader.Data.db
         {
             if (collectionName == null)
                 collectionName = "directory";
-            var update = new UpdateDefinitionBuilder<BsonFileManagerModel>().Set(n => n.Name, newName);
+
+            // Calculate new FilePath (FilterPath + newName)
+            string newFilePath = filePath + newName;
+
+            var update = new UpdateDefinitionBuilder<BsonFileManagerModel>()
+                .Set(n => n.Name, newName)
+                .Set(n => n.FilePath, newFilePath);
             await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).UpdateOneAsync(Builders<BsonFileManagerModel>.Filter.Where(x => x.Id == id), update);
             if (!isFile)
             {
@@ -671,6 +679,170 @@ namespace TelegramDownloader.Data.db
             return entry;
         }
 
+        #region Task Persistence Operations
+
+        /// <summary>
+        /// Save a new task to the persistence store
+        /// </summary>
+        public async Task<PersistedTaskModel> SaveTask(PersistedTaskModel task)
+        {
+            task.LastUpdated = DateTime.Now;
+            if (string.IsNullOrEmpty(task.Id))
+            {
+                task.Id = ObjectId.GenerateNewId().ToString();
+            }
+
+            await getDatabase(CONFIG_DB_NAME)
+                .GetCollection<PersistedTaskModel>(TASKS_COLLECTION)
+                .InsertOneAsync(task);
+
+            _logger.LogInformation("Saved task {InternalId} ({Type}) to persistence", task.InternalId, task.Type);
+            return task;
+        }
+
+        /// <summary>
+        /// Update an existing task in the persistence store
+        /// </summary>
+        public async Task<PersistedTaskModel> UpdateTask(PersistedTaskModel task)
+        {
+            task.LastUpdated = DateTime.Now;
+
+            var filter = Builders<PersistedTaskModel>.Filter.Eq(x => x.InternalId, task.InternalId);
+            await getDatabase(CONFIG_DB_NAME)
+                .GetCollection<PersistedTaskModel>(TASKS_COLLECTION)
+                .ReplaceOneAsync(filter, task, new ReplaceOptions { IsUpsert = true });
+
+            return task;
+        }
+
+        /// <summary>
+        /// Update task progress (optimized for frequent updates)
+        /// </summary>
+        public async Task UpdateTaskProgress(string internalId, long transmitted, int progress, StateTask state)
+        {
+            var filter = Builders<PersistedTaskModel>.Filter.Eq(x => x.InternalId, internalId);
+            var update = Builders<PersistedTaskModel>.Update
+                .Set(x => x.TransmittedBytes, transmitted)
+                .Set(x => x.Progress, progress)
+                .Set(x => x.State, state)
+                .Set(x => x.LastUpdated, DateTime.Now);
+
+            await getDatabase(CONFIG_DB_NAME)
+                .GetCollection<PersistedTaskModel>(TASKS_COLLECTION)
+                .UpdateOneAsync(filter, update);
+        }
+
+        /// <summary>
+        /// Update only the task state
+        /// </summary>
+        public async Task UpdateTaskState(string internalId, StateTask state)
+        {
+            var filter = Builders<PersistedTaskModel>.Filter.Eq(x => x.InternalId, internalId);
+            var update = Builders<PersistedTaskModel>.Update
+                .Set(x => x.State, state)
+                .Set(x => x.LastUpdated, DateTime.Now);
+
+            await getDatabase(CONFIG_DB_NAME)
+                .GetCollection<PersistedTaskModel>(TASKS_COLLECTION)
+                .UpdateOneAsync(filter, update);
+        }
+
+        /// <summary>
+        /// Delete a task from the persistence store
+        /// </summary>
+        public async Task DeleteTask(string internalId)
+        {
+            await getDatabase(CONFIG_DB_NAME)
+                .GetCollection<PersistedTaskModel>(TASKS_COLLECTION)
+                .DeleteOneAsync(x => x.InternalId == internalId);
+
+            _logger.LogInformation("Deleted task {InternalId} from persistence", internalId);
+        }
+
+        /// <summary>
+        /// Get all tasks that should be resumed (Pending, Working, Paused, Error)
+        /// </summary>
+        public async Task<List<PersistedTaskModel>> GetAllPendingTasks()
+        {
+            var filter = Builders<PersistedTaskModel>.Filter.In(
+                x => x.State,
+                new[] { StateTask.Pending, StateTask.Working, StateTask.Paused, StateTask.Error }
+            );
+
+            var tasks = await (await getDatabase(CONFIG_DB_NAME)
+                .GetCollection<PersistedTaskModel>(TASKS_COLLECTION)
+                .FindAsync(filter)).ToListAsync();
+
+            _logger.LogInformation("Loaded {Count} pending tasks from persistence", tasks.Count);
+            return tasks;
+        }
+
+        /// <summary>
+        /// Get a task by its internal ID
+        /// </summary>
+        public async Task<PersistedTaskModel> GetTaskByInternalId(string internalId)
+        {
+            var filter = Builders<PersistedTaskModel>.Filter.Eq(x => x.InternalId, internalId);
+            return await (await getDatabase(CONFIG_DB_NAME)
+                .GetCollection<PersistedTaskModel>(TASKS_COLLECTION)
+                .FindAsync(filter)).FirstOrDefaultAsync();
+        }
+
+        /// <summary>
+        /// Mark a task as error with an error message
+        /// </summary>
+        public async Task MarkTaskAsError(string internalId, string errorMessage)
+        {
+            var filter = Builders<PersistedTaskModel>.Filter.Eq(x => x.InternalId, internalId);
+            var update = Builders<PersistedTaskModel>.Update
+                .Set(x => x.State, StateTask.Error)
+                .Set(x => x.LastError, errorMessage)
+                .Inc(x => x.RetryCount, 1)
+                .Set(x => x.LastUpdated, DateTime.Now);
+
+            await getDatabase(CONFIG_DB_NAME)
+                .GetCollection<PersistedTaskModel>(TASKS_COLLECTION)
+                .UpdateOneAsync(filter, update);
+
+            _logger.LogWarning("Marked task {InternalId} as error: {Error}", internalId, errorMessage);
+        }
+
+        /// <summary>
+        /// Cleanup stale tasks older than maxAgeDays
+        /// </summary>
+        public async Task CleanupStaleTasks(int maxAgeDays = 7)
+        {
+            var cutoffDate = DateTime.Now.AddDays(-maxAgeDays);
+            var filter = Builders<PersistedTaskModel>.Filter.And(
+                Builders<PersistedTaskModel>.Filter.Lt(x => x.LastUpdated, cutoffDate),
+                Builders<PersistedTaskModel>.Filter.In(x => x.State,
+                    new[] { StateTask.Error, StateTask.Canceled })
+            );
+
+            var result = await getDatabase(CONFIG_DB_NAME)
+                .GetCollection<PersistedTaskModel>(TASKS_COLLECTION)
+                .DeleteManyAsync(filter);
+
+            if (result.DeletedCount > 0)
+            {
+                _logger.LogInformation("Cleaned up {Count} stale tasks older than {Days} days",
+                    result.DeletedCount, maxAgeDays);
+            }
+        }
+
+        /// <summary>
+        /// Clear all persisted tasks from the database
+        /// </summary>
+        public async Task ClearAllTasks()
+        {
+            var result = await getDatabase(CONFIG_DB_NAME)
+                .GetCollection<PersistedTaskModel>(TASKS_COLLECTION)
+                .DeleteManyAsync(Builders<PersistedTaskModel>.Filter.Empty);
+
+            _logger.LogInformation("Cleared all persisted tasks - Count: {Count}", result.DeletedCount);
+        }
+
+        #endregion
 
     }
 }

@@ -1,4 +1,5 @@
-﻿@using TelegramDownloader.Data
+﻿@using System.Web
+@using TelegramDownloader.Data
 @using TelegramDownloader.Models
 @using TelegramDownloader.Pages.Modals
 @using TelegramDownloader.Pages.Modals.InfoModals
@@ -11,8 +12,8 @@
 @inject ILogger<FileManager> Logger;
 @inject NavigationManager NavManager
 
-@* Loading while detecting viewport *@
-@if (!_viewportDetected)
+@* Loading while detecting viewport and base URL *@
+@if (!_viewportDetected || string.IsNullOrEmpty(_baseUrl))
 {
     <div style="display: flex; justify-content: center; align-items: center; height: 200px;">
         <div class="spinner-border text-primary" role="status">
@@ -21,8 +22,8 @@
     </div>
 }
 
-@* Desktop FileManager - only render when viewport detected and not on mobile *@
-@if (_viewportDetected && !_isMobileView)
+@* Desktop FileManager - only render when viewport detected, base URL ready, and not on mobile *@
+@if (_viewportDetected && !string.IsNullOrEmpty(_baseUrl) && !_isMobileView)
 {
     <SfFileManager @ref="FileManager" ID="localfm" TValue="FileManagerDirectoryContent">
         <FileManagerAjaxSettings Url="@FileOperationsUrl"
@@ -39,7 +40,7 @@
 }
 
 @* Mobile FileManager *@
-@if (_viewportDetected && _isMobileView)
+@if (_viewportDetected && !string.IsNullOrEmpty(_baseUrl) && _isMobileView)
 {
     <div class="mobile-fm-container">
         <MobileFileManager @ref="mobileFileManager"
@@ -65,11 +66,11 @@
                            OnUploadToLocal="OnMobileUploadToLocalAsync"
                            OnUrlMedia="OnMobileUrlMediaAsync"
                            CanAddToPlaylist="true"
-                           OnAddToPlaylist="OnMobileAddToPlaylistAsync" />
+                           OnAddToPlaylist="OnMobileAddToPlaylistAsync"
+                           OnPathChanged="OnMobilePathChanged" />
     </div>
 }
 
-<TelegramDownloader.Pages.Modals.UploadToTelegramModal @ref="Modal"></TelegramDownloader.Pages.Modals.UploadToTelegramModal>
 <TelegramDownloader.Pages.Modals.FileUploadModal @ref="ModalUpSer"></TelegramDownloader.Pages.Modals.FileUploadModal>
 <TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal @ref="mediaUrlModal"></TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal>
 <TelegramDownloader.Pages.Modals.VideoPlayerModal @ref=videoPlayer></TelegramDownloader.Pages.Modals.VideoPlayerModal>
@@ -94,7 +95,6 @@
     NotificationModel nm = new NotificationModel();
     public string[] ContextItems = new string[] { "Open", "Delete", "Download", "Rename", "Details", "Copy Media Url", "Add to Playlist" };
 
-    private Modals.UploadToTelegramModal Modal { get; set; }
     private Modals.FileUploadModal ModalUpSer { get; set; }
     private bool isMyChannel = false;
 
@@ -103,12 +103,12 @@
     private bool _viewportDetected = false;
     private const int MobileBreakpoint = 1920; // Custom breakpoint for mobile file manager
 
-    private string BaseUrl => NavManager.BaseUri.TrimEnd('/');
-
-    private string FileOperationsUrl => $"{BaseUrl}/api/file/FileOperations";
-    private string UploadUrl => $"{BaseUrl}/api/file/Upload";
-    private string DownloadUrl => $"{BaseUrl}/api/file/Download";
-    private string GetImageUrl => $"{BaseUrl}/api/file/GetImage";
+    // URLs will be set from JavaScript to get the actual browser origin
+    private string _baseUrl = "";
+    private string FileOperationsUrl => $"{_baseUrl}/api/file/FileOperations";
+    private string UploadUrl => $"{_baseUrl}/api/file/Upload";
+    private string DownloadUrl => $"{_baseUrl}/api/file/Download";
+    private string GetImageUrl => $"{_baseUrl}/api/file/GetImage";
 
 
     public List<ToolBarItemModel> Items = new List<ToolBarItemModel>(){
@@ -153,8 +153,16 @@
         {
             _firstRenderComplete = true;
             _currentInstance = this;
+
+            // Get actual browser origin via JavaScript (works correctly with reverse proxies)
+            _baseUrl = await JSRuntime.InvokeAsync<string>("eval", "window.location.origin");
+            Logger.LogInformation($"LocalFileManager BaseUrl: {_baseUrl}");
+
             // Detect viewport size on first render
             await DetectMobileView();
+
+            // Force re-render to apply the URLs
+            StateHasChanged();
         }
 
         if (_needsRefresh && FileManager != null)
@@ -197,6 +205,48 @@
         {
             _viewportDetected = true;
             StateHasChanged();
+
+            // After viewport is detected, navigate to path from URL if present
+            await NavigateToPathFromUrl();
+        }
+    }
+
+    private async Task NavigateToPathFromUrl()
+    {
+        try
+        {
+            var uri = new Uri(MyNavigationManager.Uri);
+            var query = HttpUtility.ParseQueryString(uri.Query);
+            var pathFromUrl = query["path"];
+
+            if (!string.IsNullOrEmpty(pathFromUrl) && mobileFileManager != null)
+            {
+                // Decode the path and ensure it ends with /
+                var decodedPath = Uri.UnescapeDataString(pathFromUrl);
+                if (!decodedPath.EndsWith("/"))
+                    decodedPath += "/";
+
+                await mobileFileManager.NavigateToPathSilent(decodedPath);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error navigating to path from URL");
+        }
+    }
+
+    private void OnMobilePathChanged(string path)
+    {
+        try
+        {
+            // Update URL without triggering navigation
+            var baseUri = MyNavigationManager.Uri.Split('?')[0];
+            var newUrl = path == "/" ? baseUri : $"{baseUri}?path={Uri.EscapeDataString(path)}";
+            MyNavigationManager.NavigateTo(newUrl, forceLoad: false, replace: true);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error updating URL with path");
         }
     }
 
@@ -362,23 +412,15 @@
 
     public async Task fileOpen(FileOpenEventArgs<FileManagerDirectoryContent> args)
     {
-        if (args != null && args.FileDetails != null && args.FileDetails.IsFile && new List<string> { ".mp3", ".ogg", ".flac", ".aac", ".wav" }.Contains(args.FileDetails.Type.ToLower()))
+        if (args != null && args.FileDetails != null && args.FileDetails.IsFile && IsAudioFile(args.FileDetails.Type.ToLower()))
         {
             await playAudio(args);
-            // string localdir = "/" + FileService.STATICRELATIVELOCALDIR.Replace("\\", "/");
-            // string path = Path.Combine(localdir, args.FileDetails.FilterPath.Substring(1).Replace("\\", "/"), args.FileDetails.Name);
-            // await JSRuntime.InvokeVoidAsync("open", path, "_blank");
-        } else
-        {
-            if (args != null && args.FileDetails != null && args.FileDetails.IsFile && new List<string> { ".mov", ".mp4", ".m4v", ".ogv", ".webm", ".flv", ".f4v" }.Contains(args.FileDetails.Type.ToLower()))
-            {
-                string localdir = MyNavigationManager.BaseUri + FileService.STATICRELATIVELOCALDIR.Replace("\\", "/");
-                string path = new System.Uri((Path.Combine(localdir, args.FileDetails.FilterPath.Substring(1).Replace("\\", "/"), args.FileDetails.Name)).Replace("\\", "/")).AbsoluteUri;
-                videoPlayer.ShowModal(path);
-            }
-            
         }
-
+        else if (args != null && args.FileDetails != null && args.FileDetails.IsFile && isVideoFile(args.FileDetails.Type.ToLower()))
+        {
+            string path = getLocalVideoUrl(args.FileDetails.FilterPath, args.FileDetails.Name);
+            videoPlayer.ShowModal(path);
+        }
     }
 
     private async Task playAudio(FileOpenEventArgs<FileManagerDirectoryContent> args)
@@ -447,6 +489,45 @@
         return new List<string> { ".mp3", ".ogg", ".flac", ".aac", ".wav" }.Contains(fileExtension);
     }
 
+    private bool isVideoFile(string fileExtension)
+    {
+        // Native browser formats - always playable
+        var nativeFormats = new List<string> { ".mov", ".mp4", ".m4v", ".ogv", ".webm", ".flv", ".f4v" };
+
+        if (nativeFormats.Contains(fileExtension))
+            return true;
+
+        // Transcoding formats - only playable if transcoding is enabled
+        if (GeneralConfigStatic.config.EnableVideoTranscoding)
+        {
+            var transcodingFormats = new List<string> { ".mkv", ".avi", ".wmv", ".ts", ".mts", ".m2ts", ".vob", ".divx", ".xvid", ".3gp" };
+            return transcodingFormats.Contains(fileExtension);
+        }
+
+        return false;
+    }
+
+    private bool needsTranscoding(string fileExtension)
+    {
+        return new List<string> { ".mkv", ".avi", ".wmv", ".ts", ".mts", ".m2ts", ".vob", ".divx", ".xvid", ".3gp" }.Contains(fileExtension);
+    }
+
+    private string getLocalVideoUrl(string filterPath, string name)
+    {
+        var extension = Path.GetExtension(name).ToLowerInvariant();
+        string localdir = MyNavigationManager.BaseUri + FileService.STATICRELATIVELOCALDIR.Replace("\\", "/");
+
+        if (needsTranscoding(extension))
+        {
+            // Use transcoding endpoint
+            var relativePath = filterPath.Substring(1).Replace("\\", "/") + name;
+            return $"{_baseUrl}/api/localvideo/stream?path={Uri.EscapeDataString(relativePath)}";
+        }
+
+        // Use direct static file
+        return new System.Uri((Path.Combine(localdir, filterPath.Substring(1).Replace("\\", "/"), name)).Replace("\\", "/")).AbsoluteUri;
+    }
+
     private async Task ShowMediaURLModal(string FilterPath, string Name)
     {
         string localdir = MyNavigationManager.BaseUri + FileService.STATICRELATIVELOCALDIR.Replace("\\", "/");
@@ -460,10 +541,7 @@
     {
         if (args.Item.Text == "Upload Telegram" && args.FileDetails.Count() > 0)
         {
-            Modal.id = id;
-            Modal.fileList = args.FileDetails;
-            Modal.filePath = args.FileDetails.FirstOrDefault().IsFile ? args.FileDetails.FirstOrDefault().FilterPath.Replace("\\", "/") + args.FileDetails.FirstOrDefault().Name : args.FileDetails.FirstOrDefault().FilterPath.Replace("\\", "/") + args.FileDetails.FirstOrDefault().Name + "/";
-            Modal.Open();
+            MainLayout.OpenUploadToTelegramModal(id, args.FileDetails.ToList());
         }
 
         if (args.Item.Text == "Upload To Local" && args.FileDetails.Count() > 0)
@@ -585,19 +663,16 @@
         if (args.FileDetails == null || !args.FileDetails.IsFile) return;
 
         var fileType = args.FileDetails.Type?.ToLower() ?? "";
-        var audioTypes = new List<string> { ".mp3", ".ogg", ".flac", ".aac", ".wav" };
-        var videoTypes = new List<string> { ".mov", ".mp4", ".m4v", ".ogv", ".webm", ".flv", ".f4v" };
 
-        if (audioTypes.Contains(fileType))
+        if (IsAudioFile(fileType))
         {
             string localdir = MyNavigationManager.BaseUri + FileService.STATICRELATIVELOCALDIR.Replace("\\", "/");
             string path = new System.Uri((Path.Combine(localdir, args.FileDetails.FilterPath.Substring(1).Replace("\\", "/"), args.FileDetails.Name)).Replace("\\", "/")).AbsoluteUri;
             await JSRuntime.InvokeVoidAsync("openAudioPlayerModal", path, null, args.FileDetails.Name);
         }
-        else if (videoTypes.Contains(fileType))
+        else if (isVideoFile(fileType))
         {
-            string localdir = MyNavigationManager.BaseUri + FileService.STATICRELATIVELOCALDIR.Replace("\\", "/");
-            string path = new System.Uri((Path.Combine(localdir, args.FileDetails.FilterPath.Substring(1).Replace("\\", "/"), args.FileDetails.Name)).Replace("\\", "/")).AbsoluteUri;
+            string path = getLocalVideoUrl(args.FileDetails.FilterPath, args.FileDetails.Name);
             videoPlayer.ShowModal(path);
         }
     }
@@ -622,12 +697,7 @@
     {
         try
         {
-            Modal.id = id;
-            Modal.fileList = args.Files.ToList();
-            Modal.filePath = args.Files.FirstOrDefault()?.IsFile == true
-                ? args.Files.FirstOrDefault()?.FilterPath?.Replace("\\", "/") + args.Files.FirstOrDefault()?.Name
-                : args.Files.FirstOrDefault()?.FilterPath?.Replace("\\", "/") + args.Files.FirstOrDefault()?.Name + "/";
-            Modal.Open();
+            MainLayout.OpenUploadToTelegramModal(id, args.Files.ToList());
         }
         catch (Exception ex)
         {

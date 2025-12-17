@@ -2,10 +2,14 @@
 @using TelegramDownloader.Data
 @using TelegramDownloader.Data.db
 @using TelegramDownloader.Models
+@using TelegramDownloader.Services
+@using Microsoft.Extensions.Hosting
 @implements IDisposable
 
 @inject IDbService db
 @inject ToastService toastService
+@inject TransactionInfoService tis
+@inject IHostApplicationLifetime applicationLifetime
 
 <style>
     .config-page {
@@ -399,6 +403,89 @@
                 </div>
             </div>
 
+            <!-- Video Transcoding Section -->
+            <div class="config-section">
+                <div class="config-section-header">
+                    <i class="bi bi-film"></i>
+                    <span>Video Transcoding</span>
+                </div>
+                <div class="config-section-body">
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-play-circle"></i>
+                                Enable Video Transcoding
+                            </div>
+                            <div class="config-item-description">
+                                Enable real-time transcoding to play non-browser video formats directly in the web player.
+                                @if (ffmpegAvailable)
+                                {
+                                    <span class="badge bg-success ms-2"><i class="bi bi-check-circle me-1"></i>FFmpeg available</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-danger ms-2"><i class="bi bi-x-circle me-1"></i>FFmpeg not found</span>
+                                }
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputCheckbox @bind-Value="Model!.EnableVideoTranscoding" class="form-check-input config-switch" disabled="@(!ffmpegAvailable)" />
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-info-circle"></i>
+                                Supported Formats
+                            </div>
+                            <div class="config-item-description">
+                                <div class="mt-2">
+                                    <strong>Native formats (always playable):</strong>
+                                    <span class="badge bg-primary me-1">.mp4</span>
+                                    <span class="badge bg-primary me-1">.webm</span>
+                                    <span class="badge bg-primary me-1">.ogg</span>
+                                    <span class="badge bg-primary me-1">.ogv</span>
+                                </div>
+                                <div class="mt-2">
+                                    <strong>Transcoding formats (requires FFmpeg):</strong>
+                                    <span class="badge bg-secondary me-1">.mkv</span>
+                                    <span class="badge bg-secondary me-1">.avi</span>
+                                    <span class="badge bg-secondary me-1">.wmv</span>
+                                    <span class="badge bg-secondary me-1">.mov</span>
+                                    <span class="badge bg-secondary me-1">.flv</span>
+                                    <span class="badge bg-secondary me-1">.ts</span>
+                                    <span class="badge bg-secondary me-1">.m2ts</span>
+                                    <span class="badge bg-secondary me-1">.vob</span>
+                                    <span class="badge bg-secondary me-1">.3gp</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-exclamation-triangle text-warning"></i>
+                                Requirements
+                            </div>
+                            <div class="config-item-description">
+                                <div class="alert alert-info py-2 px-3 mb-0 mt-2" style="font-size: 0.85rem;">
+                                    <i class="bi bi-info-circle me-2"></i>
+                                    <strong>FFmpeg</strong> must be installed and available in the system PATH.
+                                    <br/>
+                                    <span class="text-muted">
+                                        In Docker, FFmpeg is included automatically when using the official image.
+                                        <br/>
+                                        For manual installations, install FFmpeg from <a href="https://ffmpeg.org/download.html" target="_blank">ffmpeg.org</a>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Interface Section -->
             <div class="config-section">
                 <div class="config-section-header">
@@ -424,6 +511,43 @@
                     <div class="config-item">
                         <div class="config-item-info">
                             <div class="config-item-label">
+                                <i class="bi bi-image"></i>
+                                Show Channel Images
+                            </div>
+                            <div class="config-item-description">
+                                Display channel avatars/images in the sidebar channel list
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputCheckbox @bind-Value="Model!.ShowChannelImages" class="form-check-input config-switch" />
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-images"></i>
+                                Channel Image Cache
+                            </div>
+                            <div class="config-item-description">
+                                Clear cached channel images to free disk space or force re-download
+                                @if (cachedImagesSize > 0)
+                                {
+                                    <span class="badge bg-info ms-2">@cachedImagesCount images (@FormatSize(cachedImagesSize))</span>
+                                }
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <button type="button" class="btn btn-outline-warning btn-sm d-flex align-items-center gap-2" @onclick="ClearImageCache" disabled="@(cachedImagesCount == 0)">
+                                <i class="bi bi-trash3"></i>
+                                Clear Cache
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
                                 <i class="bi bi-terminal"></i>
                                 Show Logs in Terminal
                             </div>
@@ -433,6 +557,119 @@
                         </div>
                         <div class="config-item-control">
                             <InputCheckbox @bind-Value="Model!.ShouldShowLogInTerminal" class="form-check-input config-switch" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Task Persistence Section -->
+            <div class="config-section">
+                <div class="config-section-header">
+                    <i class="bi bi-arrow-repeat"></i>
+                    <span>Task Persistence</span>
+                </div>
+                <div class="config-section-body">
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-database"></i>
+                                Enable Task Persistence
+                            </div>
+                            <div class="config-item-description">
+                                Save download/upload tasks to database to survive application restarts
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputCheckbox @bind-Value="Model!.EnableTaskPersistence" class="form-check-input config-switch" />
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-play-circle"></i>
+                                Auto-Resume on Startup
+                            </div>
+                            <div class="config-item-description">
+                                Automatically resume pending tasks when the application starts
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputCheckbox @bind-Value="Model!.AutoResumeOnStartup" class="form-check-input config-switch" />
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-clock-history"></i>
+                                Progress Save Interval
+                            </div>
+                            <div class="config-item-description">
+                                How often to save task progress to database (seconds). Lower values = more precise resume, higher values = less DB load.
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <div class="config-input-group">
+                                <NumberInput TValue="int" @bind-Value="Model!.TaskPersistenceDebounceSeconds" Min="1" Max="60" EnableMinMax="true" class="form-control" style="width: 80px;" />
+                                <span class="text-muted">sec</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-trash3"></i>
+                                Stale Task Cleanup
+                            </div>
+                            <div class="config-item-description">
+                                Automatically delete failed/stuck tasks older than this many days
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <div class="config-input-group">
+                                <NumberInput TValue="int" @bind-Value="Model!.StaleTaskCleanupDays" Min="1" Max="30" EnableMinMax="true" class="form-control" style="width: 80px;" />
+                                <span class="text-muted">days</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-cloud-arrow-down"></i>
+                                Pending Downloads
+                            </div>
+                            <div class="config-item-description">
+                                Clear all pending downloads from the queue
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <button type="button" class="btn btn-outline-danger btn-sm d-flex align-items-center gap-2" @onclick="ClearPendingDownloads" disabled="@(pendingDownloadsCount == 0)">
+                                <i class="bi bi-trash3"></i>
+                                Clear
+                                <span class="badge bg-secondary">@pendingDownloadsCount</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-database-x"></i>
+                                Persisted Tasks
+                            </div>
+                            <div class="config-item-description">
+                                Clear all persisted tasks from the database (tasks saved for resume after restart)
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <button type="button" class="btn btn-outline-danger btn-sm d-flex align-items-center gap-2" @onclick="ClearPersistedTasks" disabled="@(persistedTasksCount == 0)">
+                                <i class="bi bi-trash3"></i>
+                                Clear
+                                <span class="badge bg-secondary">@persistedTasksCount</span>
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -465,6 +702,45 @@
                 </div>
             </div>
 
+            <!-- System Section -->
+            <div class="config-section">
+                <div class="config-section-header">
+                    <i class="bi bi-pc-display"></i>
+                    <span>System</span>
+                </div>
+                <div class="config-section-body">
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-arrow-clockwise"></i>
+                                Restart Application
+                            </div>
+                            <div class="config-item-description">
+                                Restart the application. Useful after configuration changes or to resolve issues.
+                                @if (isRestarting)
+                                {
+                                    <span class="badge bg-warning text-dark ms-2">Restarting...</span>
+                                }
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <button type="button" class="btn btn-outline-warning btn-sm d-flex align-items-center gap-2" @onclick="RestartApplication" disabled="@isRestarting">
+                                @if (isRestarting)
+                                {
+                                    <span class="spinner-border spinner-border-sm" role="status"></span>
+                                    <span>Restarting...</span>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-arrow-clockwise"></i>
+                                    <span>Restart</span>
+                                }
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Save Button -->
             <div class="config-save-section">
                 <button class="btn btn-primary config-save-btn" type="submit">
@@ -479,11 +755,51 @@
 @code {
     public GeneralConfig Model { get; set; }
     private bool _disposed = false;
+    private bool isRestarting = false;
+
+    // Task counters
+    private int pendingDownloadsCount = 0;
+    private int persistedTasksCount = 0;
+
+    // Image cache
+    private static readonly string ImageCacheFolder = Path.Combine(Path.GetTempPath(), "TFM_ChannelImages");
+    private int cachedImagesCount = 0;
+    private long cachedImagesSize = 0;
+
+    // FFmpeg availability
+    private bool ffmpegAvailable = false;
 
     protected override async Task OnInitializedAsync()
     {
         Model = null;
         await LoadModelAsync();
+        await RefreshCounters();
+        RefreshImageCacheInfo();
+        CheckFFmpegAvailability();
+    }
+
+    private void CheckFFmpegAvailability()
+    {
+        try
+        {
+            using var process = new System.Diagnostics.Process();
+            process.StartInfo = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "ffmpeg",
+                Arguments = "-version",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            process.Start();
+            process.WaitForExit(5000);
+            ffmpegAvailable = process.ExitCode == 0;
+        }
+        catch
+        {
+            ffmpegAvailable = false;
+        }
     }
 
     private async Task LoadModelAsync()
@@ -495,10 +811,116 @@
         }
     }
 
+    private async Task RefreshCounters()
+    {
+        pendingDownloadsCount = tis.getTotalDownloads(isPending: true);
+
+        try
+        {
+            var persistedTasks = await db.GetAllPendingTasks();
+            persistedTasksCount = persistedTasks?.Count ?? 0;
+        }
+        catch
+        {
+            persistedTasksCount = 0;
+        }
+
+        if (!_disposed)
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task ClearPendingDownloads()
+    {
+        tis.ClearPendingDownloads();
+        await RefreshCounters();
+        toastService.Notify(new(ToastType.Success, "Pending downloads cleared") { Title = "Success", AutoHide = true });
+    }
+
+    private async Task ClearPersistedTasks()
+    {
+        await db.ClearAllTasks();
+        await RefreshCounters();
+        toastService.Notify(new(ToastType.Success, "Persisted tasks cleared") { Title = "Success", AutoHide = true });
+    }
+
     private async Task Submit()
     {
         await GeneralConfigStatic.SaveChanges(db, Model);
         toastService.Notify(new(ToastType.Success, "Configuration saved successfully") { Title = "Success", AutoHide = true });
+    }
+
+    private async Task RestartApplication()
+    {
+        isRestarting = true;
+        await InvokeAsync(StateHasChanged);
+
+        toastService.Notify(new(ToastType.Warning, "Application is restarting...") { Title = "Restart", AutoHide = false });
+
+        // Small delay to allow the toast to be shown
+        await Task.Delay(1500);
+
+        // Stop the application - the container/service will restart it automatically
+        applicationLifetime.StopApplication();
+    }
+
+    private void RefreshImageCacheInfo()
+    {
+        try
+        {
+            if (Directory.Exists(ImageCacheFolder))
+            {
+                var files = Directory.GetFiles(ImageCacheFolder, "*.jpg");
+                cachedImagesCount = files.Length;
+                cachedImagesSize = files.Sum(f => new FileInfo(f).Length);
+            }
+            else
+            {
+                cachedImagesCount = 0;
+                cachedImagesSize = 0;
+            }
+        }
+        catch
+        {
+            cachedImagesCount = 0;
+            cachedImagesSize = 0;
+        }
+    }
+
+    private async Task ClearImageCache()
+    {
+        try
+        {
+            if (Directory.Exists(ImageCacheFolder))
+            {
+                var files = Directory.GetFiles(ImageCacheFolder, "*.jpg");
+                foreach (var file in files)
+                {
+                    File.Delete(file);
+                }
+            }
+            RefreshImageCacheInfo();
+            toastService.Notify(new(ToastType.Success, "Image cache cleared successfully") { Title = "Success", AutoHide = true });
+        }
+        catch (Exception ex)
+        {
+            toastService.Notify(new(ToastType.Danger, $"Error clearing cache: {ex.Message}") { Title = "Error", AutoHide = true });
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private string FormatSize(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB" };
+        int order = 0;
+        double size = bytes;
+        while (size >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            size /= 1024;
+        }
+        return $"{size:0.##} {sizes[order]}";
     }
 
     public void Dispose()

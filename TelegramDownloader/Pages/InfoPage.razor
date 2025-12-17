@@ -1,107 +1,346 @@
-﻿@page "/fetchdata"
+@page "/fetchdata"
 @using TL
 @using TelegramDownloader.Data
 @using TelegramDownloader.Models
 @using TelegramDownloader.Services
 @inject ITelegramService ts
 @inject IFileService fs
+@inject IJSRuntime JSRuntime
+@inject ISystemMetricsService metricsService
+@implements IDisposable
 
 @if(user != null)
 {
-    <h3></h3>
+    <div class="info-page">
+        <!-- Header -->
+        <div class="info-header">
+            <img src="/favicon.ico" alt="Logo" class="app-logo" />
+            <h1>Telegram File Manager</h1>
+            <p class="welcome-text">
+                Welcome back, <span class="user-name">@user.first_name</span>!
+            </p>
+            <div class="version-badge">
+                <i class="bi bi-tag"></i>
+                v@(AppVersion)
+            </div>
+        </div>
 
-    <div class="p-3 pb-md-4 mx-auto text-center">
-        <h1 class="display-4 fw-normal text-body-emphasis"><img src="/favicon.ico" style="height: 1em;" /> Telegram File Manager</h1>
-        <p class="fs-5 text-body-secondary">Thanks for use this application @(user.first_name).</p>
-    </div>
-
-    <main>
-        <div class="row row-cols-1 row-cols-md-3 mb-3 text-center">
-            <div class="col">
-                <div class="card mb-4 rounded-3 shadow-sm">
-                    <div class="card-header py-3">
-                        <h4 class="my-0 fw-normal">Free</h4>
+        <!-- Stats Grid -->
+        <div class="stats-grid">
+            <!-- Open Source Card -->
+            <div class="stat-card">
+                <div class="stat-card-header">
+                    <i class="bi bi-code-slash"></i>
+                    <h4>Open Source</h4>
+                </div>
+                <div class="stat-card-body">
+                    <div class="stat-value">
+                        <i class="bi bi-heart-fill" style="color: #e25555;"></i>
                     </div>
-                    <div class="card-body">
-                        <h1 class="card-title pricing-card-title"><small class="text-body-secondary fw-light">This is </small>Free</h1>
-                        <ul class="list-unstyled mt-3 mb-4">
-                            <li>This tool is free to use.</li>
-                        </ul>
-                        <a type="button" href="https://github.com/mateof/TelegramFileManager" target="_blank" class="w-100 btn btn-lg btn-outline-primary"><i class="bi bi-github"></i> Github</a>
+                    <p class="stat-description">
+                        This tool is free and open source. Contributions are welcome!
+                    </p>
+                    <div class="stat-meta">
+                        <span class="stat-meta-item">
+                            <i class="bi bi-star-fill" style="color: #ffc107;"></i>
+                            Star on GitHub
+                        </span>
+                    </div>
+                    <div class="stat-action">
+                        <a href="https://github.com/mateof/TelegramFileManager" target="_blank" class="btn btn-outline-primary">
+                            <i class="bi bi-github"></i>
+                            View on GitHub
+                        </a>
                     </div>
                 </div>
             </div>
-            <div class="col">
-                <div class="card mb-4 rounded-3 shadow-sm">
-                    <div class="card-header py-3">
-                        <h4 class="my-0 fw-normal">Temp Folder</h4>
-                    </div>
-                    <div class="card-body">
-                        <h1 class="card-title pricing-card-title">@dirSize?.SizeWithSuffix</h1>
-                        <ul class="list-unstyled mt-3 mb-4">
-                            <li>Elements: @dirSize?.TotalElements</li>
-                            
-                        </ul>
-                        <button type="button" class="w-100 btn btn-lg btn-primary" @onclick="cleanTempFolder"><i class="bi bi-trash"></i> Clean</button>
-                    </div>
+
+            <!-- Temp Folder Card -->
+            <div class="stat-card temp-files-card">
+                <div class="stat-card-header">
+                    <i class="bi bi-folder2"></i>
+                    <h4>Temporary Files</h4>
                 </div>
-            </div>
-            <div class="col">
-                <div class="card mb-4 rounded-3 shadow-sm border-primary">
-                    <div class="card-header py-3 text-bg-primary border-primary">
-                        <h4 class="my-0 fw-normal">Premium</h4>
+                <div class="stat-card-body">
+                    <div class="stat-value">
+                        @(dirSize?.SizeWithSuffix ?? "0 B")
                     </div>
-                    <div class="card-body">
-                        @if(TelegramService.isPremium)
-                        {
-                            <h1 class="card-title pricing-card-title">
-                                <i class="bi bi-shield-check"></i>
-                            </h1>
-                            <ul class="list-unstyled mt-3 mb-4">
-                                <li>You are a premium Telegram user</li>
-                            </ul>
-                        } else
-                        {
-                                <h1 class="card-title pricing-card-title">
-                                    <i class="bi bi-x"></i>
-                                </h1>
-                                <ul class="list-unstyled mt-3 mb-4">
-                                    <li>You are not a premium Telegram user</li>
-                                </ul>
+                    <p class="stat-description">
+                        Cached files and temporary data
+                    </p>
+                    <div class="stat-meta">
+                        <span class="stat-meta-item @(dirSize?.TotalElements > 0 ? "clickable" : "")"
+                              @onclick="@(() => { if(dirSize?.TotalElements > 0) ToggleFilesBreakdown(); })">
+                            <i class="bi bi-file-earmark"></i>
+                            @(dirSize?.TotalElements ?? 0) files
+                            @if(dirSize?.TotalElements > 0)
+                            {
+                                <i class="bi bi-info-circle-fill info-icon"></i>
                             }
+                        </span>
+                    </div>
 
+                    @if(showFilesBreakdown && dirSize?.FilesByType?.Any() == true)
+                    {
+                        <div class="files-breakdown-container">
+                            <div class="files-breakdown-popup">
+                                <div class="breakdown-header">
+                                    <span>Files by Type</span>
+                                    <button type="button" class="breakdown-close" @onclick="ToggleFilesBreakdown">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                </div>
+                                <div class="breakdown-content">
+                                    @foreach(var fileType in dirSize.FilesByType)
+                                    {
+                                        <div class="file-type-row">
+                                            <div class="file-type-info">
+                                                <span class="file-type-icon @fileType.Category.ToLower().Replace(" ", "-")">
+                                                    <i class="bi @fileType.Icon"></i>
+                                                </span>
+                                                <span class="file-type-name">@fileType.Category</span>
+                                            </div>
+                                            <div class="file-type-stats">
+                                                <span class="file-type-count">@fileType.Count</span>
+                                                <span class="file-type-size">@fileType.SizeWithSuffix</span>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
 
+                    <div class="stat-action">
+                        <button type="button" class="btn btn-primary" @onclick="cleanTempFolder">
+                            <i class="bi bi-trash3"></i>
+                            Clean Cache
+                        </button>
+                    </div>
+                </div>
+            </div>
 
-                        <a type="button" href="https://telegram.org/blog/700-million-and-premium" target="_blank" class="w-100 btn btn-lg btn-primary">More Info</a>
+            <!-- Premium Card -->
+            <div class="stat-card featured">
+                <div class="stat-card-header">
+                    <i class="bi bi-gem"></i>
+                    <h4>Telegram Premium</h4>
+                </div>
+                <div class="stat-card-body">
+                    @if(TelegramService.isPremium)
+                    {
+                        <div class="stat-value success">
+                            <i class="bi bi-patch-check-fill"></i>
+                        </div>
+                        <p class="stat-description">
+                            You have Telegram Premium! Enjoy 4GB file uploads.
+                        </p>
+                        <div class="stat-meta">
+                            <span class="stat-meta-item">
+                                <i class="bi bi-cloud-arrow-up"></i>
+                                4 GB max
+                            </span>
+                            <span class="stat-meta-item">
+                                <i class="bi bi-lightning-charge"></i>
+                                Faster downloads
+                            </span>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="stat-value muted">
+                            <i class="bi bi-x-circle"></i>
+                        </div>
+                        <p class="stat-description">
+                            Upgrade to Premium for 4GB file uploads and more features.
+                        </p>
+                        <div class="stat-meta">
+                            <span class="stat-meta-item">
+                                <i class="bi bi-cloud-arrow-up"></i>
+                                2 GB max
+                            </span>
+                        </div>
+                    }
+                    <div class="stat-action">
+                        <a href="https://telegram.org/blog/700-million-and-premium" target="_blank" class="btn btn-outline-primary">
+                            <i class="bi bi-info-circle"></i>
+                            Learn More
+                        </a>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="row mb-10 text-center">
-            <div class="card mb-12 rounded-1 shadow-sm">
-                <div class="card-header py-3">
-                    <h4 class="my-0 fw-normal">Download History</h4>
+        <!-- System Resources Section -->
+        <div class="system-resources-section">
+            <div class="section-header">
+                <i class="bi bi-pc-display"></i>
+                <h4>System Resources</h4>
+                <span class="refresh-indicator @(isRefreshing ? "active" : "")">
+                    <i class="bi bi-arrow-repeat"></i>
+                </span>
+            </div>
+
+            <div class="resources-grid">
+                <!-- CPU Card -->
+                <div class="resource-card cpu-card">
+                    <div class="resource-icon">
+                        <i class="bi bi-cpu"></i>
+                    </div>
+                    <div class="resource-content">
+                        <h5>CPU Usage</h5>
+                        <div class="resource-bars">
+                            <div class="resource-bar-item">
+                                <div class="bar-label">
+                                    <span>Application</span>
+                                    <span class="bar-value">@(metrics?.AppCpuUsageCss ?? "0")%</span>
+                                </div>
+                                <div class="progress-bar-container">
+                                    <div class="progress-bar app" style="width: @(metrics?.AppCpuUsageCss ?? "0")%"></div>
+                                </div>
+                            </div>
+                            <div class="resource-bar-item">
+                                <div class="bar-label">
+                                    <span>System</span>
+                                    <span class="bar-value">@(metrics?.SystemCpuUsageCss ?? "0")%</span>
+                                </div>
+                                <div class="progress-bar-container">
+                                    <div class="progress-bar system" style="width: @(metrics?.SystemCpuUsageCss ?? "0")%"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="resource-footer">
+                            <span><i class="bi bi-cpu"></i> @(metrics?.ProcessorCount ?? 0) cores</span>
+                        </div>
+                    </div>
                 </div>
-                <div class="card-body">
-                    <TelegramDownloader.Pages.Partials.SpeedChart></TelegramDownloader.Pages.Partials.SpeedChart>
+
+                <!-- Memory Card -->
+                <div class="resource-card memory-card">
+                    <div class="resource-icon">
+                        <i class="bi bi-memory"></i>
+                    </div>
+                    <div class="resource-content">
+                        <h5>Memory Usage</h5>
+                        <div class="resource-bars">
+                            <div class="resource-bar-item">
+                                <div class="bar-label">
+                                    <span>Application</span>
+                                    <span class="bar-value">@(metrics?.AppMemory ?? "0 B")</span>
+                                </div>
+                                <div class="progress-bar-container">
+                                    <div class="progress-bar app" style="width: @(metrics?.AppMemoryPercentCss ?? "0")%"></div>
+                                </div>
+                            </div>
+                            <div class="resource-bar-item">
+                                <div class="bar-label">
+                                    <span>System</span>
+                                    <span class="bar-value">@(metrics?.UsedMemory ?? "0 B") / @(metrics?.TotalMemory ?? "0 B")</span>
+                                </div>
+                                <div class="progress-bar-container">
+                                    <div class="progress-bar system" style="width: @(metrics?.MemoryUsagePercentCss ?? "0")%"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="resource-footer">
+                            <span><i class="bi bi-box"></i> Available: @(metrics?.AvailableMemory ?? "0 B")</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Disk Card -->
+                <div class="resource-card disk-card">
+                    <div class="resource-icon">
+                        <i class="bi bi-hdd"></i>
+                    </div>
+                    <div class="resource-content">
+                        <h5>Disk Storage</h5>
+                        <div class="resource-bars">
+                            <div class="resource-bar-item">
+                                <div class="bar-label">
+                                    <span>Temp Folder</span>
+                                    <span class="bar-value">@(metrics?.TempFolderSize ?? "0 B")</span>
+                                </div>
+                                <div class="progress-bar-container">
+                                    <div class="progress-bar temp" style="width: @(metrics?.TempFolderPercentCss ?? "0")%"></div>
+                                </div>
+                            </div>
+                            <div class="resource-bar-item">
+                                <div class="bar-label">
+                                    <span>Disk Used</span>
+                                    <span class="bar-value">@(metrics?.DiskUsed ?? "0 B") / @(metrics?.DiskTotal ?? "0 B")</span>
+                                </div>
+                                <div class="progress-bar-container">
+                                    <div class="progress-bar system @(metrics?.DiskUsagePercent > 90 ? "critical" : metrics?.DiskUsagePercent > 75 ? "warning" : "")" style="width: @(metrics?.DiskUsagePercentCss ?? "0")%"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="resource-footer">
+                            <span><i class="bi bi-hdd"></i> Free: @(metrics?.DiskFree ?? "0 B")</span>
+                        </div>
+                    </div>
                 </div>
             </div>
-            
-
         </div>
 
-    </main>
+        <!-- Speed Chart Section -->
+        <div class="chart-section">
+            <div class="chart-header">
+                <i class="bi bi-graph-up"></i>
+                <h4>Transfer Speed History</h4>
+            </div>
+            <div class="chart-body">
+                <TelegramDownloader.Pages.Partials.SpeedChart></TelegramDownloader.Pages.Partials.SpeedChart>
+            </div>
+        </div>
+    </div>
 }
 
 
 @code {
     private User user { get; set; }
     private DirectorySizeModel? dirSize { get; set; }
+    private SystemMetrics? metrics { get; set; }
+    private bool showFilesBreakdown { get; set; } = false;
+    private bool isRefreshing { get; set; } = false;
+    private Timer? refreshTimer;
+    private string AppVersion => typeof(Program).Assembly.GetName().Version?.ToString() ?? "0.0.0";
+
+    private void ToggleFilesBreakdown()
+    {
+        showFilesBreakdown = !showFilesBreakdown;
+    }
+
     protected override async Task OnInitializedAsync()
     {
         user = await ts.GetUser();
         await calculateTempDirSize();
+        await RefreshMetrics();
+
+        // Start auto-refresh timer (every 3 seconds)
+        refreshTimer = new Timer(async _ =>
+        {
+            await InvokeAsync(async () =>
+            {
+                isRefreshing = true;
+                StateHasChanged();
+                await RefreshMetrics();
+                isRefreshing = false;
+                StateHasChanged();
+            });
+        }, null, 3000, 3000);
+    }
+
+    private async Task RefreshMetrics()
+    {
+        try
+        {
+            metrics = await metricsService.GetMetricsAsync();
+        }
+        catch
+        {
+            // Ignore metrics errors
+        }
     }
 
     private async Task calculateTempDirSize()
@@ -113,5 +352,17 @@
     {
         fs.cleanTempFolder();
         await calculateTempDirSize();
+        await RefreshMetrics();
+        await TriggerCelebration();
+    }
+
+    private async Task TriggerCelebration()
+    {
+        await JSRuntime.InvokeVoidAsync("triggerConfetti");
+    }
+
+    public void Dispose()
+    {
+        refreshTimer?.Dispose();
     }
 }

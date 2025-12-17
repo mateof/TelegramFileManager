@@ -232,6 +232,47 @@ namespace TelegramDownloader.Models
         public long SizeBytes { get; set; }
         public string SizeWithSuffix { get; set; }
         public long TotalElements { get; set; }
+        public List<FileTypeInfo> FilesByType { get; set; } = new List<FileTypeInfo>();
+    }
 
+    public class FileTypeInfo
+    {
+        public string Extension { get; set; }
+        public string Category { get; set; }
+        public string Icon { get; set; }
+        public int Count { get; set; }
+        public long SizeBytes { get; set; }
+        public string SizeWithSuffix { get; set; }
+
+        public static string GetCategory(string extension)
+        {
+            extension = extension?.ToLower() ?? "";
+            return extension switch
+            {
+                ".mp4" or ".mkv" or ".avi" or ".mov" or ".wmv" or ".flv" or ".webm" => "Video",
+                ".mp3" or ".wav" or ".flac" or ".aac" or ".ogg" or ".wma" or ".m4a" => "Audio",
+                ".jpg" or ".jpeg" or ".png" or ".gif" or ".bmp" or ".webp" or ".svg" or ".ico" => "Images",
+                ".pdf" or ".doc" or ".docx" or ".xls" or ".xlsx" or ".ppt" or ".pptx" or ".txt" or ".rtf" => "Documents",
+                ".zip" or ".rar" or ".7z" or ".tar" or ".gz" or ".bz2" => "Archives",
+                ".exe" or ".msi" or ".apk" or ".dmg" or ".deb" or ".rpm" => "Applications",
+                "" => "No Extension",
+                _ => "Other"
+            };
+        }
+
+        public static string GetIcon(string category)
+        {
+            return category switch
+            {
+                "Video" => "bi-play-circle-fill",
+                "Audio" => "bi-music-note-beamed",
+                "Images" => "bi-image-fill",
+                "Documents" => "bi-file-earmark-text-fill",
+                "Archives" => "bi-file-earmark-zip-fill",
+                "Applications" => "bi-app-indicator",
+                "No Extension" => "bi-file-earmark-fill",
+                _ => "bi-folder-fill"
+            };
+        }
     }
 }

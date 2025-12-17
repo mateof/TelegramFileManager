@@ -95,7 +95,8 @@
             OnStrm="OnMobileStrmAsync"
             OnPreloadFiles="OnMobilePreloadFilesAsync"
             CanAddToPlaylist="true"
-            OnAddToPlaylist="OnMobileAddToPlaylistAsync" />
+            OnAddToPlaylist="OnMobileAddToPlaylistAsync"
+            OnPathChanged="OnMobilePathChanged" />
     </div>
 }
 
@@ -217,6 +218,48 @@
         {
             _viewportDetected = true;
             StateHasChanged();
+
+            // After viewport is detected, navigate to path from URL if present
+            await NavigateToPathFromUrl();
+        }
+    }
+
+    private async Task NavigateToPathFromUrl()
+    {
+        try
+        {
+            var uri = new Uri(MyNavigationManager.Uri);
+            var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+            var pathFromUrl = query["path"];
+
+            if (!string.IsNullOrEmpty(pathFromUrl) && mobileFileManager != null)
+            {
+                // Decode the path and ensure it ends with /
+                var decodedPath = Uri.UnescapeDataString(pathFromUrl);
+                if (!decodedPath.EndsWith("/"))
+                    decodedPath += "/";
+
+                await mobileFileManager.NavigateToPathSilent(decodedPath);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error navigating to path from URL");
+        }
+    }
+
+    private void OnMobilePathChanged(string path)
+    {
+        try
+        {
+            // Update URL without triggering navigation
+            var baseUri = MyNavigationManager.Uri.Split('?')[0];
+            var newUrl = path == "/" ? baseUri : $"{baseUri}?path={Uri.EscapeDataString(path)}";
+            MyNavigationManager.NavigateTo(newUrl, forceLoad: false, replace: true);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error updating URL with path");
         }
     }
 
@@ -323,7 +366,7 @@
 
         if (args != null && args.FileDetails != null && args.FileDetails.IsFile && isVideoFile(args.FileDetails.Type.ToLower()))
         {
-            videoPlayer.ShowModal(await getMediaUrl(args.FileDetails.Id, args.FileDetails.Name, args.FileDetails.Size));
+            videoPlayer.ShowModal(await getVideoUrl(args.FileDetails.Id, args.FileDetails.Name, args.FileDetails.Size), args.FileDetails.Name);
             return;
         }
 
@@ -709,7 +752,7 @@
 
         if (isVideoFile(args.FileDetails.Type?.ToLower() ?? ""))
         {
-            videoPlayer.ShowModal(await getMediaUrl(args.FileDetails.Id, args.FileDetails.Name, args.FileDetails.Size));
+            videoPlayer.ShowModal(await getVideoUrl(args.FileDetails.Id, args.FileDetails.Name, args.FileDetails.Size), args.FileDetails.Name);
             return;
         }
 
@@ -878,7 +921,25 @@
 
     private bool isVideoFile(string fileExtension)
     {
-        return new List<string> { ".mov", ".mp4", ".m4v", ".ogv", ".webm", ".flv", ".f4v" }.Contains(fileExtension);
+        // Native browser formats - always playable
+        var nativeFormats = new List<string> { ".mov", ".mp4", ".m4v", ".ogv", ".webm", ".flv", ".f4v" };
+
+        if (nativeFormats.Contains(fileExtension))
+            return true;
+
+        // Transcoding formats - only playable if transcoding is enabled
+        if (GeneralConfigStatic.config.EnableVideoTranscoding)
+        {
+            var transcodingFormats = new List<string> { ".mkv", ".avi", ".wmv", ".ts", ".mts", ".m2ts", ".vob", ".divx", ".xvid", ".3gp" };
+            return transcodingFormats.Contains(fileExtension);
+        }
+
+        return false;
+    }
+
+    private bool needsTranscoding(string fileExtension)
+    {
+        return new List<string> { ".mkv", ".avi", ".wmv", ".ts", ".mts", ".m2ts", ".vob", ".divx", ".xvid", ".3gp" }.Contains(fileExtension);
     }
 
     private bool isAudioFile(string fileExtension)
@@ -910,6 +971,22 @@
             return new System.Uri(Path.Combine(localdir, "api/file/GetFile", name).Replace("\\", "/") + $"?idChannel={(isShared ? bsi.ChannelId : id)}&idFile={item.MessageId}").AbsoluteUri;
         }
         return new System.Uri(Path.Combine(localdir, "api/file/GetFileStream", isShared ? bsi.ChannelId : id, idFile, name).Replace("\\", "/")).AbsoluteUri;
+    }
+
+    private async Task<string> getVideoUrl(string idFile, String name, long size)
+    {
+        var extension = Path.GetExtension(name).ToLowerInvariant();
+        string localdir = MyNavigationManager.BaseUri;
+        var channelId = isShared ? bsi.ChannelId : id;
+
+        // Use transcoding endpoint for non-native formats
+        if (needsTranscoding(extension))
+        {
+            return new System.Uri(Path.Combine(localdir, "api/video/stream", channelId, idFile, name).Replace("\\", "/")).AbsoluteUri;
+        }
+
+        // Use regular stream for native formats
+        return await getMediaUrl(idFile, name, size);
     }
 
     private string getTempFileMediaUrl(string idFile, String name)

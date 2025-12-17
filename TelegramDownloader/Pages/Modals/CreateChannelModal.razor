@@ -1,0 +1,508 @@
+@using TelegramDownloader.Data
+@using TL
+@inject ITelegramService ts
+@inject ILogger<CreateChannelModal> Logger
+
+@if (showModal)
+{
+    <div class="create-channel-modal-overlay @(showModal ? "show" : "")" @onclick="Close">
+        <div class="create-channel-modal-container" @onclick:stopPropagation="true">
+            <div class="create-channel-modal-header">
+                <div class="create-channel-modal-title">
+                    <i class="bi bi-broadcast"></i>
+                    <span>Create New Channel</span>
+                </div>
+                <button type="button" class="create-channel-modal-close" @onclick="Close" disabled="@isCreating">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+
+            <div class="create-channel-modal-body">
+                @if (!isCreating && createdChannel == null)
+                {
+                    <div class="create-channel-form">
+                        <div class="form-group">
+                            <label class="form-label">
+                                <i class="bi bi-type"></i>
+                                Channel Name <span class="required">*</span>
+                            </label>
+                            <input type="text"
+                                   class="form-control create-channel-input"
+                                   @bind="channelTitle"
+                                   @bind:event="oninput"
+                                   placeholder="Enter channel name..."
+                                   maxlength="128" />
+                            <small class="form-hint">@channelTitle.Length / 128 characters</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">
+                                <i class="bi bi-card-text"></i>
+                                Description
+                            </label>
+                            <textarea class="form-control create-channel-textarea"
+                                      @bind="channelAbout"
+                                      @bind:event="oninput"
+                                      placeholder="Enter channel description (optional)..."
+                                      rows="4"
+                                      maxlength="255"></textarea>
+                            <small class="form-hint">@channelAbout.Length / 255 characters</small>
+                        </div>
+
+                        <div class="create-channel-info">
+                            <i class="bi bi-info-circle"></i>
+                            <span>The channel will be created as a private broadcast channel. You can change settings later in Telegram.</span>
+                        </div>
+                    </div>
+                }
+
+                @if (isCreating)
+                {
+                    <div class="create-channel-loading">
+                        <div class="create-channel-loading-icon">
+                            <i class="bi bi-broadcast spinning"></i>
+                        </div>
+                        <div class="create-channel-loading-text">Creating channel...</div>
+                        <div class="create-channel-loading-hint">Please wait while we set up your new channel</div>
+                    </div>
+                }
+
+                @if (createdChannel != null)
+                {
+                    <div class="create-channel-success">
+                        <div class="create-channel-success-icon">
+                            <i class="bi bi-check-circle-fill"></i>
+                        </div>
+                        <div class="create-channel-success-title">Channel Created!</div>
+                        <div class="create-channel-success-name">@createdChannel.Title</div>
+                        <div class="create-channel-success-hint">Your channel is ready to use</div>
+                    </div>
+                }
+
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="create-channel-error">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                        <span>@errorMessage</span>
+                    </div>
+                }
+            </div>
+
+            <div class="create-channel-modal-footer">
+                @if (createdChannel != null)
+                {
+                    <button type="button" class="create-channel-btn create-channel-btn-success" @onclick="CloseAndRefresh">
+                        <i class="bi bi-check-lg"></i>
+                        <span>Done</span>
+                    </button>
+                }
+                else
+                {
+                    <button type="button" class="create-channel-btn create-channel-btn-secondary" @onclick="Close" disabled="@isCreating">
+                        <i class="bi bi-x-lg"></i>
+                        <span>Cancel</span>
+                    </button>
+                    <button type="button"
+                            class="create-channel-btn create-channel-btn-primary"
+                            @onclick="CreateChannel"
+                            disabled="@(isCreating || string.IsNullOrWhiteSpace(channelTitle))">
+                        <i class="bi bi-plus-lg"></i>
+                        <span>Create Channel</span>
+                    </button>
+                }
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .create-channel-modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.7);
+        backdrop-filter: blur(4px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 1050;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s ease;
+    }
+
+    .create-channel-modal-overlay.show {
+        opacity: 1;
+        visibility: visible;
+    }
+
+    .create-channel-modal-container {
+        background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+        border-radius: 1rem;
+        width: 100%;
+        max-width: 480px;
+        max-height: 90vh;
+        overflow: hidden;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        transform: scale(0.95);
+        transition: transform 0.3s ease;
+    }
+
+    .create-channel-modal-overlay.show .create-channel-modal-container {
+        transform: scale(1);
+    }
+
+    .create-channel-modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1.25rem 1.5rem;
+        background: rgba(0, 0, 0, 0.2);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .create-channel-modal-title {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        color: white;
+        font-size: 1.1rem;
+        font-weight: 600;
+    }
+
+    .create-channel-modal-title i {
+        color: #e94560;
+        font-size: 1.25rem;
+    }
+
+    .create-channel-modal-close {
+        background: rgba(255, 255, 255, 0.1);
+        border: none;
+        color: rgba(255, 255, 255, 0.7);
+        width: 36px;
+        height: 36px;
+        border-radius: 0.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .create-channel-modal-close:hover:not(:disabled) {
+        background: rgba(233, 69, 96, 0.3);
+        color: white;
+    }
+
+    .create-channel-modal-close:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .create-channel-modal-body {
+        padding: 1.5rem;
+    }
+
+    .create-channel-form {
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+    }
+
+    .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .form-label {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 0.9rem;
+        font-weight: 500;
+    }
+
+    .form-label i {
+        color: #e94560;
+    }
+
+    .form-label .required {
+        color: #e94560;
+    }
+
+    .create-channel-input,
+    .create-channel-textarea {
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 0.5rem;
+        padding: 0.75rem 1rem;
+        color: white;
+        font-size: 0.95rem;
+        transition: all 0.2s ease;
+    }
+
+    .create-channel-input:focus,
+    .create-channel-textarea:focus {
+        outline: none;
+        border-color: rgba(233, 69, 96, 0.5);
+        background: rgba(255, 255, 255, 0.12);
+        box-shadow: 0 0 0 3px rgba(233, 69, 96, 0.1);
+    }
+
+    .create-channel-input::placeholder,
+    .create-channel-textarea::placeholder {
+        color: rgba(255, 255, 255, 0.4);
+    }
+
+    .create-channel-textarea {
+        resize: vertical;
+        min-height: 100px;
+    }
+
+    .form-hint {
+        color: rgba(255, 255, 255, 0.4);
+        font-size: 0.8rem;
+        text-align: right;
+    }
+
+    .create-channel-info {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+        padding: 1rem;
+        background: rgba(99, 102, 241, 0.1);
+        border: 1px solid rgba(99, 102, 241, 0.2);
+        border-radius: 0.5rem;
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 0.85rem;
+        line-height: 1.5;
+    }
+
+    .create-channel-info i {
+        color: #6366f1;
+        font-size: 1rem;
+        margin-top: 0.1rem;
+    }
+
+    .create-channel-loading {
+        text-align: center;
+        padding: 2rem 1rem;
+    }
+
+    .create-channel-loading-icon {
+        font-size: 3rem;
+        color: #e94560;
+        margin-bottom: 1rem;
+    }
+
+    .create-channel-loading-icon i {
+        animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    .create-channel-loading-text {
+        color: white;
+        font-size: 1.1rem;
+        font-weight: 500;
+        margin-bottom: 0.5rem;
+    }
+
+    .create-channel-loading-hint {
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 0.9rem;
+    }
+
+    .create-channel-success {
+        text-align: center;
+        padding: 2rem 1rem;
+    }
+
+    .create-channel-success-icon {
+        font-size: 3.5rem;
+        color: #22c55e;
+        margin-bottom: 1rem;
+    }
+
+    .create-channel-success-title {
+        color: white;
+        font-size: 1.25rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+
+    .create-channel-success-name {
+        color: #e94560;
+        font-size: 1.1rem;
+        font-weight: 500;
+        margin-bottom: 0.5rem;
+    }
+
+    .create-channel-success-hint {
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 0.9rem;
+    }
+
+    .create-channel-error {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 1rem;
+        background: rgba(239, 68, 68, 0.1);
+        border: 1px solid rgba(239, 68, 68, 0.3);
+        border-radius: 0.5rem;
+        color: #ef4444;
+        font-size: 0.9rem;
+        margin-top: 1rem;
+    }
+
+    .create-channel-modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+        padding: 1rem 1.5rem;
+        background: rgba(0, 0, 0, 0.2);
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .create-channel-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        padding: 0.625rem 1.25rem;
+        border-radius: 0.5rem;
+        font-size: 0.9rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border: none;
+    }
+
+    .create-channel-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .create-channel-btn-secondary {
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.8);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .create-channel-btn-secondary:hover:not(:disabled) {
+        background: rgba(255, 255, 255, 0.15);
+        color: white;
+    }
+
+    .create-channel-btn-primary {
+        background: linear-gradient(135deg, #e94560 0%, #c73659 100%);
+        color: white;
+    }
+
+    .create-channel-btn-primary:hover:not(:disabled) {
+        background: linear-gradient(135deg, #f05e78 0%, #d94a6d 100%);
+        transform: translateY(-1px);
+    }
+
+    .create-channel-btn-success {
+        background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+        color: white;
+    }
+
+    .create-channel-btn-success:hover:not(:disabled) {
+        background: linear-gradient(135deg, #34d36f 0%, #1fb855 100%);
+    }
+
+    .spinning {
+        animation: spin 1s linear infinite;
+    }
+
+    @@keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+
+    @@keyframes pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.7; transform: scale(1.05); }
+    }
+</style>
+
+@code {
+    [Parameter]
+    public EventCallback OnChannelCreated { get; set; }
+
+    private bool showModal = false;
+    private bool isCreating = false;
+    private string channelTitle = "";
+    private string channelAbout = "";
+    private string errorMessage = "";
+    private Channel? createdChannel = null;
+
+    public void Open()
+    {
+        showModal = true;
+        channelTitle = "";
+        channelAbout = "";
+        errorMessage = "";
+        createdChannel = null;
+        isCreating = false;
+        StateHasChanged();
+    }
+
+    public void Close()
+    {
+        if (!isCreating)
+        {
+            showModal = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CloseAndRefresh()
+    {
+        showModal = false;
+        if (OnChannelCreated.HasDelegate)
+        {
+            await OnChannelCreated.InvokeAsync();
+        }
+        StateHasChanged();
+    }
+
+    private async Task CreateChannel()
+    {
+        if (string.IsNullOrWhiteSpace(channelTitle))
+        {
+            errorMessage = "Channel name is required";
+            return;
+        }
+
+        isCreating = true;
+        errorMessage = "";
+        StateHasChanged();
+
+        try
+        {
+            createdChannel = await ts.CreateChannel(channelTitle.Trim(), channelAbout.Trim());
+
+            if (createdChannel == null)
+            {
+                errorMessage = "Failed to create channel. Please try again.";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error creating channel");
+            errorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isCreating = false;
+            StateHasChanged();
+        }
+    }
+}

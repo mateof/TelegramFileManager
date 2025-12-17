@@ -26,18 +26,23 @@ namespace TelegramDownloader.Data
         private const int FILESPLITSIZE = 524288; // 512 * 1024;
         private TransactionInfoService _tis { get; set; }
         private IDbService _db { get; set; }
+        private ITaskPersistenceService _persistence { get; set; }
         private static WTelegram.Client client = null;
         private static Messages_Chats chats = null;
         private static List<ChatViewBase> favouriteChannels = new List<ChatViewBase>();
         private static Mutex mut = new Mutex();
         private ILogger<IFileService> _logger { get; set; }
 
+        // Event that fires when user successfully logs in
+        public static event EventHandler OnUserLoggedIn;
 
-        public TelegramService(TransactionInfoService tis, IDbService db, ILogger<IFileService> logger)
+
+        public TelegramService(TransactionInfoService tis, IDbService db, ILogger<IFileService> logger, ITaskPersistenceService persistence)
         {
             _tis = tis;
             _db = db;
             _logger = logger;
+            _persistence = persistence;
             // createDownloadFolder();
             mut.WaitOne();
             if (client == null)
@@ -124,6 +129,18 @@ namespace TelegramDownloader.Data
                 // splitSizeGB = 4;
             }
             _logger.LogInformation("Login successful - User: {UserId}, Premium: {IsPremium}", client.User.id, isPremium);
+
+            // Fire the login event to notify subscribers (like TaskResumeService)
+            try
+            {
+                OnUserLoggedIn?.Invoke(this, EventArgs.Empty);
+                _logger.LogInformation("OnUserLoggedIn event fired");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error firing OnUserLoggedIn event");
+            }
+
             return "ok";
         }
         /// <summary>
@@ -304,7 +321,7 @@ namespace TelegramDownloader.Data
                 {
                     ChatViewBase cb = new ChatViewBase();
                     cb.chat = chat;
-                    cb.img64 = ""; // chat.Photo == null ? "" : await getPhotoThumb(chat);
+                    cb.img64 = ""; // Images loaded via /api/channel/image/{id} endpoint
                     allChats.Add(cb);
                 }
             return allChats;
@@ -322,10 +339,102 @@ namespace TelegramDownloader.Data
                 {
                     ChatViewBase cb = new ChatViewBase();
                     cb.chat = chat;
-                    cb.img64 = ""; // chat.Photo == null ? "" : await getPhotoThumb(chat);
+                    cb.img64 = ""; // Images loaded via /api/channel/image/{id} endpoint
                     allChats.Add(cb);
                 }
             return allChats;
+        }
+
+        /// <summary>
+        /// Gets all chats organized by Telegram folders (dialog filters)
+        /// </summary>
+        public async Task<ChatsWithFolders> getChatsWithFolders()
+        {
+            var result = new ChatsWithFolders();
+
+            if (!checkUserLogin()) return result;
+
+            try
+            {
+                // Get all chats first
+                var allChats = await getAllSavedChats();
+                var chatDict = allChats.ToDictionary(c => c.chat.ID);
+                var chatsInFolders = new HashSet<long>();
+
+                // Get dialog filters (folders)
+                var dialogFilters = await client.Messages_GetDialogFilters();
+
+                if (dialogFilters?.filters != null)
+                {
+                    foreach (var filter in dialogFilters.filters)
+                    {
+                        ChatFolderView folder = null;
+                        InputPeer[] includePeers = null;
+
+                        // Handle regular folders (DialogFilter)
+                        if (filter is DialogFilter df)
+                        {
+                            folder = new ChatFolderView
+                            {
+                                Id = df.id,
+                                Title = df.title?.text ?? df.title?.ToString() ?? "Folder",
+                                IconEmoji = df.emoticon ?? "📁"
+                            };
+                            includePeers = df.include_peers;
+                        }
+                        // Handle shared folders (DialogFilterChatlist)
+                        else if (filter is DialogFilterChatlist dfc)
+                        {
+                            folder = new ChatFolderView
+                            {
+                                Id = dfc.id,
+                                Title = dfc.title?.text ?? dfc.title?.ToString() ?? "Shared Folder",
+                                IconEmoji = dfc.emoticon ?? "🔗"
+                            };
+                            includePeers = dfc.include_peers;
+                        }
+
+                        if (folder != null && includePeers != null)
+                        {
+                            foreach (var peer in includePeers)
+                            {
+                                long peerId = peer switch
+                                {
+                                    InputPeerChannel ipc => ipc.channel_id,
+                                    InputPeerChat ipchat => ipchat.chat_id,
+                                    InputPeerUser ipu => ipu.user_id,
+                                    _ => 0
+                                };
+
+                                if (peerId != 0 && chatDict.TryGetValue(peerId, out var chatView))
+                                {
+                                    folder.Chats.Add(chatView);
+                                    chatsInFolders.Add(peerId);
+                                }
+                            }
+
+                            // Only add folders that have chats
+                            if (folder.Chats.Count > 0)
+                            {
+                                result.Folders.Add(folder);
+                            }
+                        }
+                    }
+                }
+
+                // Add ungrouped chats (not in any folder)
+                result.UngroupedChats = allChats
+                    .Where(c => !chatsInFolders.Contains(c.chat.ID))
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting chat folders");
+                // Fallback: return all chats as ungrouped
+                result.UngroupedChats = await getAllSavedChats();
+            }
+
+            return result;
         }
 
         public async Task<Message> uploadFile(string chatId, Stream file, string fileName, string mimeType = null, UploadModel um = null, string caption = null)
@@ -341,16 +450,39 @@ namespace TelegramDownloader.Data
             um.startDate = DateTime.Now;
             um._transmitted = 0;
             _tis.addToUploadList(um);
+
+            // Persist the upload task
+            try
+            {
+                um.OnProgressPersist = async (transmitted, progress, state) =>
+                {
+                    await _persistence.UpdateProgress(um._internalId, transmitted, progress, state);
+                };
+                await _persistence.PersistUpload(um, chatId, um.path);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to persist upload task - continuing without persistence");
+            }
+
             try
             {
                 var inputFile = await client.UploadFileAsync(file, fileName, um.ProgressCallback);
                 var result = await client.SendMediaAsync(peer, caption ?? fileName, inputFile, mimeType);
                 _logger.LogInformation("File upload completed - FileName: {FileName}, MessageId: {MessageId}", fileName, result.id);
+
+                // Mark task as completed
+                await _persistence.MarkCompleted(um._internalId);
+
                 return result;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "File upload failed - FileName: {FileName}, ChatId: {ChatId}", fileName, chatId);
+
+                // Mark task as error
+                await _persistence.MarkError(um._internalId, ex.Message);
+
                 throw;
             }
         }
@@ -637,6 +769,22 @@ namespace TelegramDownloader.Data
 
         }
 
+        public async Task<byte[]?> DownloadChannelPhoto(long channelId)
+        {
+            if (!checkUserLogin() || chats == null) return null;
+
+            if (chats.chats.TryGetValue(channelId, out var chat) && chat.Photo != null)
+            {
+                using var ms = new MemoryStream();
+                // big=true for full resolution, miniThumb=false to avoid tiny thumbnail
+                if (await client.DownloadProfilePhotoAsync(chat, ms, big: true, miniThumb: false) != 0)
+                {
+                    return ms.ToArray();
+                }
+            }
+            return null;
+        }
+
         public async Task<string> downloadPhotoThumb(Photo thumb)
         {
             MemoryStream ms = new MemoryStream();
@@ -673,6 +821,7 @@ namespace TelegramDownloader.Data
             int totalLimit = limit;
             long currentOffset = offset;
             Byte[] response;
+
             if (message is Message msg && msg.media is MessageMediaDocument doc)
             {
                 try
@@ -685,18 +834,11 @@ namespace TelegramDownloader.Data
                             if (totalLimit >= FILESPLITSIZE)
                             {
                                 totalDownloadBytes = FILESPLITSIZE;
-                               
+
                             }
-                            //else if (totalLimit >= 4096)
-                            //{
-                            //    // Busca el mayor múltiplo de 4096 menor o igual a totalLimit
-                            //    totalDownloadBytes = (totalLimit / 4096) * 4096;
-                            //}
                             else
                             {
-                                // Último trozo, menor de 4096
-                                totalDownloadBytes = FILESPLITSIZE; // totalLimit;
-                                //totalDownloadBytes = totalLimit;
+                                totalDownloadBytes = FILESPLITSIZE;
                             }
 
                             InputDocument inputFile = doc.document;
@@ -715,8 +857,8 @@ namespace TelegramDownloader.Data
                             }
                             catch (RpcException ex) when (ex.Code == 303 && ex.Message == "FILE_MIGRATE_X")
                             {
-                                client = await client.GetClientForDC(-ex.X, true);
-                                file = await client.Upload_GetFile(location, currentOffset, limit: totalDownloadBytes);
+                                var dcClient = await client.GetClientForDC(-ex.X, true);
+                                file = await dcClient.Upload_GetFile(location, currentOffset, limit: totalDownloadBytes);
                             }
                             catch (RpcException ex) when (ex.Code == 400 && ex.Message == "OFFSET_INVALID")
                             {
@@ -731,7 +873,6 @@ namespace TelegramDownloader.Data
 
                             if (file is Upload_File uploadFile)
                             {
-                                //uploadFile.WriteTL(new BinaryWriter(memoryStream));
                                 var fileBytes = uploadFile.bytes;
                                 memoryStream.Write(fileBytes, 0, fileBytes.Length);
                                 currentOffset += (totalDownloadBytes);
@@ -749,7 +890,7 @@ namespace TelegramDownloader.Data
                     throw new InvalidOperationException("Unexpected file type returned.");
                 }
             }
-                
+
             throw new ArgumentException("Invalid message or media type.");
         }
 
@@ -769,16 +910,13 @@ namespace TelegramDownloader.Data
 
                 model._transmitted = 0;
                 model._size = document.size;
-                var filename = fileName ?? document.Filename; // use document original filename, or build a name from document ID & MIME type:
+                var filename = fileName ?? document.Filename;
                 filename ??= $"{document.id}.{document.mime_type[(document.mime_type.IndexOf('/') + 1)..]}";
                 if (model.name == null)
                     model.name = filename;
-                // _tis.addToDownloadList(model);
                 _logger.LogInformation("Starting document download - FileName: {FileName}, Size: {SizeMB:F2}MB", filename, document.size / (1024.0 * 1024.0));
-                // using var fileStream = File.Create(filename);
                 MemoryStream dest = new MemoryStream();
-                // using var dest = new FileStream($"{Path.Combine(folder != null ? folder : Path.Combine(Environment.CurrentDirectory, "download"), filename)}", FileMode.Create, FileAccess.Write);
-                await client.DownloadFileAsync(document, ms ?? dest, null, model.ProgressCallback);
+                await client.DownloadFileAsync(document, ms ?? dest, (PhotoSizeBase)null, model.ProgressCallback);
                 _logger.LogInformation("Document download completed - FileName: {FileName}", filename);
                 return ms ?? dest;
             }
@@ -792,14 +930,126 @@ namespace TelegramDownloader.Data
                 }
                 _logger.LogInformation("Starting photo download - FileName: {FileName}", filename);
                 MemoryStream dest = new MemoryStream();
-                // using var dest = new FileStream($"{Path.Combine(Environment.CurrentDirectory!, "wwwroot", "img", "telegram", filename)}", FileMode.Create, FileAccess.Write);
                 var type = await client.DownloadFileAsync(photo, ms ?? dest, (PhotoSizeBase)null, model.ProgressCallback);
-                dest.Close(); // necessary for the renaming
+                dest.Close();
                 _logger.LogInformation("Photo download completed - FileName: {FileName}", filename);
                 return ms ?? dest;
-
-
             }
+            return null;
+        }
+
+        public async Task<Stream> DownloadFileAndReturnWithOffset(ChatMessages message, Stream ms = null, string fileName = null, string folder = null, DownloadModel model = null, long offset = 0)
+        {
+            if (model == null)
+            {
+                model = new DownloadModel();
+                model.tis = _tis;
+            }
+
+            model.m = message;
+            model.channel = message.user;
+
+            if (message.message.media is MessageMediaDocument { document: TL.Document document })
+            {
+                model._size = document.size;
+                model._transmitted = offset;
+                var filename = fileName ?? document.Filename;
+                filename ??= $"{document.id}.{document.mime_type[(document.mime_type.IndexOf('/') + 1)..]}";
+                if (model.name == null)
+                    model.name = filename;
+
+                _logger.LogInformation("Starting document download with offset - FileName: {FileName}, Size: {SizeMB:F2}MB, Offset: {Offset}",
+                    filename, document.size / (1024.0 * 1024.0), offset);
+
+                if (offset == 0)
+                {
+                    MemoryStream dest = new MemoryStream();
+                    await client.DownloadFileAsync(document, ms ?? dest, (PhotoSizeBase)null, model.ProgressCallback);
+                    _logger.LogInformation("Document download completed - FileName: {FileName}", filename);
+                    return ms ?? dest;
+                }
+
+                Stream targetStream = ms ?? new MemoryStream();
+                long currentOffset = offset;
+                long totalSize = document.size;
+
+                InputDocument inputFile = document;
+                var location = new InputDocumentFileLocation
+                {
+                    id = inputFile.id,
+                    access_hash = inputFile.access_hash,
+                    file_reference = inputFile.file_reference,
+                    thumb_size = ""
+                };
+
+                _logger.LogInformation("Resuming download from offset {Offset} of {TotalSize} bytes", currentOffset, totalSize);
+
+                while (currentOffset < totalSize)
+                {
+                    int chunkSize = FILESPLITSIZE;
+                    if (currentOffset + chunkSize > totalSize)
+                    {
+                        long remaining = totalSize - currentOffset;
+                        chunkSize = (int)((remaining + 4095) / 4096 * 4096);
+                        if (chunkSize > FILESPLITSIZE)
+                            chunkSize = FILESPLITSIZE;
+                    }
+
+                    Upload_FileBase file = null;
+                    try
+                    {
+                        file = await client.Upload_GetFile(location, currentOffset, limit: chunkSize);
+                    }
+                    catch (RpcException ex) when (ex.Code == 303 && ex.Message == "FILE_MIGRATE_X")
+                    {
+                        _logger.LogWarning("DC migration required, switching to DC {DC}", -ex.X);
+                        var dcClient = await client.GetClientForDC(-ex.X, true);
+                        file = await dcClient.Upload_GetFile(location, currentOffset, limit: chunkSize);
+                    }
+                    catch (RpcException ex) when (ex.Code == 400 && ex.Message == "OFFSET_INVALID")
+                    {
+                        _logger.LogError(ex, "OFFSET_INVALID at offset {Offset} - file may have changed", currentOffset);
+                        throw;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Download error at offset {Offset}", currentOffset);
+                        throw;
+                    }
+
+                    if (file is Upload_File uploadFile)
+                    {
+                        var fileBytes = uploadFile.bytes;
+                        if (fileBytes.Length == 0)
+                        {
+                            _logger.LogInformation("Received empty chunk - download complete at offset {Offset}", currentOffset);
+                            break;
+                        }
+
+                        await targetStream.WriteAsync(fileBytes, 0, fileBytes.Length);
+                        currentOffset += fileBytes.Length;
+                        model._transmitted = currentOffset;
+                        model.ProgressCallback(currentOffset, totalSize);
+                        continue;
+                    }
+
+                    throw new InvalidOperationException("Unexpected file type returned from Telegram API.");
+                }
+
+                _logger.LogInformation("Document download with offset completed - FileName: {FileName}, FinalOffset: {Offset}",
+                    filename, currentOffset);
+                return targetStream;
+            }
+            else if (message.message.media is MessageMediaPhoto { photo: Photo photo })
+            {
+                _logger.LogInformation("Photo download (no resume support) - PhotoId: {PhotoId}", photo.id);
+                var filename = $"{photo.id}.jpg";
+                MemoryStream dest = new MemoryStream();
+                var type = await client.DownloadFileAsync(photo, ms ?? dest, (PhotoSizeBase)null, model.ProgressCallback);
+                dest.Close();
+                return ms ?? dest;
+            }
+
             return null;
         }
 
@@ -817,7 +1067,6 @@ namespace TelegramDownloader.Data
 
             if (message.message.media is MessageMediaDocument { document: TL.Document document })
             {
-
                 model._transmitted = 0;
                 model._size = document.size;
                 var filename = fileName ?? document.Filename;
@@ -826,10 +1075,8 @@ namespace TelegramDownloader.Data
                 if (shouldAddToList)
                     _tis.addToDownloadList(model);
                 _logger.LogInformation("Starting file download to disk - FileName: {FileName}, Size: {SizeMB:F2}MB", filename, document.size / (1024.0 * 1024.0));
-                // using var fileStream = File.Create(filename);
                 using var dest = new FileStream($"{Path.Combine(folder != null ? folder : Path.Combine(Environment.CurrentDirectory, "local", "temp"), filename)}", FileMode.Create, FileAccess.Write);
-                await client.DownloadFileAsync(document, dest, null, model.ProgressCallback);
-
+                await client.DownloadFileAsync(document, dest, (PhotoSizeBase)null, model.ProgressCallback);
                 _logger.LogInformation("File download to disk completed - FileName: {FileName}", filename);
             }
             else if (message.message.media is MessageMediaPhoto { photo: Photo photo })
@@ -847,12 +1094,10 @@ namespace TelegramDownloader.Data
                 _logger.LogInformation("Photo download to disk completed - FileName: {FileName}", filename);
                 if (type is not Storage_FileType.unknown and not Storage_FileType.partial)
                 {
-                    File.Move(Path.Combine(Environment.CurrentDirectory!, "wwwroot", "img", "telegram", filename), Path.Combine(Environment.CurrentDirectory!, "wwwroot", "img", "telegram", $"{photo.id}.{type}"), true); // rename extension
+                    File.Move(Path.Combine(Environment.CurrentDirectory!, "wwwroot", "img", "telegram", filename), Path.Combine(Environment.CurrentDirectory!, "wwwroot", "img", "telegram", $"{photo.id}.{type}"), true);
                     filename = $"{photo.id}.{type}";
                 }
                 return filename;
-
-
             }
             return null;
         }
@@ -941,5 +1186,46 @@ namespace TelegramDownloader.Data
 
         //    return telegramChatDocuments;
         //}
+
+        public async Task<TL.Channel?> CreateChannel(string title, string about)
+        {
+            try
+            {
+                _logger.LogInformation("Creating channel with title: {Title}", title);
+
+                // Create a new channel (broadcast = true for channel, false for megagroup/supergroup)
+                var updates = await client.Channels_CreateChannel(
+                    title: title,
+                    about: about,
+                    broadcast: true,  // true = channel, false = megagroup
+                    megagroup: false,
+                    for_import: false
+                );
+
+                // Extract the created channel from the updates
+                if (updates is Updates updatesObj)
+                {
+                    var channel = updatesObj.chats.Values.OfType<TL.Channel>().FirstOrDefault();
+                    if (channel != null)
+                    {
+                        _logger.LogInformation("Channel created successfully: {ChannelId} - {Title}", channel.ID, channel.Title);
+
+                        // Refresh the chat list to include the new channel
+                        chats = null;
+                        await getAllChats();
+
+                        return channel;
+                    }
+                }
+
+                _logger.LogWarning("Channel creation returned unexpected result type");
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error creating channel: {Title}", title);
+                throw;
+            }
+        }
     }
 }

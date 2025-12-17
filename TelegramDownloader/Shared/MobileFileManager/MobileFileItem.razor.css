@@ -34,6 +34,9 @@
     padding: 12px 8px;
     text-align: center;
     gap: 8px;
+    background-color: var(--bs-body-bg, #fff);
+    border: 1px solid var(--bs-border-color, #dee2e6);
+    border-radius: 8px;
 }
 
 .mfm-item.mfm-item-grid .mfm-item-info {

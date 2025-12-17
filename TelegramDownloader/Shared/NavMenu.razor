@@ -48,21 +48,33 @@
     }
 
     .sidebar-toggler {
-        background: rgba(255,255,255,0.1);
-        border: none;
-        color: white;
         width: 36px;
         height: 36px;
         border-radius: 0.5rem;
         display: flex;
         align-items: center;
         justify-content: center;
+        color: rgba(255, 255, 255, 0.7);
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
         cursor: pointer;
         transition: all 0.2s ease;
     }
 
+    .sidebar-toggler i {
+        font-size: 1.1rem;
+        transition: transform 0.2s ease;
+    }
+
     .sidebar-toggler:hover {
-        background: rgba(233, 69, 96, 0.3);
+        background: rgba(233, 69, 96, 0.2);
+        border-color: rgba(233, 69, 96, 0.3);
+        color: #e94560;
+        transform: scale(1.05);
+    }
+
+    .sidebar-toggler:hover i {
+        transform: translateY(-2px);
     }
 
     /* Collapse behavior */
@@ -398,6 +410,121 @@
         color: #dc3545;
         transform: scale(1.2);
     }
+
+    /* Folder Group Styles */
+    .folder-group {
+        margin-bottom: 0.5rem;
+    }
+
+    .folder-header {
+        display: flex;
+        align-items: center;
+        padding: 0.5rem 0.75rem;
+        border-radius: 0.5rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        gap: 0.5rem;
+        background: rgba(255,255,255,0.03);
+        border: 1px solid rgba(255,255,255,0.05);
+    }
+
+    .folder-header:hover {
+        background: rgba(255,255,255,0.08);
+        border-color: rgba(255,255,255,0.1);
+    }
+
+    .folder-header.expanded {
+        background: rgba(233, 69, 96, 0.1);
+        border-color: rgba(233, 69, 96, 0.2);
+    }
+
+    .folder-icon {
+        font-size: 1rem;
+        transition: transform 0.2s ease;
+    }
+
+    .folder-header.expanded .folder-icon {
+        transform: rotate(90deg);
+    }
+
+    .folder-emoji {
+        font-size: 1rem;
+    }
+
+    .folder-title {
+        flex: 1;
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: rgba(255,255,255,0.9);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .folder-count {
+        font-size: 0.7rem;
+        padding: 0.125rem 0.5rem;
+        border-radius: 1rem;
+        background: rgba(255,255,255,0.1);
+        color: rgba(255,255,255,0.6);
+    }
+
+    .folder-content {
+        padding-left: 0.75rem;
+        margin-top: 0.25rem;
+        border-left: 2px solid rgba(233, 69, 96, 0.2);
+        margin-left: 0.75rem;
+        display: none;
+    }
+
+    .folder-content.expanded {
+        display: block;
+    }
+
+    .folder-content .channel-item {
+        padding: 0.5rem 0.625rem;
+    }
+
+    /* Ungrouped section */
+    .ungrouped-section {
+        margin-top: 0.75rem;
+        padding-top: 0.75rem;
+        border-top: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .ungrouped-label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: rgba(255,255,255,0.4);
+        padding: 0.25rem 0.75rem;
+        margin-bottom: 0.25rem;
+    }
+
+    /* Channel Avatar */
+    .channel-avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        object-fit: cover;
+        border: 2px solid rgba(255,255,255,0.1);
+    }
+
+    .channel-avatar-placeholder {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        background: linear-gradient(135deg, #e94560 0%, #c73659 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 0.8rem;
+        font-weight: 600;
+        border: 2px solid rgba(255,255,255,0.1);
+    }
 </style>
 
 <div class="sidebar-nav">
@@ -408,7 +535,7 @@
             <span>TelegramFileManager</span>
         </a>
         <button class="sidebar-toggler" @onclick="ToggleNavMenu" title="Toggle menu">
-            <i class="bi @(collapseNavMenu ? "bi-list" : "bi-x-lg")"></i>
+            <i class="bi @(collapseNavMenu ? "bi-chevron-down" : "bi-chevron-up")"></i>
         </button>
     </div>
 
@@ -421,6 +548,9 @@
             </button>
             <button class="sidebar-action-btn" @onclick="RefreshChannels" title="Refresh channels">
                 <i class="bi bi-arrow-clockwise"></i>
+            </button>
+            <button class="sidebar-action-btn" @onclick="HandleCreateChannel" title="Create Channel">
+                <i class="bi bi-plus-circle"></i>
             </button>
             <button class="sidebar-action-btn" @onclick="showPlayer" title="Audio Player">
                 <i class="bi bi-music-note-beamed"></i>
@@ -467,29 +597,7 @@
                             {
                                 @foreach (ChatViewBase cb in mineChats)
                                 {
-                                    <div class="channel-item" @onclick="ToggleNavMenu">
-                                        <span class="channel-item-star @(isInFavourite(cb.chat.ID) ? "active" : "")"
-                                              @onclick="async () => await ToggleStar(cb.chat.ID)"
-                                              @onclick:stopPropagation="true">
-                                            <i class="bi @(isInFavourite(cb.chat.ID) ? "bi-star-fill" : "bi-star")"></i>
-                                        </span>
-                                        <div class="channel-item-content">
-                                            <NavLink class="channel-item-link" href="@($"/fm/{cb.chat.ID}")" Match="NavLinkMatch.All">
-                                                @cb.chat.Title
-                                            </NavLink>
-                                        </div>
-                                        <div class="channel-item-actions">
-                                            @if (GeneralConfigStatic.config.ShouldShowPaginatedFileChannel)
-                                            {
-                                                <button class="channel-action-btn" @onclick="@(async () => await goTo($"/filegrid/{cb.chat.ID}"))" @onclick:stopPropagation="true" title="Grid view">
-                                                    <i class="bi bi-grid-3x3"></i>
-                                                </button>
-                                            }
-                                            <button class="channel-action-btn" @onclick="@(async () => await goTo($"/fetchdata/{cb.chat.ID}"))" @onclick:stopPropagation="true" title="Chat view">
-                                                <i class="bi bi-chat-left-text"></i>
-                                            </button>
-                                        </div>
-                                    </div>
+                                    @RenderChannelItem(cb)
                                 }
                             }
                         </div>
@@ -513,29 +621,7 @@
                             {
                                 @foreach (ChatViewBase cb in favouriteChats)
                                 {
-                                    <div class="channel-item" @onclick="ToggleNavMenu">
-                                        <span class="channel-item-star active"
-                                              @onclick="async () => await removeStar(cb.chat.ID)"
-                                              @onclick:stopPropagation="true">
-                                            <i class="bi bi-star-fill"></i>
-                                        </span>
-                                        <div class="channel-item-content">
-                                            <NavLink class="channel-item-link" href="@($"/fm/{cb.chat.ID}")" Match="NavLinkMatch.All">
-                                                @cb.chat.Title
-                                            </NavLink>
-                                        </div>
-                                        <div class="channel-item-actions">
-                                            @if (GeneralConfigStatic.config.ShouldShowPaginatedFileChannel)
-                                            {
-                                                <button class="channel-action-btn" @onclick="@(async () => await goTo($"/filegrid/{cb.chat.ID}"))" @onclick:stopPropagation="true" title="Grid view">
-                                                    <i class="bi bi-grid-3x3"></i>
-                                                </button>
-                                            }
-                                            <button class="channel-action-btn" @onclick="@(async () => await goTo($"/fetchdata/{cb.chat.ID}"))" @onclick:stopPropagation="true" title="Chat view">
-                                                <i class="bi bi-chat-left-text"></i>
-                                            </button>
-                                        </div>
-                                    </div>
+                                    @RenderChannelItem(cb)
                                 }
                             }
                         </div>
@@ -606,27 +692,54 @@
                             {
                                 @foreach (ChatViewBase cb in sChats)
                                 {
-                                    <div class="channel-item" @onclick="ToggleNavMenu">
-                                        <span class="channel-item-star @(isInFavourite(cb.chat.ID) ? "active" : "")"
-                                              @onclick="async () => await ToggleStar(cb.chat.ID)"
-                                              @onclick:stopPropagation="true">
-                                            <i class="bi @(isInFavourite(cb.chat.ID) ? "bi-star-fill" : "bi-star")"></i>
-                                        </span>
-                                        <div class="channel-item-content">
-                                            <NavLink class="channel-item-link" href="@($"/fm/{cb.chat.ID}")" Match="NavLinkMatch.All">
-                                                @cb.chat.Title
-                                            </NavLink>
+                                    @RenderChannelItem(cb)
+                                }
+                            }
+                        </div>
+                    </Content>
+                </Tab>
+
+                <Tab Title="Folders" Name="Folders">
+                    <TitleTemplate>
+                        <i class="bi bi-folder-fill"></i> Folders
+                    </TitleTemplate>
+                    <Content>
+                        <div class="sidebar-channel-list">
+                            @if (chatsWithFolders.Folders.Count == 0)
+                            {
+                                <div class="empty-state">
+                                    <i class="bi bi-folder"></i>
+                                    <div>No folders found</div>
+                                    <small style="color: rgba(255,255,255,0.4);">Create folders in Telegram app</small>
+                                </div>
+                            }
+                            else
+                            {
+                                @foreach (var folder in chatsWithFolders.Folders)
+                                {
+                                    var folderChatsFiltered = GetFolderChatsFiltered(folder, false);
+                                    <div class="folder-group">
+                                        <div class="folder-header @(folder.IsExpanded ? "expanded" : "")"
+                                             @onclick="() => ToggleFolder(folder.Id)">
+                                            <i class="bi bi-chevron-right folder-icon"></i>
+                                            <span class="folder-emoji">@folder.IconEmoji</span>
+                                            <span class="folder-title">@folder.Title</span>
+                                            <span class="folder-count">@folderChatsFiltered.Count</span>
                                         </div>
-                                        <div class="channel-item-actions">
-                                            @if (GeneralConfigStatic.config.ShouldShowPaginatedFileChannel)
+                                        <div class="folder-content @(folder.IsExpanded ? "expanded" : "")">
+                                            @if (folderChatsFiltered.Any())
                                             {
-                                                <button class="channel-action-btn" @onclick="@(async () => await goTo($"/filegrid/{cb.chat.ID}"))" @onclick:stopPropagation="true" title="Grid view">
-                                                    <i class="bi bi-grid-3x3"></i>
-                                                </button>
+                                                @foreach (ChatViewBase cb in folderChatsFiltered)
+                                                {
+                                                    @RenderChannelItem(cb)
+                                                }
                                             }
-                                            <button class="channel-action-btn" @onclick="@(async () => await goTo($"/fetchdata/{cb.chat.ID}"))" @onclick:stopPropagation="true" title="Chat view">
-                                                <i class="bi bi-chat-left-text"></i>
-                                            </button>
+                                            else
+                                            {
+                                                <div class="empty-state" style="padding: 1rem;">
+                                                    <small>No channels match</small>
+                                                </div>
+                                            }
                                         </div>
                                     </div>
                                 }
@@ -644,6 +757,7 @@
 
     [Parameter] public EventCallback OnClickCallback { get; set; }
     [Parameter] public EventCallback OnClickOpenImportCallback { get; set; }
+    [Parameter] public EventCallback OnClickCreateChannelCallback { get; set; }
     [Parameter] public EventCallback<bool> OnCollapseChanged { get; set; }
 
     Tabs tabs = default!;
@@ -653,6 +767,7 @@
     private List<ChatViewBase> mineChats = new List<ChatViewBase>();
     private List<BsonSharedInfoModel> sharedChats = new List<BsonSharedInfoModel>();
     private List<ChatViewBase> favouriteChats = new List<ChatViewBase>();
+    private ChatsWithFolders chatsWithFolders = new ChatsWithFolders();
     private string searchString = "";
     private bool collapseNavMenu = true;
     private bool showSearch = false;
@@ -737,10 +852,20 @@
         }
     }
 
+    private async Task HandleCreateChannel()
+    {
+        ToggleNavMenu();
+        if (OnClickCreateChannelCallback.HasDelegate)
+        {
+            await OnClickCreateChannelCallback.InvokeAsync(null);
+        }
+    }
+
     public async Task RefreshChannels()
     {
         PreloadService.Show(SpinnerColor.Light, "Loading data...");
         allChats = await ts.getAllChats();
+        chatsWithFolders = await ts.getChatsWithFolders();
         await OnInitializedAsync();
         PreloadService.Hide();
     }
@@ -806,6 +931,95 @@
         filterMyChats(searchString);
     }
 
+    private void ToggleFolder(int folderId)
+    {
+        var folder = chatsWithFolders.Folders.FirstOrDefault(f => f.Id == folderId);
+        if (folder != null)
+        {
+            folder.IsExpanded = !folder.IsExpanded;
+            StateHasChanged();
+        }
+    }
+
+    private IEnumerable<ChatViewBase> FilterChats(List<ChatViewBase> chats)
+    {
+        if (string.IsNullOrEmpty(searchString))
+        {
+            return chats;
+        }
+        return chats.Where(x => x.chat.Title.ToLower().Contains(searchString.ToLower()));
+    }
+
+    private List<ChatViewBase> GetUngroupedChatsFiltered()
+    {
+        return FilterChats(chatsWithFolders.UngroupedChats)
+            .Where(c => sChats.Any(s => s.chat.ID == c.chat.ID))
+            .ToList();
+    }
+
+    private List<ChatViewBase> GetFolderChatsFiltered(ChatFolderView folder, bool filterBySChats = true)
+    {
+        var filtered = FilterChats(folder.Chats);
+        if (filterBySChats)
+        {
+            return filtered.Where(c => sChats.Any(s => s.chat.ID == c.chat.ID)).ToList();
+        }
+        return filtered.ToList();
+    }
+
+    private RenderFragment RenderChannelItem(ChatViewBase cb) => __builder =>
+    {
+        <div class="channel-item" @onclick="ToggleNavMenu">
+            <span class="channel-item-star @(isInFavourite(cb.chat.ID) ? "active" : "")"
+                  @onclick="async () => await ToggleStar(cb.chat.ID)"
+                  @onclick:stopPropagation="true">
+                <i class="bi @(isInFavourite(cb.chat.ID) ? "bi-star-fill" : "bi-star")"></i>
+            </span>
+            @if (GeneralConfigStatic.config.ShowChannelImages)
+            {
+                <img src="/api/channel/image/@cb.chat.ID"
+                     alt="@cb.chat.Title"
+                     class="channel-avatar"
+                     loading="lazy"
+                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';" />
+                <div class="channel-avatar-placeholder" style="display: none;">
+                    @GetChannelInitials(cb.chat.Title)
+                </div>
+            }
+            else
+            {
+                <div class="channel-avatar-placeholder">
+                    @GetChannelInitials(cb.chat.Title)
+                </div>
+            }
+            <div class="channel-item-content">
+                <NavLink class="channel-item-link" href="@($"/fm/{cb.chat.ID}")" Match="NavLinkMatch.All">
+                    @cb.chat.Title
+                </NavLink>
+            </div>
+            <div class="channel-item-actions">
+                @if (GeneralConfigStatic.config.ShouldShowPaginatedFileChannel)
+                {
+                    <button class="channel-action-btn" @onclick="@(async () => await goTo($"/filegrid/{cb.chat.ID}"))" @onclick:stopPropagation="true" title="Grid view">
+                        <i class="bi bi-grid-3x3"></i>
+                    </button>
+                }
+                <button class="channel-action-btn" @onclick="@(async () => await goTo($"/fetchdata/{cb.chat.ID}"))" @onclick:stopPropagation="true" title="Chat view">
+                    <i class="bi bi-chat-left-text"></i>
+                </button>
+            </div>
+        </div>
+    };
+
+    private string GetChannelInitials(string title)
+    {
+        if (string.IsNullOrEmpty(title)) return "?";
+        var words = title.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (words.Length >= 2)
+            return $"{words[0][0]}{words[1][0]}".ToUpper();
+        return title.Length >= 2 ? title.Substring(0, 2).ToUpper() : title.ToUpper();
+    }
+
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
@@ -817,6 +1031,7 @@
     protected override async Task OnInitializedAsync()
     {
         allChats = await ts.getAllSavedChats();
+        chatsWithFolders = await ts.getChatsWithFolders();
         filterChats();
         favouriteChats = (await ts.GetFouriteChannels(false)).Where(x => sChats.Select(x => x.chat.ID).ToList().Contains(x.chat.ID)).ToList();
         sharedChats = await db.getSharedInfoList(filter: searchString);

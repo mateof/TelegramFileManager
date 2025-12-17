@@ -1,0 +1,483 @@
+@using TelegramDownloader.Data
+@using TelegramDownloader.Data.db
+@using TelegramDownloader.Models
+@using TelegramDownloader.Models.Persistence
+@using TelegramDownloader.Services
+@implements IDisposable
+
+@inject ITaskPersistenceService taskPersistence
+@inject IDbService dbService
+@inject TransactionInfoService tis
+@inject IServiceProvider serviceProvider
+@inject ILogger<PersistedTasksTable> logger
+
+<div class="persisted-tasks-header">
+    <div class="selection-info">
+        @if (selectedTasks.Count > 0)
+        {
+            <span class="selected-count">@selectedTasks.Count selected</span>
+            <button class="btn btn-sm btn-outline-danger" @onclick="DeleteSelected" title="Delete selected">
+                <i class="bi bi-trash3"></i> Delete Selected
+            </button>
+            <button class="btn btn-sm btn-outline-success" @onclick="ResumeSelected" title="Resume selected">
+                <i class="bi bi-play-fill"></i> Resume Selected
+            </button>
+        }
+    </div>
+    <div class="refresh-btn">
+        <button class="btn btn-sm btn-outline-secondary" @onclick="RefreshData" title="Refresh">
+            <i class="bi bi-arrow-clockwise @(isLoading ? "spin" : "")"></i>
+        </button>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="loading-container">
+        <Spinner Type="SpinnerType.Border" />
+        <span>Loading persisted tasks...</span>
+    </div>
+}
+else if (tasks == null || tasks.Count == 0)
+{
+    <div class="empty-state">
+        <i class="bi bi-inbox"></i>
+        <h5>No Persisted Tasks</h5>
+        <p>There are no pending tasks saved in the database.</p>
+    </div>
+}
+else
+{
+    <div class="persisted-tasks-grid">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th class="col-select">
+                        <input type="checkbox" @bind="selectAll" @bind:after="ToggleSelectAll" title="Select all" />
+                    </th>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Channel</th>
+                    <th>Progress</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var task in tasks)
+                {
+                    <tr class="@(selectedTasks.Contains(task.InternalId) ? "selected" : "")">
+                        <td class="col-select">
+                            <input type="checkbox" checked="@selectedTasks.Contains(task.InternalId)"
+                                   @onchange="e => ToggleSelection(task.InternalId, (bool)e.Value)" />
+                        </td>
+                        <td>
+                            <div class="task-name">
+                                <i class="bi @GetTypeIcon(task.Type)"></i>
+                                <span title="@task.Name">@GetShortName(task.Name)</span>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="type-badge @task.Type.ToString().ToLower()">
+                                @GetTypeText(task.Type)
+                            </span>
+                        </td>
+                        <td>
+                            <span class="channel-name" title="@task.ChannelName">
+                                @GetShortName(task.ChannelName ?? task.ChannelId, 20)
+                            </span>
+                        </td>
+                        <td>
+                            <div class="progress-cell">
+                                <div class="progress" style="height: 8px;">
+                                    <div class="progress-bar @GetProgressClass(task)"
+                                         style="width: @task.Progress%;"
+                                         role="progressbar">
+                                    </div>
+                                </div>
+                                <span class="progress-text">@task.Progress%</span>
+                            </div>
+                        </td>
+                        <td>
+                            <span class="status-badge @GetStatusClass(task.State)">
+                                <i class="bi @GetStatusIcon(task.State)"></i>
+                                @task.State
+                            </span>
+                        </td>
+                        <td>
+                            <span class="date-text" title="@task.CreationDate.ToString("yyyy-MM-dd HH:mm:ss")">
+                                @GetRelativeTime(task.CreationDate)
+                            </span>
+                        </td>
+                        <td>
+                            <div class="action-buttons">
+                                @if (task.State != StateTask.Working && task.State != StateTask.Completed)
+                                {
+                                    <button class="action-btn resume" @onclick="() => ResumeTask(task)" title="Resume">
+                                        <i class="bi bi-play-fill"></i>
+                                    </button>
+                                }
+                                <button class="action-btn delete" @onclick="() => DeleteTask(task)" title="Delete">
+                                    <i class="bi bi-trash3"></i>
+                                </button>
+                                @if (!string.IsNullOrEmpty(task.LastError))
+                                {
+                                    <button class="action-btn error-info" @onclick="() => ShowError(task)" title="View error">
+                                        <i class="bi bi-exclamation-triangle"></i>
+                                    </button>
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+<Modal @ref="errorModal" Title="Error Details">
+    <BodyTemplate>
+        <div class="error-details">
+            <p><strong>Task:</strong> @selectedErrorTask?.Name</p>
+            <p><strong>Error:</strong></p>
+            <pre class="error-message">@selectedErrorTask?.LastError</pre>
+        </div>
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Secondary" @onclick="() => errorModal.HideAsync()">Close</Button>
+    </FooterTemplate>
+</Modal>
+
+<ConfirmDialog @ref="confirmDialog" />
+
+@code {
+    private List<PersistedTaskModel> tasks = new();
+    private HashSet<string> selectedTasks = new();
+    private bool selectAll = false;
+    private bool isLoading = true;
+    private Modal errorModal = default!;
+    private ConfirmDialog confirmDialog = default!;
+    private PersistedTaskModel? selectedErrorTask;
+    private bool _disposed = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshData();
+    }
+
+    private async Task RefreshData()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            tasks = await taskPersistence.LoadPendingTasks();
+            selectedTasks.Clear();
+            selectAll = false;
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error loading persisted tasks");
+            tasks = new List<PersistedTaskModel>();
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ToggleSelectAll()
+    {
+        if (selectAll)
+        {
+            selectedTasks = tasks.Select(t => t.InternalId).ToHashSet();
+        }
+        else
+        {
+            selectedTasks.Clear();
+        }
+    }
+
+    private void ToggleSelection(string internalId, bool selected)
+    {
+        if (selected)
+            selectedTasks.Add(internalId);
+        else
+            selectedTasks.Remove(internalId);
+
+        selectAll = selectedTasks.Count == tasks.Count;
+    }
+
+    private async Task DeleteTask(PersistedTaskModel task)
+    {
+        var confirmed = await confirmDialog.ShowAsync(
+            title: "Delete Task",
+            message1: $"Are you sure you want to delete '{task.Name}'?",
+            message2: "This action cannot be undone.");
+
+        if (confirmed)
+        {
+            try
+            {
+                await dbService.DeleteTask(task.InternalId);
+                tasks.Remove(task);
+                selectedTasks.Remove(task.InternalId);
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error deleting task {InternalId}", task.InternalId);
+            }
+        }
+    }
+
+    private async Task DeleteSelected()
+    {
+        if (selectedTasks.Count == 0) return;
+
+        var confirmed = await confirmDialog.ShowAsync(
+            title: "Delete Selected Tasks",
+            message1: $"Are you sure you want to delete {selectedTasks.Count} task(s)?",
+            message2: "This action cannot be undone.");
+
+        if (confirmed)
+        {
+            try
+            {
+                foreach (var internalId in selectedTasks.ToList())
+                {
+                    await dbService.DeleteTask(internalId);
+                    tasks.RemoveAll(t => t.InternalId == internalId);
+                }
+                selectedTasks.Clear();
+                selectAll = false;
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error deleting selected tasks");
+            }
+        }
+    }
+
+    private async Task ResumeTask(PersistedTaskModel task)
+    {
+        try
+        {
+            logger.LogInformation("Resuming task: {Name}, Type: {Type}", task.Name, task.Type);
+
+            using var scope = serviceProvider.CreateScope();
+            var fileService = scope.ServiceProvider.GetRequiredService<IFileService>();
+            var telegramService = scope.ServiceProvider.GetRequiredService<ITelegramService>();
+
+            if (task.Type == TaskType.Download)
+            {
+                await ResumeDownloadTask(task, fileService);
+            }
+            else if (task.Type == TaskType.Upload)
+            {
+                await ResumeUploadTask(task, telegramService);
+            }
+
+            // Remove from persisted tasks list after resuming
+            tasks.Remove(task);
+            selectedTasks.Remove(task.InternalId);
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Error resuming task {InternalId}", task.InternalId);
+        }
+    }
+
+    private async Task ResumeDownloadTask(PersistedTaskModel task, IFileService fileService)
+    {
+        // Check if partial file exists
+        long resumeOffset = 0;
+        if (!string.IsNullOrEmpty(task.DestinationPath) && File.Exists(task.DestinationPath))
+        {
+            var fileInfo = new FileInfo(task.DestinationPath);
+            if (fileInfo.Length <= task.TransmittedBytes && fileInfo.Length > 0)
+            {
+                resumeOffset = fileInfo.Length;
+            }
+        }
+
+        var downloadModel = TaskPersistenceMapper.ToDownloadModel(task);
+        downloadModel.tis = tis;
+        downloadModel._transmitted = resumeOffset;
+        downloadModel._transmittedString = HelperService.SizeSuffix(resumeOffset);
+        downloadModel.progress = task.TotalSize > 0 ? (int)(resumeOffset * 100 / task.TotalSize) : 0;
+
+        // Set up persistence callback
+        downloadModel.OnProgressPersist = async (transmitted, progress, state) =>
+        {
+            await taskPersistence.UpdateProgress(task.InternalId, transmitted, progress, state);
+        };
+
+        // Handle completion
+        downloadModel.EventStatechanged += async (sender, args) =>
+        {
+            if (downloadModel.state == StateTask.Completed)
+            {
+                await taskPersistence.MarkCompleted(task.InternalId);
+            }
+        };
+
+        if (fileService is FileServiceV2 fsv2)
+        {
+            downloadModel.callbacks = new Callbacks();
+            downloadModel.callbacks.callback = async () =>
+            {
+                await fsv2.DownloadFileNowV2WithOffset(
+                    task.ChannelId,
+                    task.MessageId ?? (task.MessageIds?.FirstOrDefault() ?? 0),
+                    task.DestinationPath,
+                    downloadModel,
+                    resumeOffset);
+            };
+
+            tis.addToPendingDownloadList(downloadModel, atFirst: true, chekDownloads: true);
+        }
+    }
+
+    private async Task ResumeUploadTask(PersistedTaskModel task, ITelegramService telegramService)
+    {
+        if (!File.Exists(task.SourcePath))
+        {
+            await taskPersistence.MarkError(task.InternalId, $"Source file not found: {task.SourcePath}");
+            return;
+        }
+
+        var uploadModel = TaskPersistenceMapper.ToUploadModel(task);
+        uploadModel.tis = tis;
+        uploadModel._transmitted = 0;
+        uploadModel.progress = 0;
+        uploadModel.state = StateTask.Pending;
+
+        uploadModel.OnProgressPersist = async (transmitted, progress, state) =>
+        {
+            await taskPersistence.UpdateProgress(task.InternalId, transmitted, progress, state);
+        };
+
+        tis.addToUploadList(uploadModel);
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                using var fileStream = new FileStream(task.SourcePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                await telegramService.uploadFile(task.ChannelId, fileStream, task.Name, um: uploadModel);
+                await taskPersistence.MarkCompleted(task.InternalId);
+            }
+            catch (Exception ex)
+            {
+                uploadModel.state = StateTask.Error;
+                await taskPersistence.MarkError(task.InternalId, ex.Message);
+            }
+        });
+    }
+
+    private async Task ResumeSelected()
+    {
+        if (selectedTasks.Count == 0) return;
+
+        var tasksToResume = tasks.Where(t => selectedTasks.Contains(t.InternalId) && t.State != StateTask.Working).ToList();
+
+        foreach (var task in tasksToResume)
+        {
+            await ResumeTask(task);
+        }
+    }
+
+    private async Task ShowError(PersistedTaskModel task)
+    {
+        selectedErrorTask = task;
+        await errorModal.ShowAsync();
+    }
+
+    private string GetShortName(string name, int maxLength = 30)
+    {
+        if (string.IsNullOrEmpty(name)) return "Unknown";
+        return name.Length > maxLength ? name.Substring(0, maxLength - 3) + "..." : name;
+    }
+
+    private string GetTypeIcon(TaskType type)
+    {
+        return type switch
+        {
+            TaskType.Download => "bi-download",
+            TaskType.Upload => "bi-upload",
+            TaskType.BatchDownload => "bi-collection",
+            TaskType.BatchUpload => "bi-collection",
+            _ => "bi-file-earmark"
+        };
+    }
+
+    private string GetTypeText(TaskType type)
+    {
+        return type switch
+        {
+            TaskType.Download => "Download",
+            TaskType.Upload => "Upload",
+            TaskType.BatchDownload => "Batch DL",
+            TaskType.BatchUpload => "Batch UL",
+            _ => "Unknown"
+        };
+    }
+
+    private string GetProgressClass(PersistedTaskModel task)
+    {
+        if (task.State == StateTask.Completed || task.Progress >= 100) return "bg-success";
+        if (task.State == StateTask.Error) return "bg-danger";
+        return "bg-primary";
+    }
+
+    private string GetStatusClass(StateTask state)
+    {
+        return state switch
+        {
+            StateTask.Working => "working",
+            StateTask.Completed => "completed",
+            StateTask.Error => "error",
+            StateTask.Canceled => "canceled",
+            StateTask.Pending => "pending",
+            StateTask.Paused => "paused",
+            _ => "pending"
+        };
+    }
+
+    private string GetStatusIcon(StateTask state)
+    {
+        return state switch
+        {
+            StateTask.Working => "bi-arrow-repeat",
+            StateTask.Completed => "bi-check-circle",
+            StateTask.Error => "bi-exclamation-circle",
+            StateTask.Canceled => "bi-slash-circle",
+            StateTask.Pending => "bi-clock",
+            StateTask.Paused => "bi-pause-circle",
+            _ => "bi-clock"
+        };
+    }
+
+    private string GetRelativeTime(DateTime dateTime)
+    {
+        var span = DateTime.Now - dateTime;
+
+        if (span.TotalMinutes < 1) return "Just now";
+        if (span.TotalMinutes < 60) return $"{(int)span.TotalMinutes}m ago";
+        if (span.TotalHours < 24) return $"{(int)span.TotalHours}h ago";
+        if (span.TotalDays < 7) return $"{(int)span.TotalDays}d ago";
+
+        return dateTime.ToString("MMM dd");
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+    }
+}

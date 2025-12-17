@@ -1,6 +1,7 @@
 ﻿using MongoDB.Driver;
 using Syncfusion.Blazor.FileManager;
 using TelegramDownloader.Models;
+using TelegramDownloader.Models.Persistence;
 
 namespace TelegramDownloader.Data.db
 {
@@ -53,5 +54,17 @@ namespace TelegramDownloader.Data.db
         Task<BsonFileManagerModel> toBasonFile(string Path, string FolderName, FileManagerDirectoryContent ParentFolder);
         void updateAllPathFiles(string dbName, string oldPath, string newPath, string collectionName = "directory");
         Task<BsonFileManagerModel> updateName(string dbName, string id, string newName, string oldName, bool isFile, string filePath, string collectionName = "directory");
+
+        // Task persistence operations
+        Task<PersistedTaskModel> SaveTask(PersistedTaskModel task);
+        Task<PersistedTaskModel> UpdateTask(PersistedTaskModel task);
+        Task UpdateTaskProgress(string internalId, long transmitted, int progress, StateTask state);
+        Task UpdateTaskState(string internalId, StateTask state);
+        Task DeleteTask(string internalId);
+        Task<List<PersistedTaskModel>> GetAllPendingTasks();
+        Task<PersistedTaskModel> GetTaskByInternalId(string internalId);
+        Task MarkTaskAsError(string internalId, string errorMessage);
+        Task CleanupStaleTasks(int maxAgeDays = 7);
+        Task ClearAllTasks();
     }
 }

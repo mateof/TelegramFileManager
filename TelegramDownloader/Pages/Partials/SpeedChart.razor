@@ -4,15 +4,331 @@
 @inject TransactionInfoService tis
 @inject IJSRuntime JS
 
-<div class="speed-chart-container">
-    <canvas id="speedChart" style="width: 100%; height: @Height;"></canvas>
+<div class="speed-chart-wrapper">
+    <!-- Stats Cards -->
+    <div class="speed-stats">
+        <!-- Download Stats -->
+        <div class="speed-stat-group download">
+            <div class="stat-group-header">
+                <span class="stat-indicator"></span>
+                <span class="stat-label">Download</span>
+            </div>
+            <div class="stat-values">
+                <div class="stat-item">
+                    <span class="stat-title">Current</span>
+                    <span class="stat-value"><span id="dl-current">0.00</span> <small>MB/s</small></span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-title">Peak</span>
+                    <span class="stat-value"><span id="dl-max">0.00</span> <small>MB/s</small></span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-title">Average</span>
+                    <span class="stat-value"><span id="dl-avg">0.00</span> <small>MB/s</small></span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Upload Stats -->
+        <div class="speed-stat-group upload">
+            <div class="stat-group-header">
+                <span class="stat-indicator"></span>
+                <span class="stat-label">Upload</span>
+            </div>
+            <div class="stat-values">
+                <div class="stat-item">
+                    <span class="stat-title">Current</span>
+                    <span class="stat-value"><span id="ul-current">0.00</span> <small>MB/s</small></span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-title">Peak</span>
+                    <span class="stat-value"><span id="ul-max">0.00</span> <small>MB/s</small></span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-title">Average</span>
+                    <span class="stat-value"><span id="ul-avg">0.00</span> <small>MB/s</small></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Chart -->
+    <div class="speed-chart-container">
+        <div class="chart-time-range">
+            <i class="bi bi-clock-history"></i>
+            <span>Last 10 minutes</span>
+        </div>
+        <div class="live-indicator">
+            <span class="live-dot"></span>
+            <span>Live</span>
+        </div>
+        <canvas id="speedChart"></canvas>
+    </div>
 </div>
+
+<style>
+    .speed-chart-wrapper {
+        display: flex;
+        flex-direction: column;
+        gap: 1.25rem;
+    }
+
+    .speed-stats {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+    }
+
+    .speed-stat-group {
+        background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+        border-radius: 1rem;
+        padding: 1.25rem;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+        transition: all 0.3s ease;
+    }
+
+    .speed-stat-group:hover {
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+        transform: translateY(-2px);
+    }
+
+    .stat-group-header {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        margin-bottom: 1rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid #f0f0f0;
+    }
+
+    .stat-indicator {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        position: relative;
+    }
+
+    .stat-indicator::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        opacity: 0.3;
+        animation: pulse-ring 2s ease-out infinite;
+    }
+
+    @@keyframes pulse-ring {
+        0% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.3; }
+        50% { transform: translate(-50%, -50%) scale(1.2); opacity: 0.1; }
+        100% { transform: translate(-50%, -50%) scale(0.8); opacity: 0.3; }
+    }
+
+    .speed-stat-group.download .stat-indicator {
+        background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+        box-shadow: 0 0 12px rgba(34, 197, 94, 0.5);
+    }
+
+    .speed-stat-group.download .stat-indicator::after {
+        background: #22c55e;
+    }
+
+    .speed-stat-group.upload .stat-indicator {
+        background: linear-gradient(135deg, #e94560 0%, #c73659 100%);
+        box-shadow: 0 0 12px rgba(233, 69, 96, 0.5);
+    }
+
+    .speed-stat-group.upload .stat-indicator::after {
+        background: #e94560;
+    }
+
+    .stat-label {
+        font-weight: 700;
+        font-size: 0.8rem;
+        color: #374151;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+    }
+
+    .stat-values {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .stat-item {
+        flex: 1;
+        text-align: center;
+        padding: 0.5rem;
+        background: rgba(0, 0, 0, 0.02);
+        border-radius: 0.5rem;
+    }
+
+    .stat-title {
+        display: block;
+        font-size: 0.65rem;
+        color: #9ca3af;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 0.35rem;
+        font-weight: 600;
+    }
+
+    .stat-value {
+        display: block;
+        font-size: 1.15rem;
+        font-weight: 800;
+        color: #1f2937;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .stat-value small {
+        font-size: 0.65rem;
+        font-weight: 600;
+        color: #9ca3af;
+        margin-left: 2px;
+    }
+
+    .speed-stat-group.download .stat-value {
+        color: #16a34a;
+    }
+
+    .speed-stat-group.upload .stat-value {
+        color: #e94560;
+    }
+
+    /* Chart Container - Modern Style */
+    .speed-chart-container {
+        position: relative;
+        height: 280px;
+        width: 100%;
+        background: linear-gradient(180deg, #ffffff 0%, #fafbfc 50%, #f5f7fa 100%);
+        border-radius: 1rem;
+        padding: 1.25rem;
+        border: 1px solid #e5e7eb;
+        box-shadow:
+            0 4px 6px -1px rgba(0, 0, 0, 0.05),
+            0 2px 4px -1px rgba(0, 0, 0, 0.03),
+            inset 0 1px 0 rgba(255, 255, 255, 0.8);
+        overflow: hidden;
+    }
+
+    /* Decorative background pattern */
+    .speed-chart-container::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-image:
+            linear-gradient(rgba(0, 0, 0, 0.015) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(0, 0, 0, 0.015) 1px, transparent 1px);
+        background-size: 40px 40px;
+        pointer-events: none;
+        border-radius: 1rem;
+    }
+
+    /* Subtle glow effect at bottom */
+    .speed-chart-container::after {
+        content: '';
+        position: absolute;
+        bottom: 0;
+        left: 10%;
+        right: 10%;
+        height: 60%;
+        background: linear-gradient(
+            to top,
+            rgba(34, 197, 94, 0.03) 0%,
+            transparent 100%
+        );
+        pointer-events: none;
+        border-radius: 0 0 1rem 1rem;
+    }
+
+    .speed-chart-container canvas {
+        position: relative;
+        z-index: 1;
+        width: 100% !important;
+        height: 100% !important;
+    }
+
+    /* Chart header with time indicator */
+    .chart-time-range {
+        position: absolute;
+        top: 0.75rem;
+        left: 1.25rem;
+        font-size: 0.7rem;
+        color: #9ca3af;
+        font-weight: 500;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+
+    .chart-time-range i {
+        font-size: 0.75rem;
+    }
+
+    /* Live indicator */
+    .live-indicator {
+        position: absolute;
+        top: 0.75rem;
+        right: 1.25rem;
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.7rem;
+        color: #22c55e;
+        font-weight: 600;
+        z-index: 2;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .live-dot {
+        width: 6px;
+        height: 6px;
+        background: #22c55e;
+        border-radius: 50%;
+        animation: live-pulse 1.5s ease-in-out infinite;
+    }
+
+    @@keyframes live-pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.5; transform: scale(1.3); }
+    }
+
+    @@media (max-width: 576px) {
+        .speed-stats {
+            grid-template-columns: 1fr;
+        }
+
+        .stat-values {
+            justify-content: space-around;
+        }
+
+        .speed-chart-container {
+            height: 220px;
+            padding: 1rem;
+        }
+
+        .stat-value {
+            font-size: 1rem;
+        }
+    }
+</style>
 
 @code {
     [Parameter]
-    public string Height { get; set; } = "300px";
+    public string Height { get; set; } = "250px";
 
     private bool chartInitialized = false;
+    private bool _disposed = false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -24,22 +340,56 @@
     {
         if (firstRender)
         {
-            await InitializeChart();
-            chartInitialized = true;
-            await LoadInitialData();
+            try
+            {
+                await InitializeChart();
+                chartInitialized = true;
+                await LoadInitialData();
+            }
+            catch (TaskCanceledException)
+            {
+                // Circuit disconnected, ignore
+            }
+            catch (Microsoft.JSInterop.JSDisconnectedException)
+            {
+                // Circuit disconnected, ignore
+            }
         }
     }
 
     private async void OnNewSpeedHistoryPoint(object? sender, SpeedHistoryEventArgs e)
     {
-        if (chartInitialized)
+        if (_disposed || !chartInitialized)
+            return;
+
+        try
         {
-            await InvokeAsync(async () => await AddSinglePoint(e.DownloadPoint, e.UploadPoint));
+            await InvokeAsync(async () =>
+            {
+                if (!_disposed)
+                {
+                    await AddSinglePoint(e.DownloadPoint, e.UploadPoint);
+                }
+            });
+        }
+        catch (TaskCanceledException)
+        {
+            // Circuit disconnected, ignore
+        }
+        catch (Microsoft.JSInterop.JSDisconnectedException)
+        {
+            // Circuit disconnected, ignore
+        }
+        catch (ObjectDisposedException)
+        {
+            // Component disposed, ignore
         }
     }
 
     private async Task InitializeChart()
     {
+        if (_disposed) return;
+
         int maxPoints = TransactionInfoService.MAX_SPEED_HISTORY_SECONDS / TransactionInfoService.INTERVAL_SPEED_HISTORY_SECONDS;
         int intervalSeconds = TransactionInfoService.INTERVAL_SPEED_HISTORY_SECONDS;
         await JS.InvokeVoidAsync("initSpeedChart", maxPoints, intervalSeconds);
@@ -47,6 +397,8 @@
 
     private async Task LoadInitialData()
     {
+        if (_disposed) return;
+
         var downloadHistory = tis.GetDownloadSpeedsHistoryCopy();
         var uploadHistory = tis.GetUploadSpeedsHistoryCopy();
 
@@ -73,25 +425,39 @@
 
     private async Task AddSinglePoint(SpeedHistory downloadPoint, SpeedHistory uploadPoint)
     {
-        var download = new {
-            time = downloadPoint.time.ToString("HH:mm:ss"),
-            datetime = downloadPoint.time.ToString("dd/MM/yyyy HH:mm:ss"),
-            speed = downloadPoint.speed / 1024.0 / 1024.0,
-            files = downloadPoint.activeFiles
-        };
+        if (_disposed) return;
 
-        var upload = new {
-            time = uploadPoint.time.ToString("HH:mm:ss"),
-            datetime = uploadPoint.time.ToString("dd/MM/yyyy HH:mm:ss"),
-            speed = uploadPoint.speed / 1024.0 / 1024.0,
-            files = uploadPoint.activeFiles
-        };
+        try
+        {
+            var download = new {
+                time = downloadPoint.time.ToString("HH:mm:ss"),
+                datetime = downloadPoint.time.ToString("dd/MM/yyyy HH:mm:ss"),
+                speed = downloadPoint.speed / 1024.0 / 1024.0,
+                files = downloadPoint.activeFiles
+            };
 
-        await JS.InvokeVoidAsync("addSpeedChartPoint", download, upload);
+            var upload = new {
+                time = uploadPoint.time.ToString("HH:mm:ss"),
+                datetime = uploadPoint.time.ToString("dd/MM/yyyy HH:mm:ss"),
+                speed = uploadPoint.speed / 1024.0 / 1024.0,
+                files = uploadPoint.activeFiles
+            };
+
+            await JS.InvokeVoidAsync("addSpeedChartPoint", download, upload);
+        }
+        catch (TaskCanceledException)
+        {
+            // Circuit disconnected, ignore
+        }
+        catch (Microsoft.JSInterop.JSDisconnectedException)
+        {
+            // Circuit disconnected, ignore
+        }
     }
 
     public void Dispose()
     {
+        _disposed = true;
         tis.NewSpeedHistoryPoint -= OnNewSpeedHistoryPoint;
     }
 }

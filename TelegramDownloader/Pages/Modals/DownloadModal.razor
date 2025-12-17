@@ -4,49 +4,76 @@
 @using TelegramDownloader.Services
 @using TelegramDownloader.Shared
 
-
 @inject ITelegramService ts
 @inject IFileService fs
 
 <div class="modal @ModalClass" tabindex="-1" role="dialog" style="display:@ModalDisplay">
-    <div class="modal-dialog" role="document">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Select Folder</h5>
-                <button type="button" class="close" data-dismiss="modal" @onclick="() => Close()" aria-label="Close" style="border-color: transparent;background-color: transparent;">
-                    <span aria-hidden="true">&times;</span>
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content download-modal">
+            <!-- Header -->
+            <div class="modal-header download-modal-header">
+                <div class="modal-title-wrapper">
+                    <div class="modal-icon">
+                        <i class="bi bi-download"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title">Download File</h5>
+                        <p class="modal-subtitle">Choose destination folder and file name</p>
+                    </div>
+                </div>
+                <button type="button" class="btn-close-modal" @onclick="() => Close()" aria-label="Close">
+                    <i class="bi bi-x-lg"></i>
                 </button>
             </div>
-            <div class="modal-body">
+
+            <!-- Body -->
+            <div class="modal-body download-modal-body">
                 @if (ShowBackdrop)
                 {
-                    <EditForm class="form-signin mb-4" Model="model" OnSubmit="Submit" FormName="downloadModelForm">
-                        <div class="form-floating mb-3">
-                            <input class="form-control" type="text" id="filename" value="@filename" aria-label="file name" disabled readonly>
-                            <label for="filename">File Name</label>
+                    <EditForm class="download-form" Model="model" OnSubmit="Submit" FormName="downloadModelForm">
+                        <!-- File Info Card -->
+                        <div class="file-info-card">
+                            <div class="file-icon-wrapper">
+                                <i class="bi @GetFileIcon()"></i>
+                            </div>
+                            <div class="file-info-details">
+                                <div class="file-info-name" title="@filename">@filename</div>
+                                <div class="file-info-size">
+                                    <i class="bi bi-hdd"></i>
+                                    @size
+                                </div>
+                            </div>
                         </div>
 
-                        <div class="form-floating mb-3">
-                            <input class="form-control" type="text" id="filename" value="@size" aria-label="size" disabled readonly>
-                            <label for="filename">Size</label>
+                        <!-- New Name -->
+                        <div class="form-section">
+                            <label class="section-label" for="newFileName">
+                                <i class="bi bi-pencil"></i>
+                                File Name
+                            </label>
+                            <div class="input-wrapper">
+                                <InputText type="text" class="form-control custom-input" id="newFileName" @bind-Value="model!.newName" placeholder="Enter new file name..." />
+                            </div>
                         </div>
-                        <div>
-                            <TelegramDownloader.Shared.Ddtree idTree="dmtree" 
-                            @ref="ddtree"></TelegramDownloader.Shared.Ddtree>
-                        </div>
 
-
-
-                        <div class="form-floating mb-3">
-                            <InputText type="text" class="form-control" id="floatingInput" @bind-Value="model!.newName" />
-                            <label for="floatingInput">New Name</label>
+                        <!-- Destination Folder (at the end so dropdown has room to expand) -->
+                        <div class="form-section folder-section">
+                            <TelegramDownloader.Shared.Ddtree idTree="dmtree" @ref="ddtree" />
                         </div>
                     </EditForm>
                 }
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-primary" @onclick="() => Submit()">Save</button>
-                <button type="button" class="btn btn-secondary" data-dismiss="modal" @onclick="() => Close()">Close</button>
+
+            <!-- Footer -->
+            <div class="modal-footer download-modal-footer">
+                <button type="button" class="btn btn-cancel" @onclick="() => Close()">
+                    <i class="bi bi-x"></i>
+                    Cancel
+                </button>
+                <button type="button" class="btn btn-download" @onclick="() => Submit()">
+                    <i class="bi bi-download"></i>
+                    Download
+                </button>
             </div>
         </div>
     </div>
@@ -103,6 +130,24 @@
     {
         fs.DownloadFileFromChat(mc, model?.newName == "" ? null : model.newName, ddtree.selectedNode == null ? null : ddtree.selectedNode.FirstOrDefault());
         Close();
+    }
+
+    private string GetFileIcon()
+    {
+        if (string.IsNullOrWhiteSpace(filename)) return "bi-file-earmark";
+        var ext = System.IO.Path.GetExtension(filename)?.ToLower();
+        return ext switch
+        {
+            ".mp4" or ".mkv" or ".avi" or ".mov" or ".webm" or ".wmv" => "bi-film",
+            ".mp3" or ".flac" or ".wav" or ".ogg" or ".m4a" or ".aac" => "bi-music-note-beamed",
+            ".jpg" or ".jpeg" or ".png" or ".gif" or ".webp" or ".bmp" => "bi-image",
+            ".zip" or ".rar" or ".7z" or ".tar" or ".gz" => "bi-file-zip",
+            ".pdf" => "bi-file-pdf",
+            ".doc" or ".docx" => "bi-file-word",
+            ".xls" or ".xlsx" => "bi-file-excel",
+            ".txt" => "bi-file-text",
+            _ => "bi-file-earmark"
+        };
     }
 }
 

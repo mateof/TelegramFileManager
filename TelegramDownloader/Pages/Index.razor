@@ -1,4 +1,4 @@
-﻿@layout EmptyLayout
+@layout EmptyLayout
 @page "/"
 @implements IDisposable
 
@@ -11,101 +11,153 @@
 @inject IJSRuntime JSRuntime;
 @inject PreloadService preloadService
 
-<style>
-    .form-signin {
-        width: 100%;
-        max-width: 330px;
-        padding: 15px;
-        margin: auto;
-    }
-
-    .buttons {
-        padding-top: inherit;
-    }
-</style>
 <Preload LoadingText="Loading..." />
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/intl-tel-input@23.0.12/build/css/intlTelInput.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
 
-<PageTitle>Login</PageTitle>
+<PageTitle>Login - Telegram File Manager</PageTitle>
 
-@if (Model != null && Model.type != null)
-{
-<div class="container form-signin">
-    <div class="text-center">
-        <img src="https://static.vecteezy.com/system/resources/previews/023/986/534/large_2x/telegram-logo-telegram-logo-transparent-telegram-icon-transparent-free-free-png.png" alt="Telegram logo" style="max-width: -webkit-fill-available;" />
+<div class="login-page">
+    <div class="login-card">
+        @if (Model != null && Model.type != null)
+        {
+            <!-- Logo -->
+            <div class="logo-container">
+                <img src="https://upload.wikimedia.org/wikipedia/commons/8/82/Telegram_logo.svg" alt="Telegram logo" />
+            </div>
 
-            <EditForm class="form-signin mb-4" Model="Model" OnSubmit="Submit" FormName="LoginModel">
+            <!-- Title based on step -->
+            @switch (Model.type)
+            {
+                case "phone":
+                    <h1 class="login-title">Welcome</h1>
+                    <p class="login-subtitle">Enter your phone number to get started</p>
+                    break;
+                case "vc":
+                    <h1 class="login-title">Verification</h1>
+                    <p class="login-subtitle">Enter the code sent to your phone</p>
+                    break;
+                case "pass":
+                    <h1 class="login-title">Two-Factor Auth</h1>
+                    <p class="login-subtitle">Enter your 2FA password</p>
+                    break;
+                case "ok":
+                    <h1 class="login-title">Welcome Back!</h1>
+                    <p class="login-subtitle">You are successfully authenticated</p>
+                    break;
+            }
+
+            <!-- Step indicator -->
+            <div class="step-indicator">
+                <div class="step @(Model.type == "phone" ? "active" : "completed")"></div>
+                <div class="step @(Model.type == "vc" ? "active" : (Model.type == "pass" || Model.type == "ok" ? "completed" : ""))"></div>
+                <div class="step @(Model.type == "pass" ? "active" : (Model.type == "ok" ? "completed" : ""))"></div>
+                <div class="step @(Model.type == "ok" ? "active completed" : "")"></div>
+            </div>
+
+            <EditForm class="login-form" Model="Model" OnSubmit="Submit" FormName="LoginModel">
                 @switch (Model.type)
                 {
                     case "phone":
                         <div class="form-group">
-                            <label for="phone">Teléfono</label>
-                            <InputText class="form-control" id="phone" type="text" @bind-Value="Model!.value" aria-describedby="phone" maxlength="12" data-mask="+00.000.00.00.00" placeholder="Teléfono" />
+                            <label for="phone"><i class="bi bi-telephone"></i> Phone Number</label>
+                            <InputText class="form-control" id="phone" type="text" @bind-Value="Model!.value"
+                                       aria-describedby="phone" maxlength="15" placeholder="+34 600 000 000" />
                         </div>
                         break;
                     case "vc":
                         <div class="form-group">
-                            <label for="code">Código</label>
-                            <InputText class="form-control" id="code" maxlength="5" type="text" @bind-Value="Model!.value" />
+                            <label for="code"><i class="bi bi-shield-lock"></i> Verification Code</label>
+                            <InputText class="form-control" id="code" maxlength="5" type="text"
+                                       @bind-Value="Model!.value" placeholder="12345" autocomplete="one-time-code" />
                         </div>
                         break;
                     case "pass":
                         <div class="form-group">
-                            <label for="pass">Contraseña</label>
-                            <InputText class="form-control" id="pass" type="password" @bind-Value="Model!.value" />
+                            <label for="pass"><i class="bi bi-key"></i> Password</label>
+                            <InputText class="form-control" id="pass" type="password"
+                                       @bind-Value="Model!.value" placeholder="Enter your 2FA password" />
                         </div>
                         break;
                     case "ok":
-                        <span> Authenticado </span>
+                        <div class="text-center">
+                            <div class="success-badge">
+                                <i class="bi bi-check-circle-fill"></i>
+                                <span>Authenticated</span>
+                            </div>
+                        </div>
                         break;
                 }
-                <div class="form-group buttons">
 
+                <div class="button-group">
                     @if (Model.type == "ok")
                     {
-                        <button class="btn btn-info" @onclick="Salir" type="button">Desconectar</button>
+                        <button class="btn-danger-custom" @onclick="Salir" type="button">
+                            <i class="bi bi-box-arrow-right"></i> Disconnect
+                        </button>
                     }
                     else
                     {
-                        <button class="btn btn-info" type="submit">Send</button>
+                        <button class="btn-primary-custom" type="submit">
+                            @if (Model.type == "phone")
+                            {
+                                <span>Continue</span>
+                                <i class="bi bi-arrow-right"></i>
+                            }
+                            else
+                            {
+                                <span>Verify</span>
+                                <i class="bi bi-check-lg"></i>
+                            }
+                        </button>
                         @if (Model.type != null && Model.type != "phone")
                         {
-                            <button class="btn btn-warning" @onclick="Cancel">Cancel</button>
+                            <button class="btn-secondary-custom" type="button" @onclick="Cancel">
+                                Cancel
+                            </button>
                         }
                     }
                 </div>
+
                 @if (!string.IsNullOrEmpty(imageString))
                 {
-                    <img src="data:image;base64, @imageString" />
+                    <div class="qr-container">
+                        <img src="data:image;base64, @imageString" alt="QR Code" />
+                    </div>
                 }
-
             </EditForm>
-       
-            
-            
-    </div>
-    </div>
-} else
-{
-    <div class="container form-signin">
-        <h3>Checking user data</h3>
-        <div class="text-center">
-            <img src="https://static.vecteezy.com/system/resources/previews/023/986/534/large_2x/telegram-logo-telegram-logo-transparent-telegram-icon-transparent-free-free-png.png" alt="Telegram logo" style="max-width: -webkit-fill-available;" />
-        </div>
-    </div>
-}
 
-
-@*
-
-<SurveyPrompt Title="How is Blazor working for you?" /> *@
+            <div class="login-footer">
+                Telegram File Manager
+            </div>
+        }
+        else
+        {
+            <!-- Loading/Checking state -->
+            <div class="loading-container">
+                <div class="loading-spinner">
+                    <img class="loading-logo" src="https://upload.wikimedia.org/wikipedia/commons/8/82/Telegram_logo.svg" alt="Telegram" />
+                </div>
+                <p class="loading-text">
+                    Checking session
+                    <span class="loading-dots">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </span>
+                </p>
+                <p class="loading-subtext">Please wait while we verify your credentials</p>
+            </div>
+        }
+    </div>
+</div>
 
 @code {
-    // [SupplyParameterFromForm]
     public LoginModel? Model { get; set; } = null;
     private CancellationToken cTokenQr { get; set; }
     CancellationTokenSource source { get; set; }
     private string imageString { get; set; }
+    private string lastFocusedType = null;
 
     protected override async Task OnInitializedAsync()
     {
@@ -122,15 +174,44 @@
         }
     }
 
-
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (Model.type != null && Model.type == "phone")
-            await JSRuntime.InvokeVoidAsync("loadCountries");
+        if (Model?.type != null && Model.type != "ok" && Model.type != lastFocusedType)
+        {
+            lastFocusedType = Model.type;
 
+            if (Model.type == "phone")
+            {
+                await JSRuntime.InvokeVoidAsync("loadCountries");
+                await Task.Delay(100); // Small delay to ensure intl-tel-input is initialized
+            }
+
+            await FocusCurrentInput();
+        }
     }
 
+    private async Task FocusCurrentInput()
+    {
+        try
+        {
+            string elementId = Model?.type switch
+            {
+                "phone" => "phone",
+                "vc" => "code",
+                "pass" => "pass",
+                _ => null
+            };
 
+            if (elementId != null)
+            {
+                await JSRuntime.InvokeVoidAsync("focusElement", elementId);
+            }
+        }
+        catch
+        {
+            // Element might not be rendered yet
+        }
+    }
 
     private async void Submit()
     {
@@ -138,7 +219,8 @@
         {
             var phone = await JSRuntime.InvokeAsync<string>("getNumber");
             Model.type = await ts.checkAuth(phone, Model.type == "phone") ?? "phone";
-        } else
+        }
+        else
         {
             Model.type = await ts.checkAuth(Model.value, Model.type == "phone");
         }
@@ -146,12 +228,11 @@
         Model.value = "";
         StateHasChanged();
         await isLogin();
-        // Logger.LogInformation("Id = {Id}", Model?.Id);
     }
 
     private async Task isLogin()
     {
-        if (Model.type == "ok") 
+        if (Model.type == "ok")
         {
             if (source != null)
             {
@@ -161,15 +242,6 @@
                 }
             }
             NavManager.NavigateTo("/fetchdata");
-        } else
-        {
-            // source = new CancellationTokenSource();
-            // cTokenQr = source.Token;
-            // var user = await ts.CallQrGenerator(GenerateQR, cTokenQr, true);
-            // if (user != null)
-            // {
-            //     NavManager.NavigateTo("/fetchdata");
-            // }
         }
     }
 
@@ -191,7 +263,6 @@
         Model.value = "";
         Model.type = "phone";
         StateHasChanged();
-        // Logger.LogInformation("Id = {Id}", Model?.Id);
     }
 
     private async void Cancel()
