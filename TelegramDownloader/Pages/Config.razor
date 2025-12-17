@@ -428,6 +428,43 @@
                     <div class="config-item">
                         <div class="config-item-info">
                             <div class="config-item-label">
+                                <i class="bi bi-image"></i>
+                                Show Channel Images
+                            </div>
+                            <div class="config-item-description">
+                                Display channel avatars/images in the sidebar channel list
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputCheckbox @bind-Value="Model!.ShowChannelImages" class="form-check-input config-switch" />
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-images"></i>
+                                Channel Image Cache
+                            </div>
+                            <div class="config-item-description">
+                                Clear cached channel images to free disk space or force re-download
+                                @if (cachedImagesSize > 0)
+                                {
+                                    <span class="badge bg-info ms-2">@cachedImagesCount images (@FormatSize(cachedImagesSize))</span>
+                                }
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <button type="button" class="btn btn-outline-warning btn-sm d-flex align-items-center gap-2" @onclick="ClearImageCache" disabled="@(cachedImagesCount == 0)">
+                                <i class="bi bi-trash3"></i>
+                                Clear Cache
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
                                 <i class="bi bi-terminal"></i>
                                 Show Logs in Terminal
                             </div>
@@ -641,11 +678,17 @@
     private int pendingDownloadsCount = 0;
     private int persistedTasksCount = 0;
 
+    // Image cache
+    private static readonly string ImageCacheFolder = Path.Combine(Path.GetTempPath(), "TFM_ChannelImages");
+    private int cachedImagesCount = 0;
+    private long cachedImagesSize = 0;
+
     protected override async Task OnInitializedAsync()
     {
         Model = null;
         await LoadModelAsync();
         await RefreshCounters();
+        RefreshImageCacheInfo();
     }
 
     private async Task LoadModelAsync()
@@ -709,6 +752,64 @@
 
         // Stop the application - the container/service will restart it automatically
         applicationLifetime.StopApplication();
+    }
+
+    private void RefreshImageCacheInfo()
+    {
+        try
+        {
+            if (Directory.Exists(ImageCacheFolder))
+            {
+                var files = Directory.GetFiles(ImageCacheFolder, "*.jpg");
+                cachedImagesCount = files.Length;
+                cachedImagesSize = files.Sum(f => new FileInfo(f).Length);
+            }
+            else
+            {
+                cachedImagesCount = 0;
+                cachedImagesSize = 0;
+            }
+        }
+        catch
+        {
+            cachedImagesCount = 0;
+            cachedImagesSize = 0;
+        }
+    }
+
+    private async Task ClearImageCache()
+    {
+        try
+        {
+            if (Directory.Exists(ImageCacheFolder))
+            {
+                var files = Directory.GetFiles(ImageCacheFolder, "*.jpg");
+                foreach (var file in files)
+                {
+                    File.Delete(file);
+                }
+            }
+            RefreshImageCacheInfo();
+            toastService.Notify(new(ToastType.Success, "Image cache cleared successfully") { Title = "Success", AutoHide = true });
+        }
+        catch (Exception ex)
+        {
+            toastService.Notify(new(ToastType.Danger, $"Error clearing cache: {ex.Message}") { Title = "Error", AutoHide = true });
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private string FormatSize(long bytes)
+    {
+        string[] sizes = { "B", "KB", "MB", "GB" };
+        int order = 0;
+        double size = bytes;
+        while (size >= 1024 && order < sizes.Length - 1)
+        {
+            order++;
+            size /= 1024;
+        }
+        return $"{size:0.##} {sizes[order]}";
     }
 
     public void Dispose()

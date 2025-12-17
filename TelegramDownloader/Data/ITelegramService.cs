@@ -25,6 +25,7 @@ namespace TelegramDownloader.Data
         Task RemoveFavouriteChannel(long id);
         Task<List<ChatViewBase>> getAllChats();
         Task<List<ChatViewBase>> getAllSavedChats();
+        Task<ChatsWithFolders> getChatsWithFolders();
         Task<List<ChatMessages>> getAllMessages(long id, Boolean onlyFiles = false);
         Task<GridDataProviderResult<ChatMessages>> getPaginatedMessages(long id, int page, int size, Boolean onlyFiles = false);
         Task<List<ChatMessages>> getAllMediaMessages(long id, Boolean onlyFiles = false);
@@ -33,6 +34,7 @@ namespace TelegramDownloader.Data
         Task<Message> getMessageFile(string chatId, int idMessage);
         Task<string> getPhotoThumb(ChatBase chat);
         Task<string> downloadPhotoThumb(Photo thumb);
+        Task<byte[]?> DownloadChannelPhoto(long channelId);
         Task logOff();
         Task sendVerificationCode(string vc);
         Task<Message> uploadFile(string chatId, Stream file, string fileName, string mimeType = null, UploadModel um = null, string caption = null);

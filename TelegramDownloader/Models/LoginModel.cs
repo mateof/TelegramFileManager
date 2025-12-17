@@ -51,4 +51,25 @@ namespace TelegramDownloader.Models
         Audio,
         Document
     }
+
+    /// <summary>
+    /// Represents a Telegram chat folder (filter)
+    /// </summary>
+    public class ChatFolderView
+    {
+        public int Id { get; set; }
+        public string Title { get; set; }
+        public string IconEmoji { get; set; }
+        public List<ChatViewBase> Chats { get; set; } = new List<ChatViewBase>();
+        public bool IsExpanded { get; set; } = false;
+    }
+
+    /// <summary>
+    /// Container for organized chats with folders
+    /// </summary>
+    public class ChatsWithFolders
+    {
+        public List<ChatFolderView> Folders { get; set; } = new List<ChatFolderView>();
+        public List<ChatViewBase> UngroupedChats { get; set; } = new List<ChatViewBase>();
+    }
 }

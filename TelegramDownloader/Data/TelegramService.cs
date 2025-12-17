@@ -321,7 +321,7 @@ namespace TelegramDownloader.Data
                 {
                     ChatViewBase cb = new ChatViewBase();
                     cb.chat = chat;
-                    cb.img64 = ""; // chat.Photo == null ? "" : await getPhotoThumb(chat);
+                    cb.img64 = ""; // Images loaded via /api/channel/image/{id} endpoint
                     allChats.Add(cb);
                 }
             return allChats;
@@ -339,10 +339,102 @@ namespace TelegramDownloader.Data
                 {
                     ChatViewBase cb = new ChatViewBase();
                     cb.chat = chat;
-                    cb.img64 = ""; // chat.Photo == null ? "" : await getPhotoThumb(chat);
+                    cb.img64 = ""; // Images loaded via /api/channel/image/{id} endpoint
                     allChats.Add(cb);
                 }
             return allChats;
+        }
+
+        /// <summary>
+        /// Gets all chats organized by Telegram folders (dialog filters)
+        /// </summary>
+        public async Task<ChatsWithFolders> getChatsWithFolders()
+        {
+            var result = new ChatsWithFolders();
+
+            if (!checkUserLogin()) return result;
+
+            try
+            {
+                // Get all chats first
+                var allChats = await getAllSavedChats();
+                var chatDict = allChats.ToDictionary(c => c.chat.ID);
+                var chatsInFolders = new HashSet<long>();
+
+                // Get dialog filters (folders)
+                var dialogFilters = await client.Messages_GetDialogFilters();
+
+                if (dialogFilters?.filters != null)
+                {
+                    foreach (var filter in dialogFilters.filters)
+                    {
+                        ChatFolderView folder = null;
+                        InputPeer[] includePeers = null;
+
+                        // Handle regular folders (DialogFilter)
+                        if (filter is DialogFilter df)
+                        {
+                            folder = new ChatFolderView
+                            {
+                                Id = df.id,
+                                Title = df.title?.text ?? df.title?.ToString() ?? "Folder",
+                                IconEmoji = df.emoticon ?? "📁"
+                            };
+                            includePeers = df.include_peers;
+                        }
+                        // Handle shared folders (DialogFilterChatlist)
+                        else if (filter is DialogFilterChatlist dfc)
+                        {
+                            folder = new ChatFolderView
+                            {
+                                Id = dfc.id,
+                                Title = dfc.title?.text ?? dfc.title?.ToString() ?? "Shared Folder",
+                                IconEmoji = dfc.emoticon ?? "🔗"
+                            };
+                            includePeers = dfc.include_peers;
+                        }
+
+                        if (folder != null && includePeers != null)
+                        {
+                            foreach (var peer in includePeers)
+                            {
+                                long peerId = peer switch
+                                {
+                                    InputPeerChannel ipc => ipc.channel_id,
+                                    InputPeerChat ipchat => ipchat.chat_id,
+                                    InputPeerUser ipu => ipu.user_id,
+                                    _ => 0
+                                };
+
+                                if (peerId != 0 && chatDict.TryGetValue(peerId, out var chatView))
+                                {
+                                    folder.Chats.Add(chatView);
+                                    chatsInFolders.Add(peerId);
+                                }
+                            }
+
+                            // Only add folders that have chats
+                            if (folder.Chats.Count > 0)
+                            {
+                                result.Folders.Add(folder);
+                            }
+                        }
+                    }
+                }
+
+                // Add ungrouped chats (not in any folder)
+                result.UngroupedChats = allChats
+                    .Where(c => !chatsInFolders.Contains(c.chat.ID))
+                    .ToList();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error getting chat folders");
+                // Fallback: return all chats as ungrouped
+                result.UngroupedChats = await getAllSavedChats();
+            }
+
+            return result;
         }
 
         public async Task<Message> uploadFile(string chatId, Stream file, string fileName, string mimeType = null, UploadModel um = null, string caption = null)
@@ -675,6 +767,22 @@ namespace TelegramDownloader.Data
             };
             return "";
 
+        }
+
+        public async Task<byte[]?> DownloadChannelPhoto(long channelId)
+        {
+            if (!checkUserLogin() || chats == null) return null;
+
+            if (chats.chats.TryGetValue(channelId, out var chat) && chat.Photo != null)
+            {
+                using var ms = new MemoryStream();
+                // big=true for full resolution, miniThumb=false to avoid tiny thumbnail
+                if (await client.DownloadProfilePhotoAsync(chat, ms, big: true, miniThumb: false) != 0)
+                {
+                    return ms.ToArray();
+                }
+            }
+            return null;
         }
 
         public async Task<string> downloadPhotoThumb(Photo thumb)
