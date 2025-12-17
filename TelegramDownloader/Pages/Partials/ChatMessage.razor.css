@@ -1,0 +1,255 @@
+/* ===== Chat Message Card Styles ===== */
+
+.message-card {
+    background: #1e1e2e;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 1rem;
+    overflow: hidden;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.message-card:hover {
+    border-color: rgba(0, 136, 204, 0.3);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* Message Header */
+.message-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.875rem 1.25rem;
+    background: #171724;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.message-header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex: 1;
+    min-width: 0;
+}
+
+.message-avatar {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #0088cc 0%, #0066aa 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.9rem;
+    flex-shrink: 0;
+}
+
+.message-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.message-sender {
+    font-weight: 600;
+    color: #fff;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.message-date {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.message-header-right {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-shrink: 0;
+}
+
+/* File Size Badge */
+.file-size-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.75rem;
+    background: rgba(0, 136, 204, 0.15);
+    border: 1px solid rgba(0, 136, 204, 0.25);
+    border-radius: 1rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #0088cc;
+}
+
+.file-size-badge i {
+    font-size: 0.85rem;
+}
+
+/* Actions Dropdown */
+.message-actions {
+    position: relative;
+}
+
+.btn-actions {
+    width: 32px;
+    height: 32px;
+    border-radius: 0.5rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.btn-actions:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #fff;
+}
+
+::deep .dropdown-menu {
+    background: #1a1a2e !important;
+    border: 1px solid rgba(255, 255, 255, 0.1) !important;
+    border-radius: 0.5rem;
+    padding: 0.5rem;
+    min-width: 160px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+::deep .dropdown-item {
+    color: rgba(255, 255, 255, 0.8) !important;
+    border-radius: 0.375rem;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+::deep .dropdown-item:hover {
+    background: rgba(0, 136, 204, 0.2) !important;
+    color: #fff !important;
+}
+
+::deep .dropdown-item i {
+    font-size: 1rem;
+    width: 1.25rem;
+}
+
+/* Message Body */
+.message-body {
+    padding: 1.25rem;
+}
+
+/* File Info */
+.file-info {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.875rem 1rem;
+    background: #151520;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.file-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 0.5rem;
+    background: rgba(0, 136, 204, 0.15);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #0088cc;
+    font-size: 1.25rem;
+    flex-shrink: 0;
+}
+
+.file-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.file-name {
+    font-weight: 500;
+    color: #fff;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.file-meta {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+/* Photo Container */
+.photo-container {
+    border-radius: 0.75rem;
+    overflow: hidden;
+    margin-bottom: 1rem;
+    background: #151520;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.photo-container img {
+    width: 100%;
+    display: block;
+    max-height: 400px;
+    object-fit: contain;
+}
+
+/* Message Text */
+.message-text {
+    color: rgba(255, 255, 255, 0.85);
+    font-size: 0.9rem;
+    line-height: 1.6;
+    word-wrap: break-word;
+}
+
+.message-text a {
+    color: #0088cc;
+    text-decoration: none;
+}
+
+.message-text a:hover {
+    text-decoration: underline;
+}
+
+/* Video indicator */
+.video-indicator {
+    position: relative;
+}
+
+.video-indicator::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 60px;
+    height: 60px;
+    background: rgba(0, 0, 0, 0.6);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* File type specific icons */
+.file-icon.video { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+.file-icon.audio { background: rgba(168, 85, 247, 0.15); color: #a855f7; }
+.file-icon.image { background: rgba(16, 185, 129, 0.15); color: #10b981; }
+.file-icon.archive { background: rgba(245, 158, 11, 0.15); color: #f59e0b; }
+.file-icon.document { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
