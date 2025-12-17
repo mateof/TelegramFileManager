@@ -98,6 +98,13 @@ namespace TelegramDownloader.Models
         public int StaleTaskCleanupDays { get; set; } = 7;
         public bool AutoResumeOnStartup { get; set; } = true;
 
+        // Video Transcoding Settings
+        /// <summary>
+        /// Enable FFmpeg video transcoding for non-browser formats (MKV, AVI, WMV, etc.)
+        /// Requires FFmpeg to be installed on the system
+        /// </summary>
+        public bool EnableVideoTranscoding { get; set; } = false;
+
     }
 
     public class TLConfig

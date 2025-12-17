@@ -7,7 +7,8 @@ EXPOSE 80
 EXPOSE 443
 
 # Install ICU libraries for globalization support (required by BlazorBootstrap NumberInput)
-RUN apk add --no-cache icu-libs
+# Install FFmpeg for video transcoding support (MKV, AVI, WMV, etc.)
+RUN apk add --no-cache icu-libs ffmpeg
 ENV DOTNET_SYSTEM_GLOBALIZATION_INVARIANT=false
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
