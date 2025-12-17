@@ -8,95 +8,105 @@ permissions:
   contents: write
 
 jobs:
-    build:
-        name: Build binaries
-        runs-on: ubuntu-latest
-        steps:
+  build:
+    name: Build binaries
+    runs-on: ubuntu-latest
+    steps:
 
-          - name: '📄 Checkout'
-            uses: actions/checkout@v4
+      - name: '📄 Checkout'
+        uses: actions/checkout@v4
 
-          - name: '📦 Package windows x64'
-            run: |
-                TAG=${{github.event.release.tag_name}}
-                TAG=${TAG:1}
-                echo "$TAG"
-                cd ${{github.workspace}}
-                dotnet publish TelegramDownloader/TelegramDownloader.csproj -r win-x64 -c Release -o bin/win-x64 -p:PublishSingleFile=true,Version=$TAG --self-contained
-                zip -r TelegramFileManager-${{github.event.release.tag_name}}-win-x64.zip bin/win-x64
-                gh release upload ${{github.event.release.tag_name}} TelegramFileManager-${{github.event.release.tag_name}}-win-x64.zip
-            env:
-              GH_TOKEN: ${{ secrets.TOKENBuild }}
-            shell: bash
+      - name: '🔧 Setup .NET'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
 
-          - name: '📦 Package windows x86'
-            run: |
-                TAG=${{github.event.release.tag_name}}
-                TAG=${TAG:1}
-                cd ${{github.workspace}}
-                dotnet publish TelegramDownloader/TelegramDownloader.csproj -r win-x86 -c Release -o bin/win-x86 -p:PublishSingleFile=true,Version=$TAG --self-contained
-                zip -r TelegramFileManager-${{github.event.release.tag_name}}-win-x86.zip bin/win-x86
-                gh release upload ${{github.event.release.tag_name}} TelegramFileManager-${{github.event.release.tag_name}}-win-x86.zip
-            env:
-              GH_TOKEN: ${{ secrets.TOKENBuild }}
-            shell: bash
+      - name: '📦 Extract version'
+        id: version
+        run: |
+          TAG=${{github.event.release.tag_name}}
+          VERSION=${TAG:1}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION"
 
-          - name: '📦 Package windows arm'
-            run: |
-                TAG=${{github.event.release.tag_name}}
-                TAG=${TAG:1}
-                cd ${{github.workspace}}
-                dotnet publish TelegramDownloader/TelegramDownloader.csproj -r win-arm64 -c Release -o bin/win-arm64 -p:PublishSingleFile=true,Version=$TAG --self-contained
-                zip -r TelegramFileManager-${{github.event.release.tag_name}}-win-arm64.zip bin/win-arm64
-                gh release upload ${{github.event.release.tag_name}} TelegramFileManager-${{github.event.release.tag_name}}-win-arm64.zip
-            env:
-              GH_TOKEN: ${{ secrets.TOKENBuild }}
-            shell: bash
+      - name: '🔨 Build all platforms'
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          TAG=${{github.event.release.tag_name}}
 
-          - name: '📦 Package linux x64'
-            run: |
-                TAG=${{github.event.release.tag_name}}
-                TAG=${TAG:1}
-                cd ${{github.workspace}}
-                dotnet publish TelegramDownloader/TelegramDownloader.csproj -r linux-x64 -c Release -o bin/linux-x64 -p:PublishSingleFile=true,Version=$TAG --self-contained
-                zip -r TelegramFileManager-${{github.event.release.tag_name}}-linux-x64.zip bin/linux-x64
-                gh release upload ${{github.event.release.tag_name}} TelegramFileManager-${{github.event.release.tag_name}}-linux-x64.zip
-            env:
-              GH_TOKEN: ${{ secrets.TOKENBuild }}
-            shell: bash
+          echo "Building win-x64..."
+          dotnet publish TelegramDownloader/TelegramDownloader.csproj -r win-x64 -c Release -o bin/win-x64 -p:PublishSingleFile=true,Version=$VERSION --self-contained
 
-          - name: '📦 Package linux arm'
-            run: |
-                TAG=${{github.event.release.tag_name}}
-                TAG=${TAG:1}
-                cd ${{github.workspace}}
-                dotnet publish TelegramDownloader/TelegramDownloader.csproj -r linux-arm -c Release -o bin/linux-arm -p:PublishSingleFile=true,Version=$TAG --self-contained
-                zip -r TelegramFileManager-${{github.event.release.tag_name}}-linux-arm.zip bin/linux-arm
-                gh release upload ${{github.event.release.tag_name}} TelegramFileManager-${{github.event.release.tag_name}}-linux-arm.zip
-            env:
-              GH_TOKEN: ${{ secrets.TOKENBuild }}
-            shell: bash
+          echo "Building win-x86..."
+          dotnet publish TelegramDownloader/TelegramDownloader.csproj -r win-x86 -c Release -o bin/win-x86 -p:PublishSingleFile=true,Version=$VERSION --self-contained
 
-          - name: '📦 Package mac OS x64' 
-            run: |
-                TAG=${{github.event.release.tag_name}}
-                TAG=${TAG:1}
-                cd ${{github.workspace}}
-                dotnet publish TelegramDownloader/TelegramDownloader.csproj -r osx-x64 -c Release -o bin/osx-x64 -p:PublishSingleFile=true,Version=$TAG --self-contained
-                zip -r TelegramFileManager-${{github.event.release.tag_name}}-osx-x64.zip bin/osx-x64
-                gh release upload ${{github.event.release.tag_name}} TelegramFileManager-${{github.event.release.tag_name}}-osx-x64.zip
-            env:
-              GH_TOKEN: ${{ secrets.TOKENBuild }}
-            shell: bash
+          echo "Building win-arm64..."
+          dotnet publish TelegramDownloader/TelegramDownloader.csproj -r win-arm64 -c Release -o bin/win-arm64 -p:PublishSingleFile=true,Version=$VERSION --self-contained
 
-          - name: '📦 Package mac OS arm64'
-            run: |
-                TAG=${{github.event.release.tag_name}}
-                TAG=${TAG:1}
-                cd ${{github.workspace}}
-                dotnet publish TelegramDownloader/TelegramDownloader.csproj -r osx-arm64 -c Release -o bin/osx-arm64 -p:PublishSingleFile=true,Version=$TAG --self-contained
-                zip -r TelegramFileManager-${{github.event.release.tag_name}}-osx-arm64.zip bin/osx-arm64
-                gh release upload ${{github.event.release.tag_name}} TelegramFileManager-${{github.event.release.tag_name}}-osx-arm64.zip
-            env:
-              GH_TOKEN: ${{ secrets.TOKENBuild }}
-            shell: bash
+          echo "Building linux-x64..."
+          dotnet publish TelegramDownloader/TelegramDownloader.csproj -r linux-x64 -c Release -o bin/linux-x64 -p:PublishSingleFile=true,Version=$VERSION --self-contained
+
+          echo "Building linux-arm..."
+          dotnet publish TelegramDownloader/TelegramDownloader.csproj -r linux-arm -c Release -o bin/linux-arm -p:PublishSingleFile=true,Version=$VERSION --self-contained
+
+          echo "Building osx-x64..."
+          dotnet publish TelegramDownloader/TelegramDownloader.csproj -r osx-x64 -c Release -o bin/osx-x64 -p:PublishSingleFile=true,Version=$VERSION --self-contained
+
+          echo "Building osx-arm64..."
+          dotnet publish TelegramDownloader/TelegramDownloader.csproj -r osx-arm64 -c Release -o bin/osx-arm64 -p:PublishSingleFile=true,Version=$VERSION --self-contained
+
+      - name: '📦 Create ZIP archives'
+        run: |
+          TAG=${{github.event.release.tag_name}}
+          mkdir -p releases
+
+          echo "Creating ZIP archives..."
+          zip -r releases/TelegramFileManager-${TAG}-win-x64.zip bin/win-x64
+          zip -r releases/TelegramFileManager-${TAG}-win-x86.zip bin/win-x86
+          zip -r releases/TelegramFileManager-${TAG}-win-arm64.zip bin/win-arm64
+          zip -r releases/TelegramFileManager-${TAG}-linux-x64.zip bin/linux-x64
+          zip -r releases/TelegramFileManager-${TAG}-linux-arm.zip bin/linux-arm
+          zip -r releases/TelegramFileManager-${TAG}-osx-x64.zip bin/osx-x64
+          zip -r releases/TelegramFileManager-${TAG}-osx-arm64.zip bin/osx-arm64
+
+          echo "Created archives:"
+          ls -la releases/
+
+      - name: '🚀 Upload all release assets'
+        env:
+          GH_TOKEN: ${{ secrets.TOKENBuild }}
+        run: |
+          TAG=${{github.event.release.tag_name}}
+
+          # Function to upload with retry
+          upload_with_retry() {
+            local file=$1
+            local max_attempts=5
+            local attempt=1
+            local delay=10
+
+            while [ $attempt -le $max_attempts ]; do
+              echo "Uploading $file (attempt $attempt/$max_attempts)..."
+              if gh release upload "$TAG" "$file" --clobber 2>&1; then
+                echo "✅ Successfully uploaded $file"
+                return 0
+              else
+                echo "⚠️ Upload failed, waiting ${delay}s before retry..."
+                sleep $delay
+                delay=$((delay * 2))  # Exponential backoff
+                attempt=$((attempt + 1))
+              fi
+            done
+
+            echo "❌ Failed to upload $file after $max_attempts attempts"
+            return 1
+          }
+
+          # Upload all files with delays between each
+          for file in releases/*.zip; do
+            upload_with_retry "$file"
+            echo "Waiting 5s before next upload..."
+            sleep 5
+          done
+
+          echo "✅ All uploads completed!"
