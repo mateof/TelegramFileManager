@@ -1,5 +1,4 @@
-﻿@page "/webdavinfo"
-@* @model TelegramDownloader.Pages.WebDavInfoModel *@
+@page "/webdavinfo"
 @using Microsoft.AspNetCore.Components.Forms
 @using TelegramDownloader.Data.db
 @using TelegramDownloader.Models
@@ -7,42 +6,110 @@
 @inject IDbService db
 @inject ToastService toastService
 
+<PageTitle>WebDAV Configuration</PageTitle>
+
 @if(model != null) {
-    <EditForm Model="model" OnValidSubmit="OnSave">
-        <div class="card mt-4" style="max-width: 500px; margin:auto;">
-            <div class="card-body">
-                <h5 class="card-title">WebDAV</h5>
-                <div class="card-text">
-                    <div class="mb-3">
-                        <label class="form-label">Host</label>
-                        <InputText class="form-control" @bind-Value="model.webDav.Host" />
+    <div class="webdav-page">
+        <!-- Header -->
+        <div class="webdav-header">
+            <h1><i class="bi bi-hdd-network"></i> WebDAV Server</h1>
+            <p>Configure your WebDAV server to access Telegram files from any file manager</p>
+        </div>
+
+        <!-- Cards Grid -->
+        <div class="webdav-grid">
+            <!-- Configuration Card -->
+            <div class="webdav-card">
+                <div class="webdav-card-header">
+                    <i class="bi bi-gear"></i>
+                    <h3>Configuration</h3>
+                </div>
+                <div class="webdav-card-body">
+                    <EditForm Model="model" OnValidSubmit="OnSave">
+                        <div class="form-group">
+                            <label><i class="bi bi-globe"></i> Host Address</label>
+                            <InputText class="form-control" @bind-Value="model.webDav.Host" placeholder="localhost or 0.0.0.0" />
+                            <div class="input-hint">Use 0.0.0.0 to allow external connections</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label><i class="bi bi-box-arrow-in-right"></i> TFM Port</label>
+                            <NumberInput TValue="int" @bind-Value="model.webDav.PuertoEntrada" Min="1" Max="65535" EnableMinMax="true" class="form-control" placeholder="5000" />
+                            <div class="input-hint">Telegram File Manager internal port</div>
+                        </div>
+
+                        <div class="form-group">
+                            <label><i class="bi bi-box-arrow-right"></i> WebDAV Port</label>
+                            <NumberInput TValue="int" @bind-Value="model.webDav.PuertoSalida" Min="1" Max="65535" EnableMinMax="true" class="form-control" placeholder="5005" />
+                            <div class="input-hint">Port exposed for WebDAV connections</div>
+                        </div>
+
+                        <button type="submit" class="btn-save">
+                            <i class="bi bi-check-lg"></i>
+                            Save Configuration
+                        </button>
+                    </EditForm>
+
+                    <div class="info-box">
+                        <div class="info-box-header">
+                            <i class="bi bi-info-circle"></i>
+                            <span>How to connect</span>
+                        </div>
+                        <p>
+                            Use any WebDAV client (Windows Explorer, macOS Finder, Cyberduck, etc.)
+                            and connect to the WebDAV URL shown in the status panel.
+                        </p>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">TFM port</label>
-                        <NumberInput TValue="int" @bind-Value="model.webDav.PuertoEntrada" Min="1" Max="65535" EnableMinMax="true" class="form-control" id="tfmport" placeholder="Telegram File Manager Port" />
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Output port</label>
-                        <NumberInput TValue="int" @bind-Value="model.webDav.PuertoSalida" Min="1" Max="65535" EnableMinMax="true" class="form-control" id="wdport" placeholder="WebDav Port" />
-                    </div>
-                    <button type="submit" class="btn btn-primary">Save</button>
                 </div>
             </div>
-        </div>
-    </EditForm>
 
-    <div class="card mt-4" style="max-width: 300px; margin:auto;">
-        <div class="card-body text-center">
-            <div class="mb-3">
-                <span style="display:inline-block; width:40px; height:40px; border-radius:50%; background-color:@GetStatusColor(); border:2px solid #ccc;"></span>
-            </div>
-            <div class="mb-3">
-                <p style="display:inline-block; ">@(status == StatusColor.Rojo ? "Stopped" : "Active") </p>
-            </div>
-            <div>
-                <button class="btn btn-success me-2" @onclick="Start">Start</button>
-                <button class="btn btn-warning me-2" @onclick="Stop">Stop</button>
-                <button class="btn btn-danger" @onclick="Reset">Reset</button>
+            <!-- Status Card -->
+            <div class="webdav-card status-card">
+                <div class="webdav-card-header">
+                    <i class="bi bi-activity"></i>
+                    <h3>Server Status</h3>
+                </div>
+                <div class="webdav-card-body">
+                    <!-- Status Indicator -->
+                    <div class="status-indicator">
+                        <div class="status-circle @(IsRunning ? "active" : "stopped")">
+                            <i class="bi @(IsRunning ? "bi-check-lg" : "bi-x-lg")"></i>
+                        </div>
+                    </div>
+
+                    <!-- Status Text -->
+                    <div class="status-text @(IsRunning ? "active" : "stopped")">
+                        <h4>@(IsRunning ? "Running" : "Stopped")</h4>
+                        <p>@(IsRunning ? "WebDAV server is accepting connections" : "Server is not running")</p>
+                    </div>
+
+                    <!-- Control Buttons -->
+                    <div class="control-buttons">
+                        <button class="btn-control start" @onclick="Start" disabled="@IsRunning">
+                            <i class="bi bi-play-fill"></i>
+                            Start
+                        </button>
+                        <button class="btn-control stop" @onclick="Stop" disabled="@(!IsRunning)">
+                            <i class="bi bi-stop-fill"></i>
+                            Stop
+                        </button>
+                        <button class="btn-control reset" @onclick="Reset">
+                            <i class="bi bi-arrow-clockwise"></i>
+                            Restart
+                        </button>
+                    </div>
+
+                    <!-- Connection Info -->
+                    @if(IsRunning)
+                    {
+                        <div class="connection-info">
+                            <h5>Connection URL</h5>
+                            <div class="connection-url">
+                                http://@(model.webDav.Host):@(model.webDav.PuertoSalida)/
+                            </div>
+                        </div>
+                    }
+                </div>
             </div>
         </div>
     </div>
@@ -51,75 +118,42 @@
 
 @code {
     private GeneralConfig model { get; set; }
-
-    private StatusColor status = StatusColor.Rojo;
+    private bool IsRunning => model?.webDav?.webDavService?.IsRunning ?? false;
 
     protected override async Task OnInitializedAsync() {
-
         model = null;
         await loadModel();
-
     }
 
     private async Task loadModel()
     {
         model ??= await GeneralConfigStatic.Load(db);
-        checkStatusColor();
         await InvokeAsync(StateHasChanged);
     }
 
     private async Task OnSave()
     {
         await GeneralConfigStatic.SaveChanges(db, model);
-        toastService.Notify(new(ToastType.Success, $"The webdav configuration has been saved") { Title = "Success", AutoHide = true });
+        toastService.Notify(new(ToastType.Success, $"WebDAV configuration has been saved") { Title = "Success", AutoHide = true });
     }
 
     private async Task Start()
     {
         model.webDav.start();
-        checkStatusColor();
         await InvokeAsync(StateHasChanged);
     }
+
     private async Task Stop()
     {
         model.webDav.stop();
-        checkStatusColor();
         await InvokeAsync(StateHasChanged);
     }
+
     private async Task Reset()
     {
         model.webDav.stop();
-        checkStatusColor();
-        await InvokeAsync(StateHasChanged);
+        await Task.Delay(500);
         model.webDav.start();
-        checkStatusColor();
         await InvokeAsync(StateHasChanged);
-    }
-
-    private string GetStatusColor() => status switch
-    {
-        StatusColor.Verde => "green",
-        StatusColor.Amarillo => "yellow",
-        StatusColor.Rojo => "red",
-        _ => "gray"
-    };
-
-    private void checkStatusColor()
-    {
-        if (model.webDav.webDavService.IsRunning)
-        {
-            status = StatusColor.Verde;
-        } else
-        {
-            status = StatusColor.Rojo;
-        }
-
-    }
-
-    private enum StatusColor
-    {
-        Verde,
-        Amarillo,
-        Rojo
     }
 }
