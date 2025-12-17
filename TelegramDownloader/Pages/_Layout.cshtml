@@ -29,6 +29,100 @@
     
 
 
+    <!-- Reconnection UI -->
+    <div id="reconnect-modal" style="display: none;">
+        <div class="reconnect-overlay"></div>
+        <div class="reconnect-dialog">
+            <div class="reconnect-icon">
+                <i class="bi bi-wifi-off"></i>
+            </div>
+            <h4>Connection Lost</h4>
+            <p id="reconnect-status">Attempting to reconnect...</p>
+            <div class="reconnect-spinner"></div>
+            <button id="reconnect-reload" style="display: none;" onclick="location.reload()">
+                <i class="bi bi-arrow-clockwise"></i> Reload Page
+            </button>
+        </div>
+    </div>
+
+    <style>
+        #reconnect-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 99999;
+        }
+        .reconnect-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+        }
+        .reconnect-dialog {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: #1e1e2e;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 1rem;
+            padding: 2rem;
+            text-align: center;
+            color: white;
+            min-width: 300px;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+        }
+        .reconnect-icon {
+            font-size: 3rem;
+            color: #f59e0b;
+            margin-bottom: 1rem;
+        }
+        .reconnect-dialog h4 {
+            margin: 0 0 0.5rem 0;
+            font-weight: 600;
+        }
+        .reconnect-dialog p {
+            margin: 0 0 1.5rem 0;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 0.9rem;
+        }
+        .reconnect-spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255, 255, 255, 0.1);
+            border-top-color: #0088cc;
+            border-radius: 50%;
+            margin: 0 auto;
+            animation: spin 1s linear infinite;
+        }
+        @@keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        #reconnect-reload {
+            margin-top: 1.5rem;
+            padding: 0.75rem 1.5rem;
+            background: linear-gradient(135deg, #0088cc 0%, #0066aa 100%);
+            border: none;
+            border-radius: 0.5rem;
+            color: white;
+            font-weight: 500;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.2s ease;
+        }
+        #reconnect-reload:hover {
+            background: linear-gradient(135deg, #0099dd 0%, #0077bb 100%);
+            transform: translateY(-1px);
+        }
+    </style>
+
     <div id="blazor-error-ui">
         <environment include="Staging,Production">
             An error has occurred. This application may no longer respond until reloaded.
@@ -41,7 +135,76 @@
     </div>
     <script src="https://cdn.jsdelivr.net/npm/intl-tel-input@23.0.12/build/js/intlTelInput.min.js"></script>
     <script src="js/phonecodes.js"></script>
-    <script src="_framework/blazor.server.js"></script>
+    <script src="_framework/blazor.server.js" autostart="false"></script>
+    <script>
+        // Blazor reconnection handler
+        (function () {
+            const modal = document.getElementById('reconnect-modal');
+            const status = document.getElementById('reconnect-status');
+            const spinner = document.querySelector('.reconnect-spinner');
+            const reloadBtn = document.getElementById('reconnect-reload');
+            let reconnectAttempts = 0;
+            const maxAttempts = 10;
+
+            function showModal(message, showReload = false) {
+                modal.style.display = 'block';
+                status.textContent = message;
+                spinner.style.display = showReload ? 'none' : 'block';
+                reloadBtn.style.display = showReload ? 'inline-flex' : 'none';
+            }
+
+            function hideModal() {
+                modal.style.display = 'none';
+                reconnectAttempts = 0;
+            }
+
+            Blazor.start({
+                reconnectionHandler: {
+                    onConnectionDown: (options, error) => {
+                        reconnectAttempts = 0;
+                        showModal('Connection lost. Reconnecting...');
+                        console.log('Blazor connection down:', error);
+                    },
+                    onConnectionUp: () => {
+                        hideModal();
+                        console.log('Blazor connection restored');
+                    }
+                },
+                reconnectionOptions: {
+                    maxRetries: maxAttempts,
+                    retryIntervalMilliseconds: (previousAttempts) => {
+                        reconnectAttempts = previousAttempts + 1;
+
+                        if (reconnectAttempts >= maxAttempts) {
+                            showModal('Unable to reconnect. Please reload the page.', true);
+                            return null; // Stop retrying
+                        }
+
+                        showModal(`Reconnecting... Attempt ${reconnectAttempts}/${maxAttempts}`);
+
+                        // Exponential backoff: 1s, 2s, 4s, 8s... max 30s
+                        const delay = Math.min(1000 * Math.pow(2, previousAttempts), 30000);
+                        return delay;
+                    }
+                }
+            });
+
+            // Auto-reload when tab becomes visible if connection was lost
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') {
+                    // Check if Blazor circuit is still connected
+                    if (modal.style.display === 'block') {
+                        // Connection was lost, try to reconnect or reload
+                        setTimeout(() => {
+                            if (modal.style.display === 'block') {
+                                location.reload();
+                            }
+                        }, 3000);
+                    }
+                }
+            });
+        })();
+    </script>
     <script src="js/bootstrap5/bootstrap.bundle.min.js"></script>
     <!-- Add chart.js reference if chart components are used in your application. -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
