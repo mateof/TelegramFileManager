@@ -243,6 +243,7 @@ namespace TelegramDownloader.Models
     {
         public Mutex mutex = new Mutex();
         public event EventHandler<UploadEventArgs> EventChanged;
+        public event EventHandler EventStatechanged;
         public string _internalId { get; set; } = Guid.NewGuid().ToString();
         public Guid id = Guid.NewGuid();
         public string action { get; set; } = "Upload";
@@ -295,6 +296,7 @@ namespace TelegramDownloader.Models
             {
                 endnDate = DateTime.Now;
                 state = StateTask.Completed;
+                EventStatechanged?.Invoke(this, EventArgs.Empty);
                 NotificationModel nm = new NotificationModel();
                 nm.sendEvent(new Notification($"Upload {name} completed", "Upload Completed", NotificationTypes.Success));
             }
@@ -329,6 +331,11 @@ namespace TelegramDownloader.Models
         {
             EventChanged?.Invoke(this, uploadEventArgs);
         }
+
+        protected void InvokeStateChanged()
+        {
+            EventStatechanged?.Invoke(this, EventArgs.Empty);
+        }
     }
 
     public class SplitModel : UploadModel
@@ -348,6 +355,7 @@ namespace TelegramDownloader.Models
             if (transmitted == totalSize)
             {
                 state = StateTask.Completed;
+                InvokeStateChanged();
                 NotificationModel nm = new NotificationModel();
                 nm.sendEvent(new Notification($"Split {name} completed", "Split Completed", NotificationTypes.Success));
             }
@@ -376,6 +384,7 @@ namespace TelegramDownloader.Models
             state = StateTask.Completed;
             progress = 100;
             mutex.ReleaseMutex();
+            InvokeStateChanged();
             base.InvokeEvent(new UploadEventArgs());
         }
     }
