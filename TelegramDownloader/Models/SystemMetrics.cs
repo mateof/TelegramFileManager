@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.InteropServices;
 
 namespace TelegramDownloader.Models
@@ -28,7 +29,7 @@ namespace TelegramDownloader.Models
         public long DiskFreeBytes { get; set; }
         public double DiskUsagePercent { get; set; }
 
-        // Formatted strings
+        // Formatted strings for display
         public string TotalMemory => FormatBytes(TotalMemoryBytes);
         public string UsedMemory => FormatBytes(UsedMemoryBytes);
         public string AvailableMemory => FormatBytes(AvailableMemoryBytes);
@@ -38,6 +39,18 @@ namespace TelegramDownloader.Models
         public string DiskTotal => FormatBytes(DiskTotalBytes);
         public string DiskUsed => FormatBytes(DiskUsedBytes);
         public string DiskFree => FormatBytes(DiskFreeBytes);
+
+        // CSS-safe formatted values (always use dot as decimal separator)
+        public string AppCpuUsageCss => AppCpuUsage.ToString("F1", CultureInfo.InvariantCulture);
+        public string SystemCpuUsageCss => SystemCpuUsage.ToString("F1", CultureInfo.InvariantCulture);
+        public string MemoryUsagePercentCss => MemoryUsagePercent.ToString("F1", CultureInfo.InvariantCulture);
+        public string DiskUsagePercentCss => DiskUsagePercent.ToString("F1", CultureInfo.InvariantCulture);
+        public string AppMemoryPercentCss => TotalMemoryBytes > 0
+            ? ((double)AppMemoryBytes / TotalMemoryBytes * 100).ToString("F1", CultureInfo.InvariantCulture)
+            : "0";
+        public string TempFolderPercentCss => DiskTotalBytes > 0
+            ? ((double)TempFolderSizeBytes / DiskTotalBytes * 100).ToString("F1", CultureInfo.InvariantCulture)
+            : "0";
 
         private static string FormatBytes(long bytes)
         {

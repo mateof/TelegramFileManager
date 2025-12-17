@@ -193,19 +193,19 @@
                             <div class="resource-bar-item">
                                 <div class="bar-label">
                                     <span>Application</span>
-                                    <span class="bar-value">@(metrics?.AppCpuUsage.ToString("F1") ?? "0")%</span>
+                                    <span class="bar-value">@(metrics?.AppCpuUsageCss ?? "0")%</span>
                                 </div>
                                 <div class="progress-bar-container">
-                                    <div class="progress-bar app" style="width: @(metrics?.AppCpuUsage ?? 0)%"></div>
+                                    <div class="progress-bar app" style="width: @(metrics?.AppCpuUsageCss ?? "0")%"></div>
                                 </div>
                             </div>
                             <div class="resource-bar-item">
                                 <div class="bar-label">
                                     <span>System</span>
-                                    <span class="bar-value">@(metrics?.SystemCpuUsage.ToString("F1") ?? "0")%</span>
+                                    <span class="bar-value">@(metrics?.SystemCpuUsageCss ?? "0")%</span>
                                 </div>
                                 <div class="progress-bar-container">
-                                    <div class="progress-bar system" style="width: @(metrics?.SystemCpuUsage ?? 0)%"></div>
+                                    <div class="progress-bar system" style="width: @(metrics?.SystemCpuUsageCss ?? "0")%"></div>
                                 </div>
                             </div>
                         </div>
@@ -229,7 +229,7 @@
                                     <span class="bar-value">@(metrics?.AppMemory ?? "0 B")</span>
                                 </div>
                                 <div class="progress-bar-container">
-                                    <div class="progress-bar app" style="width: @(metrics != null && metrics.TotalMemoryBytes > 0 ? (double)metrics.AppMemoryBytes / metrics.TotalMemoryBytes * 100 : 0)%"></div>
+                                    <div class="progress-bar app" style="width: @(metrics?.AppMemoryPercentCss ?? "0")%"></div>
                                 </div>
                             </div>
                             <div class="resource-bar-item">
@@ -238,7 +238,7 @@
                                     <span class="bar-value">@(metrics?.UsedMemory ?? "0 B") / @(metrics?.TotalMemory ?? "0 B")</span>
                                 </div>
                                 <div class="progress-bar-container">
-                                    <div class="progress-bar system" style="width: @(metrics?.MemoryUsagePercent ?? 0)%"></div>
+                                    <div class="progress-bar system" style="width: @(metrics?.MemoryUsagePercentCss ?? "0")%"></div>
                                 </div>
                             </div>
                         </div>
@@ -262,7 +262,7 @@
                                     <span class="bar-value">@(metrics?.TempFolderSize ?? "0 B")</span>
                                 </div>
                                 <div class="progress-bar-container">
-                                    <div class="progress-bar temp" style="width: @(metrics != null && metrics.DiskTotalBytes > 0 ? (double)metrics.TempFolderSizeBytes / metrics.DiskTotalBytes * 100 : 0)%"></div>
+                                    <div class="progress-bar temp" style="width: @(metrics?.TempFolderPercentCss ?? "0")%"></div>
                                 </div>
                             </div>
                             <div class="resource-bar-item">
@@ -271,7 +271,7 @@
                                     <span class="bar-value">@(metrics?.DiskUsed ?? "0 B") / @(metrics?.DiskTotal ?? "0 B")</span>
                                 </div>
                                 <div class="progress-bar-container">
-                                    <div class="progress-bar system @(metrics?.DiskUsagePercent > 90 ? "critical" : metrics?.DiskUsagePercent > 75 ? "warning" : "")" style="width: @(metrics?.DiskUsagePercent ?? 0)%"></div>
+                                    <div class="progress-bar system @(metrics?.DiskUsagePercent > 90 ? "critical" : metrics?.DiskUsagePercent > 75 ? "warning" : "")" style="width: @(metrics?.DiskUsagePercentCss ?? "0")%"></div>
                                 </div>
                             </div>
                         </div>
