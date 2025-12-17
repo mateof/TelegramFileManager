@@ -27,12 +27,10 @@ namespace TelegramDownloader.Data
         private TransactionInfoService _tis { get; set; }
         private IDbService _db { get; set; }
         private ITaskPersistenceService _persistence { get; set; }
-        private static WTelegram.Client client = null;  // Used for uploads and general operations
-        private static WTelegram.Client downloadClient = null;  // Dedicated client for downloads
+        private static WTelegram.Client client = null;
         private static Messages_Chats chats = null;
         private static List<ChatViewBase> favouriteChannels = new List<ChatViewBase>();
         private static Mutex mut = new Mutex();
-        private static Mutex downloadClientMut = new Mutex();
         private ILogger<IFileService> _logger { get; set; }
 
         // Event that fires when user successfully logs in
@@ -74,212 +72,6 @@ namespace TelegramDownloader.Data
                 WTelegram.Helpers.Log = (lvl, str) => { };
             }
 
-        }
-
-        /// <summary>
-        /// Gets the dedicated download client, creating it if necessary.
-        /// Uses a separate session file to allow independent bandwidth for downloads.
-        /// </summary>
-        private async Task<WTelegram.Client> GetDownloadClientAsync()
-        {
-            if (downloadClient != null)
-                return downloadClient;
-
-            downloadClientMut.WaitOne();
-            try
-            {
-                if (downloadClient != null)
-                    return downloadClient;
-
-                var downloadSessionPath = UserService.USERDATAFOLDER + "/WTelegram_download.session";
-
-                // Create a new client with its own session file
-                // It will authenticate using the same credentials as the main client
-                downloadClient = new WTelegram.Client(
-                    Convert.ToInt32(GeneralConfigStatic.tlconfig?.api_id ?? Environment.GetEnvironmentVariable("api_id")),
-                    GeneralConfigStatic.tlconfig?.hash_id ?? Environment.GetEnvironmentVariable("hash_id"),
-                    downloadSessionPath);
-
-                // If download session already exists, try to use it
-                // Otherwise, it will need to authenticate (which might require user interaction on first use)
-                if (File.Exists(downloadSessionPath))
-                {
-                    try
-                    {
-                        await downloadClient.LoginUserIfNeeded();
-                        _logger.LogInformation("Download client initialized from existing session");
-                        return downloadClient;
-                    }
-                    catch (Exception loginEx)
-                    {
-                        _logger.LogWarning(loginEx, "Could not login download client from existing session, deleting invalid session and using main client");
-                        downloadClient?.Dispose();
-                        downloadClient = null;
-                        // Delete the invalid session file so it won't be tried again
-                        DeleteDownloadSession();
-                        return client;
-                    }
-                }
-                else
-                {
-                    // No existing download session - use main client to avoid auth prompts
-                    _logger.LogInformation("No download session exists, using main client for downloads");
-                    downloadClient?.Dispose();
-                    downloadClient = null;
-                    return client;
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to create dedicated download client, falling back to main client");
-                downloadClient?.Dispose();
-                downloadClient = null;
-                return client;
-            }
-            finally
-            {
-                downloadClientMut.ReleaseMutex();
-            }
-        }
-
-        /// <summary>
-        /// Copies the main session file to the download session at startup, before Telegram client locks the file.
-        /// This should be called in Program.cs before the TelegramService is created.
-        /// </summary>
-        public static void CopySessionForDownloadClient()
-        {
-            var mainSessionPath = UserService.USERDATAFOLDER + "/WTelegram.session";
-            var downloadSessionPath = UserService.USERDATAFOLDER + "/WTelegram_download.session";
-
-            try
-            {
-                if (File.Exists(mainSessionPath))
-                {
-                    // Copy the main session to download session
-                    File.Copy(mainSessionPath, downloadSessionPath, overwrite: true);
-                    Console.WriteLine($"[TelegramService] Copied main session to download session");
-                }
-                else
-                {
-                    Console.WriteLine($"[TelegramService] Main session does not exist, skipping download session copy");
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[TelegramService] Failed to copy session for download client: {ex.Message}");
-                // If copy fails, delete the download session to ensure we use main client
-                DeleteDownloadSession();
-            }
-        }
-
-        /// <summary>
-        /// Deletes the download session file (used when session becomes invalid)
-        /// </summary>
-        public static void DeleteDownloadSession()
-        {
-            try
-            {
-                var downloadSessionPath = UserService.USERDATAFOLDER + "/WTelegram_download.session";
-                if (File.Exists(downloadSessionPath))
-                {
-                    File.Delete(downloadSessionPath);
-                    Console.WriteLine($"[TelegramService] Deleted download session file");
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"[TelegramService] Failed to delete download session file: {ex.Message}");
-            }
-        }
-
-        /// <summary>
-        /// Checks if an exception indicates an invalid/expired session
-        /// </summary>
-        private static bool IsSessionInvalidException(Exception ex)
-        {
-            if (ex is RpcException rpcEx)
-            {
-                // Common auth errors that indicate session is invalid
-                return rpcEx.Message.Contains("AUTH_KEY_UNREGISTERED") ||
-                       rpcEx.Message.Contains("AUTH_KEY_INVALID") ||
-                       rpcEx.Message.Contains("AUTH_KEY_DUPLICATED") ||
-                       rpcEx.Message.Contains("SESSION_EXPIRED") ||
-                       rpcEx.Message.Contains("USER_DEACTIVATED");
-            }
-            return false;
-        }
-
-        /// <summary>
-        /// Handles invalid session during download - tries to re-authenticate, if not possible resets and uses main client
-        /// </summary>
-        private async Task<WTelegram.Client> HandleInvalidDownloadSessionAsync(Exception ex)
-        {
-            _logger.LogWarning(ex, "Download client error detected, checking if session is still valid");
-            downloadClientMut.WaitOne();
-            try
-            {
-                if (downloadClient == null)
-                {
-                    return client;
-                }
-
-                // Try to verify if the session is still valid by attempting login
-                try
-                {
-                    var loginResult = await downloadClient.Login(null);
-                    if (loginResult == null)
-                    {
-                        // Session is still valid (already authenticated), might have been a transient error
-                        _logger.LogInformation("Download client session is still valid, continuing to use it");
-                        return downloadClient;
-                    }
-                    else
-                    {
-                        // Login returned something (phone_number, verification_code, etc.) - session needs re-auth
-                        _logger.LogWarning("Download client session requires re-authentication (returned: {Result}), switching to main client", loginResult);
-                        downloadClient?.Dispose();
-                        downloadClient = null;
-                        DeleteDownloadSession();
-                        return client;
-                    }
-                }
-                catch (Exception loginEx)
-                {
-                    // Login attempt failed - session is definitely invalid
-                    _logger.LogWarning(loginEx, "Download client login check failed, session is invalid, switching to main client");
-                    downloadClient?.Dispose();
-                    downloadClient = null;
-                    DeleteDownloadSession();
-                    return client;
-                }
-            }
-            finally
-            {
-                downloadClientMut.ReleaseMutex();
-            }
-        }
-
-        /// <summary>
-        /// Resets the download client (e.g., after logout)
-        /// </summary>
-        public static void ResetDownloadClient()
-        {
-            downloadClientMut.WaitOne();
-            try
-            {
-                downloadClient?.Dispose();
-                downloadClient = null;
-
-                var downloadSessionPath = UserService.USERDATAFOLDER + "/WTelegram_download.session";
-                if (File.Exists(downloadSessionPath))
-                {
-                    File.Delete(downloadSessionPath);
-                }
-            }
-            finally
-            {
-                downloadClientMut.ReleaseMutex();
-            }
         }
 
         public async Task<User> CallQrGenerator(Action<string> func, CancellationToken ct, bool logoutFirst = false)
@@ -427,7 +219,6 @@ namespace TelegramDownloader.Data
             await client.Auth_LogOut();
             UserService.deleteUserDataToFile();
             client.Dispose();
-            ResetDownloadClient();
             newClient();
             _logger.LogInformation("User logged off successfully");
         }
@@ -923,9 +714,6 @@ namespace TelegramDownloader.Data
             long currentOffset = offset;
             Byte[] response;
 
-            // Use dedicated download client for independent bandwidth
-            var dlClient = await GetDownloadClientAsync();
-
             if (message is Message msg && msg.media is MessageMediaDocument doc)
             {
                 try
@@ -940,16 +728,9 @@ namespace TelegramDownloader.Data
                                 totalDownloadBytes = FILESPLITSIZE;
 
                             }
-                            //else if (totalLimit >= 4096)
-                            //{
-                            //    // Busca el mayor múltiplo de 4096 menor o igual a totalLimit
-                            //    totalDownloadBytes = (totalLimit / 4096) * 4096;
-                            //}
                             else
                             {
-                                // Último trozo, menor de 4096
-                                totalDownloadBytes = FILESPLITSIZE; // totalLimit;
-                                //totalDownloadBytes = totalLimit;
+                                totalDownloadBytes = FILESPLITSIZE;
                             }
 
                             InputDocument inputFile = doc.document;
@@ -964,24 +745,17 @@ namespace TelegramDownloader.Data
                             Upload_FileBase file = null;
                             try
                             {
-                                file = await dlClient.Upload_GetFile(location, currentOffset, limit: totalDownloadBytes);
+                                file = await client.Upload_GetFile(location, currentOffset, limit: totalDownloadBytes);
                             }
                             catch (RpcException ex) when (ex.Code == 303 && ex.Message == "FILE_MIGRATE_X")
                             {
-                                downloadClient = await dlClient.GetClientForDC(-ex.X, true);
-                                dlClient = downloadClient;
-                                file = await dlClient.Upload_GetFile(location, currentOffset, limit: totalDownloadBytes);
+                                var dcClient = await client.GetClientForDC(-ex.X, true);
+                                file = await dcClient.Upload_GetFile(location, currentOffset, limit: totalDownloadBytes);
                             }
                             catch (RpcException ex) when (ex.Code == 400 && ex.Message == "OFFSET_INVALID")
                             {
                                 _logger.LogError(ex, "OFFSET_INVALID - CurrentOffset: {Offset}, TotalLimit: {Limit}", currentOffset, totalLimit);
                                 throw;
-                            }
-                            catch (Exception ex) when (IsSessionInvalidException(ex))
-                            {
-                                _logger.LogWarning(ex, "Download client session error, verifying session validity");
-                                dlClient = await HandleInvalidDownloadSessionAsync(ex);
-                                file = await dlClient.Upload_GetFile(location, currentOffset, limit: totalDownloadBytes);
                             }
                             catch (Exception ex)
                             {
@@ -991,7 +765,6 @@ namespace TelegramDownloader.Data
 
                             if (file is Upload_File uploadFile)
                             {
-                                //uploadFile.WriteTL(new BinaryWriter(memoryStream));
                                 var fileBytes = uploadFile.bytes;
                                 memoryStream.Write(fileBytes, 0, fileBytes.Length);
                                 currentOffset += (totalDownloadBytes);
@@ -1024,24 +797,18 @@ namespace TelegramDownloader.Data
             model.m = message;
             model.channel = message.user;
 
-            // Use dedicated download client for independent bandwidth
-            var dlClient = await GetDownloadClientAsync();
-
             if (message.message.media is MessageMediaDocument { document: TL.Document document })
             {
 
                 model._transmitted = 0;
                 model._size = document.size;
-                var filename = fileName ?? document.Filename; // use document original filename, or build a name from document ID & MIME type:
+                var filename = fileName ?? document.Filename;
                 filename ??= $"{document.id}.{document.mime_type[(document.mime_type.IndexOf('/') + 1)..]}";
                 if (model.name == null)
                     model.name = filename;
-                // _tis.addToDownloadList(model);
                 _logger.LogInformation("Starting document download - FileName: {FileName}, Size: {SizeMB:F2}MB", filename, document.size / (1024.0 * 1024.0));
-                // using var fileStream = File.Create(filename);
                 MemoryStream dest = new MemoryStream();
-                // using var dest = new FileStream($"{Path.Combine(folder != null ? folder : Path.Combine(Environment.CurrentDirectory, "download"), filename)}", FileMode.Create, FileAccess.Write);
-                await dlClient.DownloadFileAsync(document, ms ?? dest, (PhotoSizeBase)null, model.ProgressCallback);
+                await client.DownloadFileAsync(document, ms ?? dest, (PhotoSizeBase)null, model.ProgressCallback);
                 _logger.LogInformation("Document download completed - FileName: {FileName}", filename);
                 return ms ?? dest;
             }
@@ -1055,13 +822,10 @@ namespace TelegramDownloader.Data
                 }
                 _logger.LogInformation("Starting photo download - FileName: {FileName}", filename);
                 MemoryStream dest = new MemoryStream();
-                // using var dest = new FileStream($"{Path.Combine(Environment.CurrentDirectory!, "wwwroot", "img", "telegram", filename)}", FileMode.Create, FileAccess.Write);
-                var type = await dlClient.DownloadFileAsync(photo, ms ?? dest, (PhotoSizeBase)null, model.ProgressCallback);
-                dest.Close(); // necessary for the renaming
+                var type = await client.DownloadFileAsync(photo, ms ?? dest, (PhotoSizeBase)null, model.ProgressCallback);
+                dest.Close();
                 _logger.LogInformation("Photo download completed - FileName: {FileName}", filename);
                 return ms ?? dest;
-
-
             }
             return null;
         }
@@ -1077,9 +841,6 @@ namespace TelegramDownloader.Data
             model.m = message;
             model.channel = message.user;
 
-            // Use dedicated download client for independent bandwidth
-            var dlClient = await GetDownloadClientAsync();
-
             if (message.message.media is MessageMediaDocument { document: TL.Document document })
             {
                 model._size = document.size;
@@ -1094,14 +855,12 @@ namespace TelegramDownloader.Data
 
                 if (offset == 0)
                 {
-                    // No offset - use standard download
                     MemoryStream dest = new MemoryStream();
-                    await dlClient.DownloadFileAsync(document, ms ?? dest, (PhotoSizeBase)null, model.ProgressCallback);
+                    await client.DownloadFileAsync(document, ms ?? dest, (PhotoSizeBase)null, model.ProgressCallback);
                     _logger.LogInformation("Document download completed - FileName: {FileName}", filename);
                     return ms ?? dest;
                 }
 
-                // Offset-based download using Upload_GetFile API
                 Stream targetStream = ms ?? new MemoryStream();
                 long currentOffset = offset;
                 long totalSize = document.size;
@@ -1119,12 +878,11 @@ namespace TelegramDownloader.Data
 
                 while (currentOffset < totalSize)
                 {
-                    int chunkSize = FILESPLITSIZE; // 512KB chunks
+                    int chunkSize = FILESPLITSIZE;
                     if (currentOffset + chunkSize > totalSize)
                     {
-                        // Adjust last chunk size (must be multiple of 4096 for Telegram API)
                         long remaining = totalSize - currentOffset;
-                        chunkSize = (int)((remaining + 4095) / 4096 * 4096); // Round up to 4096
+                        chunkSize = (int)((remaining + 4095) / 4096 * 4096);
                         if (chunkSize > FILESPLITSIZE)
                             chunkSize = FILESPLITSIZE;
                     }
@@ -1132,25 +890,18 @@ namespace TelegramDownloader.Data
                     Upload_FileBase file = null;
                     try
                     {
-                        file = await dlClient.Upload_GetFile(location, currentOffset, limit: chunkSize);
+                        file = await client.Upload_GetFile(location, currentOffset, limit: chunkSize);
                     }
                     catch (RpcException ex) when (ex.Code == 303 && ex.Message == "FILE_MIGRATE_X")
                     {
                         _logger.LogWarning("DC migration required, switching to DC {DC}", -ex.X);
-                        downloadClient = await dlClient.GetClientForDC(-ex.X, true);
-                        dlClient = downloadClient;
-                        file = await dlClient.Upload_GetFile(location, currentOffset, limit: chunkSize);
+                        var dcClient = await client.GetClientForDC(-ex.X, true);
+                        file = await dcClient.Upload_GetFile(location, currentOffset, limit: chunkSize);
                     }
                     catch (RpcException ex) when (ex.Code == 400 && ex.Message == "OFFSET_INVALID")
                     {
                         _logger.LogError(ex, "OFFSET_INVALID at offset {Offset} - file may have changed", currentOffset);
                         throw;
-                    }
-                    catch (Exception ex) when (IsSessionInvalidException(ex))
-                    {
-                        _logger.LogWarning(ex, "Download client session error, verifying session validity");
-                        dlClient = await HandleInvalidDownloadSessionAsync(ex);
-                        file = await dlClient.Upload_GetFile(location, currentOffset, limit: chunkSize);
                     }
                     catch (Exception ex)
                     {
@@ -1167,14 +918,10 @@ namespace TelegramDownloader.Data
                             break;
                         }
 
-                        // Write to stream - for append mode, the stream position should already be at the end
                         await targetStream.WriteAsync(fileBytes, 0, fileBytes.Length);
                         currentOffset += fileBytes.Length;
                         model._transmitted = currentOffset;
-
-                        // Call progress callback
                         model.ProgressCallback(currentOffset, totalSize);
-
                         continue;
                     }
 
@@ -1187,11 +934,10 @@ namespace TelegramDownloader.Data
             }
             else if (message.message.media is MessageMediaPhoto { photo: Photo photo })
             {
-                // Photos don't support resume - they're small enough to re-download
                 _logger.LogInformation("Photo download (no resume support) - PhotoId: {PhotoId}", photo.id);
                 var filename = $"{photo.id}.jpg";
                 MemoryStream dest = new MemoryStream();
-                var type = await dlClient.DownloadFileAsync(photo, ms ?? dest, (PhotoSizeBase)null, model.ProgressCallback);
+                var type = await client.DownloadFileAsync(photo, ms ?? dest, (PhotoSizeBase)null, model.ProgressCallback);
                 dest.Close();
                 return ms ?? dest;
             }
@@ -1211,12 +957,8 @@ namespace TelegramDownloader.Data
             model.m = message;
             model.channel = message.user;
 
-            // Use dedicated download client for independent bandwidth
-            var dlClient = await GetDownloadClientAsync();
-
             if (message.message.media is MessageMediaDocument { document: TL.Document document })
             {
-
                 model._transmitted = 0;
                 model._size = document.size;
                 var filename = fileName ?? document.Filename;
@@ -1225,10 +967,8 @@ namespace TelegramDownloader.Data
                 if (shouldAddToList)
                     _tis.addToDownloadList(model);
                 _logger.LogInformation("Starting file download to disk - FileName: {FileName}, Size: {SizeMB:F2}MB", filename, document.size / (1024.0 * 1024.0));
-                // using var fileStream = File.Create(filename);
                 using var dest = new FileStream($"{Path.Combine(folder != null ? folder : Path.Combine(Environment.CurrentDirectory, "local", "temp"), filename)}", FileMode.Create, FileAccess.Write);
-                await dlClient.DownloadFileAsync(document, dest, (PhotoSizeBase)null, model.ProgressCallback);
-
+                await client.DownloadFileAsync(document, dest, (PhotoSizeBase)null, model.ProgressCallback);
                 _logger.LogInformation("File download to disk completed - FileName: {FileName}", filename);
             }
             else if (message.message.media is MessageMediaPhoto { photo: Photo photo })
@@ -1241,17 +981,15 @@ namespace TelegramDownloader.Data
                 }
                 _logger.LogInformation("Starting photo download to disk - FileName: {FileName}", filename);
                 using var dest = new FileStream($"{Path.Combine(Environment.CurrentDirectory!, "wwwroot", "img", "telegram", filename)}", FileMode.Create, FileAccess.Write);
-                var type = await dlClient.DownloadFileAsync(photo, dest, progress: model.ProgressCallback);
+                var type = await client.DownloadFileAsync(photo, dest, progress: model.ProgressCallback);
                 dest.Close();
                 _logger.LogInformation("Photo download to disk completed - FileName: {FileName}", filename);
                 if (type is not Storage_FileType.unknown and not Storage_FileType.partial)
                 {
-                    File.Move(Path.Combine(Environment.CurrentDirectory!, "wwwroot", "img", "telegram", filename), Path.Combine(Environment.CurrentDirectory!, "wwwroot", "img", "telegram", $"{photo.id}.{type}"), true); // rename extension
+                    File.Move(Path.Combine(Environment.CurrentDirectory!, "wwwroot", "img", "telegram", filename), Path.Combine(Environment.CurrentDirectory!, "wwwroot", "img", "telegram", $"{photo.id}.{type}"), true);
                     filename = $"{photo.id}.{type}";
                 }
                 return filename;
-
-
             }
             return null;
         }
