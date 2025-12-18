@@ -104,6 +104,7 @@
 
 <TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal @ref="mediaUrlModal"></TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal>
 <TelegramDownloader.Pages.Modals.VideoPlayerModal @ref="videoPlayer"></TelegramDownloader.Pages.Modals.VideoPlayerModal>
+<TelegramDownloader.Pages.Modals.PdfViewerModal @ref="pdfViewer"></TelegramDownloader.Pages.Modals.PdfViewerModal>
 
 
 
@@ -122,6 +123,7 @@
     public static bool hasVirtualScroll { get; set; } = false;
     LocalFileManager lfm { get; set; }
     private VideoPlayerModal videoPlayer { get; set; } = default!;
+    private PdfViewerModal pdfViewer { get; set; } = default!;
 
     private MediaUrlModal mediaUrlModal { get; set; } = default!;
 
@@ -367,6 +369,13 @@
         if (args != null && args.FileDetails != null && args.FileDetails.IsFile && isVideoFile(args.FileDetails.Type.ToLower()))
         {
             videoPlayer.ShowModal(await getVideoUrl(args.FileDetails.Id, args.FileDetails.Name, args.FileDetails.Size), args.FileDetails.Name);
+            return;
+        }
+
+        if (args != null && args.FileDetails != null && args.FileDetails.IsFile && isPdfFile(args.FileDetails.Type.ToLower()))
+        {
+            var pdfUrl = await getPdfViewUrl(args.FileDetails.Id, args.FileDetails.Name, args.FileDetails.Size);
+            await pdfViewer.ShowModal(pdfUrl, args.FileDetails.Name);
             return;
         }
 
@@ -756,6 +765,13 @@
             return;
         }
 
+        if (isPdfFile(args.FileDetails.Type?.ToLower() ?? ""))
+        {
+            var pdfUrl = await getPdfViewUrl(args.FileDetails.Id, args.FileDetails.Name, args.FileDetails.Size);
+            await pdfViewer.ShowModal(pdfUrl, args.FileDetails.Name);
+            return;
+        }
+
         string filePath = getTempFileMediaUrl(args.FileDetails.Id, args.FileDetails.Name);
         await JSRuntime.InvokeVoidAsync("open", filePath, "_blank");
     }
@@ -947,6 +963,11 @@
         return new List<string> { ".mp3", ".ogg", ".flac", ".aac", ".wav" }.Contains(fileExtension);
     }
 
+    private bool isPdfFile(string fileExtension)
+    {
+        return fileExtension == ".pdf";
+    }
+
     private async Task playAudio(FileManagerDirectoryContent fileDetails)
     {
         await JSRuntime.InvokeVoidAsync("openAudioPlayerModal", await getMediaUrl(fileDetails.Id, fileDetails.Name, fileDetails.Size), null, fileDetails.Name);
@@ -987,6 +1008,24 @@
 
         // Use regular stream for native formats
         return await getMediaUrl(idFile, name, size);
+    }
+
+    private async Task<string> getPdfViewUrl(string idFile, String name, long size)
+    {
+        BsonFileManagerModel item = null;
+        if (isShared)
+            item = await fs.getSharedItemById(id: idFile, collection: bsi.CollectionId);
+        else
+            item = await fs.getItemById(id, idFile);
+        string localdir = MyNavigationManager.BaseUri;
+
+        // Use ViewFile endpoint which serves with Content-Disposition: inline
+        if (item != null && item.MessageId != null)
+        {
+            return new System.Uri(Path.Combine(localdir, "api/file/ViewFile", name).Replace("\\", "/") + $"?idChannel={(isShared ? bsi.ChannelId : id)}&idFile={item.MessageId}").AbsoluteUri;
+        }
+        // Fallback to stream endpoint
+        return new System.Uri(Path.Combine(localdir, "api/file/GetFileStream", isShared ? bsi.ChannelId : id, idFile, name).Replace("\\", "/")).AbsoluteUri;
     }
 
     private string getTempFileMediaUrl(string idFile, String name)

@@ -74,6 +74,7 @@
 <TelegramDownloader.Pages.Modals.FileUploadModal @ref="ModalUpSer"></TelegramDownloader.Pages.Modals.FileUploadModal>
 <TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal @ref="mediaUrlModal"></TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal>
 <TelegramDownloader.Pages.Modals.VideoPlayerModal @ref=videoPlayer></TelegramDownloader.Pages.Modals.VideoPlayerModal>
+<TelegramDownloader.Pages.Modals.PdfViewerModal @ref="pdfViewer"></TelegramDownloader.Pages.Modals.PdfViewerModal>
 
 
 @code {
@@ -91,6 +92,7 @@
 
     private MediaUrlModal mediaUrlModal { get; set; } = default!;
     private VideoPlayerModal videoPlayer { get; set; } = default!;
+    private PdfViewerModal pdfViewer { get; set; } = default!;
 
     NotificationModel nm = new NotificationModel();
     public string[] ContextItems = new string[] { "Open", "Delete", "Download", "Rename", "Details", "Copy Media Url", "Add to Playlist" };
@@ -421,6 +423,11 @@
             string path = getLocalVideoUrl(args.FileDetails.FilterPath, args.FileDetails.Name);
             videoPlayer.ShowModal(path);
         }
+        else if (args != null && args.FileDetails != null && args.FileDetails.IsFile && isPdfFile(args.FileDetails.Type.ToLower()))
+        {
+            string path = getLocalFileUrl(args.FileDetails.FilterPath, args.FileDetails.Name);
+            await pdfViewer.ShowModal(path, args.FileDetails.Name);
+        }
     }
 
     private async Task playAudio(FileOpenEventArgs<FileManagerDirectoryContent> args)
@@ -510,6 +517,17 @@
     private bool needsTranscoding(string fileExtension)
     {
         return new List<string> { ".mkv", ".avi", ".wmv", ".ts", ".mts", ".m2ts", ".vob", ".divx", ".xvid", ".3gp" }.Contains(fileExtension);
+    }
+
+    private bool isPdfFile(string fileExtension)
+    {
+        return fileExtension == ".pdf";
+    }
+
+    private string getLocalFileUrl(string filterPath, string name)
+    {
+        string localdir = MyNavigationManager.BaseUri + FileService.STATICRELATIVELOCALDIR.Replace("\\", "/");
+        return new System.Uri((Path.Combine(localdir, filterPath.Substring(1).Replace("\\", "/"), name)).Replace("\\", "/")).AbsoluteUri;
     }
 
     private string getLocalVideoUrl(string filterPath, string name)
@@ -674,6 +692,11 @@
         {
             string path = getLocalVideoUrl(args.FileDetails.FilterPath, args.FileDetails.Name);
             videoPlayer.ShowModal(path);
+        }
+        else if (isPdfFile(fileType))
+        {
+            string path = getLocalFileUrl(args.FileDetails.FilterPath, args.FileDetails.Name);
+            await pdfViewer.ShowModal(path, args.FileDetails.Name);
         }
     }
 
