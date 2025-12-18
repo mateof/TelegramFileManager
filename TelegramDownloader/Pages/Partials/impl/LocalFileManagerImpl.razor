@@ -74,6 +74,8 @@
 <TelegramDownloader.Pages.Modals.FileUploadModal @ref="ModalUpSer"></TelegramDownloader.Pages.Modals.FileUploadModal>
 <TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal @ref="mediaUrlModal"></TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal>
 <TelegramDownloader.Pages.Modals.VideoPlayerModal @ref=videoPlayer></TelegramDownloader.Pages.Modals.VideoPlayerModal>
+<TelegramDownloader.Pages.Modals.PdfViewerModal @ref="pdfViewer"></TelegramDownloader.Pages.Modals.PdfViewerModal>
+<TelegramDownloader.Pages.Modals.ImageViewerModal @ref="imageViewer"></TelegramDownloader.Pages.Modals.ImageViewerModal>
 
 
 @code {
@@ -91,6 +93,8 @@
 
     private MediaUrlModal mediaUrlModal { get; set; } = default!;
     private VideoPlayerModal videoPlayer { get; set; } = default!;
+    private PdfViewerModal pdfViewer { get; set; } = default!;
+    private ImageViewerModal imageViewer { get; set; } = default!;
 
     NotificationModel nm = new NotificationModel();
     public string[] ContextItems = new string[] { "Open", "Delete", "Download", "Rename", "Details", "Copy Media Url", "Add to Playlist" };
@@ -421,6 +425,15 @@
             string path = getLocalVideoUrl(args.FileDetails.FilterPath, args.FileDetails.Name);
             videoPlayer.ShowModal(path);
         }
+        else if (args != null && args.FileDetails != null && args.FileDetails.IsFile && isPdfFile(args.FileDetails.Type.ToLower()))
+        {
+            string path = getLocalFileUrl(args.FileDetails.FilterPath, args.FileDetails.Name);
+            await pdfViewer.ShowModal(path, args.FileDetails.Name);
+        }
+        else if (args != null && args.FileDetails != null && args.FileDetails.IsFile && isImageFile(args.FileDetails.Type.ToLower()))
+        {
+            await OpenLocalImageViewer(args.FileDetails);
+        }
     }
 
     private async Task playAudio(FileOpenEventArgs<FileManagerDirectoryContent> args)
@@ -510,6 +523,124 @@
     private bool needsTranscoding(string fileExtension)
     {
         return new List<string> { ".mkv", ".avi", ".wmv", ".ts", ".mts", ".m2ts", ".vob", ".divx", ".xvid", ".3gp" }.Contains(fileExtension);
+    }
+
+    private bool isPdfFile(string fileExtension)
+    {
+        return fileExtension == ".pdf";
+    }
+
+    private bool isImageFile(string fileExtension)
+    {
+        return new List<string> { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg", ".ico", ".tiff", ".tif" }.Contains(fileExtension);
+    }
+
+    private async Task OpenLocalImageViewer(FileManagerDirectoryContent clickedImage)
+    {
+        try
+        {
+            // Get current path from desktop file manager
+            var currentPath = FileManager?.Path ?? "/";
+
+            // Get all files in current folder using the file operations API
+            var response = await CallFileOperationsAsync("read", currentPath, null);
+
+            // Filter to only images and build ImageInfo list
+            var imageFiles = response?.Files?
+                .Where(f => f.IsFile && isImageFile(f.Type?.ToLower() ?? ""))
+                .OrderBy(f => f.Name)
+                .ToList() ?? new List<FileManagerDirectoryContent>();
+
+            if (imageFiles.Count == 0)
+            {
+                // Fallback: just show the clicked image
+                string url = getLocalFileUrl(clickedImage.FilterPath, clickedImage.Name);
+                await imageViewer.ShowModal(url, clickedImage.Name);
+                return;
+            }
+
+            // Build list of ImageInfo
+            var imageInfoList = new List<ImageViewerModal.ImageInfo>();
+            int startIndex = 0;
+
+            for (int i = 0; i < imageFiles.Count; i++)
+            {
+                var file = imageFiles[i];
+                string url = getLocalFileUrl(file.FilterPath, file.Name);
+                imageInfoList.Add(new ImageViewerModal.ImageInfo { Url = url, FileName = file.Name });
+
+                if (file.Name == clickedImage.Name)
+                {
+                    startIndex = i;
+                }
+            }
+
+            await imageViewer.ShowModal(imageInfoList, startIndex);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error opening local image viewer");
+            // Fallback: just show the clicked image
+            string url = getLocalFileUrl(clickedImage.FilterPath, clickedImage.Name);
+            await imageViewer.ShowModal(url, clickedImage.Name);
+        }
+    }
+
+    private async Task OpenLocalImageViewerMobile(FileManagerDirectoryContent clickedImage)
+    {
+        try
+        {
+            // Get current path from mobile file manager
+            var currentPath = mobileFileManager?.Path ?? "/";
+
+            // Get all files in current folder using the file operations API
+            var response = await CallFileOperationsAsync("read", currentPath, null);
+
+            // Filter to only images and build ImageInfo list
+            var imageFiles = response?.Files?
+                .Where(f => f.IsFile && isImageFile(f.Type?.ToLower() ?? ""))
+                .OrderBy(f => f.Name)
+                .ToList() ?? new List<FileManagerDirectoryContent>();
+
+            if (imageFiles.Count == 0)
+            {
+                // Fallback: just show the clicked image
+                string url = getLocalFileUrl(clickedImage.FilterPath, clickedImage.Name);
+                await imageViewer.ShowModal(url, clickedImage.Name);
+                return;
+            }
+
+            // Build list of ImageInfo
+            var imageInfoList = new List<ImageViewerModal.ImageInfo>();
+            int startIndex = 0;
+
+            for (int i = 0; i < imageFiles.Count; i++)
+            {
+                var file = imageFiles[i];
+                string url = getLocalFileUrl(file.FilterPath, file.Name);
+                imageInfoList.Add(new ImageViewerModal.ImageInfo { Url = url, FileName = file.Name });
+
+                if (file.Name == clickedImage.Name)
+                {
+                    startIndex = i;
+                }
+            }
+
+            await imageViewer.ShowModal(imageInfoList, startIndex);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error opening local image viewer (mobile)");
+            // Fallback: just show the clicked image
+            string url = getLocalFileUrl(clickedImage.FilterPath, clickedImage.Name);
+            await imageViewer.ShowModal(url, clickedImage.Name);
+        }
+    }
+
+    private string getLocalFileUrl(string filterPath, string name)
+    {
+        string localdir = MyNavigationManager.BaseUri + FileService.STATICRELATIVELOCALDIR.Replace("\\", "/");
+        return new System.Uri((Path.Combine(localdir, filterPath.Substring(1).Replace("\\", "/"), name)).Replace("\\", "/")).AbsoluteUri;
     }
 
     private string getLocalVideoUrl(string filterPath, string name)
@@ -649,7 +780,10 @@
     {
         try
         {
-            var response = await CallFileOperationsAsync("search", args.Path, null, searchString: args.SearchText);
+            // Wrap search text with wildcards for "contains" search behavior
+            // The FileManagerService uses wildcard pattern matching where * matches any sequence
+            var searchPattern = $"*{args.SearchText}*";
+            var response = await CallFileOperationsAsync("search", args.Path, null, searchString: searchPattern);
             args.Response = response;
         }
         catch (Exception ex)
@@ -674,6 +808,15 @@
         {
             string path = getLocalVideoUrl(args.FileDetails.FilterPath, args.FileDetails.Name);
             videoPlayer.ShowModal(path);
+        }
+        else if (isPdfFile(fileType))
+        {
+            string path = getLocalFileUrl(args.FileDetails.FilterPath, args.FileDetails.Name);
+            await pdfViewer.ShowModal(path, args.FileDetails.Name);
+        }
+        else if (isImageFile(fileType))
+        {
+            await OpenLocalImageViewerMobile(args.FileDetails);
         }
     }
 

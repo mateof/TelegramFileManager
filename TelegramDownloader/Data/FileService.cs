@@ -527,9 +527,10 @@ namespace TelegramDownloader.Data
                 {
                     if (!item.IsFile)
                     {
-                        var result = await copyAllDirectoryFiles(dbName, item.Id, args.TargetData, args.TargetPath + item.Name + "/");
+                        // Pass args.IsCopy to handle internal files correctly (delete originals when moving)
+                        var result = await copyAllDirectoryFiles(dbName, item.Id, args.TargetData, args.TargetPath + item.Name + "/", args.IsCopy);
                         lista.Add(result.toFileManagerContentInCopy());
-
+                        // Note: copyAllDirectoryFiles now handles deletion of the folder when IsCopy=false
                     }
                     else
                     {
@@ -539,7 +540,6 @@ namespace TelegramDownloader.Data
                         {
                             await _db.deleteEntry(dbName, item.Id);
                         }
-
                     }
                     await _db.addBytesToFolder(dbName, item.ParentId, item.Size);
                 }
@@ -573,12 +573,10 @@ namespace TelegramDownloader.Data
                 {
                     if (!item.IsFile)
                     {
-                        var result = await copyAllDirectoryFiles(dbName, item.Id, targetData, targetPath + item.Name + "/");
+                        // Pass isCopy to handle internal files correctly (delete originals when moving)
+                        var result = await copyAllDirectoryFiles(dbName, item.Id, targetData, targetPath + item.Name + "/", isCopy);
                         lista.Add(result.toFileManagerContentInCopy());
-                        if (!isCopy)
-                        {
-                            await _db.deleteEntry(dbName, item.Id);
-                        }
+                        // Note: copyAllDirectoryFiles now handles deletion of the folder when isCopy=false
                     }
                     else
                     {
@@ -626,11 +624,9 @@ namespace TelegramDownloader.Data
                 }
                 else
                 {
-                    await copyAllDirectoryFiles(dbName, file.Id, result.toFileManagerContent(), targetPath + file.Name + "/");
-                    if (!isCopy)
-                    {
-                        await _db.deleteEntry(dbName, file.Id);
-                    }
+                    // Pass isCopy to recursive call to handle nested folders correctly
+                    await copyAllDirectoryFiles(dbName, file.Id, result.toFileManagerContent(), targetPath + file.Name + "/", isCopy);
+                    // Note: recursive call handles deletion when isCopy=false, no need to delete here
                 }
             }
             if (!isCopy)

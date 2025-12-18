@@ -1,0 +1,879 @@
+@inject IJSRuntime JSRuntime
+
+<style>
+    /* Image Viewer Overlay */
+    .image-viewer-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.92);
+        backdrop-filter: blur(8px);
+        z-index: 1050;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s ease;
+    }
+
+    .image-viewer-overlay.show {
+        opacity: 1;
+        visibility: visible;
+    }
+
+    .image-viewer-container {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+    }
+
+    /* Top bar */
+    .image-viewer-topbar {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        background: linear-gradient(180deg, rgba(0, 0, 0, 0.8) 0%, transparent 100%);
+        padding: 1rem 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        z-index: 10;
+    }
+
+    .image-viewer-title {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex: 1;
+        min-width: 0;
+    }
+
+    .image-viewer-icon {
+        width: 36px;
+        height: 36px;
+        background: linear-gradient(135deg, #4a90d9 0%, #357abd 100%);
+        border-radius: 0.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .image-viewer-icon i {
+        font-size: 1.1rem;
+        color: #fff;
+    }
+
+    .image-viewer-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .image-viewer-info h5 {
+        margin: 0;
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #fff;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .image-viewer-info span {
+        font-size: 0.75rem;
+        color: rgba(255, 255, 255, 0.6);
+    }
+
+    .image-viewer-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .image-viewer-btn {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 1.1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .image-viewer-btn:hover {
+        background: rgba(255, 255, 255, 0.2);
+        color: #fff;
+    }
+
+    .image-viewer-btn.close-btn:hover {
+        background: rgba(220, 53, 69, 0.8);
+    }
+
+    .image-viewer-btn.active {
+        background: rgba(74, 144, 217, 0.6);
+        color: #fff;
+    }
+
+    /* Toolbar separator */
+    .toolbar-separator {
+        width: 1px;
+        height: 24px;
+        background: rgba(255, 255, 255, 0.2);
+        margin: 0 0.25rem;
+    }
+
+    /* Image wrapper */
+    .image-viewer-wrapper {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 5rem 4rem;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .image-container {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        max-width: 100%;
+        max-height: 100%;
+        transition: transform 0.3s ease;
+    }
+
+    .image-container.dragging {
+        transition: none;
+        cursor: grabbing;
+    }
+
+    .image-container.can-drag {
+        cursor: grab;
+    }
+
+    .image-viewer-wrapper img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+        border-radius: 0.5rem;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        user-select: none;
+        -webkit-user-drag: none;
+    }
+
+    .image-viewer-wrapper img.loaded {
+        opacity: 1;
+    }
+
+    /* Navigation buttons */
+    .image-nav-btn {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(0, 0, 0, 0.5);
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        z-index: 5;
+        backdrop-filter: blur(4px);
+    }
+
+    .image-nav-btn:hover:not(:disabled) {
+        background: rgba(74, 144, 217, 0.8);
+        color: #fff;
+        transform: translateY(-50%) scale(1.1);
+    }
+
+    .image-nav-btn:disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
+    }
+
+    .image-nav-btn.prev {
+        left: 1rem;
+    }
+
+    .image-nav-btn.next {
+        right: 1rem;
+    }
+
+    /* Bottom bar with counter and zoom controls */
+    .image-viewer-bottombar {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: linear-gradient(0deg, rgba(0, 0, 0, 0.8) 0%, transparent 100%);
+        padding: 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 1rem;
+        z-index: 10;
+    }
+
+    .image-counter {
+        background: rgba(0, 0, 0, 0.5);
+        padding: 0.5rem 1rem;
+        border-radius: 2rem;
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 0.875rem;
+        font-weight: 500;
+        backdrop-filter: blur(4px);
+    }
+
+    /* Zoom controls */
+    .zoom-controls {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        background: rgba(0, 0, 0, 0.5);
+        padding: 0.25rem;
+        border-radius: 2rem;
+        backdrop-filter: blur(4px);
+    }
+
+    .zoom-btn {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        border: none;
+        background: transparent;
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 0.9rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .zoom-btn:hover {
+        background: rgba(255, 255, 255, 0.2);
+        color: #fff;
+    }
+
+    .zoom-btn:disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
+    }
+
+    .zoom-level {
+        min-width: 50px;
+        text-align: center;
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 0.8rem;
+        font-weight: 500;
+    }
+
+    /* Rotation controls */
+    .rotation-controls {
+        display: flex;
+        align-items: center;
+        gap: 0.25rem;
+        background: rgba(0, 0, 0, 0.5);
+        padding: 0.25rem;
+        border-radius: 2rem;
+        backdrop-filter: blur(4px);
+    }
+
+    .rotation-btn {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        border: none;
+        background: transparent;
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 0.9rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .rotation-btn:hover {
+        background: rgba(255, 255, 255, 0.2);
+        color: #fff;
+    }
+
+    /* Loading state */
+    .image-loading {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 1rem;
+        color: rgba(255, 255, 255, 0.6);
+    }
+
+    .image-loading-spinner {
+        width: 50px;
+        height: 50px;
+        border: 3px solid rgba(255, 255, 255, 0.1);
+        border-top-color: #4a90d9;
+        border-radius: 50%;
+        animation: image-spin 1s linear infinite;
+    }
+
+    @@keyframes image-spin {
+        to { transform: rotate(360deg); }
+    }
+
+    /* Responsive */
+    @@media (max-width: 768px) {
+        .image-viewer-topbar {
+            padding: 0.75rem 1rem;
+        }
+
+        .image-viewer-wrapper {
+            padding: 4rem 1rem;
+        }
+
+        .image-nav-btn {
+            width: 40px;
+            height: 40px;
+            font-size: 1.25rem;
+        }
+
+        .image-nav-btn.prev {
+            left: 0.5rem;
+        }
+
+        .image-nav-btn.next {
+            right: 0.5rem;
+        }
+
+        .image-viewer-btn {
+            width: 36px;
+            height: 36px;
+            font-size: 1rem;
+        }
+
+        .image-viewer-icon {
+            width: 32px;
+            height: 32px;
+        }
+
+        .image-viewer-info h5 {
+            font-size: 0.85rem;
+        }
+
+        .image-viewer-bottombar {
+            flex-wrap: wrap;
+            padding: 1rem;
+            gap: 0.5rem;
+        }
+
+        .zoom-controls, .rotation-controls {
+            padding: 0.2rem;
+        }
+
+        .zoom-btn, .rotation-btn {
+            width: 28px;
+            height: 28px;
+            font-size: 0.8rem;
+        }
+
+        .zoom-level {
+            min-width: 40px;
+            font-size: 0.75rem;
+        }
+
+        .image-counter {
+            padding: 0.4rem 0.75rem;
+            font-size: 0.8rem;
+        }
+    }
+</style>
+
+<div class="image-viewer-overlay @(isVisible ? "show" : "")" @onclick="OnOverlayClick" @onkeydown="HandleKeyDown" tabindex="0" @ref="overlayElement">
+    <div class="image-viewer-container" @onclick:stopPropagation="true">
+        <!-- Top bar -->
+        <div class="image-viewer-topbar">
+            <div class="image-viewer-title">
+                <div class="image-viewer-icon">
+                    <i class="bi bi-image"></i>
+                </div>
+                <div class="image-viewer-info">
+                    <h5 title="@currentFileName">@GetDisplayFileName()</h5>
+                    <span>Image Viewer</span>
+                </div>
+            </div>
+            <div class="image-viewer-actions">
+                <button class="image-viewer-btn" @onclick="OpenInNewTab" title="Open in new tab">
+                    <i class="bi bi-box-arrow-up-right"></i>
+                </button>
+                <button class="image-viewer-btn" @onclick="DownloadImage" title="Download">
+                    <i class="bi bi-download"></i>
+                </button>
+                <button class="image-viewer-btn close-btn" @onclick="OnHideModalClick" title="Close (Esc)">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Image wrapper -->
+        <div class="image-viewer-wrapper" @onclick="OnImageAreaClick" @onwheel="OnMouseWheel" @onmousedown="OnMouseDown" @onmousemove="OnMouseMove" @onmouseup="OnMouseUp" @onmouseleave="OnMouseUp">
+            @if (isLoading)
+            {
+                <div class="image-loading">
+                    <div class="image-loading-spinner"></div>
+                    <span>Loading image...</span>
+                </div>
+            }
+
+            @if (!string.IsNullOrEmpty(currentImageUrl))
+            {
+                <div class="image-container @(isDragging ? "dragging" : "") @(zoomLevel > 1 ? "can-drag" : "")"
+                     style="transform: scale(@zoomLevel.ToString(System.Globalization.CultureInfo.InvariantCulture)) rotate(@(rotation)deg) translate(@(translateX.ToString(System.Globalization.CultureInfo.InvariantCulture))px, @(translateY.ToString(System.Globalization.CultureInfo.InvariantCulture))px);">
+                    <img src="@currentImageUrl"
+                         alt="@currentFileName"
+                         class="@(imageLoaded ? "loaded" : "")"
+                         @onload="OnImageLoaded"
+                         @onerror="OnImageError"
+                         draggable="false" />
+                </div>
+            }
+
+            <!-- Navigation buttons -->
+            @if (images.Count > 1)
+            {
+                <button class="image-nav-btn prev" @onclick="PreviousImage" @onclick:stopPropagation="true" disabled="@(!CanGoPrevious)" title="Previous (Left Arrow)">
+                    <i class="bi bi-chevron-left"></i>
+                </button>
+                <button class="image-nav-btn next" @onclick="NextImage" @onclick:stopPropagation="true" disabled="@(!CanGoNext)" title="Next (Right Arrow)">
+                    <i class="bi bi-chevron-right"></i>
+                </button>
+            }
+        </div>
+
+        <!-- Bottom bar with controls -->
+        <div class="image-viewer-bottombar">
+            <!-- Rotation controls -->
+            <div class="rotation-controls">
+                <button class="rotation-btn" @onclick="RotateLeft" @onclick:stopPropagation="true" title="Rotate left (L)">
+                    <i class="bi bi-arrow-counterclockwise"></i>
+                </button>
+                <button class="rotation-btn" @onclick="RotateRight" @onclick:stopPropagation="true" title="Rotate right (R)">
+                    <i class="bi bi-arrow-clockwise"></i>
+                </button>
+            </div>
+
+            <!-- Image counter -->
+            @if (images.Count > 1)
+            {
+                <div class="image-counter">
+                    @(currentIndex + 1) / @images.Count
+                </div>
+            }
+
+            <!-- Zoom controls -->
+            <div class="zoom-controls">
+                <button class="zoom-btn" @onclick="ZoomOut" @onclick:stopPropagation="true" disabled="@(zoomLevel <= MinZoom)" title="Zoom out (-)">
+                    <i class="bi bi-dash-lg"></i>
+                </button>
+                <span class="zoom-level">@(Math.Round(zoomLevel * 100))%</span>
+                <button class="zoom-btn" @onclick="ZoomIn" @onclick:stopPropagation="true" disabled="@(zoomLevel >= MaxZoom)" title="Zoom in (+)">
+                    <i class="bi bi-plus-lg"></i>
+                </button>
+                <button class="zoom-btn" @onclick="ResetZoom" @onclick:stopPropagation="true" title="Reset (0)">
+                    <i class="bi bi-aspect-ratio"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool isVisible = false;
+    private bool isLoading = false;
+    private bool imageLoaded = false;
+    private string currentImageUrl = "";
+    private string currentFileName = "";
+    private int currentIndex = 0;
+    private List<ImageInfo> images = new List<ImageInfo>();
+    private ElementReference overlayElement;
+
+    // Zoom state
+    private double zoomLevel = 1.0;
+    private const double MinZoom = 0.25;
+    private const double MaxZoom = 5.0;
+    private const double ZoomStep = 0.25;
+
+    // Rotation state
+    private int rotation = 0;
+
+    // Pan/drag state
+    private bool isDragging = false;
+    private double translateX = 0;
+    private double translateY = 0;
+    private double dragStartX = 0;
+    private double dragStartY = 0;
+    private double dragStartTranslateX = 0;
+    private double dragStartTranslateY = 0;
+
+    private bool CanGoPrevious => currentIndex > 0;
+    private bool CanGoNext => currentIndex < images.Count - 1;
+
+    public class ImageInfo
+    {
+        public string Url { get; set; } = "";
+        public string FileName { get; set; } = "";
+    }
+
+    /// <summary>
+    /// Show modal with a single image
+    /// </summary>
+    public async Task ShowModal(string url, string fileName = "")
+    {
+        await ShowModal(new List<ImageInfo> { new ImageInfo { Url = url, FileName = fileName } }, 0);
+    }
+
+    /// <summary>
+    /// Show modal with multiple images and starting index
+    /// </summary>
+    public async Task ShowModal(List<ImageInfo> imageList, int startIndex = 0)
+    {
+        images = imageList ?? new List<ImageInfo>();
+        currentIndex = Math.Max(0, Math.Min(startIndex, images.Count - 1));
+
+        if (images.Count > 0)
+        {
+            LoadCurrentImage();
+        }
+
+        isVisible = true;
+        StateHasChanged();
+
+        // Focus for keyboard navigation
+        await Task.Delay(100);
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("eval", "document.querySelector('.image-viewer-overlay')?.focus()");
+        }
+        catch { }
+    }
+
+    private void LoadCurrentImage()
+    {
+        if (currentIndex >= 0 && currentIndex < images.Count)
+        {
+            var image = images[currentIndex];
+            currentImageUrl = image.Url;
+            currentFileName = !string.IsNullOrEmpty(image.FileName) ? image.FileName : ExtractFileName(image.Url);
+            isLoading = true;
+            imageLoaded = false;
+
+            // Reset zoom and rotation for new image
+            ResetTransform();
+        }
+    }
+
+    private void ResetTransform()
+    {
+        zoomLevel = 1.0;
+        rotation = 0;
+        translateX = 0;
+        translateY = 0;
+        isDragging = false;
+    }
+
+    public async Task OnHideModalClick()
+    {
+        isVisible = false;
+        StateHasChanged();
+
+        await Task.Delay(300);
+        currentImageUrl = "";
+        currentFileName = "";
+        images.Clear();
+        currentIndex = 0;
+        isLoading = false;
+        imageLoaded = false;
+        ResetTransform();
+    }
+
+    private async Task OnOverlayClick()
+    {
+        await OnHideModalClick();
+    }
+
+    private void OnImageAreaClick()
+    {
+        // Click on image area (not buttons) - could toggle UI visibility
+    }
+
+    private void OnImageLoaded()
+    {
+        isLoading = false;
+        imageLoaded = true;
+        StateHasChanged();
+    }
+
+    private void OnImageError()
+    {
+        isLoading = false;
+        imageLoaded = true; // Still show to display broken image
+        StateHasChanged();
+    }
+
+    #region Navigation
+
+    private async Task PreviousImage()
+    {
+        if (CanGoPrevious)
+        {
+            currentIndex--;
+            LoadCurrentImage();
+            StateHasChanged();
+        }
+    }
+
+    private async Task NextImage()
+    {
+        if (CanGoNext)
+        {
+            currentIndex++;
+            LoadCurrentImage();
+            StateHasChanged();
+        }
+    }
+
+    #endregion
+
+    #region Zoom
+
+    private void ZoomIn()
+    {
+        if (zoomLevel < MaxZoom)
+        {
+            zoomLevel = Math.Min(MaxZoom, zoomLevel + ZoomStep);
+            StateHasChanged();
+        }
+    }
+
+    private void ZoomOut()
+    {
+        if (zoomLevel > MinZoom)
+        {
+            zoomLevel = Math.Max(MinZoom, zoomLevel - ZoomStep);
+            // Reset pan when zooming out to fit
+            if (zoomLevel <= 1)
+            {
+                translateX = 0;
+                translateY = 0;
+            }
+            StateHasChanged();
+        }
+    }
+
+    private void ResetZoom()
+    {
+        zoomLevel = 1.0;
+        translateX = 0;
+        translateY = 0;
+        rotation = 0;
+        StateHasChanged();
+    }
+
+    private void OnMouseWheel(WheelEventArgs e)
+    {
+        if (e.DeltaY < 0)
+        {
+            ZoomIn();
+        }
+        else if (e.DeltaY > 0)
+        {
+            ZoomOut();
+        }
+    }
+
+    #endregion
+
+    #region Rotation
+
+    private void RotateLeft()
+    {
+        rotation = (rotation - 90) % 360;
+        if (rotation < 0) rotation += 360;
+        StateHasChanged();
+    }
+
+    private void RotateRight()
+    {
+        rotation = (rotation + 90) % 360;
+        StateHasChanged();
+    }
+
+    #endregion
+
+    #region Pan/Drag
+
+    private void OnMouseDown(MouseEventArgs e)
+    {
+        if (zoomLevel > 1)
+        {
+            isDragging = true;
+            dragStartX = e.ClientX;
+            dragStartY = e.ClientY;
+            dragStartTranslateX = translateX;
+            dragStartTranslateY = translateY;
+        }
+    }
+
+    private void OnMouseMove(MouseEventArgs e)
+    {
+        if (isDragging && zoomLevel > 1)
+        {
+            // Adjust for zoom level to make pan feel natural
+            var deltaX = (e.ClientX - dragStartX) / zoomLevel;
+            var deltaY = (e.ClientY - dragStartY) / zoomLevel;
+
+            translateX = dragStartTranslateX + deltaX;
+            translateY = dragStartTranslateY + deltaY;
+            StateHasChanged();
+        }
+    }
+
+    private void OnMouseUp(MouseEventArgs e)
+    {
+        isDragging = false;
+    }
+
+    #endregion
+
+    #region Keyboard
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "ArrowLeft":
+                await PreviousImage();
+                break;
+            case "ArrowRight":
+                await NextImage();
+                break;
+            case "Escape":
+                await OnHideModalClick();
+                break;
+            case "Home":
+                if (images.Count > 0)
+                {
+                    currentIndex = 0;
+                    LoadCurrentImage();
+                    StateHasChanged();
+                }
+                break;
+            case "End":
+                if (images.Count > 0)
+                {
+                    currentIndex = images.Count - 1;
+                    LoadCurrentImage();
+                    StateHasChanged();
+                }
+                break;
+            case "+":
+            case "=":
+                ZoomIn();
+                break;
+            case "-":
+            case "_":
+                ZoomOut();
+                break;
+            case "0":
+                ResetZoom();
+                break;
+            case "l":
+            case "L":
+                RotateLeft();
+                break;
+            case "r":
+            case "R":
+                RotateRight();
+                break;
+        }
+    }
+
+    #endregion
+
+    #region Actions
+
+    private async Task OpenInNewTab()
+    {
+        if (!string.IsNullOrEmpty(currentImageUrl))
+        {
+            await JSRuntime.InvokeVoidAsync("open", currentImageUrl, "_blank");
+        }
+    }
+
+    private async Task DownloadImage()
+    {
+        if (!string.IsNullOrEmpty(currentImageUrl))
+        {
+            await JSRuntime.InvokeVoidAsync("eval", $@"
+                (function() {{
+                    var a = document.createElement('a');
+                    a.href = '{currentImageUrl}';
+                    a.download = '{currentFileName}';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                }})();
+            ");
+        }
+    }
+
+    #endregion
+
+    #region Helpers
+
+    private string ExtractFileName(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return "Image";
+        try
+        {
+            var uri = new Uri(url);
+            var path = uri.LocalPath;
+            return System.IO.Path.GetFileName(path);
+        }
+        catch
+        {
+            return "Image";
+        }
+    }
+
+    private string GetDisplayFileName()
+    {
+        if (string.IsNullOrEmpty(currentFileName)) return "Image Viewer";
+        return currentFileName.Length > 50 ? currentFileName.Substring(0, 47) + "..." : currentFileName;
+    }
+
+    #endregion
+}

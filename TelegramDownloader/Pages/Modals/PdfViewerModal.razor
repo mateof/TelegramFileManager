@@ -1,0 +1,467 @@
+@inject IJSRuntime JSRuntime
+
+<style>
+    /* PDF Viewer Overlay */
+    .pdf-viewer-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.85);
+        backdrop-filter: blur(8px);
+        z-index: 1050;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s ease;
+    }
+
+    .pdf-viewer-overlay.show {
+        opacity: 1;
+        visibility: visible;
+    }
+
+    .pdf-viewer-container {
+        width: 100%;
+        max-width: 1400px;
+        height: 95vh;
+        margin: 1rem;
+        background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+        border-radius: 1rem;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7),
+                    0 0 0 1px rgba(220, 53, 69, 0.1);
+        overflow: hidden;
+        transform: scale(0.95) translateY(20px);
+        transition: transform 0.3s ease;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .pdf-viewer-overlay.show .pdf-viewer-container {
+        transform: scale(1) translateY(0);
+    }
+
+    /* Close button */
+    .pdf-close-btn {
+        position: absolute;
+        top: 1rem;
+        right: 1rem;
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(0, 0, 0, 0.5);
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 1.25rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        z-index: 20;
+        backdrop-filter: blur(4px);
+    }
+
+    .pdf-close-btn:hover {
+        background: rgba(220, 53, 69, 0.8);
+        color: #fff;
+        transform: scale(1.1);
+    }
+
+    /* PDF title bar */
+    .pdf-title-bar {
+        background: linear-gradient(135deg, rgba(139, 0, 0, 0.95) 0%, rgba(26, 26, 46, 0.95) 100%);
+        padding: 0.875rem 1.25rem;
+        padding-right: 4rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        flex-shrink: 0;
+    }
+
+    .pdf-title-icon {
+        width: 36px;
+        height: 36px;
+        background: linear-gradient(135deg, #dc3545 0%, #b02a37 100%);
+        border-radius: 0.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .pdf-title-icon i {
+        font-size: 1.1rem;
+        color: #fff;
+    }
+
+    .pdf-title-text {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .pdf-title-text h5 {
+        margin: 0;
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #fff;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .pdf-title-text span {
+        font-size: 0.75rem;
+        color: rgba(255, 255, 255, 0.5);
+    }
+
+    /* PDF toolbar */
+    .pdf-toolbar {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .pdf-toolbar-btn {
+        width: 36px;
+        height: 36px;
+        border-radius: 0.5rem;
+        border: none;
+        background: rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 1rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .pdf-toolbar-btn:hover {
+        background: rgba(220, 53, 69, 0.6);
+        color: #fff;
+    }
+
+    /* PDF wrapper */
+    .pdf-wrapper {
+        flex: 1;
+        position: relative;
+        width: 100%;
+        background: #525659;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+    }
+
+    .pdf-wrapper iframe {
+        width: 100%;
+        height: 100%;
+        border: none;
+        background: #fff;
+    }
+
+    /* Loading state */
+    .pdf-loading {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1rem;
+        padding: 4rem 2rem;
+        color: rgba(255, 255, 255, 0.6);
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+    }
+
+    .pdf-loading-icon {
+        width: 80px;
+        height: 80px;
+        background: linear-gradient(135deg, #dc3545 0%, #b02a37 100%);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        animation: pdf-pulse 2s ease-in-out infinite;
+    }
+
+    .pdf-loading-icon i {
+        font-size: 2rem;
+        color: #fff;
+    }
+
+    @@keyframes pdf-pulse {
+        0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.4); }
+        50% { transform: scale(1.05); box-shadow: 0 0 0 20px rgba(220, 53, 69, 0); }
+    }
+
+    .pdf-loading-text {
+        font-size: 0.95rem;
+        font-weight: 500;
+    }
+
+    /* Error state */
+    .pdf-error {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1rem;
+        padding: 4rem 2rem;
+        color: rgba(255, 255, 255, 0.6);
+        text-align: center;
+    }
+
+    .pdf-error-icon {
+        width: 80px;
+        height: 80px;
+        background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .pdf-error-icon i {
+        font-size: 2rem;
+        color: #fff;
+    }
+
+    .pdf-error-text {
+        font-size: 0.95rem;
+        font-weight: 500;
+    }
+
+    .pdf-error-link {
+        margin-top: 0.5rem;
+    }
+
+    .pdf-error-link a {
+        color: #dc3545;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 1rem;
+        background: rgba(220, 53, 69, 0.2);
+        border-radius: 0.5rem;
+        transition: all 0.2s ease;
+    }
+
+    .pdf-error-link a:hover {
+        background: rgba(220, 53, 69, 0.4);
+        color: #fff;
+    }
+
+    /* Responsive */
+    @@media (max-width: 992px) {
+        .pdf-viewer-container {
+            max-width: calc(100% - 1rem);
+            height: 90vh;
+            margin: 0.5rem;
+            border-radius: 0.75rem;
+        }
+
+        .pdf-title-bar {
+            padding: 0.75rem 1rem;
+            padding-right: 3.5rem;
+        }
+
+        .pdf-close-btn {
+            top: 0.75rem;
+            right: 0.75rem;
+            width: 36px;
+            height: 36px;
+            font-size: 1.1rem;
+        }
+    }
+
+    @@media (max-width: 576px) {
+        .pdf-viewer-container {
+            max-width: 100%;
+            height: 100vh;
+            margin: 0;
+            border-radius: 0;
+        }
+
+        .pdf-title-bar {
+            padding: 0.625rem 0.875rem;
+            padding-right: 3rem;
+        }
+
+        .pdf-title-icon {
+            width: 32px;
+            height: 32px;
+        }
+
+        .pdf-title-icon i {
+            font-size: 1rem;
+        }
+
+        .pdf-title-text h5 {
+            font-size: 0.85rem;
+        }
+
+        .pdf-close-btn {
+            top: 0.5rem;
+            right: 0.5rem;
+            width: 32px;
+            height: 32px;
+            font-size: 1rem;
+        }
+
+        .pdf-toolbar-btn {
+            width: 32px;
+            height: 32px;
+            font-size: 0.9rem;
+        }
+    }
+</style>
+
+<div class="pdf-viewer-overlay @(isVisible ? "show" : "")" @onclick="OnOverlayClick">
+    <div class="pdf-viewer-container" @onclick:stopPropagation="true">
+        <button class="pdf-close-btn" @onclick="OnHideModalClick" title="Close">
+            <i class="bi bi-x-lg"></i>
+        </button>
+
+        <div class="pdf-title-bar">
+            <div class="pdf-title-icon">
+                <i class="bi bi-file-earmark-pdf-fill"></i>
+            </div>
+            <div class="pdf-title-text">
+                <h5 title="@fileName">@GetDisplayFileName()</h5>
+                <span>PDF Viewer</span>
+            </div>
+            <div class="pdf-toolbar">
+                <button class="pdf-toolbar-btn" @onclick="OpenInNewTab" title="Open in new tab">
+                    <i class="bi bi-box-arrow-up-right"></i>
+                </button>
+                <button class="pdf-toolbar-btn" @onclick="DownloadPdf" title="Download">
+                    <i class="bi bi-download"></i>
+                </button>
+            </div>
+        </div>
+
+        <div class="pdf-wrapper">
+            @if (isLoading)
+            {
+                <div class="pdf-loading">
+                    <div class="pdf-loading-icon">
+                        <i class="bi bi-file-earmark-pdf"></i>
+                    </div>
+                    <span class="pdf-loading-text">Loading PDF...</span>
+                </div>
+            }
+
+            @if (!string.IsNullOrEmpty(fileUrl))
+            {
+                <iframe src="@fileUrl"
+                        @onload="OnIframeLoaded"
+                        style="@(isLoading ? "opacity: 0;" : "opacity: 1; transition: opacity 0.3s ease;")">
+                </iframe>
+            }
+            else if (!isLoading)
+            {
+                <div class="pdf-error">
+                    <div class="pdf-error-icon">
+                        <i class="bi bi-file-earmark-x"></i>
+                    </div>
+                    <span class="pdf-error-text">Unable to load PDF</span>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private bool isVisible = false;
+    private bool isLoading = false;
+    private string fileUrl = "";
+    private string fileName = "";
+
+    public async Task ShowModal(string url, string name = "")
+    {
+        fileUrl = url;
+        fileName = !string.IsNullOrEmpty(name) ? name : ExtractFileName(url);
+        isLoading = true;
+        isVisible = true;
+        StateHasChanged();
+    }
+
+    public async Task OnHideModalClick()
+    {
+        isVisible = false;
+        StateHasChanged();
+
+        // Small delay before clearing data to allow animation
+        await Task.Delay(300);
+        fileUrl = "";
+        fileName = "";
+        isLoading = false;
+    }
+
+    private async Task OnOverlayClick()
+    {
+        await OnHideModalClick();
+    }
+
+    private void OnIframeLoaded()
+    {
+        isLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task OpenInNewTab()
+    {
+        if (!string.IsNullOrEmpty(fileUrl))
+        {
+            await JSRuntime.InvokeVoidAsync("open", fileUrl, "_blank");
+        }
+    }
+
+    private async Task DownloadPdf()
+    {
+        if (!string.IsNullOrEmpty(fileUrl))
+        {
+            // Create a temporary link to trigger download
+            await JSRuntime.InvokeVoidAsync("eval", $@"
+                (function() {{
+                    var a = document.createElement('a');
+                    a.href = '{fileUrl}';
+                    a.download = '{fileName}';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                }})();
+            ");
+        }
+    }
+
+    private string ExtractFileName(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return "Document.pdf";
+        try
+        {
+            var uri = new Uri(url);
+            var path = uri.LocalPath;
+            return System.IO.Path.GetFileName(path);
+        }
+        catch
+        {
+            return "Document.pdf";
+        }
+    }
+
+    private string GetDisplayFileName()
+    {
+        if (string.IsNullOrEmpty(fileName)) return "PDF Viewer";
+        return fileName.Length > 60 ? fileName.Substring(0, 57) + "..." : fileName;
+    }
+}

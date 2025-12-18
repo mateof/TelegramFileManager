@@ -270,7 +270,50 @@ namespace TelegramDownloader.Controllers
             {
                 FileDownloadName = fileName,
                 EnableRangeProcessing = true
-                
+
+            };
+        }
+
+        /// <summary>
+        /// View file inline (for PDF viewer, etc.) - doesn't trigger download
+        /// </summary>
+        [Route("ViewFile/{id}")]
+        public async Task<IActionResult> ViewFile(string id, string? idChannel, string? idFile)
+        {
+            var fileName = id;
+            var mimeType = FileService.getMimeType(id.Split(".").Last());
+            var file = _fs.ExistFileIntempFolder($"{idChannel}-{idFile}-{id}");
+            if (file == null)
+            {
+                TL.Message idM = await _ts.getMessageFile(idChannel, Convert.ToInt32(idFile));
+                ChatMessages cm = new ChatMessages();
+                cm.message = idM;
+                string filePath = System.IO.Path.Combine(FileService.TEMPDIR, "_temp", $"{idChannel}-{idFile}-{id}");
+                file = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite);
+                DownloadModel dm = new DownloadModel();
+                dm.tis = _tis;
+                dm.startDate = DateTime.Now;
+                dm.path = filePath;
+                if (cm.message is Message msgBase)
+                {
+                    if (msgBase.media is MessageMediaDocument mediaDoc &&
+                        mediaDoc.document is TL.Document doc)
+                    {
+                        dm._size = doc.size;
+                        dm.name = doc.Filename;
+                    }
+                }
+                dm.channelName = _ts.getChatName(Convert.ToInt64(idChannel));
+                _tis.addToDownloadList(dm);
+                await _ts.DownloadFileAndReturn(cm, file, model: dm);
+                file.Position = 0;
+            }
+
+            // Return file for inline viewing (no download header)
+            Response.Headers["Content-Disposition"] = $"inline; filename=\"{HttpUtility.UrlEncode(fileName)}\"";
+            return new FileStreamResult(file, mimeType)
+            {
+                EnableRangeProcessing = true
             };
         }
 

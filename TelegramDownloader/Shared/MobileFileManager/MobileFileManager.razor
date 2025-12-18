@@ -1,6 +1,7 @@
 @using Syncfusion.Blazor.FileManager
 @using TelegramDownloader.Models
 @inject ILogger<MobileFileManager> Logger
+@inject IJSRuntime JSRuntime
 
 <div class="mobile-file-manager @(IsFullscreen ? "mfm-fullscreen" : "")">
     @* Header con breadcrumb y acciones *@
@@ -89,7 +90,7 @@
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
             </svg>
-            <input type="text" placeholder="Search files..." @bind="SearchText" @bind:event="oninput" @onkeyup="OnSearchKeyUp" />
+            <input type="text" placeholder="Search files..." @bind="SearchText" @bind:event="oninput" @onkeyup="OnSearchKeyUp" @ref="searchInput" />
             @if (!string.IsNullOrEmpty(SearchText))
             {
                 <button class="mfm-btn-icon-sm" @onclick="ClearSearchText" title="Clear text">
@@ -497,7 +498,9 @@
         <div class="mfm-modal-overlay" @onclick="CloseNewFolderDialog">
             <div class="mfm-dialog" @onclick:stopPropagation="true">
                 <h3>New folder</h3>
-                <input type="text" @bind="NewFolderName" @ref="newFolderInput" class="mfm-input" placeholder="Folder name" />
+                <input type="text" @bind="NewFolderName" @bind:event="oninput" @ref="newFolderInput"
+                       class="mfm-input" placeholder="Folder name"
+                       @onkeydown="OnNewFolderKeyDown" />
                 <div class="mfm-dialog-actions">
                     <button class="mfm-btn mfm-btn-secondary" @onclick="CloseNewFolderDialog">Cancel</button>
                     <button class="mfm-btn mfm-btn-primary" @onclick="ConfirmNewFolder">Create</button>

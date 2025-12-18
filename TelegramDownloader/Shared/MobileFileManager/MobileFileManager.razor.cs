@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
+using Microsoft.JSInterop;
 using Syncfusion.Blazor.FileManager;
 using System.Timers;
 
@@ -176,6 +177,8 @@ namespace TelegramDownloader.Shared.MobileFileManager
         private string NewFolderName { get; set; } = string.Empty;
         private ElementReference newFolderInput;
 
+        private ElementReference searchInput;
+
         private bool ShowDetailsPanel { get; set; } = false;
         private FileManagerDirectoryContent? DetailsItem { get; set; }
 
@@ -242,6 +245,8 @@ namespace TelegramDownloader.Shared.MobileFileManager
 
                 await OnRead.InvokeAsync(args);
 
+                // Always update Files list and invalidate cache, even if response is null/empty
+                // This prevents showing stale data from previous folder
                 if (args.Response?.Files != null)
                 {
                     Files = args.Response.Files.Select(f =>
@@ -249,8 +254,13 @@ namespace TelegramDownloader.Shared.MobileFileManager
                         f.FilterPath = NormalizePath(f.FilterPath);
                         return f;
                     }).ToList();
-                    InvalidateDisplayFilesCache();
                 }
+                else
+                {
+                    // Clear files if response is null to avoid showing stale data
+                    Files = new List<FileManagerDirectoryContent>();
+                }
+                InvalidateDisplayFilesCache();
 
                 if (args.Response?.CWD != null)
                 {
@@ -259,6 +269,11 @@ namespace TelegramDownloader.Shared.MobileFileManager
                     {
                         CurrentFolder.FilterPath = NormalizePath(CurrentFolder.FilterPath);
                     }
+                }
+                else
+                {
+                    // Clear CurrentFolder if not in response
+                    CurrentFolder = null;
                 }
             }
             finally
@@ -454,18 +469,42 @@ namespace TelegramDownloader.Shared.MobileFileManager
 
         private async Task NavigateToFolder(FileManagerDirectoryContent folder)
         {
-            var basePath = CurrentPath;
-            if (!basePath.EndsWith("/"))
-            {
-                basePath += "/";
-            }
+            string newPath;
 
-            var newPath = basePath + folder.Name + "/";
+            // If folder has FilterPath (e.g., from search results), use it to build correct path
+            // FilterPath contains the parent path where the folder is located
+            if (!string.IsNullOrEmpty(folder.FilterPath) && folder.FilterPath != "/")
+            {
+                // FilterPath is the parent path, so we append the folder name
+                var parentPath = NormalizePath(folder.FilterPath);
+                if (!parentPath.EndsWith("/"))
+                {
+                    parentPath += "/";
+                }
+                newPath = parentPath + folder.Name + "/";
+            }
+            else
+            {
+                // Normal navigation from current folder
+                var basePath = CurrentPath;
+                if (!basePath.EndsWith("/"))
+                {
+                    basePath += "/";
+                }
+                newPath = basePath + folder.Name + "/";
+            }
 
             if (newPath == CurrentPath)
             {
                 await LoadFiles();
                 return;
+            }
+
+            // Clear search when navigating to a folder
+            if (ShowSearch)
+            {
+                ShowSearch = false;
+                SearchText = string.Empty;
             }
 
             CurrentPath = newPath;
@@ -599,8 +638,9 @@ namespace TelegramDownloader.Shared.MobileFileManager
                 {
                     Id = CurrentFolder.Id,
                     Name = CurrentFolder.Name,
-                    FilterPath = NormalizePath(CurrentFolder.FilterPath ?? ""),
-                    FilterId = CurrentFolder.FilterId,
+                    // Preserve empty FilterPath for root folder - don't normalize it to "/"
+                    FilterPath = string.IsNullOrEmpty(CurrentFolder.FilterPath) ? "" : NormalizePath(CurrentFolder.FilterPath),
+                    FilterId = CurrentFolder.FilterId ?? "",
                     IsFile = false
                 };
             }
@@ -742,11 +782,33 @@ namespace TelegramDownloader.Shared.MobileFileManager
 
         #region New Folder
 
-        private void CreateNewFolder()
+        private async Task CreateNewFolder()
         {
             ShowFabMenu = false;
             NewFolderName = "New Folder";
             ShowNewFolderDialog = true;
+            StateHasChanged();
+
+            // Wait for the dialog to render, then focus and select all text
+            await Task.Delay(50);
+            try
+            {
+                await newFolderInput.FocusAsync();
+                await JSRuntime.InvokeVoidAsync("eval", "document.activeElement.select()");
+            }
+            catch { }
+        }
+
+        private async Task OnNewFolderKeyDown(KeyboardEventArgs e)
+        {
+            if (e.Key == "Enter")
+            {
+                await ConfirmNewFolder();
+            }
+            else if (e.Key == "Escape")
+            {
+                CloseNewFolderDialog();
+            }
         }
 
         private async Task ConfirmNewFolder()
@@ -1018,7 +1080,7 @@ namespace TelegramDownloader.Shared.MobileFileManager
 
         #region Search
 
-        private void ToggleSearch()
+        private async Task ToggleSearch()
         {
             ShowSearch = !ShowSearch;
             ShowMoreMenu = false;
@@ -1027,6 +1089,17 @@ namespace TelegramDownloader.Shared.MobileFileManager
                 SearchText = string.Empty;
             }
             StateHasChanged();
+
+            // Focus on search input after showing
+            if (ShowSearch)
+            {
+                await Task.Delay(50); // Small delay to ensure the input is rendered
+                try
+                {
+                    await searchInput.FocusAsync();
+                }
+                catch { /* Input may not be rendered yet */ }
+            }
         }
 
         private async Task OnSearchKeyUp(KeyboardEventArgs e)
@@ -1050,6 +1123,7 @@ namespace TelegramDownloader.Shared.MobileFileManager
                         };
                         await OnSearching.InvokeAsync(searchArgs);
 
+                        // Always update Files and invalidate cache to avoid showing stale data
                         if (searchArgs.Response?.Files != null)
                         {
                             // Normalize FilterPath in search results
@@ -1058,8 +1132,13 @@ namespace TelegramDownloader.Shared.MobileFileManager
                                 f.FilterPath = NormalizePath(f.FilterPath);
                                 return f;
                             }).ToList();
-                            InvalidateDisplayFilesCache();
                         }
+                        else
+                        {
+                            // No results or error - show empty list
+                            Files = new List<FileManagerDirectoryContent>();
+                        }
+                        InvalidateDisplayFilesCache();
                     }
                     else
                     {

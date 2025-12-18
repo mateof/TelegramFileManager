@@ -104,6 +104,8 @@
 
 <TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal @ref="mediaUrlModal"></TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal>
 <TelegramDownloader.Pages.Modals.VideoPlayerModal @ref="videoPlayer"></TelegramDownloader.Pages.Modals.VideoPlayerModal>
+<TelegramDownloader.Pages.Modals.PdfViewerModal @ref="pdfViewer"></TelegramDownloader.Pages.Modals.PdfViewerModal>
+<TelegramDownloader.Pages.Modals.ImageViewerModal @ref="imageViewer"></TelegramDownloader.Pages.Modals.ImageViewerModal>
 
 
 
@@ -122,6 +124,8 @@
     public static bool hasVirtualScroll { get; set; } = false;
     LocalFileManager lfm { get; set; }
     private VideoPlayerModal videoPlayer { get; set; } = default!;
+    private PdfViewerModal pdfViewer { get; set; } = default!;
+    private ImageViewerModal imageViewer { get; set; } = default!;
 
     private MediaUrlModal mediaUrlModal { get; set; } = default!;
 
@@ -367,6 +371,19 @@
         if (args != null && args.FileDetails != null && args.FileDetails.IsFile && isVideoFile(args.FileDetails.Type.ToLower()))
         {
             videoPlayer.ShowModal(await getVideoUrl(args.FileDetails.Id, args.FileDetails.Name, args.FileDetails.Size), args.FileDetails.Name);
+            return;
+        }
+
+        if (args != null && args.FileDetails != null && args.FileDetails.IsFile && isPdfFile(args.FileDetails.Type.ToLower()))
+        {
+            var pdfUrl = await getPdfViewUrl(args.FileDetails.Id, args.FileDetails.Name, args.FileDetails.Size);
+            await pdfViewer.ShowModal(pdfUrl, args.FileDetails.Name);
+            return;
+        }
+
+        if (args != null && args.FileDetails != null && args.FileDetails.IsFile && isImageFile(args.FileDetails.Type.ToLower()))
+        {
+            await OpenImageViewer(args.FileDetails);
             return;
         }
 
@@ -756,6 +773,19 @@
             return;
         }
 
+        if (isPdfFile(args.FileDetails.Type?.ToLower() ?? ""))
+        {
+            var pdfUrl = await getPdfViewUrl(args.FileDetails.Id, args.FileDetails.Name, args.FileDetails.Size);
+            await pdfViewer.ShowModal(pdfUrl, args.FileDetails.Name);
+            return;
+        }
+
+        if (isImageFile(args.FileDetails.Type?.ToLower() ?? ""))
+        {
+            await OpenImageViewerMobile(args.FileDetails);
+            return;
+        }
+
         string filePath = getTempFileMediaUrl(args.FileDetails.Id, args.FileDetails.Name);
         await JSRuntime.InvokeVoidAsync("open", filePath, "_blank");
     }
@@ -947,9 +977,125 @@
         return new List<string> { ".mp3", ".ogg", ".flac", ".aac", ".wav" }.Contains(fileExtension);
     }
 
+    private bool isPdfFile(string fileExtension)
+    {
+        return fileExtension == ".pdf";
+    }
+
+    private bool isImageFile(string fileExtension)
+    {
+        return new List<string> { ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg", ".ico", ".tiff", ".tif" }.Contains(fileExtension);
+    }
+
     private async Task playAudio(FileManagerDirectoryContent fileDetails)
     {
         await JSRuntime.InvokeVoidAsync("openAudioPlayerModal", await getMediaUrl(fileDetails.Id, fileDetails.Name, fileDetails.Size), null, fileDetails.Name);
+    }
+
+    private async Task OpenImageViewer(FileManagerDirectoryContent clickedImage)
+    {
+        try
+        {
+            // Get current path from desktop file manager
+            var currentPath = fm?.Path ?? "/";
+
+            // Get all files in current folder
+            var response = isShared
+                ? await fs.GetFilesPath(DbService.SHARED_DB_NAME, currentPath, null, bsi.CollectionId)
+                : await fs.GetFilesPath(id, currentPath, null);
+
+            // Filter to only images and build ImageInfo list
+            var imageFiles = response?.Files?
+                .Where(f => f.IsFile && isImageFile(f.Type?.ToLower() ?? ""))
+                .OrderBy(f => f.Name)
+                .ToList() ?? new List<FileManagerDirectoryContent>();
+
+            if (imageFiles.Count == 0)
+            {
+                // Fallback: just show the clicked image
+                var url = await getImageViewUrl(clickedImage.Id, clickedImage.Name, clickedImage.Size);
+                await imageViewer.ShowModal(url, clickedImage.Name);
+                return;
+            }
+
+            // Build list of ImageInfo
+            var imageInfoList = new List<ImageViewerModal.ImageInfo>();
+            int startIndex = 0;
+
+            for (int i = 0; i < imageFiles.Count; i++)
+            {
+                var file = imageFiles[i];
+                var url = await getImageViewUrl(file.Id, file.Name, file.Size);
+                imageInfoList.Add(new ImageViewerModal.ImageInfo { Url = url, FileName = file.Name });
+
+                if (file.Id == clickedImage.Id)
+                {
+                    startIndex = i;
+                }
+            }
+
+            await imageViewer.ShowModal(imageInfoList, startIndex);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error opening image viewer");
+            // Fallback: just show the clicked image
+            var url = await getImageViewUrl(clickedImage.Id, clickedImage.Name, clickedImage.Size);
+            await imageViewer.ShowModal(url, clickedImage.Name);
+        }
+    }
+
+    private async Task OpenImageViewerMobile(FileManagerDirectoryContent clickedImage)
+    {
+        try
+        {
+            // Get current path from mobile file manager
+            var currentPath = mobileFileManager?.Path ?? "/";
+
+            // Get all files in current folder
+            var response = isShared
+                ? await fs.GetFilesPath(DbService.SHARED_DB_NAME, currentPath, null, bsi.CollectionId)
+                : await fs.GetFilesPath(id, currentPath, null);
+
+            // Filter to only images and build ImageInfo list
+            var imageFiles = response?.Files?
+                .Where(f => f.IsFile && isImageFile(f.Type?.ToLower() ?? ""))
+                .OrderBy(f => f.Name)
+                .ToList() ?? new List<FileManagerDirectoryContent>();
+
+            if (imageFiles.Count == 0)
+            {
+                // Fallback: just show the clicked image
+                var url = await getImageViewUrl(clickedImage.Id, clickedImage.Name, clickedImage.Size);
+                await imageViewer.ShowModal(url, clickedImage.Name);
+                return;
+            }
+
+            // Build list of ImageInfo
+            var imageInfoList = new List<ImageViewerModal.ImageInfo>();
+            int startIndex = 0;
+
+            for (int i = 0; i < imageFiles.Count; i++)
+            {
+                var file = imageFiles[i];
+                var url = await getImageViewUrl(file.Id, file.Name, file.Size);
+                imageInfoList.Add(new ImageViewerModal.ImageInfo { Url = url, FileName = file.Name });
+
+                if (file.Id == clickedImage.Id)
+                {
+                    startIndex = i;
+                }
+            }
+
+            await imageViewer.ShowModal(imageInfoList, startIndex);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error opening image viewer (mobile)");
+            // Fallback: just show the clicked image
+            var url = await getImageViewUrl(clickedImage.Id, clickedImage.Name, clickedImage.Size);
+            await imageViewer.ShowModal(url, clickedImage.Name);
+        }
     }
 
     private async Task ShowMediaURLModal(string idFile, String name, long size, bool forcePreDownload = false)
@@ -987,6 +1133,42 @@
 
         // Use regular stream for native formats
         return await getMediaUrl(idFile, name, size);
+    }
+
+    private async Task<string> getPdfViewUrl(string idFile, String name, long size)
+    {
+        BsonFileManagerModel item = null;
+        if (isShared)
+            item = await fs.getSharedItemById(id: idFile, collection: bsi.CollectionId);
+        else
+            item = await fs.getItemById(id, idFile);
+        string localdir = MyNavigationManager.BaseUri;
+
+        // Use ViewFile endpoint which serves with Content-Disposition: inline
+        if (item != null && item.MessageId != null)
+        {
+            return new System.Uri(Path.Combine(localdir, "api/file/ViewFile", name).Replace("\\", "/") + $"?idChannel={(isShared ? bsi.ChannelId : id)}&idFile={item.MessageId}").AbsoluteUri;
+        }
+        // Fallback to stream endpoint
+        return new System.Uri(Path.Combine(localdir, "api/file/GetFileStream", isShared ? bsi.ChannelId : id, idFile, name).Replace("\\", "/")).AbsoluteUri;
+    }
+
+    private async Task<string> getImageViewUrl(string idFile, String name, long size)
+    {
+        BsonFileManagerModel item = null;
+        if (isShared)
+            item = await fs.getSharedItemById(id: idFile, collection: bsi.CollectionId);
+        else
+            item = await fs.getItemById(id, idFile);
+        string localdir = MyNavigationManager.BaseUri;
+
+        // Use ViewFile endpoint which serves with Content-Disposition: inline
+        if (item != null && item.MessageId != null)
+        {
+            return new System.Uri(Path.Combine(localdir, "api/file/ViewFile", name).Replace("\\", "/") + $"?idChannel={(isShared ? bsi.ChannelId : id)}&idFile={item.MessageId}").AbsoluteUri;
+        }
+        // Fallback to stream endpoint
+        return new System.Uri(Path.Combine(localdir, "api/file/GetFileStream", isShared ? bsi.ChannelId : id, idFile, name).Replace("\\", "/")).AbsoluteUri;
     }
 
     private string getTempFileMediaUrl(string idFile, String name)

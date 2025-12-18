@@ -10,8 +10,10 @@ using Serilog;
 using Serilog.Debugging;
 using Serilog.Events;
 using Syncfusion.Blazor;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Http;
+using System.Runtime.InteropServices;
 using TelegramDownloader.Data;
 using TelegramDownloader.Data.db;
 using TelegramDownloader.Helpers;
@@ -206,8 +208,70 @@ app.MapFallbackToPage("/_Host");
 
 try
 {
-    Log.Information("TelegramFileManager application started");
-    app.Run();
+    // Check if running in Docker
+    var isDocker = Environment.GetEnvironmentVariable("DOTNET_RUNNING_IN_CONTAINER") == "true"
+                   || File.Exists("/.dockerenv");
+
+    // Start the application
+    await app.StartAsync();
+
+    // Get the URLs the application is listening on
+    var urls = app.Urls;
+    var serverAddresses = app.Services.GetRequiredService<Microsoft.AspNetCore.Hosting.Server.IServer>()
+        .Features.Get<Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature>()?.Addresses;
+
+    var listeningUrls = serverAddresses?.ToList() ?? urls.ToList();
+
+    // Display startup banner with URLs
+    Console.WriteLine();
+    Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
+    Console.WriteLine("║           TelegramFileManager - Application Started          ║");
+    Console.WriteLine("╠══════════════════════════════════════════════════════════════╣");
+    foreach (var url in listeningUrls)
+    {
+        var paddedUrl = url.PadRight(46);
+        Console.WriteLine($"║  🌐 Listening on: {paddedUrl}║");
+    }
+    Console.WriteLine("╠══════════════════════════════════════════════════════════════╣");
+    if (isDocker)
+    {
+        Console.WriteLine("║  🐳 Running in Docker container                              ║");
+    }
+    else
+    {
+        Console.WriteLine("║  💻 Running on local machine                                 ║");
+    }
+    Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
+    Console.WriteLine();
+
+    Log.Information("TelegramFileManager application started. Listening on: {Urls}", string.Join(", ", listeningUrls));
+
+    // Open browser automatically if not in Docker
+    if (!isDocker && listeningUrls.Any())
+    {
+        var urlToOpen = listeningUrls.FirstOrDefault(u => u.StartsWith("http://")) ?? listeningUrls.First();
+
+        // Replace 0.0.0.0 or * with localhost for browser
+        urlToOpen = urlToOpen.Replace("://0.0.0.0", "://localhost")
+                            .Replace("://[::]", "://localhost")
+                            .Replace("://*", "://localhost");
+
+        Log.Information("Opening browser at: {Url}", urlToOpen);
+        Console.WriteLine($"🚀 Opening browser at: {urlToOpen}");
+
+        try
+        {
+            OpenBrowser(urlToOpen);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Could not open browser automatically. Please navigate to {Url} manually.", urlToOpen);
+            Console.WriteLine($"⚠️  Could not open browser automatically. Please navigate to {urlToOpen} manually.");
+        }
+    }
+
+    // Wait for the application to stop
+    await app.WaitForShutdownAsync();
 }
 catch (Exception ex)
 {
@@ -217,4 +281,36 @@ finally
 {
     Log.Information("TelegramFileManager application shutting down");
     Log.CloseAndFlush();
+}
+
+// Helper method to open browser cross-platform
+static void OpenBrowser(string url)
+{
+    try
+    {
+        Process.Start(url);
+    }
+    catch
+    {
+        // Windows
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            url = url.Replace("&", "^&");
+            Process.Start(new ProcessStartInfo("cmd", $"/c start {url}") { CreateNoWindow = true });
+        }
+        // Linux
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        {
+            Process.Start("xdg-open", url);
+        }
+        // macOS
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            Process.Start("open", url);
+        }
+        else
+        {
+            throw;
+        }
+    }
 }
