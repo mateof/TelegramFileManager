@@ -244,6 +244,8 @@ namespace TelegramDownloader.Shared.MobileFileManager
 
                 await OnRead.InvokeAsync(args);
 
+                // Always update Files list and invalidate cache, even if response is null/empty
+                // This prevents showing stale data from previous folder
                 if (args.Response?.Files != null)
                 {
                     Files = args.Response.Files.Select(f =>
@@ -251,8 +253,13 @@ namespace TelegramDownloader.Shared.MobileFileManager
                         f.FilterPath = NormalizePath(f.FilterPath);
                         return f;
                     }).ToList();
-                    InvalidateDisplayFilesCache();
                 }
+                else
+                {
+                    // Clear files if response is null to avoid showing stale data
+                    Files = new List<FileManagerDirectoryContent>();
+                }
+                InvalidateDisplayFilesCache();
 
                 if (args.Response?.CWD != null)
                 {
@@ -261,6 +268,11 @@ namespace TelegramDownloader.Shared.MobileFileManager
                     {
                         CurrentFolder.FilterPath = NormalizePath(CurrentFolder.FilterPath);
                     }
+                }
+                else
+                {
+                    // Clear CurrentFolder if not in response
+                    CurrentFolder = null;
                 }
             }
             finally
@@ -456,18 +468,42 @@ namespace TelegramDownloader.Shared.MobileFileManager
 
         private async Task NavigateToFolder(FileManagerDirectoryContent folder)
         {
-            var basePath = CurrentPath;
-            if (!basePath.EndsWith("/"))
-            {
-                basePath += "/";
-            }
+            string newPath;
 
-            var newPath = basePath + folder.Name + "/";
+            // If folder has FilterPath (e.g., from search results), use it to build correct path
+            // FilterPath contains the parent path where the folder is located
+            if (!string.IsNullOrEmpty(folder.FilterPath) && folder.FilterPath != "/")
+            {
+                // FilterPath is the parent path, so we append the folder name
+                var parentPath = NormalizePath(folder.FilterPath);
+                if (!parentPath.EndsWith("/"))
+                {
+                    parentPath += "/";
+                }
+                newPath = parentPath + folder.Name + "/";
+            }
+            else
+            {
+                // Normal navigation from current folder
+                var basePath = CurrentPath;
+                if (!basePath.EndsWith("/"))
+                {
+                    basePath += "/";
+                }
+                newPath = basePath + folder.Name + "/";
+            }
 
             if (newPath == CurrentPath)
             {
                 await LoadFiles();
                 return;
+            }
+
+            // Clear search when navigating to a folder
+            if (ShowSearch)
+            {
+                ShowSearch = false;
+                SearchText = string.Empty;
             }
 
             CurrentPath = newPath;
@@ -1063,6 +1099,7 @@ namespace TelegramDownloader.Shared.MobileFileManager
                         };
                         await OnSearching.InvokeAsync(searchArgs);
 
+                        // Always update Files and invalidate cache to avoid showing stale data
                         if (searchArgs.Response?.Files != null)
                         {
                             // Normalize FilterPath in search results
@@ -1071,8 +1108,13 @@ namespace TelegramDownloader.Shared.MobileFileManager
                                 f.FilterPath = NormalizePath(f.FilterPath);
                                 return f;
                             }).ToList();
-                            InvalidateDisplayFilesCache();
                         }
+                        else
+                        {
+                            // No results or error - show empty list
+                            Files = new List<FileManagerDirectoryContent>();
+                        }
+                        InvalidateDisplayFilesCache();
                     }
                     else
                     {

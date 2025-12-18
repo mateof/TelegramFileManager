@@ -780,7 +780,10 @@
     {
         try
         {
-            var response = await CallFileOperationsAsync("search", args.Path, null, searchString: args.SearchText);
+            // Wrap search text with wildcards for "contains" search behavior
+            // The FileManagerService uses wildcard pattern matching where * matches any sequence
+            var searchPattern = $"*{args.SearchText}*";
+            var response = await CallFileOperationsAsync("search", args.Path, null, searchString: searchPattern);
             args.Response = response;
         }
         catch (Exception ex)
