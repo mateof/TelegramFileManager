@@ -489,10 +489,12 @@ namespace TelegramDownloader.Data.db
             result.Id = null;
             result.ParentId = target.Id;
             result.DateModified = DateTime.Now;
-            result.FilterId = target.FilterId + target.Id + "/";
+            result.FilterId = (target.FilterId ?? "") + target.Id + "/";
             result.ParentId = target.Id;
-            result.FilterPath = target.FilterPath == "" ? "/" : target.FilterPath + target.Name + "/";
-            result.FilePath = isFile ? targetPath + result.Name : targetPath;
+            // Both empty string and "/" indicate root folder
+            var isRootTarget = string.IsNullOrEmpty(target.FilterPath) || target.FilterPath == "/";
+            result.FilterPath = isRootTarget ? "/" : target.FilterPath + target.Name + "/";
+            result.FilePath = isFile ? targetPath + result.Name : targetPath.TrimEnd('/');
             await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).InsertOneAsync(result);
             return result;
 

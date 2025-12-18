@@ -1,0 +1,114 @@
+@using TelegramDownloader.Data.db
+@inject IDbService DbService
+@inject NavigationManager NavigationManager
+
+<Modal @ref="modal" Title="Delete Channel Database" Size="ModalSize.Regular">
+    <BodyTemplate>
+        <div class="alert alert-danger" role="alert">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <strong>Warning!</strong> This action cannot be undone. All files and folders in this channel's database will be permanently deleted.
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label fw-bold">Channel ID:</label>
+            <div class="form-control bg-light">@ChannelId</div>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label fw-bold">Channel Name:</label>
+            <div class="form-control bg-light">@ChannelName</div>
+        </div>
+
+        <hr />
+
+        <div class="mb-3">
+            <label class="form-label">To confirm deletion, type the channel ID: <strong>@ChannelId</strong></label>
+            <input type="text" class="form-control @(IsInputValid ? "" : "is-invalid")"
+                   @bind="ConfirmationInput"
+                   @bind:event="oninput"
+                   placeholder="Enter channel ID to confirm" />
+            @if (!string.IsNullOrEmpty(ConfirmationInput) && !IsInputValid)
+            {
+                <div class="invalid-feedback">
+                    The channel ID does not match.
+                </div>
+            }
+        </div>
+    </BodyTemplate>
+    <FooterTemplate>
+        <Button Color="ButtonColor.Secondary" @onclick="OnHideModalClick">Cancel</Button>
+        <Button Color="ButtonColor.Danger"
+                @onclick="OnDeleteClick"
+                Disabled="@(!IsInputValid || isDeleting)">
+            @if (isDeleting)
+            {
+                <Spinner Type="SpinnerType.Border" Size="SpinnerSize.Small" Class="me-2" />
+                <span>Deleting...</span>
+            }
+            else
+            {
+                <i class="bi bi-trash me-2"></i>
+                <span>Delete Database</span>
+            }
+        </Button>
+    </FooterTemplate>
+</Modal>
+
+@code {
+    [Parameter] public string ChannelId { get; set; } = string.Empty;
+    [Parameter] public string ChannelName { get; set; } = string.Empty;
+    [Inject] protected ToastService ToastService { get; set; } = default!;
+
+    private Modal modal = default!;
+    private string ConfirmationInput { get; set; } = string.Empty;
+    private bool isDeleting = false;
+
+    private bool IsInputValid => !string.IsNullOrEmpty(ConfirmationInput) &&
+                                  ConfirmationInput.Trim() == ChannelId;
+
+    public async Task ShowAsync()
+    {
+        ConfirmationInput = string.Empty;
+        isDeleting = false;
+        await modal.ShowAsync();
+    }
+
+    private async Task OnHideModalClick()
+    {
+        await modal.HideAsync();
+    }
+
+    private async Task OnDeleteClick()
+    {
+        if (!IsInputValid || isDeleting)
+            return;
+
+        isDeleting = true;
+        StateHasChanged();
+
+        try
+        {
+            await DbService.deleteDatabase(ChannelId);
+            await modal.HideAsync();
+
+            ToastService.Notify(new ToastMessage(ToastType.Success, $"Database for channel '{ChannelName}' has been deleted successfully.")
+            {
+                Title = "Database Deleted",
+                AutoHide = true
+            });
+
+            // Navigate to home page
+            NavigationManager.NavigateTo("/fetchdata", forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(new ToastMessage(ToastType.Danger, $"Error deleting database: {ex.Message}")
+            {
+                Title = "Error",
+                AutoHide = true
+            });
+            isDeleting = false;
+            StateHasChanged();
+        }
+    }
+}

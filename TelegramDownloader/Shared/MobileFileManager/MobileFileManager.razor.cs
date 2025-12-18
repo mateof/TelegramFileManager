@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
+using Microsoft.JSInterop;
 using Syncfusion.Blazor.FileManager;
 using System.Timers;
 
@@ -637,8 +638,9 @@ namespace TelegramDownloader.Shared.MobileFileManager
                 {
                     Id = CurrentFolder.Id,
                     Name = CurrentFolder.Name,
-                    FilterPath = NormalizePath(CurrentFolder.FilterPath ?? ""),
-                    FilterId = CurrentFolder.FilterId,
+                    // Preserve empty FilterPath for root folder - don't normalize it to "/"
+                    FilterPath = string.IsNullOrEmpty(CurrentFolder.FilterPath) ? "" : NormalizePath(CurrentFolder.FilterPath),
+                    FilterId = CurrentFolder.FilterId ?? "",
                     IsFile = false
                 };
             }
@@ -780,11 +782,33 @@ namespace TelegramDownloader.Shared.MobileFileManager
 
         #region New Folder
 
-        private void CreateNewFolder()
+        private async Task CreateNewFolder()
         {
             ShowFabMenu = false;
             NewFolderName = "New Folder";
             ShowNewFolderDialog = true;
+            StateHasChanged();
+
+            // Wait for the dialog to render, then focus and select all text
+            await Task.Delay(50);
+            try
+            {
+                await newFolderInput.FocusAsync();
+                await JSRuntime.InvokeVoidAsync("eval", "document.activeElement.select()");
+            }
+            catch { }
+        }
+
+        private async Task OnNewFolderKeyDown(KeyboardEventArgs e)
+        {
+            if (e.Key == "Enter")
+            {
+                await ConfirmNewFolder();
+            }
+            else if (e.Key == "Escape")
+            {
+                CloseNewFolderDialog();
+            }
         }
 
         private async Task ConfirmNewFolder()

@@ -1,6 +1,7 @@
 @using Syncfusion.Blazor.FileManager
 @using TelegramDownloader.Models
 @inject ILogger<MobileFileManager> Logger
+@inject IJSRuntime JSRuntime
 
 <div class="mobile-file-manager @(IsFullscreen ? "mfm-fullscreen" : "")">
     @* Header con breadcrumb y acciones *@
@@ -497,7 +498,9 @@
         <div class="mfm-modal-overlay" @onclick="CloseNewFolderDialog">
             <div class="mfm-dialog" @onclick:stopPropagation="true">
                 <h3>New folder</h3>
-                <input type="text" @bind="NewFolderName" @ref="newFolderInput" class="mfm-input" placeholder="Folder name" />
+                <input type="text" @bind="NewFolderName" @bind:event="oninput" @ref="newFolderInput"
+                       class="mfm-input" placeholder="Folder name"
+                       @onkeydown="OnNewFolderKeyDown" />
                 <div class="mfm-dialog-actions">
                     <button class="mfm-btn mfm-btn-secondary" @onclick="CloseNewFolderDialog">Cancel</button>
                     <button class="mfm-btn mfm-btn-primary" @onclick="ConfirmNewFolder">Create</button>

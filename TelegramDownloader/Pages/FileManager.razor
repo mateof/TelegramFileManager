@@ -50,6 +50,10 @@
                 }
             }
 
+            <DropdownDivider />
+            <DropdownItem @onclick="openDeleteChannelModal" Type="DropdownItemType.Button" Class="text-danger">
+                <i class="bi bi-trash"></i> Delete Database
+            </DropdownItem>
         </DropdownMenu>
     </Dropdown>
     @if (webDavService.IsRunning)
@@ -71,6 +75,7 @@
 <TelegramDownloader.Pages.Partials.impl.FileManagerImpl @ref="fileManagerImpl" id="@id"></TelegramDownloader.Pages.Partials.impl.FileManagerImpl>
 <TelegramDownloader.Pages.Modals.ImportDataModal id="@id" @ref="ImportModal"></TelegramDownloader.Pages.Modals.ImportDataModal>
 <TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal @ref="mediaUrlModal" title="WebDav URL" url="@webDavUrl"></TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal>
+<TelegramDownloader.Pages.Modals.InfoModals.DeleteChannelModal @ref="deleteChannelModal" ChannelId="@id" ChannelName="@chatName"></TelegramDownloader.Pages.Modals.InfoModals.DeleteChannelModal>
 
 @code {
     private Modals.ImportDataModal ImportModal { get; set; }
@@ -78,6 +83,7 @@
     [Parameter]
     public string id { get; set; }
     private MediaUrlModal mediaUrlModal { get; set; } = default!;
+    private DeleteChannelModal deleteChannelModal { get; set; } = default!;
 
     private WebbDavService webDavService = GeneralConfigStatic.config.webDav.webDavService ?? new WebbDavService();
     private String webDavUrl = "";
@@ -155,5 +161,10 @@
             showRefresh = true;
             await InvokeAsync(StateHasChanged);
         }
+    }
+
+    public async Task openDeleteChannelModal()
+    {
+        await deleteChannelModal.ShowAsync();
     }
 }
