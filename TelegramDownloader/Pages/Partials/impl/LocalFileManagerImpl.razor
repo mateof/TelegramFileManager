@@ -943,7 +943,17 @@
 
         if (newName != null)
         {
-            requestData["name"] = newName;
+            // For rename action: name = old name, newName = new name
+            if (action == "rename" && data != null && data.Length > 0)
+            {
+                requestData["name"] = data[0].Name;  // Old name
+                requestData["newName"] = newName;    // New name
+            }
+            else
+            {
+                // For create folder action: name = folder name
+                requestData["name"] = newName;
+            }
         }
 
         if (searchString != null)

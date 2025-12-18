@@ -483,7 +483,8 @@
         <div class="mfm-modal-overlay" @onclick="CloseRenameDialog">
             <div class="mfm-dialog" @onclick:stopPropagation="true">
                 <h3>Rename</h3>
-                <input type="text" @bind="RenameText" @ref="renameInput" class="mfm-input" />
+                <input type="text" @bind="RenameText" @bind:event="oninput" @ref="renameInput"
+                       class="mfm-input" @onkeydown="OnRenameKeyDown" />
                 <div class="mfm-dialog-actions">
                     <button class="mfm-btn mfm-btn-secondary" @onclick="CloseRenameDialog">Cancel</button>
                     <button class="mfm-btn mfm-btn-primary" @onclick="ConfirmRename">Rename</button>

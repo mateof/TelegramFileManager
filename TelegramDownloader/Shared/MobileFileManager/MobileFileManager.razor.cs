@@ -737,21 +737,47 @@ namespace TelegramDownloader.Shared.MobileFileManager
 
         #region Rename
 
-        private void RenameSelected()
+        private async Task RenameSelected()
         {
             if (SelectedItems.Count != 1) return;
             RenameItem = SelectedItems.First();
             RenameText = RenameItem.Name;
             ShowRenameDialog = true;
             ClearSelection();
+            await FocusAndSelectRenameInput();
         }
 
-        private void StartRenameItem(FileManagerDirectoryContent item)
+        private async Task StartRenameItem(FileManagerDirectoryContent item)
         {
             RenameItem = item;
             RenameText = item.Name;
             ShowRenameDialog = true;
             CloseContextMenu();
+            await FocusAndSelectRenameInput();
+        }
+
+        private async Task FocusAndSelectRenameInput()
+        {
+            StateHasChanged();
+            await Task.Delay(50);
+            try
+            {
+                await renameInput.FocusAsync();
+                await JSRuntime.InvokeVoidAsync("eval", "document.activeElement.select()");
+            }
+            catch { }
+        }
+
+        private async Task OnRenameKeyDown(KeyboardEventArgs e)
+        {
+            if (e.Key == "Enter")
+            {
+                await ConfirmRename();
+            }
+            else if (e.Key == "Escape")
+            {
+                CloseRenameDialog();
+            }
         }
 
         private async Task ConfirmRename()
