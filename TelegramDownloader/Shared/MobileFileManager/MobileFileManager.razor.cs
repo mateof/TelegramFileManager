@@ -176,6 +176,8 @@ namespace TelegramDownloader.Shared.MobileFileManager
         private string NewFolderName { get; set; } = string.Empty;
         private ElementReference newFolderInput;
 
+        private ElementReference searchInput;
+
         private bool ShowDetailsPanel { get; set; } = false;
         private FileManagerDirectoryContent? DetailsItem { get; set; }
 
@@ -1018,7 +1020,7 @@ namespace TelegramDownloader.Shared.MobileFileManager
 
         #region Search
 
-        private void ToggleSearch()
+        private async Task ToggleSearch()
         {
             ShowSearch = !ShowSearch;
             ShowMoreMenu = false;
@@ -1027,6 +1029,17 @@ namespace TelegramDownloader.Shared.MobileFileManager
                 SearchText = string.Empty;
             }
             StateHasChanged();
+
+            // Focus on search input after showing
+            if (ShowSearch)
+            {
+                await Task.Delay(50); // Small delay to ensure the input is rendered
+                try
+                {
+                    await searchInput.FocusAsync();
+                }
+                catch { /* Input may not be rendered yet */ }
+            }
         }
 
         private async Task OnSearchKeyUp(KeyboardEventArgs e)
