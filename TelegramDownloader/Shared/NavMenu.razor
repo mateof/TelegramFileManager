@@ -555,6 +555,9 @@
             <button class="sidebar-action-btn" @onclick="showPlayer" title="Audio Player">
                 <i class="bi bi-music-note-beamed"></i>
             </button>
+            <button class="sidebar-action-btn" @onclick="OpenLocalFiles" title="Local Files">
+                <i class="bi bi-folder2-open"></i>
+            </button>
             <button class="sidebar-action-btn" @onclick="HandleThreeDots" title="More options">
                 <i class="bi bi-three-dots-vertical"></i>
             </button>
@@ -873,6 +876,12 @@
     public async Task goTo(string route)
     {
         uriHelper.NavigateTo(route, forceLoad: true, replace: false);
+    }
+
+    private void OpenLocalFiles()
+    {
+        ToggleNavMenu();
+        uriHelper.NavigateTo("/local-files");
     }
 
     public async Task searchChat()
