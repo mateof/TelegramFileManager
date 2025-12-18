@@ -6,6 +6,7 @@
 @using TelegramDownloader.Services
 @using TelegramDownloader.Services.GitHub
 @using TelegramDownloader.Shared
+@inject ISetupService SetupService
 @inject ITelegramService ts
 @inject NavigationManager NavManager
 @inject IJSRuntime JS
@@ -435,6 +436,14 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Check if setup is complete using async method to avoid deadlock
+        var status = await SetupService.GetSetupStatusAsync();
+        if (status.CurrentStep != SetupStep.Complete)
+        {
+            NavManager.NavigateTo("/setup", forceLoad: true);
+            return;
+        }
+
         checkWorkingTasks();
         tis.TaskEventChanged += eventChangedWorkingTasks;
     }

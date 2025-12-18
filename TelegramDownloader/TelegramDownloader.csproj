@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
-	<Version>3.1.0.0</Version>
+	<Version>3.2.0.0</Version>
 	<Authors>Mateo</Authors>
 	<Product>TelegramFileManager</Product>
     <TargetFramework>net10.0</TargetFramework>
@@ -28,6 +28,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Folder Include="Configuration\" />
     <Folder Include="wwwroot\local\local\" />
     <Folder Include="wwwroot\local\temp\" />
   </ItemGroup>

@@ -11,13 +11,18 @@ namespace TelegramDownloader.Services
         Task<List<string>> GetVersions();
         Task<LogStats> GetStats();
         Task<long> DeleteOldLogs(int daysToKeep);
+        void ReinitializeConnection(string connectionString);
+        bool IsInitialized { get; }
     }
 
     public class LogQueryService : ILogQueryService
     {
-        private readonly IMongoCollection<LogEntry> _logs;
+        private IMongoCollection<LogEntry>? _logs;
         private readonly ILogger<LogQueryService> _logger;
         private bool _indexesCreated = false;
+        private bool _isInitialized = false;
+
+        public bool IsInitialized => _isInitialized;
 
         public LogQueryService(string connectionString, ILogger<LogQueryService> logger)
         {
@@ -25,23 +30,48 @@ namespace TelegramDownloader.Services
 
             try
             {
-                var client = new MongoClient(connectionString);
-                var database = client.GetDatabase("TFM_Logs");
-                _logs = database.GetCollection<LogEntry>("logs");
-
-                // Create indexes asynchronously
-                _ = CreateIndexesAsync();
+                InitializeConnection(connectionString);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to initialize LogQueryService");
-                throw;
+                _logger.LogWarning(ex, "Failed to initialize LogQueryService - will retry when connection is available");
+                _isInitialized = false;
             }
+        }
+
+        private void InitializeConnection(string connectionString)
+        {
+            if (string.IsNullOrWhiteSpace(connectionString))
+            {
+                _logger.LogWarning("LogQueryService: Connection string is empty");
+                _isInitialized = false;
+                return;
+            }
+
+            var settings = MongoClientSettings.FromConnectionString(connectionString);
+            settings.ServerSelectionTimeout = TimeSpan.FromSeconds(5);
+            settings.ConnectTimeout = TimeSpan.FromSeconds(5);
+
+            var client = new MongoClient(settings);
+            var database = client.GetDatabase("TFM_Logs");
+            _logs = database.GetCollection<LogEntry>("logs");
+            _isInitialized = true;
+            _indexesCreated = false;
+
+            // Create indexes asynchronously
+            _ = CreateIndexesAsync();
+        }
+
+        public void ReinitializeConnection(string connectionString)
+        {
+            _logger.LogInformation("Reinitializing LogQueryService connection...");
+            InitializeConnection(connectionString);
+            _logger.LogInformation("LogQueryService reinitialized successfully");
         }
 
         private async Task CreateIndexesAsync()
         {
-            if (_indexesCreated) return;
+            if (_indexesCreated || _logs == null) return;
 
             try
             {
@@ -73,6 +103,17 @@ namespace TelegramDownloader.Services
 
         public async Task<LogQueryResult> GetLogs(LogQueryRequest request)
         {
+            if (!_isInitialized || _logs == null)
+            {
+                return new LogQueryResult
+                {
+                    Logs = new List<LogEntry>(),
+                    TotalCount = 0,
+                    Page = request.Page,
+                    PageSize = request.PageSize
+                };
+            }
+
             try
             {
                 var filterBuilder = Builders<LogEntry>.Filter;
@@ -150,6 +191,11 @@ namespace TelegramDownloader.Services
 
         public async Task<List<string>> GetLoggerNames()
         {
+            if (!_isInitialized || _logs == null)
+            {
+                return new List<string>();
+            }
+
             try
             {
                 var pipeline = new BsonDocument[]
@@ -177,6 +223,11 @@ namespace TelegramDownloader.Services
 
         public async Task<List<string>> GetVersions()
         {
+            if (!_isInitialized || _logs == null)
+            {
+                return new List<string>();
+            }
+
             try
             {
                 var pipeline = new BsonDocument[]
@@ -204,6 +255,11 @@ namespace TelegramDownloader.Services
 
         public async Task<LogStats> GetStats()
         {
+            if (!_isInitialized || _logs == null)
+            {
+                return new LogStats();
+            }
+
             try
             {
                 var stats = new LogStats();
@@ -262,6 +318,11 @@ namespace TelegramDownloader.Services
 
         public async Task<long> DeleteOldLogs(int daysToKeep)
         {
+            if (!_isInitialized || _logs == null)
+            {
+                return 0;
+            }
+
             try
             {
                 var cutoffDate = DateTime.UtcNow.AddDays(-daysToKeep);

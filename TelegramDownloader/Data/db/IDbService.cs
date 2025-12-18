@@ -7,6 +7,7 @@ namespace TelegramDownloader.Data.db
 {
     public interface IDbService
     {
+        void ReinitializeConnection(string connectionString);
         Task<IClientSessionHandle> getSession();
         Task<BsonSharedInfoModel> InsertSharedInfo(BsonSharedInfoModel sim, string dbName = DbService.SHARED_DB_NAME, string collection = "info");
         Task<List<BsonSharedInfoModel>> getSharedInfoList(string dbName = DbService.SHARED_DB_NAME, string collection = "info", string? filter = null);

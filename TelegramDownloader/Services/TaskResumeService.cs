@@ -86,7 +86,23 @@ namespace TelegramDownloader.Services
             }
 
             using var scope = _serviceProvider.CreateScope();
+
+            // Check if setup is complete first
+            var setupService = scope.ServiceProvider.GetRequiredService<ISetupService>();
+            if (!setupService.IsSetupComplete)
+            {
+                _logger.LogInformation("Setup not complete - skipping task resume");
+                return;
+            }
+
             var telegramService = scope.ServiceProvider.GetRequiredService<ITelegramService>();
+
+            // Check if Telegram is configured
+            if (!telegramService.IsConfigured)
+            {
+                _logger.LogInformation("Telegram not configured - setup required, skipping task resume");
+                return;
+            }
 
             if (!telegramService.checkUserLogin())
             {
@@ -113,10 +129,24 @@ namespace TelegramDownloader.Services
             _logger.LogInformation("ResumeTasksAsync - Services resolved. Persistence enabled: {Enabled}, FileService type: {Type}",
                 persistence.IsEnabled, fileService.GetType().Name);
 
+            // Skip if persistence is not enabled (MongoDB not accessible)
+            if (!persistence.IsEnabled)
+            {
+                _logger.LogInformation("Task persistence is not enabled - skipping task resume");
+                return;
+            }
+
             _logger.LogInformation("========== Loading pending tasks from MongoDB ==========");
 
             // Cleanup stale tasks first
-            await persistence.CleanupStaleTasks();
+            try
+            {
+                await persistence.CleanupStaleTasks();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to cleanup stale tasks - continuing with resume");
+            }
 
             // Load pending tasks
             _logger.LogInformation("Calling LoadPendingTasks...");

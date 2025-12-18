@@ -45,12 +45,73 @@ namespace TelegramDownloader.Data
             _persistence = persistence;
             // createDownloadFolder();
             mut.WaitOne();
-            if (client == null)
+            try
             {
-                newClient();
+                if (client == null && HasValidCredentials())
+                {
+                    newClient();
+                }
+                else if (!HasValidCredentials())
+                {
+                    _logger.LogWarning("TelegramService: Credentials not configured - setup required");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "TelegramService: Could not initialize client - setup may be required");
+            }
+            finally
+            {
+                mut.ReleaseMutex();
+            }
+        }
+
+        private static bool HasValidCredentials()
+        {
+            var apiId = GeneralConfigStatic.tlconfig?.api_id ?? Environment.GetEnvironmentVariable("api_id");
+            var apiHash = GeneralConfigStatic.tlconfig?.hash_id ?? Environment.GetEnvironmentVariable("hash_id");
+            return !string.IsNullOrWhiteSpace(apiId) && !string.IsNullOrWhiteSpace(apiHash);
+        }
+
+        public bool IsConfigured => HasValidCredentials() && client != null;
+
+        /// <summary>
+        /// Initializes or reinitializes the Telegram client.
+        /// Call this after setup is complete to create the client with new credentials.
+        /// </summary>
+        public void InitializeClient()
+        {
+            if (client != null)
+            {
+                _logger.LogInformation("Client already initialized");
+                return;
             }
 
-            mut.ReleaseMutex();
+            if (!HasValidCredentials())
+            {
+                _logger.LogWarning("Cannot initialize client - credentials not configured");
+                return;
+            }
+
+            mut.WaitOne();
+            try
+            {
+                if (client == null) // Double-check after acquiring lock
+                {
+                    _logger.LogInformation("Initializing Telegram client after setup");
+                    newClient();
+                    _logger.LogInformation("Telegram client initialized successfully");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to initialize Telegram client: {Message}", ex.Message);
+                throw;
+            }
+            finally
+            {
+                mut.ReleaseMutex();
+            }
         }
 
         private void createDownloadFolder()
@@ -156,6 +217,13 @@ namespace TelegramDownloader.Data
 
         public async Task<string> checkAuth(string number, bool isPhone = false)
         {
+            // Return early if client is not initialized (setup required)
+            if (client == null)
+            {
+                _logger.LogWarning("checkAuth called but client is null - setup required");
+                return "setup_required";
+            }
+
             _logger.LogInformation("Checking authentication - IsPhone: {IsPhone}", isPhone);
             if (client.UserId != null && number == null)
             {

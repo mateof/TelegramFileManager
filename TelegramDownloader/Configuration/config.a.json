@@ -1,0 +1,6 @@
+{
+  "api_id": "62071",
+  "hash_id": "2204b5c6075aeb2e1cdc81e68e2f9256",
+  "mongo_connection_string": "mongodb://mateo:mateoMongo@192.168.0.22:27017",
+  "avoid_checking_certificate": true
+}

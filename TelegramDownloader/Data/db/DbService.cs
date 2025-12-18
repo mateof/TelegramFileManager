@@ -27,10 +27,67 @@ namespace TelegramDownloader.Data.db
         public DbService(ILogger<DbService> logger)
         {
             _logger = logger;
-            client = new MongoClient(GeneralConfigStatic.tlconfig?.mongo_connection_string ?? Environment.GetEnvironmentVariable("connectionString"));
-            currentDatabase = getDatabase("default");
-            this.dbName = "default";
-            _logger.LogInformation("DbService initialized - Connected to MongoDB");
+            var connectionString = GeneralConfigStatic.tlconfig?.mongo_connection_string
+                ?? Environment.GetEnvironmentVariable("connectionString");
+
+            if (string.IsNullOrWhiteSpace(connectionString))
+            {
+                _logger.LogWarning("DbService: MongoDB connection string not configured - setup required");
+                // Use a default that will fail gracefully when actually used
+                connectionString = "mongodb://localhost:27017";
+            }
+
+            try
+            {
+                var settings = MongoClientSettings.FromConnectionString(connectionString);
+                settings.ServerSelectionTimeout = TimeSpan.FromSeconds(5);
+                settings.ConnectTimeout = TimeSpan.FromSeconds(5);
+                client = new MongoClient(settings);
+                currentDatabase = getDatabase("default");
+                this.dbName = "default";
+                _logger.LogInformation("DbService initialized - Connected to MongoDB");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "DbService: Could not connect to MongoDB - setup may be required");
+                // Create client anyway for later use after setup
+                client = new MongoClient(connectionString);
+                currentDatabase = client.GetDatabase("default");
+                this.dbName = "default";
+            }
+        }
+
+        /// <summary>
+        /// Reinitializes the MongoDB connection with a new connection string.
+        /// Call this after setup when the connection string has been configured.
+        /// </summary>
+        public void ReinitializeConnection(string connectionString)
+        {
+            if (string.IsNullOrWhiteSpace(connectionString))
+            {
+                _logger.LogWarning("ReinitializeConnection: Connection string is empty");
+                return;
+            }
+
+            try
+            {
+                _logger.LogInformation("Reinitializing MongoDB connection...");
+                var settings = MongoClientSettings.FromConnectionString(connectionString);
+                settings.ServerSelectionTimeout = TimeSpan.FromSeconds(5);
+                settings.ConnectTimeout = TimeSpan.FromSeconds(5);
+
+                // Create new client with updated connection string
+                client = new MongoClient(settings);
+                currentDatabase = getDatabase("default");
+                this.dbName = "default";
+
+                _logger.LogInformation("DbService reinitialized - Connected to MongoDB with new connection string");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to reinitialize MongoDB connection: {Message}", ex.Message);
+                throw;
+            }
         }
 
         public async Task<IClientSessionHandle> getSession()

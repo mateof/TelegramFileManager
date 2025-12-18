@@ -7,6 +7,8 @@ namespace TelegramDownloader.Data
 {
     public interface ITelegramService
     {
+        bool IsConfigured { get; }
+        void InitializeClient();
         Task<string> checkAuth(string number, bool isPhone = false);
         Task<User> GetUser();
         bool checkChannelExist(string id);
