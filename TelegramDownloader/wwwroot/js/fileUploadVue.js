@@ -56,7 +56,9 @@ function initFileUploadVue() {
             path: "",
             url: "",
             isDragging: false,
-            isUploading: false
+            isUploading: false,
+            concurrentUploads: 3,
+            activeUploads: 0
         };
     },
     methods: {
@@ -100,34 +102,72 @@ function initFileUploadVue() {
             if (this.files.length === 0 || this.isUploading) return;
 
             this.isUploading = true;
-            console.log("Enviando....");
+            this.activeUploads = 0;
+            console.log(`Enviando ${this.files.length} archivos (${this.concurrentUploads} simultáneos)...`);
 
-            const uploadPromises = this.files.map((value) => {
+            // Get files that haven't been uploaded yet
+            const pendingFiles = this.files.filter(f => !f.completed);
+
+            // Upload with concurrency limit
+            await this.uploadWithConcurrency(pendingFiles, this.concurrentUploads);
+
+            this.isUploading = false;
+        },
+
+        async uploadWithConcurrency(files, limit) {
+            const queue = [...files];
+            const executing = [];
+
+            const uploadFile = async (fileItem) => {
+                this.activeUploads++;
+
                 return new Promise((resolve) => {
                     let xhr = new XMLHttpRequest();
                     xhr.open("POST", this.url);
                     let data = new FormData();
-                    data.set('file', value.file);
+                    data.set('file', fileItem.file);
                     data.set('id', this.id);
                     data.set('path', this.path);
                     data.set('action', 'save');
 
                     xhr.upload.addEventListener("progress", ({ loaded, total }) => {
-                        value.progress = Math.floor((loaded / total) * 100);
-                        value.sended = loaded;
+                        fileItem.progress = Math.floor((loaded / total) * 100);
+                        fileItem.sended = loaded;
 
                         if (loaded == total) {
-                            value.completed = true;
+                            fileItem.completed = true;
                         }
                     });
 
-                    xhr.onloadend = () => resolve();
+                    xhr.onloadend = () => {
+                        this.activeUploads--;
+                        resolve();
+                    };
+
+                    xhr.onerror = () => {
+                        this.activeUploads--;
+                        resolve();
+                    };
+
                     xhr.send(data);
                 });
-            });
+            };
 
-            await Promise.all(uploadPromises);
-            this.isUploading = false;
+            while (queue.length > 0 || executing.length > 0) {
+                // Start new uploads while under limit and queue has items
+                while (executing.length < limit && queue.length > 0) {
+                    const fileItem = queue.shift();
+                    const promise = uploadFile(fileItem).then(() => {
+                        executing.splice(executing.indexOf(promise), 1);
+                    });
+                    executing.push(promise);
+                }
+
+                // Wait for at least one to complete before continuing
+                if (executing.length > 0) {
+                    await Promise.race(executing);
+                }
+            }
         },
         closeModal() {
             const hadFiles = this.files.length > 0;
@@ -914,7 +954,7 @@ window.moveToBody = (elementSelector) => {
 }
 
 window.showUploadModal = () => {
-    const modal = document.querySelector('.upload-modal-overlay');
+    const modal = document.querySelector('.vue-upload-overlay');
     if (modal) {
         // Move to body if not already there
         if (modal.parentElement !== document.body) {

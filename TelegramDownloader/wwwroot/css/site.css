@@ -385,66 +385,78 @@ a, .btn-link {
     position: fixed;
     top: 0;
     left: 0;
-    width: 0;
-    height: 0;
+    width: 100%;
+    height: 100%;
     z-index: 10500;
     pointer-events: none;
 }
 
-.upload-modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(4px);
-    z-index: 10500;
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.3s ease, visibility 0.3s ease;
+#modalFileUploadVue > * {
     pointer-events: auto;
 }
 
-.upload-modal-overlay.modalshow {
+.vue-upload-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(8px);
+    z-index: 10500;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+}
+
+.vue-upload-overlay.modalshow {
     opacity: 1;
     visibility: visible;
 }
 
-.upload-modal-overlay.modalhide {
+.vue-upload-overlay.modalhide {
     opacity: 0;
     visibility: hidden;
 }
 
-.upload-modal-container {
+.vue-upload-container {
     position: fixed;
     top: 50%;
     left: 50%;
-    transform: translate(-50%, -50%) scale(0.9);
+    transform: translate(-50%, -50%) scale(0.95);
     width: calc(100% - 2rem);
     max-width: 550px;
+    max-height: 85vh;
     background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
     border-radius: 1rem;
-    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7),
+                0 0 0 1px rgba(233, 69, 96, 0.1);
     overflow: hidden;
-    transition: transform 0.3s ease;
+    transition: transform 0.3s ease, opacity 0.3s ease;
     z-index: 10501;
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
 }
 
-.upload-modal-overlay.modalshow .upload-modal-container {
+.vue-upload-overlay.modalshow .vue-upload-container {
     transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
 }
 
-.upload-modal-header {
+.vue-upload-header {
     background: linear-gradient(135deg, #0f3460 0%, #1a1a2e 100%);
     padding: 1rem 1.25rem;
     display: flex;
     align-items: center;
     justify-content: space-between;
     border-bottom: 1px solid rgba(255,255,255,0.1);
+    flex-shrink: 0;
 }
 
-.upload-modal-title {
+.vue-upload-title {
     color: white;
     font-weight: 600;
     font-size: 1.1rem;
@@ -454,11 +466,11 @@ a, .btn-link {
     margin: 0;
 }
 
-.upload-modal-title i {
+.vue-upload-title i {
     color: #e94560;
 }
 
-.upload-modal-close {
+.vue-upload-close {
     width: 32px;
     height: 32px;
     border-radius: 50%;
@@ -472,20 +484,21 @@ a, .btn-link {
     transition: all 0.2s ease;
 }
 
-.upload-modal-close:hover {
+.vue-upload-close:hover {
     background: rgba(233, 69, 96, 0.3);
     color: #fff;
     transform: rotate(90deg);
 }
 
-.upload-modal-body {
+.vue-upload-body {
     padding: 1.25rem;
-    max-height: 60vh;
+    flex: 1;
     overflow-y: auto;
+    min-height: 0;
 }
 
 /* Drop Zone */
-.upload-drop-zone {
+.vue-upload-drop-zone {
     border: 2px dashed rgba(233, 69, 96, 0.4);
     border-radius: 0.75rem;
     padding: 2rem;
@@ -496,18 +509,18 @@ a, .btn-link {
     margin-bottom: 1rem;
 }
 
-.upload-drop-zone:hover {
+.vue-upload-drop-zone:hover {
     border-color: #e94560;
     background: rgba(233, 69, 96, 0.1);
 }
 
-.upload-drop-zone.dragover {
+.vue-upload-drop-zone.dragover {
     border-color: #e94560;
     background: rgba(233, 69, 96, 0.15);
     transform: scale(1.02);
 }
 
-.upload-drop-icon {
+.vue-upload-drop-icon {
     width: 64px;
     height: 64px;
     background: linear-gradient(135deg, #e94560 0%, #c73659 100%);
@@ -518,34 +531,98 @@ a, .btn-link {
     margin: 0 auto 1rem;
 }
 
-.upload-drop-icon i {
+.vue-upload-drop-icon i {
     font-size: 1.75rem;
     color: white;
 }
 
-.upload-drop-text {
+.vue-upload-drop-text {
     color: rgba(255,255,255,0.8);
     font-size: 1rem;
     margin-bottom: 0.5rem;
 }
 
-.upload-drop-hint {
+.vue-upload-drop-hint {
     color: rgba(255,255,255,0.5);
     font-size: 0.8rem;
 }
 
-.upload-drop-input {
+.vue-upload-drop-input {
     display: none;
 }
 
+/* Concurrent uploads selector */
+.vue-upload-concurrent {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 0.75rem;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.vue-upload-concurrent-label {
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.8);
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.vue-upload-concurrent-label i {
+    color: #e94560;
+}
+
+.vue-upload-concurrent-selector {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.vue-upload-concurrent-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 0.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(255, 255, 255, 0.7);
+    font-weight: 600;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.vue-upload-concurrent-btn:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.3);
+    color: #fff;
+}
+
+.vue-upload-concurrent-btn.active {
+    background: linear-gradient(135deg, #e94560 0%, #c73659 100%);
+    border-color: transparent;
+    color: #fff;
+}
+
+.vue-upload-concurrent-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.vue-upload-concurrent-hint {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.5);
+}
+
 /* File List */
-.upload-file-list {
+.vue-upload-file-list {
     display: flex;
     flex-direction: column;
     gap: 0.75rem;
 }
 
-.upload-file-item {
+.vue-upload-file-item {
     background: rgba(255,255,255,0.05);
     border: 1px solid rgba(255,255,255,0.1);
     border-radius: 0.75rem;
@@ -553,23 +630,23 @@ a, .btn-link {
     transition: all 0.2s ease;
 }
 
-.upload-file-item:hover {
+.vue-upload-file-item:hover {
     background: rgba(255,255,255,0.08);
 }
 
-.upload-file-item.completed {
+.vue-upload-file-item.completed {
     border-color: rgba(40, 167, 69, 0.3);
     background: rgba(40, 167, 69, 0.1);
 }
 
-.upload-file-header {
+.vue-upload-file-header {
     display: flex;
     align-items: center;
     gap: 0.75rem;
     margin-bottom: 0.75rem;
 }
 
-.upload-file-icon {
+.vue-upload-file-icon {
     width: 40px;
     height: 40px;
     background: linear-gradient(135deg, #e94560 0%, #c73659 100%);
@@ -580,21 +657,21 @@ a, .btn-link {
     flex-shrink: 0;
 }
 
-.upload-file-item.completed .upload-file-icon {
+.vue-upload-file-item.completed .vue-upload-file-icon {
     background: linear-gradient(135deg, #28a745 0%, #5dd879 100%);
 }
 
-.upload-file-icon i {
+.vue-upload-file-icon i {
     font-size: 1.1rem;
     color: white;
 }
 
-.upload-file-info {
+.vue-upload-file-info {
     flex: 1;
     min-width: 0;
 }
 
-.upload-file-name {
+.vue-upload-file-name {
     color: white;
     font-weight: 500;
     font-size: 0.9rem;
@@ -604,12 +681,12 @@ a, .btn-link {
     margin-bottom: 0.125rem;
 }
 
-.upload-file-size {
+.vue-upload-file-size {
     color: rgba(255,255,255,0.5);
     font-size: 0.8rem;
 }
 
-.upload-file-remove {
+.vue-upload-file-remove {
     width: 28px;
     height: 28px;
     border-radius: 50%;
@@ -624,17 +701,17 @@ a, .btn-link {
     flex-shrink: 0;
 }
 
-.upload-file-remove:hover {
+.vue-upload-file-remove:hover {
     background: rgba(220, 53, 69, 0.4);
     transform: scale(1.1);
 }
 
-.upload-file-remove i {
+.vue-upload-file-remove i {
     font-size: 0.8rem;
 }
 
 /* Progress */
-.upload-file-progress {
+.vue-upload-file-progress {
     height: 6px;
     background: rgba(255,255,255,0.1);
     border-radius: 3px;
@@ -642,39 +719,39 @@ a, .btn-link {
     margin-bottom: 0.5rem;
 }
 
-.upload-file-progress-bar {
+.vue-upload-file-progress-bar {
     height: 100%;
     background: linear-gradient(90deg, #e94560 0%, #ff6b6b 100%);
     border-radius: 3px;
     transition: width 0.3s ease;
 }
 
-.upload-file-item.completed .upload-file-progress-bar {
+.vue-upload-file-item.completed .vue-upload-file-progress-bar {
     background: linear-gradient(90deg, #28a745 0%, #5dd879 100%);
 }
 
-.upload-file-status {
+.vue-upload-file-status {
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
 
-.upload-file-percent {
+.vue-upload-file-percent {
     color: #e94560;
     font-weight: 600;
     font-size: 0.85rem;
 }
 
-.upload-file-item.completed .upload-file-percent {
+.vue-upload-file-item.completed .vue-upload-file-percent {
     color: #5dd879;
 }
 
-.upload-file-bytes {
+.vue-upload-file-bytes {
     color: rgba(255,255,255,0.5);
     font-size: 0.75rem;
 }
 
-.upload-completed-badge {
+.vue-upload-completed-badge {
     display: inline-flex;
     align-items: center;
     gap: 0.25rem;
@@ -687,16 +764,17 @@ a, .btn-link {
 }
 
 /* Footer */
-.upload-modal-footer {
+.vue-upload-footer {
     padding: 1rem 1.25rem;
     background: rgba(0,0,0,0.2);
     border-top: 1px solid rgba(255,255,255,0.1);
     display: flex;
     justify-content: flex-end;
     gap: 0.75rem;
+    flex-shrink: 0;
 }
 
-.upload-btn {
+.vue-upload-btn {
     padding: 0.625rem 1.5rem;
     border-radius: 0.5rem;
     font-weight: 500;
@@ -708,34 +786,34 @@ a, .btn-link {
     transition: all 0.2s ease;
 }
 
-.upload-btn-primary {
+.vue-upload-btn-primary {
     background: linear-gradient(135deg, #e94560 0%, #c73659 100%);
     color: white;
 }
 
-.upload-btn-primary:hover {
+.vue-upload-btn-primary:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(233, 69, 96, 0.4);
 }
 
-.upload-btn-primary:disabled {
+.vue-upload-btn-primary:disabled {
     opacity: 0.5;
     cursor: not-allowed;
     transform: none;
     box-shadow: none;
 }
 
-.upload-btn-secondary {
+.vue-upload-btn-secondary {
     background: rgba(255,255,255,0.1);
     color: rgba(255,255,255,0.8);
 }
 
-.upload-btn-secondary:hover {
+.vue-upload-btn-secondary:hover {
     background: rgba(255,255,255,0.15);
 }
 
 /* Empty State */
-.upload-empty-state {
+.vue-upload-empty-state {
     text-align: center;
     padding: 1rem;
     color: rgba(255,255,255,0.5);
@@ -743,51 +821,101 @@ a, .btn-link {
 }
 
 /* Scrollbar */
-.upload-modal-body::-webkit-scrollbar {
+.vue-upload-body::-webkit-scrollbar {
     width: 6px;
 }
 
-.upload-modal-body::-webkit-scrollbar-track {
+.vue-upload-body::-webkit-scrollbar-track {
     background: rgba(255,255,255,0.05);
     border-radius: 3px;
 }
 
-.upload-modal-body::-webkit-scrollbar-thumb {
+.vue-upload-body::-webkit-scrollbar-thumb {
     background: rgba(233, 69, 96, 0.4);
     border-radius: 3px;
 }
 
-.upload-modal-body::-webkit-scrollbar-thumb:hover {
+.vue-upload-body::-webkit-scrollbar-thumb:hover {
     background: rgba(233, 69, 96, 0.6);
 }
 
-/* Responsive */
+/* Responsive - Full screen on mobile */
 @media (max-width: 576px) {
-    .upload-modal-container {
-        max-width: calc(100% - 1rem);
-        margin: 0.5rem;
+    .vue-upload-overlay {
+        padding: 0;
     }
 
-    .upload-drop-zone {
+    .vue-upload-container {
+        top: 0;
+        left: 0;
+        transform: none;
+        width: 100%;
+        max-width: 100%;
+        height: 100%;
+        max-height: 100%;
+        border-radius: 0;
+    }
+
+    .vue-upload-overlay.modalshow .vue-upload-container {
+        transform: none;
+    }
+
+    .vue-upload-header {
+        padding: 1rem;
+        border-radius: 0;
+    }
+
+    .vue-upload-body {
+        padding: 1rem;
+        flex: 1;
+        overflow-y: auto;
+    }
+
+    .vue-upload-drop-zone {
         padding: 1.5rem 1rem;
     }
 
-    .upload-drop-icon {
-        width: 48px;
-        height: 48px;
+    .vue-upload-drop-icon {
+        width: 56px;
+        height: 56px;
     }
 
-    .upload-drop-icon i {
-        font-size: 1.25rem;
+    .vue-upload-drop-icon i {
+        font-size: 1.5rem;
     }
 
-    .upload-modal-footer {
+    .vue-upload-drop-text {
+        font-size: 0.95rem;
+    }
+
+    .vue-upload-drop-hint {
+        font-size: 0.8rem;
+    }
+
+    .vue-upload-file-item {
+        padding: 0.75rem;
+    }
+
+    .vue-upload-file-icon {
+        width: 36px;
+        height: 36px;
+    }
+
+    .vue-upload-file-name {
+        font-size: 0.85rem;
+    }
+
+    .vue-upload-footer {
+        padding: 1rem;
         flex-direction: column;
+        gap: 0.5rem;
+        border-radius: 0;
     }
 
-    .upload-btn {
+    .vue-upload-btn {
         width: 100%;
         justify-content: center;
+        padding: 0.75rem 1rem;
     }
 }
 
