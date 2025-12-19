@@ -131,7 +131,6 @@ namespace TelegramDownloader.Services
             try
             {
                 var allProcesses = Process.GetProcesses();
-                double totalCpu = 0;
 
                 foreach (var proc in allProcesses)
                 {

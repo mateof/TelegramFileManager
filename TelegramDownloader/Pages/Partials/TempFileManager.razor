@@ -36,6 +36,7 @@
 
 
 @code {
+#pragma warning disable BL0005 // Setting component parameters from code for modal pattern
     [Parameter]
     public string id { get; set; }
     private Modals.FileUploadModal Modal { get; set; }

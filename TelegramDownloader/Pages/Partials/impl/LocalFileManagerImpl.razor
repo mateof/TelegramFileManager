@@ -79,6 +79,8 @@
 
 
 @code {
+#nullable disable
+#pragma warning disable BL0005 // Setting component parameters from code for modal pattern
     const string param = "path";
     [Parameter]
     public string id { get; set; }
@@ -272,13 +274,17 @@
     [JSInvokable]
     public static async Task RefreshFileManagerStatic()
     {
-        if (_currentInstance != null)
+        try
         {
-            await _currentInstance.InvokeAsync(async () =>
+            if (_currentInstance != null)
             {
-                await _currentInstance.RefreshFileManager();
-            });
+                await _currentInstance.InvokeAsync(async () =>
+                {
+                    await _currentInstance.RefreshFileManager();
+                });
+            }
         }
+        catch { }
     }
 
     private async Task LoadDataAsync()

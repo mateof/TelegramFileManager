@@ -1,4 +1,5 @@
-﻿using BlazorBootstrap;
+#nullable disable
+using BlazorBootstrap;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using Syncfusion.Blazor.Inputs;
@@ -225,7 +226,7 @@ namespace TelegramDownloader.Data
             }
 
             _logger.LogInformation("Checking authentication - IsPhone: {IsPhone}", isPhone);
-            if (client.UserId != null && number == null)
+            if (client.UserId != 0 && number == null)
             {
                 UserData ud = await UserService.getUserDataFromFile();
                 if (ud != null)
@@ -888,7 +889,6 @@ namespace TelegramDownloader.Data
             _logger.LogDebug("DownloadFileStream - Offset: {Offset}, Limit: {Limit}", offset, limit);
             int totalLimit = limit;
             long currentOffset = offset;
-            Byte[] response;
 
             if (message is Message msg && msg.media is MessageMediaDocument doc)
             {
@@ -953,7 +953,7 @@ namespace TelegramDownloader.Data
                         return memoryStream.ToArray();
                     }
                 }
-                catch (Exception e)
+                catch
                 {
                     throw new InvalidOperationException("Unexpected file type returned.");
                 }

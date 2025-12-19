@@ -139,7 +139,7 @@ function initFileUploadVue() {
             // Notificar a Blazor para refrescar el FileManager si se subieron archivos
             if (hadFiles) {
                 try {
-                    DotNet.invokeMethodAsync('TelegramDownloader', 'RefreshFileManagerStatic');
+                    DotNet.invokeMethodAsync('TelegramDownloader', 'RefreshFileManagerStatic').catch(() => {});
                 } catch (e) {
                     console.log('[FileUpload] No se pudo refrescar FileManager:', e);
                 }
@@ -359,12 +359,16 @@ window.openAudioPlayerModal = (file, type = "audio/mpeg", title = "") => {
     if (type === null) {
         type = "audio/mpeg";
     }
-    DotNet.invokeMethodAsync('TelegramDownloader', 'OpenAudioPlayer', file, type, title);
+    try {
+        DotNet.invokeMethodAsync('TelegramDownloader', 'OpenAudioPlayer', file, type, title).catch(() => {});
+    } catch (e) { console.log('OpenAudioPlayer error:', e); }
 }
 
 window.openAudioModal = () => {
     // Abrir el modal con la canción actual (si hay una)
-    DotNet.invokeMethodAsync('TelegramDownloader', 'OpenAudioPlayerCurrent');
+    try {
+        DotNet.invokeMethodAsync('TelegramDownloader', 'OpenAudioPlayerCurrent').catch(() => {});
+    } catch (e) { console.log('OpenAudioPlayerCurrent error:', e); }
 }
 
 window.playAudioPlayer = (url, type) => {
@@ -462,17 +466,23 @@ window.closeAudioModal = () => {
 
 window.addToAudioPlaylist = (url, type = "audio/mpeg", title = "") => {
     if (type === null) type = "audio/mpeg";
-    DotNet.invokeMethodAsync('TelegramDownloader', 'AddToAudioPlaylist', url, type, title);
+    try {
+        DotNet.invokeMethodAsync('TelegramDownloader', 'AddToAudioPlaylist', url, type, title).catch(() => {});
+    } catch (e) { console.log('AddToAudioPlaylist error:', e); }
 }
 
 window.addToAudioPlaylistAndPlay = (url, type = "audio/mpeg", title = "") => {
     if (type === null) type = "audio/mpeg";
-    DotNet.invokeMethodAsync('TelegramDownloader', 'AddToAudioPlaylistAndPlay', url, type, title);
+    try {
+        DotNet.invokeMethodAsync('TelegramDownloader', 'AddToAudioPlaylistAndPlay', url, type, title).catch(() => {});
+    } catch (e) { console.log('AddToAudioPlaylistAndPlay error:', e); }
 }
 
 window.addMultipleToAudioPlaylist = (items) => {
     // items is an array of {url, type, title} objects
-    DotNet.invokeMethodAsync('TelegramDownloader', 'AddMultipleToAudioPlaylist', items);
+    try {
+        DotNet.invokeMethodAsync('TelegramDownloader', 'AddMultipleToAudioPlaylist', items).catch(() => {});
+    } catch (e) { console.log('AddMultipleToAudioPlaylist error:', e); }
 }
 
 // ===== Media Session API for mobile/Bluetooth integration =====
@@ -499,43 +509,59 @@ window.initMediaSession = (title, artist, album, artworkUrl) => {
             ] : []
         });
 
-        // Set up action handlers
+        // Set up action handlers with error handling
         navigator.mediaSession.setActionHandler('play', () => {
-            DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionAction', 'play');
+            try {
+                DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionAction', 'play').catch(() => {});
+            } catch (e) { console.log('Media session play error:', e); }
         });
 
         navigator.mediaSession.setActionHandler('pause', () => {
-            DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionAction', 'pause');
+            try {
+                DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionAction', 'pause').catch(() => {});
+            } catch (e) { console.log('Media session pause error:', e); }
         });
 
         navigator.mediaSession.setActionHandler('previoustrack', () => {
-            DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionAction', 'previoustrack');
+            try {
+                DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionAction', 'previoustrack').catch(() => {});
+            } catch (e) { console.log('Media session previoustrack error:', e); }
         });
 
         navigator.mediaSession.setActionHandler('nexttrack', () => {
-            DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionAction', 'nexttrack');
+            try {
+                DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionAction', 'nexttrack').catch(() => {});
+            } catch (e) { console.log('Media session nexttrack error:', e); }
         });
 
         navigator.mediaSession.setActionHandler('stop', () => {
-            DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionAction', 'stop');
+            try {
+                DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionAction', 'stop').catch(() => {});
+            } catch (e) { console.log('Media session stop error:', e); }
         });
 
         // Seek handlers (for progress bar on lock screen)
         try {
             navigator.mediaSession.setActionHandler('seekbackward', (details) => {
-                const skipTime = details.seekOffset || 10;
-                DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionSeek', -skipTime);
+                try {
+                    const skipTime = details.seekOffset || 10;
+                    DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionSeek', -skipTime).catch(() => {});
+                } catch (e) { console.log('Media session seekbackward error:', e); }
             });
 
             navigator.mediaSession.setActionHandler('seekforward', (details) => {
-                const skipTime = details.seekOffset || 10;
-                DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionSeek', skipTime);
+                try {
+                    const skipTime = details.seekOffset || 10;
+                    DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionSeek', skipTime).catch(() => {});
+                } catch (e) { console.log('Media session seekforward error:', e); }
             });
 
             navigator.mediaSession.setActionHandler('seekto', (details) => {
-                if (details.seekTime !== undefined) {
-                    DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionSeekTo', details.seekTime);
-                }
+                try {
+                    if (details.seekTime !== undefined) {
+                        DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionSeekTo', details.seekTime).catch(() => {});
+                    }
+                } catch (e) { console.log('Media session seekto error:', e); }
             });
         } catch (e) {
             console.log('Seek handlers not supported:', e);
@@ -621,6 +647,16 @@ window.extractAudioArtwork = (audioUrl) => {
             return;
         }
 
+        // Skip artwork extraction for FLAC files - jsmediatags has issues with them
+        // and they require downloading too much data
+        const urlLower = audioUrl.toLowerCase();
+        if (urlLower.includes('.flac') || urlLower.includes('flac')) {
+            console.log('Skipping artwork extraction for FLAC file');
+            window._artworkCache[audioUrl] = null;
+            resolve(null);
+            return;
+        }
+
         // Check if jsmediatags is available
         if (typeof jsmediatags === 'undefined') {
             console.log('jsmediatags library not loaded');
@@ -628,9 +664,17 @@ window.extractAudioArtwork = (audioUrl) => {
             return;
         }
 
+        // Add timeout to prevent hanging
+        const timeoutId = setTimeout(() => {
+            console.log('Artwork extraction timed out');
+            window._artworkCache[audioUrl] = null;
+            resolve(null);
+        }, 10000); // 10 second timeout
+
         try {
             jsmediatags.read(audioUrl, {
                 onSuccess: function(tag) {
+                    clearTimeout(timeoutId);
                     try {
                         const picture = tag.tags.picture;
                         if (picture) {
@@ -655,12 +699,14 @@ window.extractAudioArtwork = (audioUrl) => {
                     }
                 },
                 onError: function(error) {
+                    clearTimeout(timeoutId);
                     console.log('Error reading tags:', error.type, error.info);
                     window._artworkCache[audioUrl] = null;
                     resolve(null);
                 }
             });
         } catch (e) {
+            clearTimeout(timeoutId);
             console.error('Error extracting artwork:', e);
             resolve(null);
         }

@@ -293,7 +293,8 @@
 }
 
 @code {
-
+#nullable disable
+#pragma warning disable BL0005 // Setting component parameters from code for modal pattern
     private Offcanvas offcanvas = default!;
     private Pages.Modals.ImportDataModal ImportModal { get; set; }
     private Pages.Modals.CreateChannelModal CreateChannelModal { get; set; }
@@ -316,41 +317,67 @@
     [JSInvokable]
     public static async Task OpenAudioPlayer(string url, string type, string title)
     {
-        if (_instance?.audioPlayer != null)
+        try
         {
-            await _instance.audioPlayer.ShowModal(url, type, title);
+            if (_instance?.audioPlayer != null)
+            {
+                await _instance.audioPlayer.ShowModal(url, type, title);
+            }
         }
+        catch { }
     }
 
     [JSInvokable]
     public static async Task OpenAudioPlayerCurrent()
     {
-        if (_instance?.audioPlayer != null)
+        try
         {
-            await _instance.audioPlayer.ShowCurrentModal();
+            if (_instance?.audioPlayer != null)
+            {
+                await _instance.audioPlayer.ShowCurrentModal();
+            }
         }
+        catch { }
     }
 
     [JSInvokable]
-    public static void AddToAudioPlaylist(string url, string type, string title)
+    public static async Task AddToAudioPlaylist(string url, string type, string title)
     {
-        _instance?.audioPlayer?.AddToPlaylist(url, type, title);
-    }
-
-    [JSInvokable]
-    public static void AddToAudioPlaylistAndPlay(string url, string type, string title)
-    {
-        _instance?.audioPlayer?.AddToPlaylistAndPlay(url, type, title);
-    }
-
-    [JSInvokable]
-    public static void AddMultipleToAudioPlaylist(PlaylistItemDto[] items)
-    {
-        if (_instance?.audioPlayer != null && items != null)
+        try
         {
-            var playlistItems = items.Select(i => (i.url, i.type ?? "audio/mpeg", i.title ?? "")).ToList();
-            _instance.audioPlayer.AddMultipleToPlaylist(playlistItems);
+            if (_instance?.audioPlayer != null)
+            {
+                await _instance.audioPlayer.AddToPlaylist(url, type, title);
+            }
         }
+        catch { }
+    }
+
+    [JSInvokable]
+    public static async Task AddToAudioPlaylistAndPlay(string url, string type, string title)
+    {
+        try
+        {
+            if (_instance?.audioPlayer != null)
+            {
+                await _instance.audioPlayer.AddToPlaylistAndPlay(url, type, title);
+            }
+        }
+        catch { }
+    }
+
+    [JSInvokable]
+    public static async Task AddMultipleToAudioPlaylist(PlaylistItemDto[] items)
+    {
+        try
+        {
+            if (_instance?.audioPlayer != null && items != null)
+            {
+                var playlistItems = items.Select(i => (i.url, i.type ?? "audio/mpeg", i.title ?? "")).ToList();
+                await _instance.audioPlayer.AddMultipleToPlaylist(playlistItems);
+            }
+        }
+        catch { }
     }
 
     public class PlaylistItemDto
@@ -364,44 +391,56 @@
     [JSInvokable]
     public static async Task MediaSessionAction(string action)
     {
-        if (_instance?.audioPlayer == null) return;
-
-        switch (action)
+        try
         {
-            case "play":
-                await _instance.audioPlayer.ResumeFromMediaSession();
-                break;
-            case "pause":
-                await _instance.audioPlayer.PauseFromMediaSession();
-                break;
-            case "previoustrack":
-                await _instance.audioPlayer.PlayPreviousFromMediaSession();
-                break;
-            case "nexttrack":
-                await _instance.audioPlayer.PlayNextFromMediaSession();
-                break;
-            case "stop":
-                await _instance.audioPlayer.StopFromMediaSession();
-                break;
+            if (_instance?.audioPlayer == null) return;
+
+            switch (action)
+            {
+                case "play":
+                    await _instance.audioPlayer.ResumeFromMediaSession();
+                    break;
+                case "pause":
+                    await _instance.audioPlayer.PauseFromMediaSession();
+                    break;
+                case "previoustrack":
+                    await _instance.audioPlayer.PlayPreviousFromMediaSession();
+                    break;
+                case "nexttrack":
+                    await _instance.audioPlayer.PlayNextFromMediaSession();
+                    break;
+                case "stop":
+                    await _instance.audioPlayer.StopFromMediaSession();
+                    break;
+            }
         }
+        catch { }
     }
 
     [JSInvokable]
     public static async Task MediaSessionSeek(double offsetSeconds)
     {
-        if (_instance?.audioPlayer != null)
+        try
         {
-            await _instance.audioPlayer.SeekRelativeFromMediaSession(offsetSeconds);
+            if (_instance?.audioPlayer != null)
+            {
+                await _instance.audioPlayer.SeekRelativeFromMediaSession(offsetSeconds);
+            }
         }
+        catch { }
     }
 
     [JSInvokable]
     public static async Task MediaSessionSeekTo(double positionSeconds)
     {
-        if (_instance?.audioPlayer != null)
+        try
         {
-            await _instance.audioPlayer.SeekToFromMediaSession(positionSeconds);
+            if (_instance?.audioPlayer != null)
+            {
+                await _instance.audioPlayer.SeekToFromMediaSession(positionSeconds);
+            }
         }
+        catch { }
     }
 
     // Método público para acceder al reproductor desde otros componentes
@@ -444,7 +483,7 @@
             return;
         }
 
-        checkWorkingTasks();
+        await checkWorkingTasks();
         tis.TaskEventChanged += eventChangedWorkingTasks;
     }
 
@@ -496,9 +535,13 @@
 
     private async void Logout()
     {
-        await ts.logOff();
-        NavManager.NavigateTo("/");
-        StateHasChanged();
+        try
+        {
+            await ts.logOff();
+            NavManager.NavigateTo("/");
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
     }
 
     private async Task LogoutAndClose()
@@ -510,9 +553,13 @@
     }
 
     private async Task checkWorkingTasks() {
-        if (_disposed) return;
-        active = tis.isWorking();
-        await InvokeAsync(StateHasChanged);
+        try
+        {
+            if (_disposed) return;
+            active = tis.isWorking();
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
     }
 
     private int GetDownloadProgress()
@@ -527,9 +574,13 @@
         return activeUpload?.progress ?? 0;
     }
 
-    private void eventChangedWorkingTasks(object sender, System.EventArgs e)
+    private async void eventChangedWorkingTasks(object sender, System.EventArgs e)
     {
-        checkWorkingTasks();
+        try
+        {
+            await checkWorkingTasks();
+        }
+        catch { }
     }
 
     private void ToggleSidebar()
@@ -537,10 +588,14 @@
         sidebarCollapsed = !sidebarCollapsed;
     }
 
-    private void OnNavMenuCollapseChanged(bool isCollapsed)
+    private async void OnNavMenuCollapseChanged(bool isCollapsed)
     {
-        navMenuCollapsed = isCollapsed;
-        StateHasChanged();
+        try
+        {
+            navMenuCollapsed = isCollapsed;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
     }
 
     private async Task CloseVersionModal()

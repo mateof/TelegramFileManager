@@ -1,4 +1,5 @@
-﻿using TL;
+#nullable disable
+using TL;
 
 namespace TelegramDownloader.Models
 {

@@ -1,4 +1,5 @@
 @inject IJSRuntime JSRuntime
+@implements IDisposable
 
 <style>
     /* Floating Audio Player */
@@ -709,7 +710,9 @@
 
     // Album artwork
     private string? artworkUrl = null;
+#pragma warning disable CS0414 // Value assigned but never read
     private bool isLoadingArtwork = false;
+#pragma warning restore CS0414
 
     // Playlist
     private List<PlaylistItem> playlist = new();
@@ -718,6 +721,9 @@
     // Drag and drop state
     private int? draggedIndex = null;
     private int? dragOverIndex = null;
+
+    // Disposed state
+    private bool _disposed = false;
 
     public class PlaylistItem
     {
@@ -731,65 +737,85 @@
 
     public async Task ShowModal(string url, string type = "audio/mpeg", string title = "")
     {
-        bool isSameTrack = audioUrl == url;
-
-        audioUrl = url;
-        audioType = string.IsNullOrEmpty(type) ? "audio/mpeg" : type;
-        audioTitle = !string.IsNullOrEmpty(title) ? title : ExtractFileName(url);
-
-        // Add to playlist if not exists
-        var existingIndex = playlist.FindIndex(p => p.Url == url);
-        if (existingIndex < 0)
+        if (_disposed) return;
+        try
         {
-            playlist.Add(new PlaylistItem { Url = url, Type = audioType, Title = audioTitle });
-            currentTrackIndex = playlist.Count - 1;
+            bool isSameTrack = audioUrl == url;
+
+            audioUrl = url;
+            audioType = string.IsNullOrEmpty(type) ? "audio/mpeg" : type;
+            audioTitle = !string.IsNullOrEmpty(title) ? title : ExtractFileName(url);
+
+            // Add to playlist if not exists
+            var existingIndex = playlist.FindIndex(p => p.Url == url);
+            if (existingIndex < 0)
+            {
+                playlist.Add(new PlaylistItem { Url = url, Type = audioType, Title = audioTitle });
+                currentTrackIndex = playlist.Count - 1;
+            }
+            else
+            {
+                currentTrackIndex = existingIndex;
+            }
+
+            isVisible = true;
+            await InvokeAsync(StateHasChanged);
+            await Task.Delay(100);
+
+            // Only auto-play if different track
+            if (!isSameTrack)
+            {
+                isPlaying = false;
+                progressPercent = 0;
+                currentTimeDisplay = "0:00";
+                artworkUrl = null; // Reset artwork before loading new one
+                await JSRuntime.InvokeVoidAsync("playAudioPlayer", audioUrl, audioType);
+
+                // Extract artwork and update Media Session (async, won't block playback)
+                _ = ExtractArtworkAndUpdateMediaSession(audioUrl);
+            }
+
+            // Start progress update
+            StartProgressTimer();
+            await UpdateProgress();
         }
-        else
+        catch
         {
-            currentTrackIndex = existingIndex;
+            // Prevent circuit crash
         }
-
-        isVisible = true;
-        StateHasChanged();
-        await Task.Delay(100);
-
-        // Only auto-play if different track
-        if (!isSameTrack)
-        {
-            isPlaying = false;
-            progressPercent = 0;
-            currentTimeDisplay = "0:00";
-            artworkUrl = null; // Reset artwork before loading new one
-            await JSRuntime.InvokeVoidAsync("playAudioPlayer", audioUrl, audioType);
-
-            // Extract artwork and update Media Session (async, won't block playback)
-            _ = ExtractArtworkAndUpdateMediaSession(audioUrl);
-        }
-
-        // Start progress update
-        StartProgressTimer();
-        await UpdateProgress();
     }
 
     public async Task ShowCurrentModal()
     {
-        // Show modal with current song without changing anything
-        if (!string.IsNullOrEmpty(audioUrl))
+        if (_disposed) return;
+        try
         {
-            isVisible = true;
-            StateHasChanged();
-            await Task.Delay(100);
-            StartProgressTimer();
-            await UpdateProgress();
+            // Show modal with current song without changing anything
+            if (!string.IsNullOrEmpty(audioUrl))
+            {
+                isVisible = true;
+                await InvokeAsync(StateHasChanged);
+                await Task.Delay(100);
+                StartProgressTimer();
+                await UpdateProgress();
+            }
+        }
+        catch
+        {
+            // Prevent circuit crash
         }
     }
 
     public async Task OnHideModalClick()
     {
-        StopProgressTimer();
-        await JSRuntime.InvokeVoidAsync("closeAudioModal");
-        isVisible = false;
-        StateHasChanged();
+        try
+        {
+            StopProgressTimer();
+            await JSRuntime.InvokeVoidAsync("closeAudioModal");
+            isVisible = false;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
     }
 
     private async Task OnOverlayClick()
@@ -846,15 +872,21 @@
 
     private async Task UpdateProgressLoop(CancellationToken token)
     {
-        while (!token.IsCancellationRequested)
+        while (!token.IsCancellationRequested && !_disposed)
         {
             try
             {
+                if (_disposed) break;
                 await UpdateProgress();
+                if (_disposed) break;
                 await InvokeAsync(StateHasChanged);
                 await Task.Delay(500, token);
             }
             catch (TaskCanceledException)
+            {
+                break;
+            }
+            catch (ObjectDisposedException)
             {
                 break;
             }
@@ -920,26 +952,38 @@
         public double BufferPercent { get; set; }
     }
 
-    private void OnPlay()
+    private async void OnPlay()
     {
-        isPlaying = true;
-        StateHasChanged();
+        try
+        {
+            isPlaying = true;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
     }
 
-    private void OnPause()
+    private async void OnPause()
     {
-        isPlaying = false;
-        StateHasChanged();
+        try
+        {
+            isPlaying = false;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
     }
 
     private async void OnEnded()
     {
-        isPlaying = false;
-        if (CanPlayNext)
+        try
         {
-            await PlayNext();
+            isPlaying = false;
+            if (CanPlayNext)
+            {
+                await PlayNext();
+            }
+            await InvokeAsync(StateHasChanged);
         }
-        StateHasChanged();
+        catch { }
     }
 
     // Playlist methods
@@ -966,10 +1010,17 @@
 
     private async Task ExtractArtworkAndUpdateMediaSession(string url)
     {
-        await ExtractArtwork(url);
-        // Update Media Session for mobile/Bluetooth with artwork
-        await InitializeMediaSession();
-        await UpdateMediaSessionPlaybackState("playing");
+        try
+        {
+            await ExtractArtwork(url);
+            // Update Media Session for mobile/Bluetooth with artwork
+            await InitializeMediaSession();
+            await UpdateMediaSessionPlaybackState("playing");
+        }
+        catch
+        {
+            // Ignore errors - don't crash the circuit
+        }
     }
 
     private async Task PlayPrevious()
@@ -1006,69 +1057,85 @@
         }
     }
 
-    public void AddToPlaylist(string url, string type = "audio/mpeg", string title = "")
+    public async Task AddToPlaylist(string url, string type = "audio/mpeg", string title = "")
     {
-        var item = new PlaylistItem
+        try
         {
-            Url = url,
-            Type = string.IsNullOrEmpty(type) ? "audio/mpeg" : type,
-            Title = !string.IsNullOrEmpty(title) ? title : ExtractFileName(url)
-        };
-
-        if (!playlist.Any(p => p.Url == url))
-        {
-            playlist.Add(item);
-            StateHasChanged();
-        }
-    }
-
-    public void AddToPlaylistAndPlay(string url, string type = "audio/mpeg", string title = "")
-    {
-        var existingIndex = playlist.FindIndex(p => p.Url == url);
-
-        if (existingIndex >= 0)
-        {
-            _ = PlayTrack(existingIndex);
-        }
-        else
-        {
-            AddToPlaylist(url, type, title);
-            _ = PlayTrack(playlist.Count - 1);
-        }
-    }
-
-    public void AddMultipleToPlaylist(List<PlaylistItem> items)
-    {
-        foreach (var item in items)
-        {
-            if (!playlist.Any(p => p.Url == item.Url))
+            var item = new PlaylistItem
             {
-                playlist.Add(new PlaylistItem
-                {
-                    Url = item.Url,
-                    Type = string.IsNullOrEmpty(item.Type) ? "audio/mpeg" : item.Type,
-                    Title = !string.IsNullOrEmpty(item.Title) ? item.Title : ExtractFileName(item.Url)
-                });
-            }
-        }
-        StateHasChanged();
-    }
+                Url = url,
+                Type = string.IsNullOrEmpty(type) ? "audio/mpeg" : type,
+                Title = !string.IsNullOrEmpty(title) ? title : ExtractFileName(url)
+            };
 
-    public void AddMultipleToPlaylist(IEnumerable<(string url, string type, string title)> items)
-    {
-        foreach (var (url, type, title) in items)
-        {
             if (!playlist.Any(p => p.Url == url))
             {
-                playlist.Add(new PlaylistItem
-                {
-                    Url = url,
-                    Type = string.IsNullOrEmpty(type) ? "audio/mpeg" : type,
-                    Title = !string.IsNullOrEmpty(title) ? title : ExtractFileName(url)
-                });
+                playlist.Add(item);
+                await InvokeAsync(StateHasChanged);
             }
         }
-        StateHasChanged();
+        catch { }
+    }
+
+    public async Task AddToPlaylistAndPlay(string url, string type = "audio/mpeg", string title = "")
+    {
+        try
+        {
+            var existingIndex = playlist.FindIndex(p => p.Url == url);
+
+            if (existingIndex >= 0)
+            {
+                await PlayTrack(existingIndex);
+            }
+            else
+            {
+                await AddToPlaylist(url, type, title);
+                await PlayTrack(playlist.Count - 1);
+            }
+        }
+        catch { }
+    }
+
+    public async Task AddMultipleToPlaylist(List<PlaylistItem> items)
+    {
+        try
+        {
+            foreach (var item in items)
+            {
+                if (!playlist.Any(p => p.Url == item.Url))
+                {
+                    playlist.Add(new PlaylistItem
+                    {
+                        Url = item.Url,
+                        Type = string.IsNullOrEmpty(item.Type) ? "audio/mpeg" : item.Type,
+                        Title = !string.IsNullOrEmpty(item.Title) ? item.Title : ExtractFileName(item.Url)
+                    });
+                }
+            }
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
+    }
+
+    public async Task AddMultipleToPlaylist(IEnumerable<(string url, string type, string title)> items)
+    {
+        try
+        {
+            foreach (var (url, type, title) in items)
+            {
+                if (!playlist.Any(p => p.Url == url))
+                {
+                    playlist.Add(new PlaylistItem
+                    {
+                        Url = url,
+                        Type = string.IsNullOrEmpty(type) ? "audio/mpeg" : type,
+                        Title = !string.IsNullOrEmpty(title) ? title : ExtractFileName(url)
+                    });
+                }
+            }
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
     }
 
     // Drag and drop handlers
@@ -1219,44 +1286,64 @@
     // Media Session action handlers (called from MainLayout via JS)
     public async Task ResumeFromMediaSession()
     {
-        await JSRuntime.InvokeVoidAsync("resumeAudioPlayer");
-        isPlaying = true;
-        await UpdateMediaSessionPlaybackState("playing");
-        await InvokeAsync(StateHasChanged);
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("resumeAudioPlayer");
+            isPlaying = true;
+            await UpdateMediaSessionPlaybackState("playing");
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
     }
 
     public async Task PauseFromMediaSession()
     {
-        await JSRuntime.InvokeVoidAsync("pauseAudioPlayer");
-        isPlaying = false;
-        await UpdateMediaSessionPlaybackState("paused");
-        await InvokeAsync(StateHasChanged);
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("pauseAudioPlayer");
+            isPlaying = false;
+            await UpdateMediaSessionPlaybackState("paused");
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
     }
 
     public async Task PlayPreviousFromMediaSession()
     {
-        if (CanPlayPrevious)
+        try
         {
-            await PlayTrack(currentTrackIndex - 1);
+            if (CanPlayPrevious)
+            {
+                await PlayTrack(currentTrackIndex - 1);
+            }
         }
+        catch { }
     }
 
     public async Task PlayNextFromMediaSession()
     {
-        if (CanPlayNext)
+        try
         {
-            await PlayTrack(currentTrackIndex + 1);
+            if (CanPlayNext)
+            {
+                await PlayTrack(currentTrackIndex + 1);
+            }
         }
+        catch { }
     }
 
     public async Task StopFromMediaSession()
     {
-        await JSRuntime.InvokeVoidAsync("stopAudioPlayer");
-        isPlaying = false;
-        progressPercent = 0;
-        currentTimeDisplay = "0:00";
-        await UpdateMediaSessionPlaybackState("none");
-        await InvokeAsync(StateHasChanged);
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("stopAudioPlayer");
+            isPlaying = false;
+            progressPercent = 0;
+            currentTimeDisplay = "0:00";
+            await UpdateMediaSessionPlaybackState("none");
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
     }
 
     public async Task SeekRelativeFromMediaSession(double offsetSeconds)
@@ -1286,5 +1373,11 @@
             }
         }
         catch { }
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        StopProgressTimer();
     }
 }

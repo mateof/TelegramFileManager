@@ -287,7 +287,9 @@
     // State
     private bool isLoading = false;
     private System.Timers.Timer? searchDebounceTimer;
+#pragma warning disable CS0414 // Value assigned but never read
     private CancellationTokenSource? searchCts;
+#pragma warning restore CS0414
 
     protected override async Task OnInitializedAsync()
     {

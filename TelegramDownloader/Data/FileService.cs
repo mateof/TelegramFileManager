@@ -1,4 +1,5 @@
-﻿using BlazorBootstrap;
+#nullable disable
+using BlazorBootstrap;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.StaticFiles;
 using MongoDB.Driver;
@@ -873,7 +874,7 @@ namespace TelegramDownloader.Data
             try
             {
                 model.channelName = _ts.getChatName(Convert.ToInt64(dbName));
-            } catch(Exception ex) {
+            } catch {
                 model.channelName = "Public or Shared";
             }
             var tcs = new TaskCompletionSource<bool>();
@@ -1280,10 +1281,10 @@ namespace TelegramDownloader.Data
             {
                 Directory.Delete(basePath, true);
             }
-            catch (Exception ex)
+            catch
             {
             }
-            
+
             Directory.CreateDirectory(basePath);
             List<BsonFileManagerModel> filesAndFolders = await _db.getAllChildFilesInDirectory(dbName, path);
             foreach (BsonFileManagerModel file in filesAndFolders)
@@ -1797,7 +1798,7 @@ namespace TelegramDownloader.Data
             {
                 return MIMETypesDictionary[extension.Replace(".", "")] ?? "application/octet-stream";
             }
-            catch (Exception e)
+            catch
             {
                 return "application/octet-stream";
             }

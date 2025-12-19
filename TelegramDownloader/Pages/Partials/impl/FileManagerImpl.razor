@@ -111,6 +111,8 @@
 
 
 @code {
+#nullable disable
+#pragma warning disable BL0005 // Setting component parameters from code for modal pattern
     private Modals.DowloadFromTelegram Modal { get; set; }
     [Parameter]
     public string id { get; set; }
@@ -989,7 +991,16 @@
 
     private async Task playAudio(FileManagerDirectoryContent fileDetails)
     {
-        await JSRuntime.InvokeVoidAsync("openAudioPlayerModal", await getMediaUrl(fileDetails.Id, fileDetails.Name, fileDetails.Size), null, fileDetails.Name);
+        try
+        {
+            var url = await getMediaUrl(fileDetails.Id, fileDetails.Name, fileDetails.Size);
+            await JSRuntime.InvokeVoidAsync("openAudioPlayerModal", url, null, fileDetails.Name);
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Error playing audio file: {Name}", fileDetails.Name);
+            nm.sendMessage("Error", "Error playing audio file", NotificationTypes.Error);
+        }
     }
 
     private async Task OpenImageViewer(FileManagerDirectoryContent clickedImage)

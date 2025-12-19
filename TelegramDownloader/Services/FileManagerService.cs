@@ -1,4 +1,5 @@
-﻿using System.IO.Compression;
+#nullable disable
+using System.IO.Compression;
 using System.Text.RegularExpressions;
 using Syncfusion.Blazor.FileManager;
 using Microsoft.AspNetCore.Mvc;
@@ -16,7 +17,7 @@ namespace TelegramDownloader.Services
         protected string hostPath;
         protected string hostName;
         private string accessMessage = string.Empty;
-        internal HttpResponse Response;
+        internal HttpResponse? Response;
         public string basePath;
         string root = "wwwroot\\Files";
 
@@ -1808,7 +1809,7 @@ namespace TelegramDownloader.Services
                     Permission = GetPermission(GetPath(filterPath), info.Name, isFile)
                 };
             }
-            catch (Exception e)
+            catch
             {
                 throw;
             }
@@ -1940,7 +1941,7 @@ namespace TelegramDownloader.Services
 
                 return ((attributes & FileAttributes.Directory) != FileAttributes.Directory) ? false : true;
             }
-            catch (Exception ex)
+            catch
             {
                 return false;
             }

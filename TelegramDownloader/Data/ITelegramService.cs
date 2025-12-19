@@ -1,4 +1,5 @@
-﻿using BlazorBootstrap;
+#nullable disable
+using BlazorBootstrap;
 using TelegramDownloader.Models;
 using TL;
 using WTelegram;

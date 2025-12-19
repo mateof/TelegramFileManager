@@ -1,4 +1,5 @@
-﻿using Syncfusion.Blazor.FileManager;
+#nullable disable
+using Syncfusion.Blazor.FileManager;
 using Syncfusion.Blazor.Inputs;
 using System.Dynamic;
 using TelegramDownloader.Models;

@@ -82,7 +82,7 @@ else
 </script> *@
 
 @code {
-
+#pragma warning disable BL0007 // Component parameter with custom setter for change detection
     private Modals.DownloadModal Modal { get; set; }
     private string? idChat;
     private int elements = 20;

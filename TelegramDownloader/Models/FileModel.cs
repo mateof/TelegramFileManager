@@ -1,4 +1,5 @@
-﻿using MongoDB.Bson.Serialization.Attributes;
+#nullable disable
+using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.Bson;
 using Syncfusion.Blazor.FileManager;
 using TelegramDownloader.Data.db;

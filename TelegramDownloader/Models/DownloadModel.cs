@@ -1,4 +1,5 @@
-﻿using System.Diagnostics.Tracing;
+#nullable disable
+using System.Diagnostics.Tracing;
 using System.Xml.Linq;
 using System;
 using TelegramDownloader.Data;

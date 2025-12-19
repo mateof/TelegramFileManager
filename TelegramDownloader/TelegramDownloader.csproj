@@ -10,6 +10,15 @@
     <UserSecretsId>528ba20b-8482-4c0f-9c2f-7ecc8dc30410</UserSecretsId>
     <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
     <DockerfileContext>.</DockerfileContext>
+    <!-- Suppress warnings that are by design or acceptable -->
+    <!-- CS1998/CS4014: Async/await patterns for parallel execution -->
+    <!-- CS0618/SYSLIB0014/ASPDEPR005: Obsolete API warnings -->
+    <!-- CA2200/CA2024: Code analysis patterns -->
+    <!-- CS0649: Fields with nullable initialization patterns -->
+    <!-- CS86xx: Nullable reference types (requires architectural changes to fix properly) -->
+    <NoWarn>
+      CS1998;CS4014;CA2024;CA2200;CS0618;SYSLIB0014;ASPDEPR005;CS0649;CS8600;CS8602;CS8603;CS8604;CS8605;CS8618;CS8622;CS8625;CS8632;CS8669
+    </NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

@@ -133,7 +133,14 @@ else
 
 // Add services to the container.
 builder.Services.AddRazorPages();
-builder.Services.AddServerSideBlazor();
+builder.Services.AddServerSideBlazor(options =>
+{
+    options.DetailedErrors = true; // Enable detailed errors for debugging
+})
+.AddCircuitOptions(options =>
+{
+    options.DetailedErrors = true;
+});
 builder.Services.AddSingleton<ITelegramService, TelegramService>();
 builder.Services.AddSingleton<IDbService, DbService>();
 builder.Services.AddTransient<IFileService, FileServiceV2>();
@@ -155,7 +162,9 @@ builder.Services.AddSingleton<ISystemMetricsService, SystemMetricsService>();
 // Setup service for initial configuration
 builder.Services.AddSingleton<ISetupService, SetupService>();
 
+#pragma warning disable ASP0000 // ServiceLocator pattern is intentional
 ServiceLocator.ServiceProvider = builder.Services.BuildServiceProvider();
+#pragma warning restore ASP0000
 builder.Services.AddBlazorBootstrap();
 
 

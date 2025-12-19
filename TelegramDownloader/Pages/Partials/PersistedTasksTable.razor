@@ -159,7 +159,9 @@ else
     private Modal errorModal = default!;
     private ConfirmDialog confirmDialog = default!;
     private PersistedTaskModel? selectedErrorTask;
+#pragma warning disable CS0414 // Value assigned but never read
     private bool _disposed = false;
+#pragma warning restore CS0414
 
     protected override async Task OnInitializedAsync()
     {
