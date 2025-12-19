@@ -558,9 +558,6 @@
             <button class="sidebar-action-btn" @onclick="OpenLocalFiles" title="Local Files">
                 <i class="bi bi-folder2-open"></i>
             </button>
-            <button class="sidebar-action-btn" @onclick="HandleThreeDots" title="More options">
-                <i class="bi bi-three-dots-vertical"></i>
-            </button>
         </div>
 
         <!-- Search -->
@@ -835,15 +832,6 @@
         await fs.DeleteShared(id, collecionId);
         await OnInitializedAsync();
         PreloadService.Hide();
-    }
-
-    private async Task HandleThreeDots()
-    {
-        ToggleNavMenu();
-        if (OnClickCallback.HasDelegate)
-        {
-            await OnClickCallback.InvokeAsync(null);
-        }
     }
 
     private async Task HandleImportMenu()

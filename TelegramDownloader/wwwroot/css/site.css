@@ -1796,21 +1796,24 @@ table.table tbody td,
 
 .info-page .stat-action {
     width: 100%;
+    display: flex;
+    gap: 0.5rem;
 }
 
 .info-page .stat-action .btn {
-    width: 100%;
-    padding: 0.75rem 1.25rem;
+    flex: 1;
+    padding: 0.75rem 1rem;
     font-weight: 600;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 0.5rem;
+    gap: 0.4rem;
     border-radius: 0.625rem;
     transition: all 0.25s ease;
     border: none;
     cursor: pointer;
+    white-space: nowrap;
 }
 
 .info-page .stat-action .btn:hover {
@@ -1858,6 +1861,29 @@ table.table tbody td,
 
 .info-page .stat-action .btn-outline-primary i {
     color: #3b82f6 !important;
+}
+
+/* Outline secondary button - Open Folder style */
+.info-page .stat-action .btn-outline-secondary {
+    background: transparent !important;
+    color: #6b7280 !important;
+    border: 2px solid #d1d5db !important;
+    box-shadow: none;
+}
+
+.info-page .stat-action .btn-outline-secondary:hover {
+    background: #f3f4f6 !important;
+    color: #374151 !important;
+    border-color: #9ca3af !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.info-page .stat-action .btn-outline-secondary i {
+    color: #6b7280 !important;
+}
+
+.info-page .stat-action .btn-outline-secondary:hover i {
+    color: #374151 !important;
 }
 
 /* Chart section */
