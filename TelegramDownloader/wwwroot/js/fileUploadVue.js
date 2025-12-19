@@ -464,6 +464,151 @@ window.closeAudioModal = () => {
     // El audio sigue reproduciéndose en segundo plano
 }
 
+// ===== Audio Visualizer with Web Audio API =====
+window._audioVisualizer = {
+    audioContext: null,
+    analyser: null,
+    source: null,
+    dataArray: null,
+    animationId: null,
+    isInitialized: false
+};
+
+window.initAudioVisualizer = () => {
+    const audio = document.getElementById('audioPlayer');
+    if (!audio) return false;
+
+    try {
+        // Only create context once
+        if (!window._audioVisualizer.audioContext) {
+            window._audioVisualizer.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        const ctx = window._audioVisualizer.audioContext;
+
+        // Resume context if suspended (browser autoplay policy)
+        if (ctx.state === 'suspended') {
+            ctx.resume();
+        }
+
+        // Only connect source once per audio element
+        if (!window._audioVisualizer.isInitialized) {
+            // Create analyser with better resolution
+            window._audioVisualizer.analyser = ctx.createAnalyser();
+            window._audioVisualizer.analyser.fftSize = 256; // 128 frequency bins for better resolution
+            window._audioVisualizer.analyser.smoothingTimeConstant = 0.4; // Lower = more responsive
+            window._audioVisualizer.analyser.minDecibels = -90;
+            window._audioVisualizer.analyser.maxDecibels = -10;
+
+            // Connect audio element to analyser
+            window._audioVisualizer.source = ctx.createMediaElementSource(audio);
+            window._audioVisualizer.source.connect(window._audioVisualizer.analyser);
+            window._audioVisualizer.analyser.connect(ctx.destination);
+
+            // Create data array for frequency data
+            const bufferLength = window._audioVisualizer.analyser.frequencyBinCount;
+            window._audioVisualizer.dataArray = new Uint8Array(bufferLength);
+
+            window._audioVisualizer.isInitialized = true;
+        }
+
+        return true;
+    } catch (e) {
+        console.error('Error initializing audio visualizer:', e);
+        return false;
+    }
+};
+
+window.getVisualizerData = () => {
+    if (!window._audioVisualizer.analyser || !window._audioVisualizer.dataArray) {
+        return null;
+    }
+
+    try {
+        window._audioVisualizer.analyser.getByteFrequencyData(window._audioVisualizer.dataArray);
+
+        const data = window._audioVisualizer.dataArray;
+        const bars = [];
+        const numBars = 13;
+        const dataLength = data.length;
+
+        // Use logarithmic frequency distribution (more bins for bass, fewer for treble)
+        // This better matches human hearing perception
+        const frequencyBands = [
+            { start: 0, end: 2 },      // Sub-bass (very low)
+            { start: 2, end: 4 },      // Bass
+            { start: 4, end: 8 },      // Low-mid bass
+            { start: 8, end: 12 },     // Mid-bass
+            { start: 12, end: 20 },    // Low-mids
+            { start: 20, end: 30 },    // Mids
+            { start: 30, end: 42 },    // Upper-mids
+            { start: 42, end: 56 },    // Presence
+            { start: 56, end: 72 },    // High-mids
+            { start: 72, end: 88 },    // Highs
+            { start: 88, end: 104 },   // High treble
+            { start: 104, end: 118 },  // Air
+            { start: 118, end: 128 }   // Ultra-high
+        ];
+
+        // Frequency-dependent scaling to compensate for bass dominance
+        // Lower values = more attenuation, higher values = more boost
+        const frequencyScaling = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7];
+
+        for (let i = 0; i < numBars; i++) {
+            const band = frequencyBands[i];
+            let sum = 0;
+            let count = 0;
+
+            for (let j = band.start; j < band.end && j < dataLength; j++) {
+                sum += data[j];
+                count++;
+            }
+
+            if (count > 0) {
+                let avg = sum / count;
+                // Apply frequency-dependent scaling
+                avg *= frequencyScaling[i];
+                // Normalize to 0-100
+                let normalized = (avg / 255) * 100;
+                // Apply slight boost for visual impact
+                normalized = Math.min(100, normalized * 1.2);
+                bars.push(normalized);
+            } else {
+                bars.push(0);
+            }
+        }
+
+        return bars;
+    } catch (e) {
+        console.error('Error getting visualizer data:', e);
+        return null;
+    }
+};
+
+window.startVisualizerAnimation = (callback) => {
+    // Initialize if not already done
+    if (!window._audioVisualizer.isInitialized) {
+        window.initAudioVisualizer();
+    }
+
+    const animate = () => {
+        const data = window.getVisualizerData();
+        if (data && callback) {
+            callback(data);
+        }
+        window._audioVisualizer.animationId = requestAnimationFrame(animate);
+    };
+
+    animate();
+};
+
+window.stopVisualizerAnimation = () => {
+    if (window._audioVisualizer.animationId) {
+        cancelAnimationFrame(window._audioVisualizer.animationId);
+        window._audioVisualizer.animationId = null;
+    }
+};
+
 window.addToAudioPlaylist = (url, type = "audio/mpeg", title = "") => {
     if (type === null) type = "audio/mpeg";
     try {
