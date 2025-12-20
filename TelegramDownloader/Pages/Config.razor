@@ -10,6 +10,7 @@
 @inject ToastService toastService
 @inject TransactionInfoService tis
 @inject IHostApplicationLifetime applicationLifetime
+@inject ITelegramService ts
 @using TelegramDownloader.Shared
 
 <style>
@@ -727,6 +728,42 @@
                             </button>
                         </div>
                     </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-star"></i>
+                                Orphaned Favorites
+                            </div>
+                            <div class="config-item-description">
+                                Remove favorite channels that you no longer have access to in Telegram.
+                                @if (orphanedFavoritesCount > 0)
+                                {
+                                    <span class="badge bg-warning text-dark ms-2">@orphanedFavoritesCount orphaned</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-success ms-2">All good</span>
+                                }
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <button type="button" class="btn btn-outline-danger btn-sm d-flex align-items-center gap-2"
+                                    @onclick="CleanOrphanedFavorites"
+                                    disabled="@(orphanedFavoritesCount == 0 || isCleaningFavorites)">
+                                @if (isCleaningFavorites)
+                                {
+                                    <span class="spinner-border spinner-border-sm" role="status"></span>
+                                    <span>Cleaning...</span>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-trash3"></i>
+                                    <span>Clean (@orphanedFavoritesCount)</span>
+                                }
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -797,6 +834,10 @@
     // FFmpeg availability
     private bool ffmpegAvailable = false;
 
+    // Orphaned favorites
+    private int orphanedFavoritesCount = 0;
+    private bool isCleaningFavorites = false;
+
     protected override async Task OnInitializedAsync()
     {
         Model = null;
@@ -804,6 +845,7 @@
         await RefreshCounters();
         RefreshImageCacheInfo();
         CheckFFmpegAvailability();
+        RefreshOrphanedFavoritesCount();
     }
 
     private void CheckFFmpegAvailability()
@@ -896,6 +938,71 @@
     private void OpenDatabaseMaintenance()
     {
         MainLayout.OpenDatabaseMaintenanceModal();
+    }
+
+    private void RefreshOrphanedFavoritesCount()
+    {
+        try
+        {
+            orphanedFavoritesCount = 0;
+            if (GeneralConfigStatic.config?.FavouriteChannels != null)
+            {
+                foreach (var channelId in GeneralConfigStatic.config.FavouriteChannels)
+                {
+                    var (_, exists) = ts.GetChannelInfo(channelId);
+                    if (!exists)
+                    {
+                        orphanedFavoritesCount++;
+                    }
+                }
+            }
+        }
+        catch
+        {
+            orphanedFavoritesCount = 0;
+        }
+    }
+
+    private async Task CleanOrphanedFavorites()
+    {
+        isCleaningFavorites = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var orphanedIds = new List<long>();
+
+            if (GeneralConfigStatic.config?.FavouriteChannels != null)
+            {
+                foreach (var channelId in GeneralConfigStatic.config.FavouriteChannels.ToList())
+                {
+                    var (_, exists) = ts.GetChannelInfo(channelId);
+                    if (!exists)
+                    {
+                        orphanedIds.Add(channelId);
+                    }
+                }
+            }
+
+            // Remove all orphaned favorites
+            foreach (var id in orphanedIds)
+            {
+                GeneralConfigStatic.DeleteFavouriteChannel(id);
+            }
+
+            // Save changes to database
+            await GeneralConfigStatic.SaveChanges(db, GeneralConfigStatic.config);
+
+            RefreshOrphanedFavoritesCount();
+            toastService.Notify(new(ToastType.Success, $"Removed {orphanedIds.Count} orphaned favorite(s)") { Title = "Success", AutoHide = true });
+        }
+        catch (Exception ex)
+        {
+            toastService.Notify(new(ToastType.Danger, $"Error cleaning favorites: {ex.Message}") { Title = "Error", AutoHide = true });
+        }
+
+        isCleaningFavorites = false;
+        await InvokeAsync(StateHasChanged);
     }
 
     private void RefreshImageCacheInfo()
