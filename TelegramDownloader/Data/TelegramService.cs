@@ -359,6 +359,97 @@ namespace TelegramDownloader.Data
             return true;
         }
 
+        public bool isChannelOwner(long id)
+        {
+            if (chats == null)
+                return false;
+            var peer = chats.chats[id];
+            if (peer is TL.Channel channel)
+            {
+                return channel.IsActive && channel.flags.HasFlag(TL.Channel.Flags.creator);
+            }
+            return false;
+        }
+
+        public async Task LeaveChannel(long id)
+        {
+            try
+            {
+                _logger.LogInformation("Leaving channel with ID: {Id}", id);
+                var peer = chats.chats[id];
+                if (peer is TL.Channel channel)
+                {
+                    var inputChannel = new InputChannel(channel.id, channel.access_hash);
+                    await client.Channels_LeaveChannel(inputChannel);
+                    _logger.LogInformation("Successfully left channel: {Id}", id);
+                }
+                else
+                {
+                    throw new Exception("The specified chat is not a channel");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error leaving channel: {Id}", id);
+                throw;
+            }
+        }
+
+        public async Task DeleteChannel(long id)
+        {
+            try
+            {
+                _logger.LogInformation("Deleting channel with ID: {Id}", id);
+                var peer = chats.chats[id];
+                if (peer is TL.Channel channel)
+                {
+                    if (!channel.flags.HasFlag(TL.Channel.Flags.creator))
+                    {
+                        throw new Exception("You are not the owner of this channel");
+                    }
+                    var inputChannel = new InputChannel(channel.id, channel.access_hash);
+                    await client.Channels_DeleteChannel(inputChannel);
+                    _logger.LogInformation("Successfully deleted channel: {Id}", id);
+                }
+                else
+                {
+                    throw new Exception("The specified chat is not a channel");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting channel: {Id}", id);
+                throw;
+            }
+        }
+
+        public (string? name, bool exists) GetChannelInfo(long id)
+        {
+            try
+            {
+                if (chats == null || !chats.chats.ContainsKey(id))
+                {
+                    return (null, false);
+                }
+
+                var peer = chats.chats[id];
+                if (peer is TL.Channel channel)
+                {
+                    return (channel.title, true);
+                }
+                else if (peer is TL.Chat chat)
+                {
+                    return (chat.title, true);
+                }
+
+                return (peer.ToString(), true);
+            }
+            catch
+            {
+                return (null, false);
+            }
+        }
+
         public async Task<List<ChatViewBase>> GetFouriteChannels(bool mustRefresh = true)
         {
 

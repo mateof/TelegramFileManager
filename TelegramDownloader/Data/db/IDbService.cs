@@ -67,5 +67,17 @@ namespace TelegramDownloader.Data.db
         Task MarkTaskAsError(string internalId, string errorMessage);
         Task CleanupStaleTasks(int maxAgeDays = 7);
         Task ClearAllTasks();
+
+        // Maintenance operations
+        Task<List<string>> GetAllChannelDatabaseNames();
+        Task<DatabaseStats> GetDatabaseStats(string dbName);
+    }
+
+    public class DatabaseStats
+    {
+        public long SizeInBytes { get; set; }
+        public long DocumentCount { get; set; }
+        public DateTime? CreatedAt { get; set; }
+        public DateTime? LastModified { get; set; }
     }
 }

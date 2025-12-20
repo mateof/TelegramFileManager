@@ -903,5 +903,102 @@ namespace TelegramDownloader.Data.db
 
         #endregion
 
+        #region Maintenance Operations
+
+        /// <summary>
+        /// Get all database names that represent Telegram channels (numeric IDs)
+        /// Excludes system databases like TCCONFIG, TFM-SHARED, admin, local, config
+        /// </summary>
+        public async Task<List<string>> GetAllChannelDatabaseNames()
+        {
+            var excludedDatabases = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                CONFIG_DB_NAME,
+                SHARED_DB_NAME,
+                "admin",
+                "local",
+                "config",
+                "default"
+            };
+
+            var databaseNames = new List<string>();
+
+            using (var cursor = await client.ListDatabaseNamesAsync())
+            {
+                while (await cursor.MoveNextAsync())
+                {
+                    foreach (var dbName in cursor.Current)
+                    {
+                        // Only include databases that are numeric (channel IDs) or start with "-" (group IDs)
+                        if (!excludedDatabases.Contains(dbName) &&
+                            (long.TryParse(dbName, out _) || (dbName.StartsWith("-") && long.TryParse(dbName, out _))))
+                        {
+                            databaseNames.Add(dbName);
+                        }
+                    }
+                }
+            }
+
+            _logger.LogInformation("Found {Count} channel databases", databaseNames.Count);
+            return databaseNames;
+        }
+
+        /// <summary>
+        /// Get statistics for a specific database including size, document count, and dates
+        /// </summary>
+        public async Task<DatabaseStats> GetDatabaseStats(string dbName)
+        {
+            var stats = new DatabaseStats();
+
+            try
+            {
+                var database = getDatabase(dbName);
+
+                // Get database stats using command
+                var command = new BsonDocument { { "dbStats", 1 } };
+                var result = await database.RunCommandAsync<BsonDocument>(command);
+
+                if (result.Contains("dataSize"))
+                {
+                    stats.SizeInBytes = result["dataSize"].ToInt64();
+                }
+
+                // Get document count from the directory collection
+                var collection = database.GetCollection<BsonFileManagerModel>("directory");
+                stats.DocumentCount = await collection.CountDocumentsAsync(Builders<BsonFileManagerModel>.Filter.Empty);
+
+                // Get creation date (oldest document) and last modified (newest document)
+                var oldestDoc = await collection
+                    .Find(Builders<BsonFileManagerModel>.Filter.Empty)
+                    .Sort(Builders<BsonFileManagerModel>.Sort.Ascending(x => x.DateCreated))
+                    .Limit(1)
+                    .FirstOrDefaultAsync();
+
+                var newestDoc = await collection
+                    .Find(Builders<BsonFileManagerModel>.Filter.Empty)
+                    .Sort(Builders<BsonFileManagerModel>.Sort.Descending(x => x.DateModified))
+                    .Limit(1)
+                    .FirstOrDefaultAsync();
+
+                if (oldestDoc != null)
+                {
+                    stats.CreatedAt = oldestDoc.DateCreated;
+                }
+
+                if (newestDoc != null)
+                {
+                    stats.LastModified = newestDoc.DateModified;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error getting stats for database {DbName}", dbName);
+            }
+
+            return stats;
+        }
+
+        #endregion
+
     }
 }

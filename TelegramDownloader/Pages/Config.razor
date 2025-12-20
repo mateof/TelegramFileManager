@@ -10,6 +10,7 @@
 @inject ToastService toastService
 @inject TransactionInfoService tis
 @inject IHostApplicationLifetime applicationLifetime
+@using TelegramDownloader.Shared
 
 <style>
     .config-page {
@@ -702,6 +703,33 @@
                 </div>
             </div>
 
+            <!-- Maintenance Section -->
+            <div class="config-section">
+                <div class="config-section-header">
+                    <i class="bi bi-tools"></i>
+                    <span>Maintenance</span>
+                </div>
+                <div class="config-section-body">
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-database-gear"></i>
+                                Database Cleanup
+                            </div>
+                            <div class="config-item-description">
+                                Scan for orphaned databases from channels you no longer have access to. These may be from channels you left or that were deleted.
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <button type="button" class="btn btn-outline-warning btn-sm d-flex align-items-center gap-2" @onclick="OpenDatabaseMaintenance">
+                                <i class="bi bi-search"></i>
+                                <span>Scan</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- System Section -->
             <div class="config-section">
                 <div class="config-section-header">
@@ -863,6 +891,11 @@
 
         // Stop the application - the container/service will restart it automatically
         applicationLifetime.StopApplication();
+    }
+
+    private void OpenDatabaseMaintenance()
+    {
+        MainLayout.OpenDatabaseMaintenanceModal();
     }
 
     private void RefreshImageCacheInfo()

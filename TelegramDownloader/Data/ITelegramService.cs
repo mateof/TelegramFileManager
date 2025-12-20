@@ -43,6 +43,10 @@ namespace TelegramDownloader.Data
         Task<Message> uploadFile(string chatId, Stream file, string fileName, string mimeType = null, UploadModel um = null, string caption = null);
         Task<List<TelegramChatDocuments>> searchAllChannelFiles(long id, int lastId);
         bool isMyChat(long id);
+        bool isChannelOwner(long id);
         Task<TL.Channel?> CreateChannel(string title, string about);
+        Task LeaveChannel(long id);
+        Task DeleteChannel(long id);
+        (string? name, bool exists) GetChannelInfo(long id);
     }
 }

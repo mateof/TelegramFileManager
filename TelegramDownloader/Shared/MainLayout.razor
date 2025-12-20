@@ -190,6 +190,12 @@
 @* Upload to Telegram Modal - rendered outside .page to avoid stacking context issues *@
 <TelegramDownloader.Pages.Modals.UploadToTelegramModal @ref="uploadToTelegramModal" />
 
+@* Delete/Leave Channel Modal - rendered outside .page to avoid stacking context issues *@
+<TelegramDownloader.Pages.Modals.DeleteLeaveChannelModal @ref="deleteLeaveChannelModal" OnChannelRemoved="reloadMenu" />
+
+@* Database Maintenance Modal - rendered outside .page to avoid stacking context issues *@
+<TelegramDownloader.Pages.Modals.DatabaseMaintenanceModal @ref="databaseMaintenanceModal" />
+
 @* Vue Upload Modal - rendered outside .page to avoid stacking context issues *@
 <div id="modalFileUploadVue">
     <TelegramDownloader.Pages.Modals.FileUploadModalTemplate></TelegramDownloader.Pages.Modals.FileUploadModalTemplate>
@@ -300,6 +306,8 @@
     private Pages.Modals.CreateChannelModal CreateChannelModal { get; set; }
     private Pages.Modals.AudioPlayerModal audioPlayer { get; set; } = default!;
     private Pages.Modals.UploadToTelegramModal uploadToTelegramModal { get; set; } = default!;
+    private Pages.Modals.DeleteLeaveChannelModal deleteLeaveChannelModal { get; set; } = default!;
+    private Pages.Modals.DatabaseMaintenanceModal databaseMaintenanceModal { get; set; } = default!;
     private NavMenu menu { get; set; }
     private VersionBadge versionBadge { get; set; }
     private bool active { get; set; } = true;
@@ -457,6 +465,24 @@
     }
 
     public static Pages.Modals.UploadToTelegramModal? GetUploadToTelegramModal() => _instance?.uploadToTelegramModal;
+
+    // Delete/Leave Channel Modal - static methods
+    public static void OpenDeleteLeaveChannelModal(string channelId, string channelName, bool isOwner)
+    {
+        if (_instance != null && _instance.deleteLeaveChannelModal != null)
+        {
+            _instance.InvokeAsync(() => _instance.deleteLeaveChannelModal.Open(channelId, channelName, isOwner));
+        }
+    }
+
+    // Database Maintenance Modal - static methods
+    public static void OpenDatabaseMaintenanceModal()
+    {
+        if (_instance != null && _instance.databaseMaintenanceModal != null)
+        {
+            _instance.InvokeAsync(async () => await _instance.databaseMaintenanceModal.Open());
+        }
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {

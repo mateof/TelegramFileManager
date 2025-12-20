@@ -354,6 +354,16 @@
         color: white;
     }
 
+    .channel-action-btn-danger {
+        opacity: 0.5;
+    }
+
+    .channel-action-btn-danger:hover {
+        background: rgba(220, 53, 69, 0.4) !important;
+        color: #ff6b6b !important;
+        opacity: 1;
+    }
+
     /* Shared Tab Buttons */
     .shared-actions {
         display: flex;
@@ -1004,6 +1014,12 @@
                 <button class="channel-action-btn" @onclick="@(async () => await goTo($"/fetchdata/{cb.chat.ID}"))" @onclick:stopPropagation="true" title="Chat view">
                     <i class="bi bi-chat-left-text"></i>
                 </button>
+                <button class="channel-action-btn channel-action-btn-danger"
+                        @onclick="@(() => OpenDeleteLeaveModal(cb.chat.ID, cb.chat.Title))"
+                        @onclick:stopPropagation="true"
+                        title="@(ts.isChannelOwner(cb.chat.ID) ? "Delete channel" : "Leave channel")">
+                    <i class="bi @(ts.isChannelOwner(cb.chat.ID) ? "bi-trash" : "bi-box-arrow-right")"></i>
+                </button>
             </div>
         </div>
     };
@@ -1015,6 +1031,12 @@
         if (words.Length >= 2)
             return $"{words[0][0]}{words[1][0]}".ToUpper();
         return title.Length >= 2 ? title.Substring(0, 2).ToUpper() : title.ToUpper();
+    }
+
+    private void OpenDeleteLeaveModal(long channelId, string channelName)
+    {
+        var isOwner = ts.isChannelOwner(channelId);
+        MainLayout.OpenDeleteLeaveChannelModal(channelId.ToString(), channelName, isOwner);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
