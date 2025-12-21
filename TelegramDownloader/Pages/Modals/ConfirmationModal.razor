@@ -1,0 +1,304 @@
+@if (isVisible)
+{
+    <div class="confirm-modal-overlay" @onclick="Cancel">
+        <div class="confirm-modal-container @SizeClass" @onclick:stopPropagation="true">
+            <div class="confirm-modal-header @HeaderColorClass">
+                <div class="confirm-modal-title">
+                    <i class="@IconClass"></i>
+                    <span>@Title</span>
+                </div>
+                <button class="confirm-modal-close" @onclick="Cancel" disabled="@isProcessing">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+
+            <div class="confirm-modal-body">
+                @if (!string.IsNullOrEmpty(Message))
+                {
+                    <p class="confirm-message">@Message</p>
+                }
+                @if (ChildContent != null)
+                {
+                    @ChildContent
+                }
+            </div>
+
+            <div class="confirm-modal-footer">
+                <button class="btn btn-outline-secondary" @onclick="Cancel" disabled="@isProcessing">
+                    @CancelText
+                </button>
+                <button class="btn @ConfirmButtonClass" @onclick="Confirm" disabled="@isProcessing">
+                    @if (isProcessing)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                        <span>@ProcessingText</span>
+                    }
+                    else
+                    {
+                        <i class="@ConfirmIconClass me-2"></i>
+                        <span>@ConfirmText</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+<style>
+    .confirm-modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.85);
+        backdrop-filter: blur(8px);
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+    }
+
+    .confirm-modal-container {
+        position: relative;
+        width: 100%;
+        max-width: 450px;
+        background: var(--bs-body-bg);
+        border-radius: 1rem;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        z-index: 100000;
+    }
+
+    .confirm-modal-container.modal-sm {
+        max-width: 350px;
+    }
+
+    .confirm-modal-container.modal-lg {
+        max-width: 550px;
+    }
+
+    .confirm-modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1.25rem;
+        color: white;
+    }
+
+    .confirm-modal-header.header-primary {
+        background: linear-gradient(135deg, var(--bs-primary) 0%, color-mix(in srgb, var(--bs-primary) 80%, black) 100%);
+    }
+
+    .confirm-modal-header.header-warning {
+        background: linear-gradient(135deg, #f0ad4e 0%, #ec971f 100%);
+    }
+
+    .confirm-modal-header.header-danger {
+        background: linear-gradient(135deg, #d9534f 0%, #c9302c 100%);
+    }
+
+    .confirm-modal-header.header-info {
+        background: linear-gradient(135deg, #5bc0de 0%, #31b0d5 100%);
+    }
+
+    .confirm-modal-title {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-size: 1.15rem;
+        font-weight: 600;
+    }
+
+    .confirm-modal-title i {
+        font-size: 1.35rem;
+    }
+
+    .confirm-modal-close {
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        border-radius: 50%;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+
+    .confirm-modal-close:hover {
+        background: rgba(255, 255, 255, 0.3);
+    }
+
+    .confirm-modal-close:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .confirm-modal-body {
+        padding: 1.5rem;
+    }
+
+    .confirm-message {
+        margin: 0;
+        font-size: 1rem;
+        color: var(--bs-body-color);
+        line-height: 1.6;
+    }
+
+    .confirm-modal-footer {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+        padding: 1rem 1.25rem;
+        background: var(--bs-tertiary-bg);
+        border-top: 1px solid var(--bs-border-color);
+    }
+
+    @@media (max-width: 576px) {
+        .confirm-modal-overlay {
+            padding: 1rem;
+        }
+
+        .confirm-modal-container {
+            max-width: 100%;
+        }
+
+        .confirm-modal-footer {
+            flex-direction: column-reverse;
+        }
+
+        .confirm-modal-footer button {
+            width: 100%;
+        }
+    }
+</style>
+
+@code {
+    private bool isVisible = false;
+    private bool isProcessing = false;
+    private TaskCompletionSource<bool>? tcs;
+
+    [Parameter] public string Title { get; set; } = "Confirm";
+    [Parameter] public string Message { get; set; } = "";
+    [Parameter] public string ConfirmText { get; set; } = "Confirm";
+    [Parameter] public string CancelText { get; set; } = "Cancel";
+    [Parameter] public string ProcessingText { get; set; } = "Processing...";
+    [Parameter] public string Icon { get; set; } = "bi-question-circle";
+    [Parameter] public string ConfirmIcon { get; set; } = "bi-check-lg";
+    [Parameter] public ConfirmationType Type { get; set; } = ConfirmationType.Warning;
+    [Parameter] public ConfirmationSize Size { get; set; } = ConfirmationSize.Default;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public EventCallback OnConfirm { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private string IconClass => $"bi {Icon}";
+    private string ConfirmIconClass => $"bi {ConfirmIcon}";
+
+    private string HeaderColorClass => Type switch
+    {
+        ConfirmationType.Primary => "header-primary",
+        ConfirmationType.Warning => "header-warning",
+        ConfirmationType.Danger => "header-danger",
+        ConfirmationType.Info => "header-info",
+        _ => "header-warning"
+    };
+
+    private string ConfirmButtonClass => Type switch
+    {
+        ConfirmationType.Primary => "btn-primary",
+        ConfirmationType.Warning => "btn-warning",
+        ConfirmationType.Danger => "btn-danger",
+        ConfirmationType.Info => "btn-info",
+        _ => "btn-warning"
+    };
+
+    private string SizeClass => Size switch
+    {
+        ConfirmationSize.Small => "modal-sm",
+        ConfirmationSize.Large => "modal-lg",
+        _ => ""
+    };
+
+    public async Task<bool> ShowAsync()
+    {
+        isVisible = true;
+        isProcessing = false;
+        tcs = new TaskCompletionSource<bool>();
+        StateHasChanged();
+        return await tcs.Task;
+    }
+
+    public void Show()
+    {
+        isVisible = true;
+        isProcessing = false;
+        StateHasChanged();
+    }
+
+    public void Hide()
+    {
+        isVisible = false;
+        isProcessing = false;
+        StateHasChanged();
+    }
+
+    public void SetProcessing(bool processing)
+    {
+        isProcessing = processing;
+        StateHasChanged();
+    }
+
+    private async Task Confirm()
+    {
+        if (OnConfirm.HasDelegate)
+        {
+            isProcessing = true;
+            StateHasChanged();
+
+            await OnConfirm.InvokeAsync();
+
+            isProcessing = false;
+            isVisible = false;
+            StateHasChanged();
+        }
+
+        tcs?.TrySetResult(true);
+    }
+
+    private async Task Cancel()
+    {
+        if (isProcessing) return;
+
+        if (OnCancel.HasDelegate)
+        {
+            await OnCancel.InvokeAsync();
+        }
+
+        isVisible = false;
+        StateHasChanged();
+        tcs?.TrySetResult(false);
+    }
+
+    public enum ConfirmationType
+    {
+        Primary,
+        Warning,
+        Danger,
+        Info
+    }
+
+    public enum ConfirmationSize
+    {
+        Small,
+        Default,
+        Large
+    }
+}

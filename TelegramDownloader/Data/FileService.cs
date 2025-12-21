@@ -1942,6 +1942,28 @@ namespace TelegramDownloader.Data
                     var matchingFolder = Data.FirstOrDefault(x => x.FilePath + "/" == path)
                         ?? Data.FirstOrDefault(x => x.FilePath == path.TrimEnd('/'));
 
+                    // If not found in Data, try searching by name and parent FilterPath
+                    // This handles cases where FilePath format doesn't match (e.g., first-level folders)
+                    if (matchingFolder == null)
+                    {
+                        // Extract folder name and parent path from the navigation path
+                        // e.g., "/FolderA/" -> name = "FolderA", parentPath = "/"
+                        // e.g., "/Parent/Child/" -> name = "Child", parentPath = "/Parent/"
+                        var pathParts = path.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+                        if (pathParts.Length > 0)
+                        {
+                            var folderName = pathParts[pathParts.Length - 1];
+                            var parentPath = pathParts.Length == 1
+                                ? "/"
+                                : "/" + string.Join("/", pathParts.Take(pathParts.Length - 1)) + "/";
+
+                            // Search for folder by name and parent FilterPath
+                            matchingFolder = collectionName == null
+                                ? await _db.getFolderByNameAndParentPath(dbName, folderName, parentPath)
+                                : await _db.getFolderByNameAndParentPath(dbName, folderName, parentPath, collectionName);
+                        }
+                    }
+
                     if (matchingFolder != null)
                     {
                         childItem = matchingFolder.toFileManagerContent();

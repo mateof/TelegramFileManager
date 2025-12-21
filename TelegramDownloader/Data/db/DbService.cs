@@ -467,6 +467,27 @@ namespace TelegramDownloader.Data.db
                 .ToListAsync();
         }
 
+        /// <summary>
+        /// Find a folder by its name and parent FilterPath.
+        /// This is useful for finding folders when FilePath format doesn't match the navigation path.
+        /// </summary>
+        public async Task<BsonFileManagerModel?> getFolderByNameAndParentPath(string dbName, string folderName, string parentFilterPath, string collectionName = "directory")
+        {
+            if (collectionName == null)
+                collectionName = "directory";
+
+            // For first-level folders, FilterPath is "/"
+            // For nested folders, FilterPath is the parent path (e.g., "/Parent/")
+            var filter = Builders<BsonFileManagerModel>.Filter.Where(x =>
+                !x.IsFile &&
+                x.Name == folderName &&
+                x.FilterPath == parentFilterPath);
+
+            return await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName)
+                .FindAsync(filter))
+                .FirstOrDefaultAsync();
+        }
+
         public async Task<List<int>> getAllIdsFromChannel(string dbName, string collectionName = "directory")
         {
             if (collectionName == null)
@@ -548,8 +569,9 @@ namespace TelegramDownloader.Data.db
             result.DateModified = DateTime.Now;
             result.FilterId = (target.FilterId ?? "") + target.Id + "/";
             result.ParentId = target.Id;
-            // Both empty string and "/" indicate root folder
-            var isRootTarget = string.IsNullOrEmpty(target.FilterPath) || target.FilterPath == "/";
+            // Only empty string indicates root folder (the "Files" folder)
+            // FilterPath "/" means a first-level folder, not the root itself
+            var isRootTarget = string.IsNullOrEmpty(target.FilterPath);
             result.FilterPath = isRootTarget ? "/" : target.FilterPath + target.Name + "/";
             result.FilePath = isFile ? targetPath + result.Name : targetPath.TrimEnd('/');
             await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).InsertOneAsync(result);
@@ -996,6 +1018,165 @@ namespace TelegramDownloader.Data.db
             }
 
             return stats;
+        }
+
+        /// <summary>
+        /// Analyze FilterPath issues without repairing them.
+        /// Returns detailed information about items that need repair.
+        /// </summary>
+        public async Task<FilterPathAnalysisResult> AnalyzeFilterPaths(string dbName, string collectionName = "directory")
+        {
+            if (collectionName == null)
+                collectionName = "directory";
+
+            var result = new FilterPathAnalysisResult { DatabaseName = dbName };
+
+            try
+            {
+                var collection = getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName);
+                var allItems = await (await collection.FindAsync(Builders<BsonFileManagerModel>.Filter.Empty)).ToListAsync();
+
+                result.TotalItems = allItems.Count;
+
+                // Build a dictionary for quick lookup by Id
+                var itemsById = allItems.ToDictionary(x => x.Id, x => x);
+
+                foreach (var item in allItems)
+                {
+                    // Skip the root folder (no ParentId)
+                    if (string.IsNullOrEmpty(item.ParentId))
+                        continue;
+
+                    // Calculate the correct FilterPath and FilterId
+                    var correctFilterPath = CalculateFilterPath(item.ParentId, itemsById);
+                    var correctFilterId = CalculateFilterId(item.ParentId, itemsById);
+                    var normalizedFilePath = item.FilePath?.Replace("\\", "/");
+
+                    bool hasIssue = false;
+
+                    if (item.FilterPath != correctFilterPath)
+                    {
+                        result.FilterPathIssues++;
+                        hasIssue = true;
+                    }
+
+                    if (item.FilterId != correctFilterId)
+                    {
+                        result.FilterIdIssues++;
+                        hasIssue = true;
+                    }
+
+                    if (normalizedFilePath != item.FilePath)
+                    {
+                        result.FilePathIssues++;
+                        hasIssue = true;
+                    }
+
+                    if (hasIssue)
+                    {
+                        result.ItemsWithIssues++;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error analyzing FilterPaths for database {DbName}", dbName);
+                result.Error = ex.Message;
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Repair FilterPath and FilterId for all items in a database.
+        /// This fixes data corruption caused by incorrect path calculations during move operations.
+        /// </summary>
+        public async Task<int> RepairFilterPaths(string dbName, string collectionName = "directory")
+        {
+            if (collectionName == null)
+                collectionName = "directory";
+
+            var collection = getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName);
+            var allItems = await (await collection.FindAsync(Builders<BsonFileManagerModel>.Filter.Empty)).ToListAsync();
+
+            // Build a dictionary for quick lookup by Id
+            var itemsById = allItems.ToDictionary(x => x.Id, x => x);
+
+            int repairedCount = 0;
+
+            foreach (var item in allItems)
+            {
+                // Skip the root folder (no ParentId)
+                if (string.IsNullOrEmpty(item.ParentId))
+                    continue;
+
+                // Calculate the correct FilterPath and FilterId by walking up the parent chain
+                var correctFilterPath = CalculateFilterPath(item.ParentId, itemsById);
+                var correctFilterId = CalculateFilterId(item.ParentId, itemsById);
+
+                // Also normalize FilePath (replace backslashes with forward slashes)
+                var normalizedFilePath = item.FilePath?.Replace("\\", "/");
+
+                bool needsUpdate = false;
+                var updateDef = Builders<BsonFileManagerModel>.Update.Combine();
+
+                if (item.FilterPath != correctFilterPath)
+                {
+                    updateDef = updateDef.Set(x => x.FilterPath, correctFilterPath);
+                    needsUpdate = true;
+                }
+
+                if (item.FilterId != correctFilterId)
+                {
+                    updateDef = updateDef.Set(x => x.FilterId, correctFilterId);
+                    needsUpdate = true;
+                }
+
+                if (normalizedFilePath != item.FilePath)
+                {
+                    updateDef = updateDef.Set(x => x.FilePath, normalizedFilePath);
+                    needsUpdate = true;
+                }
+
+                if (needsUpdate)
+                {
+                    await collection.UpdateOneAsync(
+                        Builders<BsonFileManagerModel>.Filter.Eq(x => x.Id, item.Id),
+                        updateDef);
+                    repairedCount++;
+                }
+            }
+
+            _logger.LogInformation("Repaired {Count} items in database {DbName}", repairedCount, dbName);
+            return repairedCount;
+        }
+
+        private string CalculateFilterPath(string parentId, Dictionary<string, BsonFileManagerModel> itemsById)
+        {
+            if (string.IsNullOrEmpty(parentId) || !itemsById.TryGetValue(parentId, out var parent))
+                return "/";
+
+            // If parent is root (no ParentId), return "/"
+            if (string.IsNullOrEmpty(parent.ParentId))
+                return "/";
+
+            // Otherwise, build the path recursively
+            var parentPath = CalculateFilterPath(parent.ParentId, itemsById);
+            return parentPath + parent.Name + "/";
+        }
+
+        private string CalculateFilterId(string parentId, Dictionary<string, BsonFileManagerModel> itemsById)
+        {
+            if (string.IsNullOrEmpty(parentId) || !itemsById.TryGetValue(parentId, out var parent))
+                return "";
+
+            // If parent is root (no ParentId), return just the parent's Id
+            if (string.IsNullOrEmpty(parent.ParentId))
+                return parent.Id + "/";
+
+            // Otherwise, build the FilterId recursively
+            var parentFilterId = CalculateFilterId(parent.ParentId, itemsById);
+            return parentFilterId + parent.Id + "/";
         }
 
         #endregion

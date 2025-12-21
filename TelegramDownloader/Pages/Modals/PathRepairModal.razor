@@ -1,0 +1,664 @@
+@using TelegramDownloader.Data
+@using TelegramDownloader.Data.db
+@inject IDbService db
+@inject ITelegramService ts
+@inject ToastService toastService
+
+@if (isVisible)
+{
+    <div class="repair-modal-overlay" @onclick="Close">
+        <div class="repair-modal-container" @onclick:stopPropagation="true">
+            <div class="repair-modal-header">
+                <div class="repair-modal-title">
+                    <i class="bi bi-wrench-adjustable"></i>
+                    <span>Path Repair Tool</span>
+                </div>
+                <button class="repair-modal-close" @onclick="Close" disabled="@isProcessing">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+
+            <div class="repair-modal-body">
+                @if (isLoading)
+                {
+                    <div class="repair-loading">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p>Loading databases...</p>
+                    </div>
+                }
+                else if (databases == null || databases.Count == 0)
+                {
+                    <div class="repair-empty">
+                        <i class="bi bi-database-x text-warning"></i>
+                        <p>No databases found.</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="repair-info">
+                        <div class="alert alert-info mb-3">
+                            <i class="bi bi-info-circle me-2"></i>
+                            <span>This tool analyzes and repairs corrupted file paths in your databases. Select databases to analyze first, then repair if issues are found.</span>
+                        </div>
+                    </div>
+
+                    <div class="repair-actions-top">
+                        <button class="btn btn-outline-primary btn-sm" @onclick="SelectAll" disabled="@isProcessing">
+                            <i class="bi bi-check-all me-1"></i>
+                            Select All
+                        </button>
+                        <button class="btn btn-outline-secondary btn-sm" @onclick="DeselectAll" disabled="@isProcessing">
+                            <i class="bi bi-x-lg me-1"></i>
+                            Deselect All
+                        </button>
+                        <button class="btn btn-primary btn-sm ms-2" @onclick="AnalyzeSelected" disabled="@(selectedCount == 0 || isProcessing)">
+                            @if (isAnalyzing)
+                            {
+                                <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+                                <span>Analyzing...</span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-search me-1"></i>
+                                <span>Analyze Selected (@selectedCount)</span>
+                            }
+                        </button>
+                        <span class="ms-auto text-muted">@selectedCount selected</span>
+                    </div>
+
+                    <div class="repair-list">
+                        @foreach (var item in databases)
+                        {
+                            <div class="repair-item @(item.IsSelected ? "selected" : "") @(item.HasIssues ? "has-issues" : "") @(item.IsRepaired ? "repaired" : "")"
+                                 @onclick="@(() => ToggleSelection(item))">
+                                <div class="repair-item-check">
+                                    <input type="checkbox" checked="@item.IsSelected"
+                                           @onchange="@(() => ToggleSelection(item))"
+                                           @onclick:stopPropagation="true"
+                                           disabled="@isProcessing" />
+                                </div>
+                                <div class="repair-item-info">
+                                    <div class="repair-item-name">
+                                        <i class="bi bi-database text-primary me-2"></i>
+                                        <span>@GetChannelName(item.DatabaseName)</span>
+                                    </div>
+                                    <div class="repair-item-id">
+                                        <span class="badge bg-secondary">ID: @item.DatabaseName</span>
+                                        @if (item.IsAnalyzed)
+                                        {
+                                            @if (item.HasIssues)
+                                            {
+                                                <span class="badge bg-warning text-dark">
+                                                    <i class="bi bi-exclamation-triangle me-1"></i>@item.ItemsWithIssues issues
+                                                </span>
+                                            }
+                                            else
+                                            {
+                                                <span class="badge bg-success">
+                                                    <i class="bi bi-check-circle me-1"></i>OK
+                                                </span>
+                                            }
+                                        }
+                                        @if (item.IsRepaired)
+                                        {
+                                            <span class="badge bg-success">
+                                                <i class="bi bi-check2-all me-1"></i>Repaired (@item.RepairedCount)
+                                            </span>
+                                        }
+                                    </div>
+                                    @if (item.IsAnalyzed && item.HasIssues)
+                                    {
+                                        <div class="repair-item-stats">
+                                            <div class="repair-stat">
+                                                <i class="bi bi-files"></i>
+                                                <span>Total: @item.TotalItems</span>
+                                            </div>
+                                            <div class="repair-stat text-warning">
+                                                <i class="bi bi-folder-x"></i>
+                                                <span>FilterPath: @item.FilterPathIssues</span>
+                                            </div>
+                                            <div class="repair-stat text-warning">
+                                                <i class="bi bi-key"></i>
+                                                <span>FilterId: @item.FilterIdIssues</span>
+                                            </div>
+                                            <div class="repair-stat text-warning">
+                                                <i class="bi bi-file-earmark-x"></i>
+                                                <span>FilePath: @item.FilePathIssues</span>
+                                            </div>
+                                        </div>
+                                    }
+                                    @if (!string.IsNullOrEmpty(item.Error))
+                                    {
+                                        <div class="repair-item-error text-danger">
+                                            <i class="bi bi-exclamation-circle me-1"></i>@item.Error
+                                        </div>
+                                    }
+                                </div>
+                                <div class="repair-item-action">
+                                    @if (item.IsRepairing)
+                                    {
+                                        <span class="spinner-border spinner-border-sm text-primary" role="status"></span>
+                                    }
+                                    else if (item.IsAnalyzed && item.HasIssues && !item.IsRepaired)
+                                    {
+                                        <button class="btn btn-warning btn-sm"
+                                                @onclick="@(() => RepairSingle(item))"
+                                                @onclick:stopPropagation="true"
+                                                disabled="@isProcessing">
+                                            <i class="bi bi-wrench"></i>
+                                        </button>
+                                    }
+                                </div>
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            @if (databases != null && databases.Count > 0)
+            {
+                <div class="repair-modal-footer">
+                    <div class="repair-summary">
+                        @if (analyzedWithIssues > 0)
+                        {
+                            <span class="text-warning">
+                                <i class="bi bi-exclamation-triangle me-1"></i>
+                                @analyzedWithIssues database(s) with issues (@totalIssues total items to repair)
+                            </span>
+                        }
+                    </div>
+                    <div class="repair-buttons">
+                        <button class="btn btn-outline-secondary" @onclick="Close" disabled="@isProcessing">
+                            Close
+                        </button>
+                        <button class="btn btn-warning" @onclick="RepairAllWithIssues"
+                                disabled="@(analyzedWithIssues == 0 || isProcessing)">
+                            @if (isRepairing)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                <span>Repairing...</span>
+                            }
+                            else
+                            {
+                                <i class="bi bi-wrench-adjustable me-2"></i>
+                                <span>Repair All (@analyzedWithIssues)</span>
+                            }
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
+
+<style>
+    .repair-modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.85);
+        backdrop-filter: blur(8px);
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+    }
+
+    .repair-modal-container {
+        position: relative;
+        width: 100%;
+        max-width: 700px;
+        max-height: 85vh;
+        background: var(--bs-body-bg);
+        border-radius: 1rem;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        z-index: 100000;
+    }
+
+    .repair-modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1.25rem;
+        background: linear-gradient(135deg, #f0ad4e 0%, #ec971f 100%);
+        color: white;
+    }
+
+    .repair-modal-title {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-size: 1.25rem;
+        font-weight: 600;
+    }
+
+    .repair-modal-title i {
+        font-size: 1.5rem;
+    }
+
+    .repair-modal-close {
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        border-radius: 50%;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+
+    .repair-modal-close:hover {
+        background: rgba(255, 255, 255, 0.3);
+    }
+
+    .repair-modal-close:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .repair-modal-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 1.25rem;
+    }
+
+    .repair-loading, .repair-empty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 1rem;
+        padding: 3rem;
+        color: var(--bs-secondary-color);
+    }
+
+    .repair-empty i {
+        font-size: 3rem;
+    }
+
+    .repair-actions-top {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid var(--bs-border-color);
+    }
+
+    .repair-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .repair-item {
+        display: flex;
+        align-items: flex-start;
+        gap: 1rem;
+        padding: 0.875rem 1rem;
+        background: var(--bs-tertiary-bg);
+        border: 1px solid var(--bs-border-color);
+        border-radius: 0.5rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .repair-item:hover {
+        background: var(--bs-secondary-bg);
+        border-color: var(--bs-primary);
+    }
+
+    .repair-item.selected {
+        background: color-mix(in srgb, var(--bs-primary) 10%, var(--bs-body-bg));
+        border-color: var(--bs-primary);
+    }
+
+    .repair-item.has-issues {
+        border-left: 3px solid #f0ad4e;
+    }
+
+    .repair-item.repaired {
+        border-left: 3px solid #5cb85c;
+    }
+
+    .repair-item-check {
+        padding-top: 0.25rem;
+    }
+
+    .repair-item-check input[type="checkbox"] {
+        width: 1.25rem;
+        height: 1.25rem;
+        cursor: pointer;
+    }
+
+    .repair-item-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .repair-item-name {
+        display: flex;
+        align-items: center;
+        font-weight: 500;
+        margin-bottom: 0.25rem;
+    }
+
+    .repair-item-name span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .repair-item-id {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 0.25rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .repair-item-stats {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        font-size: 0.8rem;
+    }
+
+    .repair-stat {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+    }
+
+    .repair-stat i {
+        font-size: 0.85rem;
+        opacity: 0.7;
+    }
+
+    .repair-item-error {
+        font-size: 0.8rem;
+        margin-top: 0.5rem;
+    }
+
+    .repair-item-action {
+        flex-shrink: 0;
+        padding-top: 0.25rem;
+    }
+
+    .repair-modal-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 1rem 1.25rem;
+        background: var(--bs-tertiary-bg);
+        border-top: 1px solid var(--bs-border-color);
+    }
+
+    .repair-summary {
+        font-size: 0.9rem;
+    }
+
+    .repair-buttons {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    @@media (max-width: 576px) {
+        .repair-modal-overlay {
+            padding: 0;
+        }
+
+        .repair-modal-container {
+            max-width: 100%;
+            max-height: 100%;
+            height: 100%;
+            border-radius: 0;
+        }
+
+        .repair-actions-top {
+            flex-wrap: wrap;
+        }
+
+        .repair-actions-top .ms-auto {
+            width: 100%;
+            text-align: center;
+            margin-top: 0.5rem;
+        }
+
+        .repair-item-stats {
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .repair-modal-footer {
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .repair-summary {
+            text-align: center;
+        }
+
+        .repair-buttons {
+            width: 100%;
+            justify-content: flex-end;
+        }
+    }
+</style>
+
+@code {
+    private bool isVisible = false;
+    private bool isLoading = false;
+    private bool isAnalyzing = false;
+    private bool isRepairing = false;
+    private bool isProcessing => isAnalyzing || isRepairing;
+
+    private List<FilterPathAnalysisResult>? databases;
+
+    private int selectedCount => databases?.Count(x => x.IsSelected) ?? 0;
+    private int analyzedWithIssues => databases?.Count(x => x.IsAnalyzed && x.HasIssues && !x.IsRepaired) ?? 0;
+    private int totalIssues => databases?.Where(x => x.IsAnalyzed && x.HasIssues && !x.IsRepaired).Sum(x => x.ItemsWithIssues) ?? 0;
+
+    public async Task Open()
+    {
+        isVisible = true;
+        isLoading = true;
+        databases = null;
+        StateHasChanged();
+
+        await LoadDatabases();
+
+        isLoading = false;
+        StateHasChanged();
+    }
+
+    public void Close()
+    {
+        if (isProcessing) return;
+        isVisible = false;
+        StateHasChanged();
+    }
+
+    private async Task LoadDatabases()
+    {
+        try
+        {
+            var allDatabases = await db.GetAllChannelDatabaseNames();
+            databases = allDatabases
+                .Where(dbName => long.TryParse(dbName, out _))
+                .Select(dbName => new FilterPathAnalysisResult { DatabaseName = dbName })
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            toastService.Notify(new(ToastType.Danger, $"Error loading databases: {ex.Message}") { Title = "Error", AutoHide = true });
+        }
+    }
+
+    private string GetChannelName(string dbName)
+    {
+        if (long.TryParse(dbName, out var channelId))
+        {
+            var (name, _) = ts.GetChannelInfo(channelId);
+            return !string.IsNullOrEmpty(name) ? name : $"Channel {dbName}";
+        }
+        return dbName;
+    }
+
+    private void ToggleSelection(FilterPathAnalysisResult item)
+    {
+        if (isProcessing) return;
+        item.IsSelected = !item.IsSelected;
+        StateHasChanged();
+    }
+
+    private void SelectAll()
+    {
+        if (databases != null && !isProcessing)
+        {
+            foreach (var item in databases)
+            {
+                item.IsSelected = true;
+            }
+            StateHasChanged();
+        }
+    }
+
+    private void DeselectAll()
+    {
+        if (databases != null && !isProcessing)
+        {
+            foreach (var item in databases)
+            {
+                item.IsSelected = false;
+            }
+            StateHasChanged();
+        }
+    }
+
+    private async Task AnalyzeSelected()
+    {
+        if (databases == null || isProcessing) return;
+
+        var selected = databases.Where(x => x.IsSelected).ToList();
+        if (selected.Count == 0) return;
+
+        isAnalyzing = true;
+        StateHasChanged();
+
+        foreach (var item in selected)
+        {
+            try
+            {
+                var result = await db.AnalyzeFilterPaths(item.DatabaseName);
+                item.TotalItems = result.TotalItems;
+                item.ItemsWithIssues = result.ItemsWithIssues;
+                item.FilterPathIssues = result.FilterPathIssues;
+                item.FilterIdIssues = result.FilterIdIssues;
+                item.FilePathIssues = result.FilePathIssues;
+                item.Error = result.Error;
+                item.IsAnalyzed = true;
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                item.Error = ex.Message;
+                item.IsAnalyzed = true;
+            }
+        }
+
+        isAnalyzing = false;
+        StateHasChanged();
+
+        var withIssues = selected.Count(x => x.HasIssues);
+        if (withIssues > 0)
+        {
+            toastService.Notify(new(ToastType.Warning, $"Found {withIssues} database(s) with path issues") { Title = "Analysis Complete", AutoHide = true });
+        }
+        else
+        {
+            toastService.Notify(new(ToastType.Success, "All selected databases are OK") { Title = "Analysis Complete", AutoHide = true });
+        }
+    }
+
+    private async Task RepairSingle(FilterPathAnalysisResult item)
+    {
+        if (isProcessing) return;
+
+        item.IsRepairing = true;
+        StateHasChanged();
+
+        try
+        {
+            var repairedCount = await db.RepairFilterPaths(item.DatabaseName);
+            item.RepairedCount = repairedCount;
+            item.IsRepaired = true;
+            item.ItemsWithIssues = 0;
+            toastService.Notify(new(ToastType.Success, $"Repaired {repairedCount} items in {GetChannelName(item.DatabaseName)}") { Title = "Repair Complete", AutoHide = true });
+        }
+        catch (Exception ex)
+        {
+            toastService.Notify(new(ToastType.Danger, $"Error repairing: {ex.Message}") { Title = "Error", AutoHide = true });
+        }
+
+        item.IsRepairing = false;
+        StateHasChanged();
+    }
+
+    private async Task RepairAllWithIssues()
+    {
+        if (databases == null || isProcessing) return;
+
+        var toRepair = databases.Where(x => x.IsAnalyzed && x.HasIssues && !x.IsRepaired).ToList();
+        if (toRepair.Count == 0) return;
+
+        isRepairing = true;
+        StateHasChanged();
+
+        int totalRepaired = 0;
+        int successCount = 0;
+
+        foreach (var item in toRepair)
+        {
+            item.IsRepairing = true;
+            StateHasChanged();
+
+            try
+            {
+                var repairedCount = await db.RepairFilterPaths(item.DatabaseName);
+                item.RepairedCount = repairedCount;
+                item.IsRepaired = true;
+                item.ItemsWithIssues = 0;
+                totalRepaired += repairedCount;
+                successCount++;
+            }
+            catch (Exception ex)
+            {
+                item.Error = ex.Message;
+            }
+
+            item.IsRepairing = false;
+            StateHasChanged();
+        }
+
+        isRepairing = false;
+        StateHasChanged();
+
+        toastService.Notify(new(ToastType.Success, $"Repaired {totalRepaired} items in {successCount} database(s)") { Title = "Repair Complete", AutoHide = true });
+    }
+}

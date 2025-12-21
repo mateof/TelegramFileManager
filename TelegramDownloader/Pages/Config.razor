@@ -488,6 +488,36 @@
                 </div>
             </div>
 
+            <!-- Data Refresh Section -->
+            <div class="config-section">
+                <div class="config-section-header">
+                    <i class="bi bi-arrow-clockwise"></i>
+                    <span>Data Refresh</span>
+                </div>
+                <div class="config-section-body">
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-person-badge"></i>
+                                Enable Refresh for Own Channels
+                            </div>
+                            <div class="config-item-description">
+                                Allow refreshing data from Telegram for channels where you are admin or owner.
+                                By default, refresh is only available for channels you don't own (to sync changes made by others).
+                                <div class="alert alert-warning py-2 px-3 mb-0 mt-2" style="font-size: 0.85rem;">
+                                    <i class="bi bi-exclamation-triangle me-2"></i>
+                                    <strong>Warning:</strong> Refreshing a channel re-downloads all file metadata from Telegram.
+                                    This can take a long time for large channels.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputCheckbox @bind-Value="Model!.EnableRefreshOwnChannels" class="form-check-input config-switch" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Interface Section -->
             <div class="config-section">
                 <div class="config-section-header">
@@ -764,6 +794,24 @@
                             </button>
                         </div>
                     </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-wrench-adjustable"></i>
+                                Path Repair Tool
+                            </div>
+                            <div class="config-item-description">
+                                Analyze and repair file path issues in your databases. Use this if files disappear after moving folders or if STRM exports are missing files.
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <button type="button" class="btn btn-outline-warning btn-sm d-flex align-items-center gap-2" @onclick="OpenPathRepairModal">
+                                <i class="bi bi-wrench"></i>
+                                <span>Repair</span>
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -938,6 +986,11 @@
     private void OpenDatabaseMaintenance()
     {
         MainLayout.OpenDatabaseMaintenanceModal();
+    }
+
+    private void OpenPathRepairModal()
+    {
+        MainLayout.OpenPathRepairModal();
     }
 
     private void RefreshOrphanedFavoritesCount()

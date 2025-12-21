@@ -36,6 +36,7 @@ namespace TelegramDownloader.Data.db
         Task<List<BsonFileManagerModel>> getAllFolders(string dbName, string? parentId = null, string collectionName = "directory");
         Task<List<BsonFileManagerModel>> getFoldersByParentId(string dbName, string? parentId, string collectionName = "directory");
         Task<List<BsonFileManagerModel>> getFilesByParentId(string dbName, string parentId, string collectionName = "directory");
+        Task<BsonFileManagerModel?> getFolderByNameAndParentPath(string dbName, string folderName, string parentFilterPath, string collectionName = "directory");
         Task<List<int>> getAllIdsFromChannel(string dbName, string collectionName = "directory");
         IMongoDatabase getDatabase(string dbName);
         Task<BsonFileManagerModel> getEntry(string dbName, string filterId, string name, string collectionName = "directory");
@@ -71,6 +72,8 @@ namespace TelegramDownloader.Data.db
         // Maintenance operations
         Task<List<string>> GetAllChannelDatabaseNames();
         Task<DatabaseStats> GetDatabaseStats(string dbName);
+        Task<FilterPathAnalysisResult> AnalyzeFilterPaths(string dbName, string collectionName = "directory");
+        Task<int> RepairFilterPaths(string dbName, string collectionName = "directory");
     }
 
     public class DatabaseStats
@@ -79,5 +82,22 @@ namespace TelegramDownloader.Data.db
         public long DocumentCount { get; set; }
         public DateTime? CreatedAt { get; set; }
         public DateTime? LastModified { get; set; }
+    }
+
+    public class FilterPathAnalysisResult
+    {
+        public string DatabaseName { get; set; } = "";
+        public int TotalItems { get; set; }
+        public int ItemsWithIssues { get; set; }
+        public int FilterPathIssues { get; set; }
+        public int FilterIdIssues { get; set; }
+        public int FilePathIssues { get; set; }
+        public string? Error { get; set; }
+        public bool HasIssues => ItemsWithIssues > 0;
+        public bool IsSelected { get; set; }
+        public bool IsAnalyzed { get; set; }
+        public bool IsRepairing { get; set; }
+        public bool IsRepaired { get; set; }
+        public int RepairedCount { get; set; }
     }
 }

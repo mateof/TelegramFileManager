@@ -62,8 +62,16 @@ namespace TelegramDownloader.Models
             this.ParentId = parent.Id;
             this.CaseSensitive = false;
             this.Name = FolderName;
-            this.FilePath = System.IO.Path.Combine(Path, FolderName);
-            this.FilterId = (string.IsNullOrEmpty(parent.FilterId) ? String.Concat(parent.Id, "/") : String.Concat(System.IO.Path.Combine(parent.FilterId, parent.Id), "/"));
+            // Use forward slashes consistently (not System.IO.Path.Combine which uses backslashes on Windows)
+            var normalizedPath = Path?.Replace("\\", "/") ?? "";
+            if (!string.IsNullOrEmpty(normalizedPath) && !normalizedPath.EndsWith("/"))
+                normalizedPath += "/";
+            this.FilePath = normalizedPath + FolderName;
+            // Use forward slashes for FilterId as well
+            var parentFilterId = parent.FilterId?.Replace("\\", "/") ?? "";
+            this.FilterId = string.IsNullOrEmpty(parentFilterId)
+                ? parent.Id + "/"
+                : parentFilterId + parent.Id + "/";
             this.FilterPath = (string.IsNullOrEmpty(parent.FilterId) ? "/" : String.Concat(parent.FilterPath, parent.Name, "/"));
             this.ShowHiddenItems = false;
             this.IsFile = false;

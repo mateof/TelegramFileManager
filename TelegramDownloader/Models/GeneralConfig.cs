@@ -105,6 +105,13 @@ namespace TelegramDownloader.Models
         /// </summary>
         public bool EnableVideoTranscoding { get; set; } = false;
 
+        // Refresh Data Settings
+        /// <summary>
+        /// Enable refresh data option for channels where you are admin/owner.
+        /// By default, refresh is only available for channels you don't own.
+        /// </summary>
+        public bool EnableRefreshOwnChannels { get; set; } = false;
+
     }
 
     public class TLConfig
