@@ -1,0 +1,287 @@
+@using TelegramDownloader.Data
+@using TelegramDownloader.Models
+@using TelegramDownloader.Shared
+
+@inject IFileService fs
+@inject NavigationManager MyNavigationManager
+
+<div class="modal @ModalClass" tabindex="-1" role="dialog" style="display:@ModalDisplay">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content download-modal">
+            <!-- Header -->
+            <div class="modal-header download-modal-header">
+                <div class="modal-title-wrapper">
+                    <div class="modal-icon">
+                        <i class="bi bi-file-earmark-play"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title">Export STRM Files</h5>
+                        <p class="modal-subtitle">Choose export method for @folderName</p>
+                    </div>
+                </div>
+                <button type="button" class="btn-close-modal" @onclick="() => Close()" aria-label="Close">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+
+            <!-- Body -->
+            <div class="modal-body download-modal-body">
+                @if (ShowBackdrop)
+                {
+                    <div class="export-options">
+                        <!-- Option 1: Download ZIP -->
+                        <div class="export-option-card @(selectedOption == ExportOption.DownloadZip ? "selected" : "")"
+                             @onclick="() => SelectOption(ExportOption.DownloadZip)">
+                            <div class="option-icon">
+                                <i class="bi bi-file-earmark-zip"></i>
+                            </div>
+                            <div class="option-content">
+                                <h6 class="option-title">Download as ZIP</h6>
+                                <p class="option-description">Download all STRM files compressed in a ZIP file</p>
+                            </div>
+                            <div class="option-check">
+                                @if (selectedOption == ExportOption.DownloadZip)
+                                {
+                                    <i class="bi bi-check-circle-fill"></i>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-circle"></i>
+                                }
+                            </div>
+                        </div>
+
+                        <!-- Option 2: Export to Local Folder -->
+                        <div class="export-option-card @(selectedOption == ExportOption.ExportToLocal ? "selected" : "")"
+                             @onclick="() => SelectOption(ExportOption.ExportToLocal)">
+                            <div class="option-icon">
+                                <i class="bi bi-folder2-open"></i>
+                            </div>
+                            <div class="option-content">
+                                <h6 class="option-title">Export to Local Folder</h6>
+                                <p class="option-description">Generate STRM files directly in a local directory</p>
+                            </div>
+                            <div class="option-check">
+                                @if (selectedOption == ExportOption.ExportToLocal)
+                                {
+                                    <i class="bi bi-check-circle-fill"></i>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-circle"></i>
+                                }
+                            </div>
+                        </div>
+
+                        <!-- Folder Selection (only visible when ExportToLocal is selected) -->
+                        @if (selectedOption == ExportOption.ExportToLocal)
+                        {
+                            <div class="form-section folder-section mt-3">
+                                <label class="section-label">
+                                    <i class="bi bi-folder"></i>
+                                    Destination Folder
+                                </label>
+                                <TelegramDownloader.Shared.Ddtree idTree="strmtree" @ref="ddtree" />
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+
+            <!-- Footer -->
+            <div class="modal-footer download-modal-footer">
+                <button type="button" class="btn btn-cancel" @onclick="() => Close()">
+                    <i class="bi bi-x"></i>
+                    Cancel
+                </button>
+                <button type="button" class="btn btn-download" @onclick="() => Submit()" disabled="@isExporting">
+                    @if (isExporting)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        <span>Exporting...</span>
+                    }
+                    else
+                    {
+                        <i class="bi @(selectedOption == ExportOption.DownloadZip ? "bi-download" : "bi-folder-check")"></i>
+                        <span>@(selectedOption == ExportOption.DownloadZip ? "Download" : "Export")</span>
+                    }
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (ShowBackdrop)
+{
+    <div class="modal-backdrop fade show"></div>
+}
+
+<style>
+    .export-options {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .export-option-card {
+        display: flex;
+        align-items: center;
+        padding: 16px;
+        border: 2px solid var(--border-color, #e0e0e0);
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        background: var(--card-bg, #fff);
+    }
+
+    .export-option-card:hover {
+        border-color: var(--primary-color, #0d6efd);
+        background: var(--hover-bg, #f8f9fa);
+    }
+
+    .export-option-card.selected {
+        border-color: var(--primary-color, #0d6efd);
+        background: var(--selected-bg, #e7f1ff);
+    }
+
+    .option-icon {
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--icon-bg, #f0f0f0);
+        border-radius: 10px;
+        margin-right: 16px;
+    }
+
+    .option-icon i {
+        font-size: 24px;
+        color: var(--primary-color, #0d6efd);
+    }
+
+    .option-content {
+        flex: 1;
+    }
+
+    .option-title {
+        margin: 0 0 4px 0;
+        font-weight: 600;
+        color: var(--text-primary, #212529);
+    }
+
+    .option-description {
+        margin: 0;
+        font-size: 13px;
+        color: var(--text-secondary, #6c757d);
+    }
+
+    .option-check i {
+        font-size: 20px;
+        color: var(--primary-color, #0d6efd);
+    }
+
+    .folder-section {
+        padding-top: 12px;
+        border-top: 1px solid var(--border-color, #e0e0e0);
+    }
+
+    .section-label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 500;
+        margin-bottom: 8px;
+        color: var(--text-primary, #212529);
+    }
+</style>
+
+@code {
+    public enum ExportOption
+    {
+        DownloadZip,
+        ExportToLocal
+    }
+
+    public Ddtree? ddtree { get; set; }
+    private ExportOption selectedOption = ExportOption.DownloadZip;
+    private bool isExporting = false;
+
+    public string ModalDisplay = "none;";
+    public string ModalClass = "";
+    public bool ShowBackdrop = false;
+
+    private string channelId = "";
+    private string path = "";
+    private string folderName = "";
+    private string host = "";
+
+    [Parameter]
+    public EventCallback<string> OnExportCompleted { get; set; }
+
+    public void Open(string channelId, string path, string host)
+    {
+        this.channelId = channelId;
+        this.path = path;
+        this.host = host;
+        this.folderName = Path.GetFileName(path.TrimEnd('/'));
+        this.selectedOption = ExportOption.DownloadZip;
+        this.isExporting = false;
+
+        ModalDisplay = "block;";
+        ModalClass = "Show";
+        ShowBackdrop = true;
+        StateHasChanged();
+    }
+
+    public void Close()
+    {
+        ModalDisplay = "none";
+        ModalClass = "";
+        ShowBackdrop = false;
+        StateHasChanged();
+    }
+
+    private void SelectOption(ExportOption option)
+    {
+        selectedOption = option;
+        StateHasChanged();
+    }
+
+    private async Task Submit()
+    {
+        if (selectedOption == ExportOption.DownloadZip)
+        {
+            // Navigate to download ZIP (existing behavior)
+            MyNavigationManager.NavigateTo($"/api/file/strm?idChannel={channelId}&path={path}&host={host}", true);
+            Close();
+        }
+        else
+        {
+            // Export to local folder
+            var selectedFolder = ddtree?.selectedNode?.FirstOrDefault();
+            if (string.IsNullOrEmpty(selectedFolder))
+            {
+                return;
+            }
+
+            isExporting = true;
+            StateHasChanged();
+
+            try
+            {
+                await fs.CreateStrmFilesToLocal(path, channelId, host, selectedFolder);
+                await OnExportCompleted.InvokeAsync($"STRM files exported successfully to {selectedFolder}");
+            }
+            catch (Exception ex)
+            {
+                await OnExportCompleted.InvokeAsync($"Error exporting STRM files: {ex.Message}");
+            }
+            finally
+            {
+                isExporting = false;
+                Close();
+            }
+        }
+    }
+}

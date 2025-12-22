@@ -1315,6 +1315,45 @@ namespace TelegramDownloader.Data
             Directory.Delete(basePath, true);
             return zipPath;
         }
+
+        public async Task CreateStrmFilesToLocal(string path, string dbName, string host, string destinationFolder)
+        {
+            String folderPathName = Path.GetFileName(path.TrimEnd('/'));
+            String basePath = Path.Combine(LOCALDIR, destinationFolder, folderPathName);
+
+            // Create destination directory
+            Directory.CreateDirectory(basePath);
+
+            List<BsonFileManagerModel> filesAndFolders = await _db.getAllChildFilesInDirectory(dbName, path);
+            foreach (BsonFileManagerModel file in filesAndFolders)
+            {
+                String filePath = Path.Combine(basePath, file.FilePath.Substring(path.Length));
+                if (file.IsFile)
+                {
+                    if (FileExtensionTypeTest.isVideoExtension(file.Type) || FileExtensionTypeTest.isAudioExtension(file.Type))
+                    {
+                        string contenido = Path.Combine(host, "api/file/GetFileStream", dbName, file.Id, "file" + file.Type).Replace("\\", "/");
+                        if (GeneralConfigStatic.config.PreloadFilesOnStream || HelperService.bytesToMegaBytes(file.Size) < GeneralConfigStatic.config.MaxPreloadFileSizeInMb)
+                        {
+                            contenido = Path.Combine(host, "api/file/GetFileByTfmId", Uri.EscapeDataString(file.Name)).Replace("\\", "/") + $"?idChannel={dbName}&idFile={file.Id}";
+                        }
+                        string pattern = $@"\.({file.Type.Replace(".", "")})$";
+                        // Ensure parent directory exists
+                        var parentDir = Path.GetDirectoryName(Regex.Replace(filePath, pattern, ".strm"));
+                        if (!string.IsNullOrEmpty(parentDir))
+                        {
+                            Directory.CreateDirectory(parentDir);
+                        }
+                        File.WriteAllText(Regex.Replace(filePath, pattern, ".strm"), contenido);
+                    }
+                }
+                else
+                {
+                    Directory.CreateDirectory(filePath);
+                }
+            }
+        }
+
         public async Task UploadFileFromServer(string dbName, string currentPath, List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files, InfoDownloadTaksModel dm = null) // ItemsUploadedEventArgs<FileManagerDirectoryContent> args)
         {
             _logger.LogInformation("Starting upload from server - DbName: {DbName}, Path: {Path}, FilesCount: {Count}",
