@@ -23,13 +23,13 @@
 </style>
 
 <h3>
-    File Manager 
+    <i class="bi bi-folder2-open me-2"></i>File Manager
     <Dropdown Color="DropdownColor.Secondary">
         <DropdownToggleButton>@chatName</DropdownToggleButton>
         <DropdownMenu>
             <DropdownItem @onclick="exportData" Type="DropdownItemType.Button"><i class="bi bi-cloud-download"></i> Export</DropdownItem>
             <DropdownItem @onclick="importData" Type="DropdownItemType.Button"><i class="bi bi-cloud-upload"></i> Import</DropdownItem>
-            @if (!isMyChannel)
+            @if (canShowRefresh)
             {
                 @if (isRefreshing)
                 {
@@ -40,7 +40,7 @@
                 }
                 else if (showRefresh)
                 {
-                    <DropdownItem @onclick="refreshData" Type="DropdownItemType.Button">
+                    <DropdownItem @onclick="showRefreshConfirmation" Type="DropdownItemType.Button">
                         <span class="position-relative badge rounded-pill bg-danger">
                             Beta
                             <span class="visually-hidden">Beta function</span>
@@ -77,9 +77,32 @@
 <TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal @ref="mediaUrlModal" title="WebDav URL" url="@webDavUrl"></TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal>
 <TelegramDownloader.Pages.Modals.InfoModals.DeleteChannelModal @ref="deleteChannelModal" ChannelId="@id" ChannelName="@chatName"></TelegramDownloader.Pages.Modals.InfoModals.DeleteChannelModal>
 
+<TelegramDownloader.Pages.Modals.ConfirmationModal @ref="refreshConfirmModal"
+    Title="Refresh Channel Data"
+    Icon="bi-arrow-clockwise"
+    ConfirmText="Refresh"
+    ConfirmIcon="bi-arrow-clockwise"
+    ProcessingText="Refreshing..."
+    Type="TelegramDownloader.Pages.Modals.ConfirmationModal.ConfirmationType.Warning"
+    OnConfirm="executeRefreshData">
+    <div class="mb-3">
+        <p>Are you sure you want to refresh data for <strong>@chatName</strong>?</p>
+    </div>
+    <div class="alert alert-warning py-2 px-3 mb-0" style="font-size: 0.9rem;">
+        <i class="bi bi-exclamation-triangle me-2"></i>
+        <strong>This will:</strong>
+        <ul class="mb-0 mt-2">
+            <li>Re-download all file metadata from Telegram</li>
+            <li>Sync any changes made in the channel</li>
+            <li>May take a long time for large channels</li>
+        </ul>
+    </div>
+</TelegramDownloader.Pages.Modals.ConfirmationModal>
+
 @code {
     private Modals.ImportDataModal ImportModal { get; set; }
     private TelegramDownloader.Pages.Partials.impl.FileManagerImpl fileManagerImpl { get; set; } = default!;
+    private Modals.ConfirmationModal refreshConfirmModal { get; set; } = default!;
     [Parameter]
     public string id { get; set; }
     private MediaUrlModal mediaUrlModal { get; set; } = default!;
@@ -93,6 +116,9 @@
     private bool isMyChannel = true;
     private bool showRefresh = true;
     private bool isRefreshing = false;
+
+    // Show refresh button if: not my channel OR (is my channel AND EnableRefreshOwnChannels is enabled)
+    private bool canShowRefresh => !isMyChannel || GeneralConfigStatic.config.EnableRefreshOwnChannels;
 
     NotificationModel nm = new NotificationModel();
 
@@ -139,7 +165,13 @@
     {
         await ImportModal.Open();
     }
-    public async Task refreshData()
+
+    private async Task showRefreshConfirmation()
+    {
+        refreshConfirmModal.Show();
+    }
+
+    private async Task executeRefreshData()
     {
         isRefreshing = true;
         showRefresh = false;

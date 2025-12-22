@@ -1,4 +1,5 @@
-﻿using System.Timers;
+#nullable disable
+using System.Timers;
 using TelegramDownloader.Data;
 using TelegramDownloader.Models;
 using TelegramDownloader.Pages.Modals;

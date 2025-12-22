@@ -1,4 +1,5 @@
-﻿using Syncfusion.Blazor.FileManager;
+#nullable disable
+using Syncfusion.Blazor.FileManager;
 using Syncfusion.Blazor.Inputs;
 using System.Dynamic;
 using TelegramDownloader.Models;
@@ -30,6 +31,7 @@ namespace TelegramDownloader.Data
         Task<List<BsonFileManagerModel>> getTelegramFoldersByParentId(string dbName, string? parentId);
         Task<List<ExpandoObject>> GetTelegramFoldersExpando(string id, string parentId);
         Task<String> CreateStrmFiles(string path, string dbName, string host);
+        Task CreateStrmFilesToLocal(string path, string dbName, string host, string destinationFolder);
         Task importData(string dbName, string path, GenericNotificationProgressModel gnp);
         Task importSharedData(ShareFilesModel sfm, GenericNotificationProgressModel gnp);
         Task<FileManagerResponse<FileManagerDirectoryContent>> itemDeleteAsync(string dbName, ItemsDeleteEventArgs<FileManagerDirectoryContent> args);

@@ -1,3 +1,4 @@
+#nullable disable
 using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
 using TelegramDownloader.Models.Persistence;

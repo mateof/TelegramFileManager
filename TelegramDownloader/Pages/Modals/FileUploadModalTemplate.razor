@@ -1,85 +1,106 @@
 @* Styles moved to site.css *@
-<div class="upload-modal-overlay" :class="{ modalshow: showModal, modalhide: !showModal }" v-if="showModal">
-    <div class="upload-modal-container" v-on:click.stop>
-        <div class="upload-modal-header">
-            <h5 class="upload-modal-title">
+<div class="vue-upload-overlay" :class="{ modalshow: showModal, modalhide: !showModal }" v-if="showModal">
+    <div class="vue-upload-container" v-on:click.stop>
+        <div class="vue-upload-header">
+            <h5 class="vue-upload-title">
                 <i class="bi bi-cloud-arrow-up"></i>
                 Upload Files
             </h5>
-            <button class="upload-modal-close" v-on:click="closeModal()">
+            <button class="vue-upload-close" v-on:click="closeModal()">
                 <i class="bi bi-x-lg"></i>
             </button>
         </div>
 
-        <div class="upload-modal-body">
+        <div class="vue-upload-body">
             <!-- Drop Zone -->
-            <div class="upload-drop-zone"
+            <div class="vue-upload-drop-zone"
                  v-on:click="$refs.files.click()"
                  v-on:dragover.prevent="onDragOver"
                  v-on:dragleave="onDragLeave"
                  v-on:drop.prevent="onDrop"
                  :class="{ dragover: isDragging }">
-                <div class="upload-drop-icon">
+                <div class="vue-upload-drop-icon">
                     <i class="bi bi-cloud-arrow-up"></i>
                 </div>
-                <div class="upload-drop-text">Drop files here or click to browse</div>
-                <div class="upload-drop-hint">Supports any file type</div>
+                <div class="vue-upload-drop-text">Drop files here or click to browse</div>
+                <div class="vue-upload-drop-hint">Supports any file type</div>
                 <input type="file"
-                       class="upload-drop-input"
+                       class="vue-upload-drop-input"
                        id="filesInput"
                        ref="files"
                        v-on:change="onChangeFileUpload()"
                        multiple />
             </div>
 
+            <!-- Concurrent uploads selector -->
+            <div class="vue-upload-concurrent" v-if="files.length > 1">
+                <label class="vue-upload-concurrent-label">
+                    <i class="bi bi-stack"></i>
+                    Simultaneous uploads
+                </label>
+                <div class="vue-upload-concurrent-selector">
+                    <button v-for="n in 5"
+                            :key="n"
+                            class="vue-upload-concurrent-btn"
+                            :class="{ active: concurrentUploads === n }"
+                            v-on:click="concurrentUploads = n"
+                            :disabled="isUploading">
+                        {{ n }}
+                    </button>
+                </div>
+                <span class="vue-upload-concurrent-hint">
+                    {{ activeUploads > 0 ? `Uploading ${activeUploads} of ${concurrentUploads}...` : `Upload ${concurrentUploads} files at a time` }}
+                </span>
+            </div>
+
             <!-- File List -->
-            <div class="upload-file-list" v-if="files.length > 0">
-                <div class="upload-file-item"
+            <div class="vue-upload-file-list" v-if="files.length > 0">
+                <div class="vue-upload-file-item"
                      v-for="fileItem in files"
                      :key="fileItem.file.name"
                      :class="{ completed: fileItem.completed }">
-                    <div class="upload-file-header">
-                        <div class="upload-file-icon">
+                    <div class="vue-upload-file-header">
+                        <div class="vue-upload-file-icon">
                             <i class="bi" :class="getFileIcon(fileItem.file.name)"></i>
                         </div>
-                        <div class="upload-file-info">
-                            <div class="upload-file-name" :title="fileItem.file.name">{{ fileItem.file.name }}</div>
-                            <div class="upload-file-size">{{ bytes(fileItem.file.size) }}</div>
+                        <div class="vue-upload-file-info">
+                            <div class="vue-upload-file-name" :title="fileItem.file.name">{{ fileItem.file.name }}</div>
+                            <div class="vue-upload-file-size">{{ bytes(fileItem.file.size) }}</div>
                         </div>
-                        <button class="upload-file-remove"
+                        <button class="vue-upload-file-remove"
                                 v-on:click="deleteFile(fileItem.file.name)"
                                 v-if="!fileItem.completed"
                                 title="Remove file">
                             <i class="bi bi-x"></i>
                         </button>
                     </div>
-                    <div class="upload-file-progress">
-                        <div class="upload-file-progress-bar" :style="{ width: fileItem.progress + '%' }"></div>
+                    <div class="vue-upload-file-progress">
+                        <div class="vue-upload-file-progress-bar" :style="{ width: fileItem.progress + '%' }"></div>
                     </div>
-                    <div class="upload-file-status">
-                        <span class="upload-file-percent" v-if="!fileItem.completed">{{ fileItem.progress }}%</span>
-                        <span class="upload-completed-badge" v-else>
+                    <div class="vue-upload-file-status">
+                        <span class="vue-upload-file-percent" v-if="!fileItem.completed">{{ fileItem.progress }}%</span>
+                        <span class="vue-upload-completed-badge" v-else>
                             <i class="bi bi-check-circle-fill"></i>
                             Completed
                         </span>
-                        <span class="upload-file-bytes">{{ bytesProgress(fileItem.sended) }} / {{ bytes(fileItem.file.size) }}</span>
+                        <span class="vue-upload-file-bytes">{{ bytesProgress(fileItem.sended) }} / {{ bytes(fileItem.file.size) }}</span>
                     </div>
                 </div>
             </div>
 
             <!-- Empty State -->
-            <div class="upload-empty-state" v-else>
+            <div class="vue-upload-empty-state" v-else>
                 <i class="bi bi-inbox" style="font-size: 2rem; display: block; margin-bottom: 0.5rem; opacity: 0.5;"></i>
                 No files selected
             </div>
         </div>
 
-        <div class="upload-modal-footer">
-            <button class="upload-btn upload-btn-secondary" v-on:click="closeModal()">
+        <div class="vue-upload-footer">
+            <button class="vue-upload-btn vue-upload-btn-secondary" v-on:click="closeModal()">
                 <i class="bi bi-x-lg"></i>
                 Close
             </button>
-            <button class="upload-btn upload-btn-primary"
+            <button class="vue-upload-btn vue-upload-btn-primary"
                     v-on:click="submitForm()"
                     :disabled="files.length === 0 || isUploading">
                 <i class="bi bi-cloud-arrow-up"></i>
@@ -88,4 +109,3 @@
         </div>
     </div>
 </div>
-

@@ -17,7 +17,7 @@
 
 
 @code {
-
+#nullable disable
     [Parameter]
     public string id { get; set; }
     [Parameter]
@@ -46,7 +46,7 @@
     private Task<List<TreeNodeModel>> LoadLocalFolders(string parentPath)
     {
         var result = new List<TreeNodeModel>();
-        string basePath = FileService.TEMPDIR;
+        string basePath = FileService.LOCALDIR;
 
         // If parentPath is null, load root (temp folder)
         string targetPath = string.IsNullOrEmpty(parentPath) ? basePath : parentPath;

@@ -27,10 +27,67 @@ namespace TelegramDownloader.Data.db
         public DbService(ILogger<DbService> logger)
         {
             _logger = logger;
-            client = new MongoClient(GeneralConfigStatic.tlconfig?.mongo_connection_string ?? Environment.GetEnvironmentVariable("connectionString"));
-            currentDatabase = getDatabase("default");
-            this.dbName = "default";
-            _logger.LogInformation("DbService initialized - Connected to MongoDB");
+            var connectionString = GeneralConfigStatic.tlconfig?.mongo_connection_string
+                ?? Environment.GetEnvironmentVariable("connectionString");
+
+            if (string.IsNullOrWhiteSpace(connectionString))
+            {
+                _logger.LogWarning("DbService: MongoDB connection string not configured - setup required");
+                // Use a default that will fail gracefully when actually used
+                connectionString = "mongodb://localhost:27017";
+            }
+
+            try
+            {
+                var settings = MongoClientSettings.FromConnectionString(connectionString);
+                settings.ServerSelectionTimeout = TimeSpan.FromSeconds(5);
+                settings.ConnectTimeout = TimeSpan.FromSeconds(5);
+                client = new MongoClient(settings);
+                currentDatabase = getDatabase("default");
+                this.dbName = "default";
+                _logger.LogInformation("DbService initialized - Connected to MongoDB");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "DbService: Could not connect to MongoDB - setup may be required");
+                // Create client anyway for later use after setup
+                client = new MongoClient(connectionString);
+                currentDatabase = client.GetDatabase("default");
+                this.dbName = "default";
+            }
+        }
+
+        /// <summary>
+        /// Reinitializes the MongoDB connection with a new connection string.
+        /// Call this after setup when the connection string has been configured.
+        /// </summary>
+        public void ReinitializeConnection(string connectionString)
+        {
+            if (string.IsNullOrWhiteSpace(connectionString))
+            {
+                _logger.LogWarning("ReinitializeConnection: Connection string is empty");
+                return;
+            }
+
+            try
+            {
+                _logger.LogInformation("Reinitializing MongoDB connection...");
+                var settings = MongoClientSettings.FromConnectionString(connectionString);
+                settings.ServerSelectionTimeout = TimeSpan.FromSeconds(5);
+                settings.ConnectTimeout = TimeSpan.FromSeconds(5);
+
+                // Create new client with updated connection string
+                client = new MongoClient(settings);
+                currentDatabase = getDatabase("default");
+                this.dbName = "default";
+
+                _logger.LogInformation("DbService reinitialized - Connected to MongoDB with new connection string");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to reinitialize MongoDB connection: {Message}", ex.Message);
+                throw;
+            }
         }
 
         public async Task<IClientSessionHandle> getSession()
@@ -410,6 +467,27 @@ namespace TelegramDownloader.Data.db
                 .ToListAsync();
         }
 
+        /// <summary>
+        /// Find a folder by its name and parent FilterPath.
+        /// This is useful for finding folders when FilePath format doesn't match the navigation path.
+        /// </summary>
+        public async Task<BsonFileManagerModel?> getFolderByNameAndParentPath(string dbName, string folderName, string parentFilterPath, string collectionName = "directory")
+        {
+            if (collectionName == null)
+                collectionName = "directory";
+
+            // For first-level folders, FilterPath is "/"
+            // For nested folders, FilterPath is the parent path (e.g., "/Parent/")
+            var filter = Builders<BsonFileManagerModel>.Filter.Where(x =>
+                !x.IsFile &&
+                x.Name == folderName &&
+                x.FilterPath == parentFilterPath);
+
+            return await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName)
+                .FindAsync(filter))
+                .FirstOrDefaultAsync();
+        }
+
         public async Task<List<int>> getAllIdsFromChannel(string dbName, string collectionName = "directory")
         {
             if (collectionName == null)
@@ -491,8 +569,9 @@ namespace TelegramDownloader.Data.db
             result.DateModified = DateTime.Now;
             result.FilterId = (target.FilterId ?? "") + target.Id + "/";
             result.ParentId = target.Id;
-            // Both empty string and "/" indicate root folder
-            var isRootTarget = string.IsNullOrEmpty(target.FilterPath) || target.FilterPath == "/";
+            // Only empty string indicates root folder (the "Files" folder)
+            // FilterPath "/" means a first-level folder, not the root itself
+            var isRootTarget = string.IsNullOrEmpty(target.FilterPath);
             result.FilterPath = isRootTarget ? "/" : target.FilterPath + target.Name + "/";
             result.FilePath = isFile ? targetPath + result.Name : targetPath.TrimEnd('/');
             await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).InsertOneAsync(result);
@@ -842,6 +921,262 @@ namespace TelegramDownloader.Data.db
                 .DeleteManyAsync(Builders<PersistedTaskModel>.Filter.Empty);
 
             _logger.LogInformation("Cleared all persisted tasks - Count: {Count}", result.DeletedCount);
+        }
+
+        #endregion
+
+        #region Maintenance Operations
+
+        /// <summary>
+        /// Get all database names that represent Telegram channels (numeric IDs)
+        /// Excludes system databases like TCCONFIG, TFM-SHARED, admin, local, config
+        /// </summary>
+        public async Task<List<string>> GetAllChannelDatabaseNames()
+        {
+            var excludedDatabases = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                CONFIG_DB_NAME,
+                SHARED_DB_NAME,
+                "admin",
+                "local",
+                "config",
+                "default"
+            };
+
+            var databaseNames = new List<string>();
+
+            using (var cursor = await client.ListDatabaseNamesAsync())
+            {
+                while (await cursor.MoveNextAsync())
+                {
+                    foreach (var dbName in cursor.Current)
+                    {
+                        // Only include databases that are numeric (channel IDs) or start with "-" (group IDs)
+                        if (!excludedDatabases.Contains(dbName) &&
+                            (long.TryParse(dbName, out _) || (dbName.StartsWith("-") && long.TryParse(dbName, out _))))
+                        {
+                            databaseNames.Add(dbName);
+                        }
+                    }
+                }
+            }
+
+            _logger.LogInformation("Found {Count} channel databases", databaseNames.Count);
+            return databaseNames;
+        }
+
+        /// <summary>
+        /// Get statistics for a specific database including size, document count, and dates
+        /// </summary>
+        public async Task<DatabaseStats> GetDatabaseStats(string dbName)
+        {
+            var stats = new DatabaseStats();
+
+            try
+            {
+                var database = getDatabase(dbName);
+
+                // Get database stats using command
+                var command = new BsonDocument { { "dbStats", 1 } };
+                var result = await database.RunCommandAsync<BsonDocument>(command);
+
+                if (result.Contains("dataSize"))
+                {
+                    stats.SizeInBytes = result["dataSize"].ToInt64();
+                }
+
+                // Get document count from the directory collection
+                var collection = database.GetCollection<BsonFileManagerModel>("directory");
+                stats.DocumentCount = await collection.CountDocumentsAsync(Builders<BsonFileManagerModel>.Filter.Empty);
+
+                // Get creation date (oldest document) and last modified (newest document)
+                var oldestDoc = await collection
+                    .Find(Builders<BsonFileManagerModel>.Filter.Empty)
+                    .Sort(Builders<BsonFileManagerModel>.Sort.Ascending(x => x.DateCreated))
+                    .Limit(1)
+                    .FirstOrDefaultAsync();
+
+                var newestDoc = await collection
+                    .Find(Builders<BsonFileManagerModel>.Filter.Empty)
+                    .Sort(Builders<BsonFileManagerModel>.Sort.Descending(x => x.DateModified))
+                    .Limit(1)
+                    .FirstOrDefaultAsync();
+
+                if (oldestDoc != null)
+                {
+                    stats.CreatedAt = oldestDoc.DateCreated;
+                }
+
+                if (newestDoc != null)
+                {
+                    stats.LastModified = newestDoc.DateModified;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error getting stats for database {DbName}", dbName);
+            }
+
+            return stats;
+        }
+
+        /// <summary>
+        /// Analyze FilterPath issues without repairing them.
+        /// Returns detailed information about items that need repair.
+        /// </summary>
+        public async Task<FilterPathAnalysisResult> AnalyzeFilterPaths(string dbName, string collectionName = "directory")
+        {
+            if (collectionName == null)
+                collectionName = "directory";
+
+            var result = new FilterPathAnalysisResult { DatabaseName = dbName };
+
+            try
+            {
+                var collection = getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName);
+                var allItems = await (await collection.FindAsync(Builders<BsonFileManagerModel>.Filter.Empty)).ToListAsync();
+
+                result.TotalItems = allItems.Count;
+
+                // Build a dictionary for quick lookup by Id
+                var itemsById = allItems.ToDictionary(x => x.Id, x => x);
+
+                foreach (var item in allItems)
+                {
+                    // Skip the root folder (no ParentId)
+                    if (string.IsNullOrEmpty(item.ParentId))
+                        continue;
+
+                    // Calculate the correct FilterPath and FilterId
+                    var correctFilterPath = CalculateFilterPath(item.ParentId, itemsById);
+                    var correctFilterId = CalculateFilterId(item.ParentId, itemsById);
+                    var normalizedFilePath = item.FilePath?.Replace("\\", "/");
+
+                    bool hasIssue = false;
+
+                    if (item.FilterPath != correctFilterPath)
+                    {
+                        result.FilterPathIssues++;
+                        hasIssue = true;
+                    }
+
+                    if (item.FilterId != correctFilterId)
+                    {
+                        result.FilterIdIssues++;
+                        hasIssue = true;
+                    }
+
+                    if (normalizedFilePath != item.FilePath)
+                    {
+                        result.FilePathIssues++;
+                        hasIssue = true;
+                    }
+
+                    if (hasIssue)
+                    {
+                        result.ItemsWithIssues++;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error analyzing FilterPaths for database {DbName}", dbName);
+                result.Error = ex.Message;
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Repair FilterPath and FilterId for all items in a database.
+        /// This fixes data corruption caused by incorrect path calculations during move operations.
+        /// </summary>
+        public async Task<int> RepairFilterPaths(string dbName, string collectionName = "directory")
+        {
+            if (collectionName == null)
+                collectionName = "directory";
+
+            var collection = getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName);
+            var allItems = await (await collection.FindAsync(Builders<BsonFileManagerModel>.Filter.Empty)).ToListAsync();
+
+            // Build a dictionary for quick lookup by Id
+            var itemsById = allItems.ToDictionary(x => x.Id, x => x);
+
+            int repairedCount = 0;
+
+            foreach (var item in allItems)
+            {
+                // Skip the root folder (no ParentId)
+                if (string.IsNullOrEmpty(item.ParentId))
+                    continue;
+
+                // Calculate the correct FilterPath and FilterId by walking up the parent chain
+                var correctFilterPath = CalculateFilterPath(item.ParentId, itemsById);
+                var correctFilterId = CalculateFilterId(item.ParentId, itemsById);
+
+                // Also normalize FilePath (replace backslashes with forward slashes)
+                var normalizedFilePath = item.FilePath?.Replace("\\", "/");
+
+                bool needsUpdate = false;
+                var updateDef = Builders<BsonFileManagerModel>.Update.Combine();
+
+                if (item.FilterPath != correctFilterPath)
+                {
+                    updateDef = updateDef.Set(x => x.FilterPath, correctFilterPath);
+                    needsUpdate = true;
+                }
+
+                if (item.FilterId != correctFilterId)
+                {
+                    updateDef = updateDef.Set(x => x.FilterId, correctFilterId);
+                    needsUpdate = true;
+                }
+
+                if (normalizedFilePath != item.FilePath)
+                {
+                    updateDef = updateDef.Set(x => x.FilePath, normalizedFilePath);
+                    needsUpdate = true;
+                }
+
+                if (needsUpdate)
+                {
+                    await collection.UpdateOneAsync(
+                        Builders<BsonFileManagerModel>.Filter.Eq(x => x.Id, item.Id),
+                        updateDef);
+                    repairedCount++;
+                }
+            }
+
+            _logger.LogInformation("Repaired {Count} items in database {DbName}", repairedCount, dbName);
+            return repairedCount;
+        }
+
+        private string CalculateFilterPath(string parentId, Dictionary<string, BsonFileManagerModel> itemsById)
+        {
+            if (string.IsNullOrEmpty(parentId) || !itemsById.TryGetValue(parentId, out var parent))
+                return "/";
+
+            // If parent is root (no ParentId), return "/"
+            if (string.IsNullOrEmpty(parent.ParentId))
+                return "/";
+
+            // Otherwise, build the path recursively
+            var parentPath = CalculateFilterPath(parent.ParentId, itemsById);
+            return parentPath + parent.Name + "/";
+        }
+
+        private string CalculateFilterId(string parentId, Dictionary<string, BsonFileManagerModel> itemsById)
+        {
+            if (string.IsNullOrEmpty(parentId) || !itemsById.TryGetValue(parentId, out var parent))
+                return "";
+
+            // If parent is root (no ParentId), return just the parent's Id
+            if (string.IsNullOrEmpty(parent.ParentId))
+                return parent.Id + "/";
+
+            // Otherwise, build the FilterId recursively
+            var parentFilterId = CalculateFilterId(parent.ParentId, itemsById);
+            return parentFilterId + parent.Id + "/";
         }
 
         #endregion

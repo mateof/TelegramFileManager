@@ -7,6 +7,7 @@
 @inject IFileService fs
 @inject IJSRuntime JSRuntime
 @inject ISystemMetricsService metricsService
+@inject NavigationManager NavigationManager
 @implements IDisposable
 
 @if(user != null)
@@ -112,6 +113,10 @@
                     }
 
                     <div class="stat-action">
+                        <button type="button" class="btn btn-outline-secondary" @onclick="OpenTempFolder" title="Open temp folder in file manager">
+                            <i class="bi bi-folder2-open"></i>
+                            Open Folder
+                        </button>
                         <button type="button" class="btn btn-primary" @onclick="cleanTempFolder">
                             <i class="bi bi-trash3"></i>
                             Clean Cache
@@ -354,6 +359,14 @@
         await calculateTempDirSize();
         await RefreshMetrics();
         await TriggerCelebration();
+    }
+
+    private void OpenTempFolder()
+    {
+        // Navigate to local-files with the temp folder path
+        // The path is relative to LOCALDIR (local/), so temp/_temp/
+        var tempPath = "/temp/_temp/";
+        NavigationManager.NavigateTo($"/local-files?path={Uri.EscapeDataString(tempPath)}");
     }
 
     private async Task TriggerCelebration()

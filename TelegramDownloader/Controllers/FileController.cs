@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Http.Features;
+#nullable disable
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
 
 using MongoDB.Driver;
@@ -526,8 +527,8 @@ namespace TelegramDownloader.Controllers
             Response.StatusCode = StatusCodes.Status206PartialContent; // StatusCodes.Status206PartialContent;
             Response.ContentType = mimeType;
             Response.Headers["Content-Disposition"] = $"inline; filename=\"{HttpUtility.UrlEncode(fileName)}\"";
-            Response.Headers.Add("Content-Range", $"bytes {(initialFrom >= totalLength ? totalLength - 1 : initialFrom)}-{(initialFrom >= totalLength ? totalLength - 1 : initialFrom + Response.ContentLength - 1)}/{totalLength}");
-            Response.Headers.Add("Accept-Ranges", "bytes");
+            Response.Headers["Content-Range"] = $"bytes {(initialFrom >= totalLength ? totalLength - 1 : initialFrom)}-{(initialFrom >= totalLength ? totalLength - 1 : initialFrom + Response.ContentLength - 1)}/{totalLength}";
+            Response.Headers["Accept-Ranges"] = "bytes";
 
             //if (Request.Headers.ContainsKey("Range"))
             //{

@@ -56,7 +56,9 @@ function initFileUploadVue() {
             path: "",
             url: "",
             isDragging: false,
-            isUploading: false
+            isUploading: false,
+            concurrentUploads: 3,
+            activeUploads: 0
         };
     },
     methods: {
@@ -100,34 +102,72 @@ function initFileUploadVue() {
             if (this.files.length === 0 || this.isUploading) return;
 
             this.isUploading = true;
-            console.log("Enviando....");
+            this.activeUploads = 0;
+            console.log(`Enviando ${this.files.length} archivos (${this.concurrentUploads} simultáneos)...`);
 
-            const uploadPromises = this.files.map((value) => {
+            // Get files that haven't been uploaded yet
+            const pendingFiles = this.files.filter(f => !f.completed);
+
+            // Upload with concurrency limit
+            await this.uploadWithConcurrency(pendingFiles, this.concurrentUploads);
+
+            this.isUploading = false;
+        },
+
+        async uploadWithConcurrency(files, limit) {
+            const queue = [...files];
+            const executing = [];
+
+            const uploadFile = async (fileItem) => {
+                this.activeUploads++;
+
                 return new Promise((resolve) => {
                     let xhr = new XMLHttpRequest();
                     xhr.open("POST", this.url);
                     let data = new FormData();
-                    data.set('file', value.file);
+                    data.set('file', fileItem.file);
                     data.set('id', this.id);
                     data.set('path', this.path);
                     data.set('action', 'save');
 
                     xhr.upload.addEventListener("progress", ({ loaded, total }) => {
-                        value.progress = Math.floor((loaded / total) * 100);
-                        value.sended = loaded;
+                        fileItem.progress = Math.floor((loaded / total) * 100);
+                        fileItem.sended = loaded;
 
                         if (loaded == total) {
-                            value.completed = true;
+                            fileItem.completed = true;
                         }
                     });
 
-                    xhr.onloadend = () => resolve();
+                    xhr.onloadend = () => {
+                        this.activeUploads--;
+                        resolve();
+                    };
+
+                    xhr.onerror = () => {
+                        this.activeUploads--;
+                        resolve();
+                    };
+
                     xhr.send(data);
                 });
-            });
+            };
 
-            await Promise.all(uploadPromises);
-            this.isUploading = false;
+            while (queue.length > 0 || executing.length > 0) {
+                // Start new uploads while under limit and queue has items
+                while (executing.length < limit && queue.length > 0) {
+                    const fileItem = queue.shift();
+                    const promise = uploadFile(fileItem).then(() => {
+                        executing.splice(executing.indexOf(promise), 1);
+                    });
+                    executing.push(promise);
+                }
+
+                // Wait for at least one to complete before continuing
+                if (executing.length > 0) {
+                    await Promise.race(executing);
+                }
+            }
         },
         closeModal() {
             const hadFiles = this.files.length > 0;
@@ -139,7 +179,7 @@ function initFileUploadVue() {
             // Notificar a Blazor para refrescar el FileManager si se subieron archivos
             if (hadFiles) {
                 try {
-                    DotNet.invokeMethodAsync('TelegramDownloader', 'RefreshFileManagerStatic');
+                    DotNet.invokeMethodAsync('TelegramDownloader', 'RefreshFileManagerStatic').catch(() => {});
                 } catch (e) {
                     console.log('[FileUpload] No se pudo refrescar FileManager:', e);
                 }
@@ -359,12 +399,16 @@ window.openAudioPlayerModal = (file, type = "audio/mpeg", title = "") => {
     if (type === null) {
         type = "audio/mpeg";
     }
-    DotNet.invokeMethodAsync('TelegramDownloader', 'OpenAudioPlayer', file, type, title);
+    try {
+        DotNet.invokeMethodAsync('TelegramDownloader', 'OpenAudioPlayer', file, type, title).catch(() => {});
+    } catch (e) { console.log('OpenAudioPlayer error:', e); }
 }
 
 window.openAudioModal = () => {
     // Abrir el modal con la canción actual (si hay una)
-    DotNet.invokeMethodAsync('TelegramDownloader', 'OpenAudioPlayerCurrent');
+    try {
+        DotNet.invokeMethodAsync('TelegramDownloader', 'OpenAudioPlayerCurrent').catch(() => {});
+    } catch (e) { console.log('OpenAudioPlayerCurrent error:', e); }
 }
 
 window.playAudioPlayer = (url, type) => {
@@ -460,19 +504,170 @@ window.closeAudioModal = () => {
     // El audio sigue reproduciéndose en segundo plano
 }
 
+// ===== Audio Visualizer with Web Audio API =====
+window._audioVisualizer = {
+    audioContext: null,
+    analyser: null,
+    source: null,
+    dataArray: null,
+    animationId: null,
+    isInitialized: false
+};
+
+window.initAudioVisualizer = () => {
+    const audio = document.getElementById('audioPlayer');
+    if (!audio) return false;
+
+    try {
+        // Only create context once
+        if (!window._audioVisualizer.audioContext) {
+            window._audioVisualizer.audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+
+        const ctx = window._audioVisualizer.audioContext;
+
+        // Resume context if suspended (browser autoplay policy)
+        if (ctx.state === 'suspended') {
+            ctx.resume();
+        }
+
+        // Only connect source once per audio element
+        if (!window._audioVisualizer.isInitialized) {
+            // Create analyser with better resolution
+            window._audioVisualizer.analyser = ctx.createAnalyser();
+            window._audioVisualizer.analyser.fftSize = 256; // 128 frequency bins for better resolution
+            window._audioVisualizer.analyser.smoothingTimeConstant = 0.4; // Lower = more responsive
+            window._audioVisualizer.analyser.minDecibels = -90;
+            window._audioVisualizer.analyser.maxDecibels = -10;
+
+            // Connect audio element to analyser
+            window._audioVisualizer.source = ctx.createMediaElementSource(audio);
+            window._audioVisualizer.source.connect(window._audioVisualizer.analyser);
+            window._audioVisualizer.analyser.connect(ctx.destination);
+
+            // Create data array for frequency data
+            const bufferLength = window._audioVisualizer.analyser.frequencyBinCount;
+            window._audioVisualizer.dataArray = new Uint8Array(bufferLength);
+
+            window._audioVisualizer.isInitialized = true;
+        }
+
+        return true;
+    } catch (e) {
+        console.error('Error initializing audio visualizer:', e);
+        return false;
+    }
+};
+
+window.getVisualizerData = () => {
+    if (!window._audioVisualizer.analyser || !window._audioVisualizer.dataArray) {
+        return null;
+    }
+
+    try {
+        window._audioVisualizer.analyser.getByteFrequencyData(window._audioVisualizer.dataArray);
+
+        const data = window._audioVisualizer.dataArray;
+        const bars = [];
+        const numBars = 13;
+        const dataLength = data.length;
+
+        // Use logarithmic frequency distribution (more bins for bass, fewer for treble)
+        // This better matches human hearing perception
+        const frequencyBands = [
+            { start: 0, end: 2 },      // Sub-bass (very low)
+            { start: 2, end: 4 },      // Bass
+            { start: 4, end: 8 },      // Low-mid bass
+            { start: 8, end: 12 },     // Mid-bass
+            { start: 12, end: 20 },    // Low-mids
+            { start: 20, end: 30 },    // Mids
+            { start: 30, end: 42 },    // Upper-mids
+            { start: 42, end: 56 },    // Presence
+            { start: 56, end: 72 },    // High-mids
+            { start: 72, end: 88 },    // Highs
+            { start: 88, end: 104 },   // High treble
+            { start: 104, end: 118 },  // Air
+            { start: 118, end: 128 }   // Ultra-high
+        ];
+
+        // Frequency-dependent scaling to compensate for bass dominance
+        // Lower values = more attenuation, higher values = more boost
+        const frequencyScaling = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7];
+
+        for (let i = 0; i < numBars; i++) {
+            const band = frequencyBands[i];
+            let sum = 0;
+            let count = 0;
+
+            for (let j = band.start; j < band.end && j < dataLength; j++) {
+                sum += data[j];
+                count++;
+            }
+
+            if (count > 0) {
+                let avg = sum / count;
+                // Apply frequency-dependent scaling
+                avg *= frequencyScaling[i];
+                // Normalize to 0-100
+                let normalized = (avg / 255) * 100;
+                // Apply slight boost for visual impact
+                normalized = Math.min(100, normalized * 1.2);
+                bars.push(normalized);
+            } else {
+                bars.push(0);
+            }
+        }
+
+        return bars;
+    } catch (e) {
+        console.error('Error getting visualizer data:', e);
+        return null;
+    }
+};
+
+window.startVisualizerAnimation = (callback) => {
+    // Initialize if not already done
+    if (!window._audioVisualizer.isInitialized) {
+        window.initAudioVisualizer();
+    }
+
+    const animate = () => {
+        const data = window.getVisualizerData();
+        if (data && callback) {
+            callback(data);
+        }
+        window._audioVisualizer.animationId = requestAnimationFrame(animate);
+    };
+
+    animate();
+};
+
+window.stopVisualizerAnimation = () => {
+    if (window._audioVisualizer.animationId) {
+        cancelAnimationFrame(window._audioVisualizer.animationId);
+        window._audioVisualizer.animationId = null;
+    }
+};
+
 window.addToAudioPlaylist = (url, type = "audio/mpeg", title = "") => {
     if (type === null) type = "audio/mpeg";
-    DotNet.invokeMethodAsync('TelegramDownloader', 'AddToAudioPlaylist', url, type, title);
+    try {
+        DotNet.invokeMethodAsync('TelegramDownloader', 'AddToAudioPlaylist', url, type, title).catch(() => {});
+    } catch (e) { console.log('AddToAudioPlaylist error:', e); }
 }
 
 window.addToAudioPlaylistAndPlay = (url, type = "audio/mpeg", title = "") => {
     if (type === null) type = "audio/mpeg";
-    DotNet.invokeMethodAsync('TelegramDownloader', 'AddToAudioPlaylistAndPlay', url, type, title);
+    try {
+        DotNet.invokeMethodAsync('TelegramDownloader', 'AddToAudioPlaylistAndPlay', url, type, title).catch(() => {});
+    } catch (e) { console.log('AddToAudioPlaylistAndPlay error:', e); }
 }
 
 window.addMultipleToAudioPlaylist = (items) => {
     // items is an array of {url, type, title} objects
-    DotNet.invokeMethodAsync('TelegramDownloader', 'AddMultipleToAudioPlaylist', items);
+    try {
+        DotNet.invokeMethodAsync('TelegramDownloader', 'AddMultipleToAudioPlaylist', items).catch(() => {});
+    } catch (e) { console.log('AddMultipleToAudioPlaylist error:', e); }
 }
 
 // ===== Media Session API for mobile/Bluetooth integration =====
@@ -499,43 +694,59 @@ window.initMediaSession = (title, artist, album, artworkUrl) => {
             ] : []
         });
 
-        // Set up action handlers
+        // Set up action handlers with error handling
         navigator.mediaSession.setActionHandler('play', () => {
-            DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionAction', 'play');
+            try {
+                DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionAction', 'play').catch(() => {});
+            } catch (e) { console.log('Media session play error:', e); }
         });
 
         navigator.mediaSession.setActionHandler('pause', () => {
-            DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionAction', 'pause');
+            try {
+                DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionAction', 'pause').catch(() => {});
+            } catch (e) { console.log('Media session pause error:', e); }
         });
 
         navigator.mediaSession.setActionHandler('previoustrack', () => {
-            DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionAction', 'previoustrack');
+            try {
+                DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionAction', 'previoustrack').catch(() => {});
+            } catch (e) { console.log('Media session previoustrack error:', e); }
         });
 
         navigator.mediaSession.setActionHandler('nexttrack', () => {
-            DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionAction', 'nexttrack');
+            try {
+                DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionAction', 'nexttrack').catch(() => {});
+            } catch (e) { console.log('Media session nexttrack error:', e); }
         });
 
         navigator.mediaSession.setActionHandler('stop', () => {
-            DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionAction', 'stop');
+            try {
+                DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionAction', 'stop').catch(() => {});
+            } catch (e) { console.log('Media session stop error:', e); }
         });
 
         // Seek handlers (for progress bar on lock screen)
         try {
             navigator.mediaSession.setActionHandler('seekbackward', (details) => {
-                const skipTime = details.seekOffset || 10;
-                DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionSeek', -skipTime);
+                try {
+                    const skipTime = details.seekOffset || 10;
+                    DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionSeek', -skipTime).catch(() => {});
+                } catch (e) { console.log('Media session seekbackward error:', e); }
             });
 
             navigator.mediaSession.setActionHandler('seekforward', (details) => {
-                const skipTime = details.seekOffset || 10;
-                DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionSeek', skipTime);
+                try {
+                    const skipTime = details.seekOffset || 10;
+                    DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionSeek', skipTime).catch(() => {});
+                } catch (e) { console.log('Media session seekforward error:', e); }
             });
 
             navigator.mediaSession.setActionHandler('seekto', (details) => {
-                if (details.seekTime !== undefined) {
-                    DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionSeekTo', details.seekTime);
-                }
+                try {
+                    if (details.seekTime !== undefined) {
+                        DotNet.invokeMethodAsync('TelegramDownloader', 'MediaSessionSeekTo', details.seekTime).catch(() => {});
+                    }
+                } catch (e) { console.log('Media session seekto error:', e); }
             });
         } catch (e) {
             console.log('Seek handlers not supported:', e);
@@ -621,6 +832,16 @@ window.extractAudioArtwork = (audioUrl) => {
             return;
         }
 
+        // Skip artwork extraction for FLAC files - jsmediatags has issues with them
+        // and they require downloading too much data
+        const urlLower = audioUrl.toLowerCase();
+        if (urlLower.includes('.flac') || urlLower.includes('flac')) {
+            console.log('Skipping artwork extraction for FLAC file');
+            window._artworkCache[audioUrl] = null;
+            resolve(null);
+            return;
+        }
+
         // Check if jsmediatags is available
         if (typeof jsmediatags === 'undefined') {
             console.log('jsmediatags library not loaded');
@@ -628,9 +849,17 @@ window.extractAudioArtwork = (audioUrl) => {
             return;
         }
 
+        // Add timeout to prevent hanging
+        const timeoutId = setTimeout(() => {
+            console.log('Artwork extraction timed out');
+            window._artworkCache[audioUrl] = null;
+            resolve(null);
+        }, 10000); // 10 second timeout
+
         try {
             jsmediatags.read(audioUrl, {
                 onSuccess: function(tag) {
+                    clearTimeout(timeoutId);
                     try {
                         const picture = tag.tags.picture;
                         if (picture) {
@@ -655,12 +884,14 @@ window.extractAudioArtwork = (audioUrl) => {
                     }
                 },
                 onError: function(error) {
+                    clearTimeout(timeoutId);
                     console.log('Error reading tags:', error.type, error.info);
                     window._artworkCache[audioUrl] = null;
                     resolve(null);
                 }
             });
         } catch (e) {
+            clearTimeout(timeoutId);
             console.error('Error extracting artwork:', e);
             resolve(null);
         }
@@ -723,7 +954,7 @@ window.moveToBody = (elementSelector) => {
 }
 
 window.showUploadModal = () => {
-    const modal = document.querySelector('.upload-modal-overlay');
+    const modal = document.querySelector('.vue-upload-overlay');
     if (modal) {
         // Move to body if not already there
         if (modal.parentElement !== document.body) {

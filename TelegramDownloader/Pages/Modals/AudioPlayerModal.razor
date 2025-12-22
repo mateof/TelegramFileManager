@@ -1,4 +1,5 @@
 @inject IJSRuntime JSRuntime
+@implements IDisposable
 
 <style>
     /* Floating Audio Player */
@@ -174,6 +175,59 @@
         100% { transform: translateX(-50%); }
     }
 
+    /* Loading Indicator */
+    .audio-loading-indicator {
+        height: 50px;
+        background: linear-gradient(135deg, rgba(233, 69, 96, 0.05) 0%, rgba(15, 52, 96, 0.1) 100%);
+        border-radius: 0.5rem;
+        margin-bottom: 1rem;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        padding: 0.5rem;
+    }
+
+    .loading-spinner {
+        width: 20px;
+        height: 20px;
+        border: 2px solid rgba(233, 69, 96, 0.3);
+        border-top-color: #e94560;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+
+    @@keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    .loading-text {
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 0.75rem;
+    }
+
+    .loading-progress {
+        width: 80%;
+        height: 4px;
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 2px;
+        overflow: hidden;
+    }
+
+    .loading-progress-bar {
+        height: 100%;
+        background: linear-gradient(90deg, #e94560 0%, #ff6b6b 100%);
+        border-radius: 2px;
+        transition: width 0.3s ease;
+    }
+
+    .loading-percent {
+        color: #e94560;
+        font-size: 0.7rem;
+        font-weight: 600;
+    }
+
     /* Visualizer */
     .audio-visualizer {
         height: 50px;
@@ -199,19 +253,27 @@
         animation: equalizer 0.8s ease-in-out infinite;
     }
 
-    .audio-visualizer .bar:nth-child(1) { height: 20%; animation-delay: 0s; }
-    .audio-visualizer .bar:nth-child(2) { height: 40%; animation-delay: 0.1s; }
-    .audio-visualizer .bar:nth-child(3) { height: 60%; animation-delay: 0.2s; }
-    .audio-visualizer .bar:nth-child(4) { height: 80%; animation-delay: 0.3s; }
-    .audio-visualizer .bar:nth-child(5) { height: 100%; animation-delay: 0.4s; }
-    .audio-visualizer .bar:nth-child(6) { height: 80%; animation-delay: 0.5s; }
-    .audio-visualizer .bar:nth-child(7) { height: 60%; animation-delay: 0.6s; }
-    .audio-visualizer .bar:nth-child(8) { height: 40%; animation-delay: 0.7s; }
-    .audio-visualizer .bar:nth-child(9) { height: 20%; animation-delay: 0.8s; }
-    .audio-visualizer .bar:nth-child(10) { height: 40%; animation-delay: 0.9s; }
-    .audio-visualizer .bar:nth-child(11) { height: 60%; animation-delay: 1s; }
-    .audio-visualizer .bar:nth-child(12) { height: 80%; animation-delay: 1.1s; }
-    .audio-visualizer .bar:nth-child(13) { height: 60%; animation-delay: 1.2s; }
+    /* Default animation heights for non-real-time mode */
+    .audio-visualizer:not(.real-time) .bar:nth-child(1) { height: 20%; animation-delay: 0s; }
+    .audio-visualizer:not(.real-time) .bar:nth-child(2) { height: 40%; animation-delay: 0.1s; }
+    .audio-visualizer:not(.real-time) .bar:nth-child(3) { height: 60%; animation-delay: 0.2s; }
+    .audio-visualizer:not(.real-time) .bar:nth-child(4) { height: 80%; animation-delay: 0.3s; }
+    .audio-visualizer:not(.real-time) .bar:nth-child(5) { height: 100%; animation-delay: 0.4s; }
+    .audio-visualizer:not(.real-time) .bar:nth-child(6) { height: 80%; animation-delay: 0.5s; }
+    .audio-visualizer:not(.real-time) .bar:nth-child(7) { height: 60%; animation-delay: 0.6s; }
+    .audio-visualizer:not(.real-time) .bar:nth-child(8) { height: 40%; animation-delay: 0.7s; }
+    .audio-visualizer:not(.real-time) .bar:nth-child(9) { height: 20%; animation-delay: 0.8s; }
+    .audio-visualizer:not(.real-time) .bar:nth-child(10) { height: 40%; animation-delay: 0.9s; }
+    .audio-visualizer:not(.real-time) .bar:nth-child(11) { height: 60%; animation-delay: 1s; }
+    .audio-visualizer:not(.real-time) .bar:nth-child(12) { height: 80%; animation-delay: 1.1s; }
+    .audio-visualizer:not(.real-time) .bar:nth-child(13) { height: 60%; animation-delay: 1.2s; }
+
+    /* Real-time visualizer - no animation, heights controlled by JS */
+    .audio-visualizer.real-time .bar {
+        animation: none;
+        transition: height 0.05s ease-out;
+        min-height: 5%;
+    }
 
     @@keyframes equalizer {
         0%, 100% { transform: scaleY(0.3); }
@@ -600,12 +662,32 @@
                 </div>
             }
 
-            <div class="audio-visualizer @(isPlaying ? "" : "paused")">
-                @for (int i = 0; i < 13; i++)
-                {
-                    <div class="bar"></div>
-                }
-            </div>
+            @if (isInitialLoading || isBuffering)
+            {
+                <div class="audio-loading-indicator">
+                    <div class="loading-spinner"></div>
+                    <span class="loading-text">@loadingStatus</span>
+                    @if (bufferPercent > 0 && bufferPercent < 100)
+                    {
+                        <div class="loading-progress">
+                            <div class="loading-progress-bar" style="width: @(bufferPercent.ToString("F0", System.Globalization.CultureInfo.InvariantCulture))%"></div>
+                        </div>
+                        <span class="loading-percent">@bufferPercent.ToString("F0")%</span>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="audio-visualizer @(isPlaying ? "" : "paused") @(useRealVisualizer ? "real-time" : "")">
+                    @for (int i = 0; i < 13; i++)
+                    {
+                        var height = useRealVisualizer && visualizerBars != null && i < visualizerBars.Length
+                            ? visualizerBars[i]
+                            : GetDefaultBarHeight(i);
+                        <div class="bar" style="@(useRealVisualizer ? $"height: {height.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)}%" : "")"></div>
+                    }
+                </div>
+            }
 
             <div class="audio-controls">
                 <div class="audio-main-controls">
@@ -690,7 +772,10 @@
        style="display: none;"
        @onplay="OnPlay"
        @onpause="OnPause"
-       @onended="OnEnded">
+       @onended="OnEnded"
+       @onwaiting="OnWaiting"
+       @oncanplay="OnCanPlay"
+       @onloadstart="OnLoadStart">
 </audio>
 
 @code {
@@ -709,7 +794,19 @@
 
     // Album artwork
     private string? artworkUrl = null;
+#pragma warning disable CS0414 // Value assigned but never read
     private bool isLoadingArtwork = false;
+#pragma warning restore CS0414
+
+    // Loading/Buffering state
+    private bool isBuffering = false;
+    private bool isInitialLoading = false;
+    private string loadingStatus = "";
+
+    // Real-time visualizer
+    private bool useRealVisualizer = false;
+    private double[] visualizerBars = new double[13];
+    private CancellationTokenSource? visualizerCts;
 
     // Playlist
     private List<PlaylistItem> playlist = new();
@@ -718,6 +815,9 @@
     // Drag and drop state
     private int? draggedIndex = null;
     private int? dragOverIndex = null;
+
+    // Disposed state
+    private bool _disposed = false;
 
     public class PlaylistItem
     {
@@ -731,65 +831,93 @@
 
     public async Task ShowModal(string url, string type = "audio/mpeg", string title = "")
     {
-        bool isSameTrack = audioUrl == url;
-
-        audioUrl = url;
-        audioType = string.IsNullOrEmpty(type) ? "audio/mpeg" : type;
-        audioTitle = !string.IsNullOrEmpty(title) ? title : ExtractFileName(url);
-
-        // Add to playlist if not exists
-        var existingIndex = playlist.FindIndex(p => p.Url == url);
-        if (existingIndex < 0)
+        if (_disposed) return;
+        try
         {
-            playlist.Add(new PlaylistItem { Url = url, Type = audioType, Title = audioTitle });
-            currentTrackIndex = playlist.Count - 1;
+            bool isSameTrack = audioUrl == url;
+
+            audioUrl = url;
+            audioType = string.IsNullOrEmpty(type) ? "audio/mpeg" : type;
+            audioTitle = !string.IsNullOrEmpty(title) ? title : ExtractFileName(url);
+
+            // Add to playlist if not exists
+            var existingIndex = playlist.FindIndex(p => p.Url == url);
+            if (existingIndex < 0)
+            {
+                playlist.Add(new PlaylistItem { Url = url, Type = audioType, Title = audioTitle });
+                currentTrackIndex = playlist.Count - 1;
+            }
+            else
+            {
+                currentTrackIndex = existingIndex;
+            }
+
+            isVisible = true;
+            await InvokeAsync(StateHasChanged);
+            await Task.Delay(100);
+
+            // Only auto-play if different track
+            if (!isSameTrack)
+            {
+                isPlaying = false;
+                progressPercent = 0;
+                bufferPercent = 0;
+                currentTimeDisplay = "0:00";
+                artworkUrl = null; // Reset artwork before loading new one
+
+                // Set loading state - check if it's a Telegram file (not local)
+                bool isTelegramFile = audioUrl.Contains("/api/file/") || audioUrl.Contains("GetFileStream");
+                isInitialLoading = isTelegramFile;
+                isBuffering = false;
+                loadingStatus = isTelegramFile ? "Loading from Telegram..." : "";
+
+                await JSRuntime.InvokeVoidAsync("playAudioPlayer", audioUrl, audioType);
+
+                // Extract artwork and update Media Session (async, won't block playback)
+                _ = ExtractArtworkAndUpdateMediaSession(audioUrl);
+            }
+
+            // Start progress update
+            StartProgressTimer();
+            await UpdateProgress();
         }
-        else
+        catch
         {
-            currentTrackIndex = existingIndex;
+            // Prevent circuit crash
         }
-
-        isVisible = true;
-        StateHasChanged();
-        await Task.Delay(100);
-
-        // Only auto-play if different track
-        if (!isSameTrack)
-        {
-            isPlaying = false;
-            progressPercent = 0;
-            currentTimeDisplay = "0:00";
-            artworkUrl = null; // Reset artwork before loading new one
-            await JSRuntime.InvokeVoidAsync("playAudioPlayer", audioUrl, audioType);
-
-            // Extract artwork and update Media Session (async, won't block playback)
-            _ = ExtractArtworkAndUpdateMediaSession(audioUrl);
-        }
-
-        // Start progress update
-        StartProgressTimer();
-        await UpdateProgress();
     }
 
     public async Task ShowCurrentModal()
     {
-        // Show modal with current song without changing anything
-        if (!string.IsNullOrEmpty(audioUrl))
+        if (_disposed) return;
+        try
         {
-            isVisible = true;
-            StateHasChanged();
-            await Task.Delay(100);
-            StartProgressTimer();
-            await UpdateProgress();
+            // Show modal with current song without changing anything
+            if (!string.IsNullOrEmpty(audioUrl))
+            {
+                isVisible = true;
+                await InvokeAsync(StateHasChanged);
+                await Task.Delay(100);
+                StartProgressTimer();
+                await UpdateProgress();
+            }
+        }
+        catch
+        {
+            // Prevent circuit crash
         }
     }
 
     public async Task OnHideModalClick()
     {
-        StopProgressTimer();
-        await JSRuntime.InvokeVoidAsync("closeAudioModal");
-        isVisible = false;
-        StateHasChanged();
+        try
+        {
+            StopProgressTimer();
+            await JSRuntime.InvokeVoidAsync("closeAudioModal");
+            isVisible = false;
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
     }
 
     private async Task OnOverlayClick()
@@ -846,15 +974,21 @@
 
     private async Task UpdateProgressLoop(CancellationToken token)
     {
-        while (!token.IsCancellationRequested)
+        while (!token.IsCancellationRequested && !_disposed)
         {
             try
             {
+                if (_disposed) break;
                 await UpdateProgress();
+                if (_disposed) break;
                 await InvokeAsync(StateHasChanged);
                 await Task.Delay(500, token);
             }
             catch (TaskCanceledException)
+            {
+                break;
+            }
+            catch (ObjectDisposedException)
             {
                 break;
             }
@@ -920,26 +1054,149 @@
         public double BufferPercent { get; set; }
     }
 
-    private void OnPlay()
+    private async void OnPlay()
     {
-        isPlaying = true;
-        StateHasChanged();
+        try
+        {
+            isPlaying = true;
+            await StartRealVisualizer();
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
     }
 
-    private void OnPause()
+    private async void OnPause()
     {
-        isPlaying = false;
-        StateHasChanged();
+        try
+        {
+            isPlaying = false;
+            StopRealVisualizer();
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
+    }
+
+    private int GetDefaultBarHeight(int index)
+    {
+        // Default animated heights when not using real visualizer
+        int[] defaultHeights = { 20, 40, 60, 80, 100, 80, 60, 40, 20, 40, 60, 80, 60 };
+        return index < defaultHeights.Length ? defaultHeights[index] : 50;
+    }
+
+    private async Task StartRealVisualizer()
+    {
+        try
+        {
+            // Initialize the audio visualizer in JavaScript
+            var initialized = await JSRuntime.InvokeAsync<bool>("initAudioVisualizer");
+            if (initialized)
+            {
+                useRealVisualizer = true;
+                visualizerCts?.Cancel();
+                visualizerCts = new CancellationTokenSource();
+                _ = UpdateVisualizerLoop(visualizerCts.Token);
+            }
+        }
+        catch
+        {
+            useRealVisualizer = false;
+        }
+    }
+
+    private void StopRealVisualizer()
+    {
+        visualizerCts?.Cancel();
+        // Reset bars to minimum
+        for (int i = 0; i < visualizerBars.Length; i++)
+        {
+            visualizerBars[i] = 5;
+        }
+    }
+
+    private async Task UpdateVisualizerLoop(CancellationToken token)
+    {
+        while (!token.IsCancellationRequested && !_disposed && isPlaying)
+        {
+            try
+            {
+                var data = await JSRuntime.InvokeAsync<double[]>("getVisualizerData", token);
+                if (data != null && data.Length >= 13)
+                {
+                    for (int i = 0; i < 13 && i < data.Length; i++)
+                    {
+                        // Add minimum height and smooth the values
+                        visualizerBars[i] = Math.Max(5, data[i]);
+                    }
+                    await InvokeAsync(StateHasChanged);
+                }
+                await Task.Delay(50, token); // ~20 FPS update rate
+            }
+            catch (TaskCanceledException)
+            {
+                break;
+            }
+            catch (ObjectDisposedException)
+            {
+                break;
+            }
+            catch
+            {
+                // Ignore other errors, continue loop
+            }
+        }
     }
 
     private async void OnEnded()
     {
-        isPlaying = false;
-        if (CanPlayNext)
+        try
         {
-            await PlayNext();
+            isPlaying = false;
+            if (CanPlayNext)
+            {
+                await PlayNext();
+            }
+            await InvokeAsync(StateHasChanged);
         }
-        StateHasChanged();
+        catch { }
+    }
+
+    private async void OnWaiting()
+    {
+        try
+        {
+            isBuffering = true;
+            loadingStatus = "Buffering...";
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
+    }
+
+    private async void OnCanPlay()
+    {
+        try
+        {
+            isBuffering = false;
+            isInitialLoading = false;
+            loadingStatus = "";
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
+    }
+
+    private async void OnLoadStart()
+    {
+        try
+        {
+            // Only show loading for Telegram files
+            bool isTelegramFile = audioUrl.Contains("/api/file/") || audioUrl.Contains("GetFileStream");
+            if (isTelegramFile)
+            {
+                isInitialLoading = true;
+                loadingStatus = "Loading from Telegram...";
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch { }
     }
 
     // Playlist methods
@@ -953,11 +1210,19 @@
             audioType = track.Type;
             audioTitle = track.Title;
             progressPercent = 0;
+            bufferPercent = 0;
             currentTimeDisplay = "0:00";
             artworkUrl = null; // Reset artwork before loading new one
+
+            // Set loading state - check if it's a Telegram file (not local)
+            bool isTelegramFile = audioUrl.Contains("/api/file/") || audioUrl.Contains("GetFileStream");
+            isInitialLoading = isTelegramFile;
+            isBuffering = false;
+            loadingStatus = isTelegramFile ? "Loading from Telegram..." : "";
+
             await JSRuntime.InvokeVoidAsync("playAudioPlayer", audioUrl, audioType);
 
-            StateHasChanged();
+            await InvokeAsync(StateHasChanged);
 
             // Extract artwork from audio file (async, won't block playback)
             _ = ExtractArtworkAndUpdateMediaSession(audioUrl);
@@ -966,10 +1231,17 @@
 
     private async Task ExtractArtworkAndUpdateMediaSession(string url)
     {
-        await ExtractArtwork(url);
-        // Update Media Session for mobile/Bluetooth with artwork
-        await InitializeMediaSession();
-        await UpdateMediaSessionPlaybackState("playing");
+        try
+        {
+            await ExtractArtwork(url);
+            // Update Media Session for mobile/Bluetooth with artwork
+            await InitializeMediaSession();
+            await UpdateMediaSessionPlaybackState("playing");
+        }
+        catch
+        {
+            // Ignore errors - don't crash the circuit
+        }
     }
 
     private async Task PlayPrevious()
@@ -1006,69 +1278,85 @@
         }
     }
 
-    public void AddToPlaylist(string url, string type = "audio/mpeg", string title = "")
+    public async Task AddToPlaylist(string url, string type = "audio/mpeg", string title = "")
     {
-        var item = new PlaylistItem
+        try
         {
-            Url = url,
-            Type = string.IsNullOrEmpty(type) ? "audio/mpeg" : type,
-            Title = !string.IsNullOrEmpty(title) ? title : ExtractFileName(url)
-        };
-
-        if (!playlist.Any(p => p.Url == url))
-        {
-            playlist.Add(item);
-            StateHasChanged();
-        }
-    }
-
-    public void AddToPlaylistAndPlay(string url, string type = "audio/mpeg", string title = "")
-    {
-        var existingIndex = playlist.FindIndex(p => p.Url == url);
-
-        if (existingIndex >= 0)
-        {
-            _ = PlayTrack(existingIndex);
-        }
-        else
-        {
-            AddToPlaylist(url, type, title);
-            _ = PlayTrack(playlist.Count - 1);
-        }
-    }
-
-    public void AddMultipleToPlaylist(List<PlaylistItem> items)
-    {
-        foreach (var item in items)
-        {
-            if (!playlist.Any(p => p.Url == item.Url))
+            var item = new PlaylistItem
             {
-                playlist.Add(new PlaylistItem
-                {
-                    Url = item.Url,
-                    Type = string.IsNullOrEmpty(item.Type) ? "audio/mpeg" : item.Type,
-                    Title = !string.IsNullOrEmpty(item.Title) ? item.Title : ExtractFileName(item.Url)
-                });
-            }
-        }
-        StateHasChanged();
-    }
+                Url = url,
+                Type = string.IsNullOrEmpty(type) ? "audio/mpeg" : type,
+                Title = !string.IsNullOrEmpty(title) ? title : ExtractFileName(url)
+            };
 
-    public void AddMultipleToPlaylist(IEnumerable<(string url, string type, string title)> items)
-    {
-        foreach (var (url, type, title) in items)
-        {
             if (!playlist.Any(p => p.Url == url))
             {
-                playlist.Add(new PlaylistItem
-                {
-                    Url = url,
-                    Type = string.IsNullOrEmpty(type) ? "audio/mpeg" : type,
-                    Title = !string.IsNullOrEmpty(title) ? title : ExtractFileName(url)
-                });
+                playlist.Add(item);
+                await InvokeAsync(StateHasChanged);
             }
         }
-        StateHasChanged();
+        catch { }
+    }
+
+    public async Task AddToPlaylistAndPlay(string url, string type = "audio/mpeg", string title = "")
+    {
+        try
+        {
+            var existingIndex = playlist.FindIndex(p => p.Url == url);
+
+            if (existingIndex >= 0)
+            {
+                await PlayTrack(existingIndex);
+            }
+            else
+            {
+                await AddToPlaylist(url, type, title);
+                await PlayTrack(playlist.Count - 1);
+            }
+        }
+        catch { }
+    }
+
+    public async Task AddMultipleToPlaylist(List<PlaylistItem> items)
+    {
+        try
+        {
+            foreach (var item in items)
+            {
+                if (!playlist.Any(p => p.Url == item.Url))
+                {
+                    playlist.Add(new PlaylistItem
+                    {
+                        Url = item.Url,
+                        Type = string.IsNullOrEmpty(item.Type) ? "audio/mpeg" : item.Type,
+                        Title = !string.IsNullOrEmpty(item.Title) ? item.Title : ExtractFileName(item.Url)
+                    });
+                }
+            }
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
+    }
+
+    public async Task AddMultipleToPlaylist(IEnumerable<(string url, string type, string title)> items)
+    {
+        try
+        {
+            foreach (var (url, type, title) in items)
+            {
+                if (!playlist.Any(p => p.Url == url))
+                {
+                    playlist.Add(new PlaylistItem
+                    {
+                        Url = url,
+                        Type = string.IsNullOrEmpty(type) ? "audio/mpeg" : type,
+                        Title = !string.IsNullOrEmpty(title) ? title : ExtractFileName(url)
+                    });
+                }
+            }
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
     }
 
     // Drag and drop handlers
@@ -1219,44 +1507,64 @@
     // Media Session action handlers (called from MainLayout via JS)
     public async Task ResumeFromMediaSession()
     {
-        await JSRuntime.InvokeVoidAsync("resumeAudioPlayer");
-        isPlaying = true;
-        await UpdateMediaSessionPlaybackState("playing");
-        await InvokeAsync(StateHasChanged);
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("resumeAudioPlayer");
+            isPlaying = true;
+            await UpdateMediaSessionPlaybackState("playing");
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
     }
 
     public async Task PauseFromMediaSession()
     {
-        await JSRuntime.InvokeVoidAsync("pauseAudioPlayer");
-        isPlaying = false;
-        await UpdateMediaSessionPlaybackState("paused");
-        await InvokeAsync(StateHasChanged);
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("pauseAudioPlayer");
+            isPlaying = false;
+            await UpdateMediaSessionPlaybackState("paused");
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
     }
 
     public async Task PlayPreviousFromMediaSession()
     {
-        if (CanPlayPrevious)
+        try
         {
-            await PlayTrack(currentTrackIndex - 1);
+            if (CanPlayPrevious)
+            {
+                await PlayTrack(currentTrackIndex - 1);
+            }
         }
+        catch { }
     }
 
     public async Task PlayNextFromMediaSession()
     {
-        if (CanPlayNext)
+        try
         {
-            await PlayTrack(currentTrackIndex + 1);
+            if (CanPlayNext)
+            {
+                await PlayTrack(currentTrackIndex + 1);
+            }
         }
+        catch { }
     }
 
     public async Task StopFromMediaSession()
     {
-        await JSRuntime.InvokeVoidAsync("stopAudioPlayer");
-        isPlaying = false;
-        progressPercent = 0;
-        currentTimeDisplay = "0:00";
-        await UpdateMediaSessionPlaybackState("none");
-        await InvokeAsync(StateHasChanged);
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("stopAudioPlayer");
+            isPlaying = false;
+            progressPercent = 0;
+            currentTimeDisplay = "0:00";
+            await UpdateMediaSessionPlaybackState("none");
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
     }
 
     public async Task SeekRelativeFromMediaSession(double offsetSeconds)
@@ -1286,5 +1594,13 @@
             }
         }
         catch { }
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        StopProgressTimer();
+        StopRealVisualizer();
+        visualizerCts?.Dispose();
     }
 }

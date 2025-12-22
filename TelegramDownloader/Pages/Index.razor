@@ -6,7 +6,9 @@
 @using QRCoder
 @using TelegramDownloader.Data
 @using TelegramDownloader.Models
+@using TelegramDownloader.Services
 @inject ITelegramService ts
+@inject ISetupService SetupService
 @inject NavigationManager NavManager
 @inject IJSRuntime JSRuntime;
 @inject PreloadService preloadService
@@ -153,6 +155,7 @@
 </div>
 
 @code {
+#nullable disable
     public LoginModel? Model { get; set; } = null;
     private CancellationToken cTokenQr { get; set; }
     CancellationTokenSource source { get; set; }
@@ -163,8 +166,40 @@
     {
         try
         {
+            // Check if setup is complete using async method
+            var status = await SetupService.GetSetupStatusAsync();
+            if (status.CurrentStep != SetupStep.Complete)
+            {
+                NavManager.NavigateTo("/setup", forceLoad: true);
+                return;
+            }
+
+            // If Telegram client is not configured, try to initialize it
+            if (!ts.IsConfigured)
+            {
+                try
+                {
+                    ts.InitializeClient();
+                }
+                catch (Exception ex)
+                {
+                    // If initialization fails, redirect to setup
+                    Console.WriteLine($"Failed to initialize Telegram client: {ex.Message}");
+                    NavManager.NavigateTo("/setup", forceLoad: true);
+                    return;
+                }
+            }
+
             Model ??= new();
             Model.type = await ts.checkAuth(Model.value);
+
+            // Handle setup_required response - only redirect if actually not configured
+            if (Model.type == "setup_required" && !ts.IsConfigured)
+            {
+                NavManager.NavigateTo("/setup", forceLoad: true);
+                return;
+            }
+
             StateHasChanged();
             await isLogin();
         }

@@ -1,0 +1,561 @@
+@using TelegramDownloader.Data
+@using TelegramDownloader.Data.db
+@using TelegramDownloader.Models
+@inject ITelegramService ts
+@inject IDbService DbService
+@inject NavigationManager NavigationManager
+
+<style>
+    .delete-channel-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(0, 0, 0, 0.85);
+        backdrop-filter: blur(8px);
+        z-index: 99999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s ease;
+    }
+
+    .delete-channel-overlay.show {
+        opacity: 1;
+        visibility: visible;
+    }
+
+    .delete-channel-container {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) scale(0.95);
+        width: calc(100% - 2rem);
+        max-width: 500px;
+        max-height: 90vh;
+        background: linear-gradient(180deg, #1a1a2e 0%, #16213e 100%);
+        border-radius: 1rem;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7),
+                    0 0 0 1px rgba(220, 53, 69, 0.2);
+        overflow: hidden;
+        transition: transform 0.3s ease, opacity 0.3s ease;
+        z-index: 100000;
+        display: flex;
+        flex-direction: column;
+        opacity: 0;
+    }
+
+    .delete-channel-overlay.show .delete-channel-container {
+        transform: translate(-50%, -50%) scale(1);
+        opacity: 1;
+    }
+
+    .delete-channel-header {
+        background: linear-gradient(135deg, #6b1a1a 0%, #1a1a2e 100%);
+        padding: 1.25rem 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .delete-channel-header-icon {
+        width: 48px;
+        height: 48px;
+        background: linear-gradient(135deg, #dc3545 0%, #a71d2a 100%);
+        border-radius: 0.75rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .delete-channel-header-icon i {
+        font-size: 1.5rem;
+        color: #fff;
+    }
+
+    .delete-channel-header-text h5 {
+        margin: 0;
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #fff;
+    }
+
+    .delete-channel-header-text span {
+        font-size: 0.8rem;
+        color: rgba(255, 255, 255, 0.5);
+    }
+
+    .delete-channel-body {
+        padding: 1.5rem;
+        overflow-y: auto;
+        flex: 1;
+    }
+
+    .delete-channel-warning {
+        background: rgba(220, 53, 69, 0.15);
+        border: 1px solid rgba(220, 53, 69, 0.3);
+        border-radius: 0.75rem;
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+    }
+
+    .delete-channel-warning i {
+        color: #dc3545;
+        font-size: 1.25rem;
+        flex-shrink: 0;
+        margin-top: 0.125rem;
+    }
+
+    .delete-channel-warning-text {
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 0.9rem;
+        line-height: 1.5;
+    }
+
+    .delete-channel-warning-text strong {
+        color: #ff6b6b;
+    }
+
+    .delete-channel-info {
+        background: rgba(0, 0, 0, 0.2);
+        border-radius: 0.75rem;
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .delete-channel-info-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .delete-channel-info-row:last-child {
+        border-bottom: none;
+    }
+
+    .delete-channel-info-label {
+        color: rgba(255, 255, 255, 0.6);
+        font-size: 0.85rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .delete-channel-info-label i {
+        color: #dc3545;
+    }
+
+    .delete-channel-info-value {
+        color: #fff;
+        font-weight: 500;
+        font-size: 0.9rem;
+        text-align: right;
+        word-break: break-all;
+    }
+
+    .delete-channel-info-value.owner {
+        color: #ffc107;
+    }
+
+    .delete-channel-info-value.not-owner {
+        color: #6c757d;
+    }
+
+    .delete-channel-action-preview {
+        background: rgba(220, 53, 69, 0.1);
+        border: 1px dashed rgba(220, 53, 69, 0.3);
+        border-radius: 0.75rem;
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .delete-channel-action-title {
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 0.85rem;
+        font-weight: 500;
+        margin-bottom: 0.75rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .delete-channel-action-title i {
+        color: #ffc107;
+    }
+
+    .delete-channel-action-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .delete-channel-action-list li {
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 0.85rem;
+        padding: 0.375rem 0;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .delete-channel-action-list li i {
+        color: #dc3545;
+        font-size: 0.75rem;
+    }
+
+    .delete-channel-confirm {
+        margin-bottom: 0;
+    }
+
+    .delete-channel-confirm-label {
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 0.9rem;
+        margin-bottom: 0.5rem;
+        display: block;
+    }
+
+    .delete-channel-confirm-label code {
+        background: rgba(220, 53, 69, 0.2);
+        color: #ff6b6b;
+        padding: 0.125rem 0.375rem;
+        border-radius: 0.25rem;
+        font-size: 0.85rem;
+    }
+
+    .delete-channel-confirm-input {
+        width: 100%;
+        padding: 0.75rem 1rem;
+        background: rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 0.5rem;
+        color: #fff;
+        font-size: 0.95rem;
+        transition: all 0.2s ease;
+    }
+
+    .delete-channel-confirm-input:focus {
+        outline: none;
+        border-color: #dc3545;
+        background: rgba(0, 0, 0, 0.4);
+    }
+
+    .delete-channel-confirm-input.valid {
+        border-color: #28a745;
+    }
+
+    .delete-channel-confirm-input.invalid {
+        border-color: #dc3545;
+    }
+
+    .delete-channel-footer {
+        padding: 1rem 1.5rem;
+        background: rgba(0, 0, 0, 0.2);
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.75rem;
+    }
+
+    .delete-channel-btn {
+        padding: 0.625rem 1.25rem;
+        border-radius: 0.5rem;
+        font-size: 0.9rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        border: none;
+    }
+
+    .delete-channel-btn-cancel {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: rgba(255, 255, 255, 0.8);
+    }
+
+    .delete-channel-btn-cancel:hover {
+        background: rgba(255, 255, 255, 0.15);
+        color: #fff;
+    }
+
+    .delete-channel-btn-danger {
+        background: linear-gradient(135deg, #dc3545 0%, #a71d2a 100%);
+        color: #fff;
+    }
+
+    .delete-channel-btn-danger:hover:not(:disabled) {
+        background: linear-gradient(135deg, #e04555 0%, #b72735 100%);
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
+    }
+
+    .delete-channel-btn-danger:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+    }
+
+    @@media (max-width: 576px) {
+        .delete-channel-container {
+            top: 0;
+            left: 0;
+            transform: none;
+            width: 100%;
+            max-width: 100%;
+            height: 100%;
+            max-height: 100%;
+            border-radius: 0;
+        }
+
+        .delete-channel-overlay.show .delete-channel-container {
+            transform: none;
+        }
+
+        .delete-channel-header {
+            padding: 1rem;
+        }
+
+        .delete-channel-body {
+            padding: 1rem;
+        }
+
+        .delete-channel-footer {
+            padding: 1rem;
+            flex-direction: column;
+        }
+
+        .delete-channel-btn {
+            width: 100%;
+            justify-content: center;
+        }
+    }
+</style>
+
+<div class="delete-channel-overlay @(isVisible ? "show" : "")" @onclick="Close">
+    <div class="delete-channel-container" @onclick:stopPropagation="true">
+        <div class="delete-channel-header">
+            <div class="delete-channel-header-icon">
+                <i class="bi @(IsOwner ? "bi-trash" : "bi-box-arrow-right")"></i>
+            </div>
+            <div class="delete-channel-header-text">
+                <h5>@(IsOwner ? "Delete Channel" : "Leave Channel")</h5>
+                <span>This action cannot be undone</span>
+            </div>
+        </div>
+
+        <div class="delete-channel-body">
+            <div class="delete-channel-warning">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+                <div class="delete-channel-warning-text">
+                    @if (IsOwner)
+                    {
+                        <span><strong>Warning!</strong> You are the owner of this channel. Deleting it will permanently remove the channel from Telegram and delete all associated data.</span>
+                    }
+                    else
+                    {
+                        <span><strong>Warning!</strong> You will leave this channel and all local data associated with it will be deleted.</span>
+                    }
+                </div>
+            </div>
+
+            <div class="delete-channel-info">
+                <div class="delete-channel-info-row">
+                    <span class="delete-channel-info-label">
+                        <i class="bi bi-hash"></i>
+                        Channel ID
+                    </span>
+                    <span class="delete-channel-info-value">@ChannelId</span>
+                </div>
+                <div class="delete-channel-info-row">
+                    <span class="delete-channel-info-label">
+                        <i class="bi bi-chat-square-text"></i>
+                        Channel Name
+                    </span>
+                    <span class="delete-channel-info-value">@ChannelName</span>
+                </div>
+                <div class="delete-channel-info-row">
+                    <span class="delete-channel-info-label">
+                        <i class="bi bi-person-badge"></i>
+                        Ownership
+                    </span>
+                    <span class="delete-channel-info-value @(IsOwner ? "owner" : "not-owner")">
+                        @if (IsOwner)
+                        {
+                            <i class="bi bi-crown-fill me-1"></i>
+                            <text>Owner</text>
+                        }
+                        else
+                        {
+                            <i class="bi bi-person me-1"></i>
+                            <text>Member</text>
+                        }
+                    </span>
+                </div>
+            </div>
+
+            <div class="delete-channel-action-preview">
+                <div class="delete-channel-action-title">
+                    <i class="bi bi-info-circle-fill"></i>
+                    What will happen:
+                </div>
+                <ul class="delete-channel-action-list">
+                    @if (IsOwner)
+                    {
+                        <li><i class="bi bi-x-circle-fill"></i> The channel will be permanently deleted from Telegram</li>
+                        <li><i class="bi bi-x-circle-fill"></i> All messages and files in the channel will be lost</li>
+                        <li><i class="bi bi-x-circle-fill"></i> All members will be removed from the channel</li>
+                        <li><i class="bi bi-x-circle-fill"></i> The local database (files/folders) will be deleted</li>
+                    }
+                    else
+                    {
+                        <li><i class="bi bi-x-circle-fill"></i> You will leave the channel</li>
+                        <li><i class="bi bi-x-circle-fill"></i> The local database (files/folders) will be deleted</li>
+                        <li><i class="bi bi-check-circle-fill" style="color: #28a745 !important;"></i> The channel will remain on Telegram for other members</li>
+                    }
+                </ul>
+            </div>
+
+            <div class="delete-channel-confirm">
+                <label class="delete-channel-confirm-label">
+                    To confirm, type the channel ID: <code>@ChannelId</code>
+                </label>
+                <input type="text"
+                       class="delete-channel-confirm-input @GetInputValidationClass()"
+                       @bind="ConfirmationInput"
+                       @bind:event="oninput"
+                       placeholder="Enter channel ID to confirm"
+                       disabled="@isProcessing" />
+            </div>
+        </div>
+
+        <div class="delete-channel-footer">
+            <button class="delete-channel-btn delete-channel-btn-cancel" @onclick="Close" disabled="@isProcessing">
+                <i class="bi bi-x-lg"></i>
+                Cancel
+            </button>
+            <button class="delete-channel-btn delete-channel-btn-danger"
+                    @onclick="OnConfirmClick"
+                    disabled="@(!IsInputValid || isProcessing)">
+                @if (isProcessing)
+                {
+                    <span class="spinner-border spinner-border-sm"></span>
+                    <span>Processing...</span>
+                }
+                else
+                {
+                    <i class="bi @(IsOwner ? "bi-trash" : "bi-box-arrow-right")"></i>
+                    <span>@(IsOwner ? "Delete Channel" : "Leave Channel")</span>
+                }
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback OnChannelRemoved { get; set; }
+    [Inject] protected ToastService ToastService { get; set; } = default!;
+
+    private bool isVisible = false;
+    private bool isProcessing = false;
+    private string ConfirmationInput { get; set; } = string.Empty;
+
+    public string ChannelId { get; set; } = string.Empty;
+    public string ChannelName { get; set; } = string.Empty;
+    public bool IsOwner { get; set; } = false;
+
+    private bool IsInputValid => !string.IsNullOrEmpty(ConfirmationInput) &&
+                                  ConfirmationInput.Trim() == ChannelId;
+
+    public void Open(string channelId, string channelName, bool isOwner)
+    {
+        ChannelId = channelId;
+        ChannelName = channelName;
+        IsOwner = isOwner;
+        ConfirmationInput = string.Empty;
+        isProcessing = false;
+        isVisible = true;
+        StateHasChanged();
+    }
+
+    public void Close()
+    {
+        if (isProcessing) return;
+        isVisible = false;
+        StateHasChanged();
+    }
+
+    private string GetInputValidationClass()
+    {
+        if (string.IsNullOrEmpty(ConfirmationInput))
+            return "";
+        return IsInputValid ? "valid" : "invalid";
+    }
+
+    private async Task OnConfirmClick()
+    {
+        if (!IsInputValid || isProcessing)
+            return;
+
+        isProcessing = true;
+        StateHasChanged();
+
+        try
+        {
+            if (IsOwner)
+            {
+                // Delete the channel from Telegram
+                await ts.DeleteChannel(Convert.ToInt64(ChannelId));
+            }
+            else
+            {
+                // Leave the channel
+                await ts.LeaveChannel(Convert.ToInt64(ChannelId));
+            }
+
+            // Delete the local database
+            await DbService.deleteDatabase(ChannelId);
+
+            isVisible = false;
+
+            ToastService.Notify(new ToastMessage(
+                ToastType.Success,
+                IsOwner
+                    ? $"Channel '{ChannelName}' has been deleted successfully."
+                    : $"You have left channel '{ChannelName}' successfully.")
+            {
+                Title = IsOwner ? "Channel Deleted" : "Left Channel",
+                AutoHide = true
+            });
+
+            // Notify parent to refresh
+            await OnChannelRemoved.InvokeAsync();
+
+            // Navigate to home
+            NavigationManager.NavigateTo("/fetchdata", forceLoad: true);
+        }
+        catch (Exception ex)
+        {
+            ToastService.Notify(new ToastMessage(ToastType.Danger, $"Error: {ex.Message}")
+            {
+                Title = "Error",
+                AutoHide = true
+            });
+            isProcessing = false;
+            StateHasChanged();
+        }
+    }
+}

@@ -62,8 +62,7 @@ if (!Directory.Exists(FileService.LOCALDIR))
 
 // Configure Serilog
 var mongoConnectionString = GeneralConfigStatic.tlconfig?.mongo_connection_string
-    ?? Environment.GetEnvironmentVariable("connectionString")
-    ?? "mongodb://localhost:27017";
+    ?? Environment.GetEnvironmentVariable("connectionString");
 
 // Enable Serilog self-logging for debugging
 SelfLog.Enable(msg => Console.WriteLine($"[Serilog] {msg}"));
@@ -71,11 +70,34 @@ SelfLog.Enable(msg => Console.WriteLine($"[Serilog] {msg}"));
 // Get application version from assembly
 var appVersion = typeof(Program).Assembly.GetName().Version?.ToString() ?? "Unknown";
 
-// Create MongoDB client and get logs database
-var mongoClient = new MongoDB.Driver.MongoClient(mongoConnectionString);
-var logsDatabase = mongoClient.GetDatabase("TFM_Logs");
+// Check if MongoDB is configured and accessible
+bool mongoAvailable = false;
+MongoDB.Driver.IMongoDatabase? logsDatabase = null;
 
-Log.Logger = new LoggerConfiguration()
+if (!string.IsNullOrWhiteSpace(mongoConnectionString))
+{
+    try
+    {
+        var settings = MongoDB.Driver.MongoClientSettings.FromConnectionString(mongoConnectionString);
+        settings.ServerSelectionTimeout = TimeSpan.FromSeconds(3);
+        settings.ConnectTimeout = TimeSpan.FromSeconds(3);
+        var mongoClient = new MongoDB.Driver.MongoClient(settings);
+        logsDatabase = mongoClient.GetDatabase("TFM_Logs");
+
+        // Test connection
+        var command = new MongoDB.Bson.BsonDocument("ping", 1);
+        logsDatabase.RunCommand<MongoDB.Bson.BsonDocument>(command);
+        mongoAvailable = true;
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[Startup] MongoDB not available: {ex.Message}");
+        mongoAvailable = false;
+    }
+}
+
+// Configure Serilog - with MongoDB if available, console only otherwise
+var logConfig = new LoggerConfiguration()
     .MinimumLevel.Information()
     .MinimumLevel.Override("Microsoft", LogEventLevel.Warning)
     .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning)
@@ -83,23 +105,42 @@ Log.Logger = new LoggerConfiguration()
     .Enrich.FromLogContext()
     .Enrich.WithProperty("AppVersion", appVersion)
     .WriteTo.Console(
-        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {SourceContext} - {Message:lj}{NewLine}{Exception}")
-    .WriteTo.MongoDBBson(cfg =>
+        outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss} [{Level:u3}] {SourceContext} - {Message:lj}{NewLine}{Exception}");
+
+if (mongoAvailable && logsDatabase != null)
+{
+    logConfig.WriteTo.MongoDBBson(cfg =>
     {
         cfg.SetMongoDatabase(logsDatabase);
         cfg.SetCollectionName("logs");
-    })
-    .CreateLogger();
+    });
+}
+
+Log.Logger = logConfig.CreateLogger();
 
 builder.Host.UseSerilog();
 
 // Log application startup
-Log.Information("TelegramFileManager starting up. MongoDB logs database: TFM_Logs");
+if (mongoAvailable)
+{
+    Log.Information("TelegramFileManager starting up. MongoDB logs database: TFM_Logs");
+}
+else
+{
+    Log.Warning("TelegramFileManager starting up. MongoDB not configured or not available - setup required.");
+}
 
 
 // Add services to the container.
 builder.Services.AddRazorPages();
-builder.Services.AddServerSideBlazor();
+builder.Services.AddServerSideBlazor(options =>
+{
+    options.DetailedErrors = true; // Enable detailed errors for debugging
+})
+.AddCircuitOptions(options =>
+{
+    options.DetailedErrors = true;
+});
 builder.Services.AddSingleton<ITelegramService, TelegramService>();
 builder.Services.AddSingleton<IDbService, DbService>();
 builder.Services.AddTransient<IFileService, FileServiceV2>();
@@ -111,14 +152,19 @@ builder.Services.AddSingleton<GHService>();
 builder.Services.AddSingleton<ITaskPersistenceService, TaskPersistenceService>();
 builder.Services.AddHostedService<TaskResumeService>();
 
-// Log query service
+// Log query service - only if MongoDB is available
 builder.Services.AddSingleton<ILogQueryService>(sp =>
-    new LogQueryService(mongoConnectionString, sp.GetRequiredService<ILogger<LogQueryService>>()));
+    new LogQueryService(mongoConnectionString ?? "mongodb://localhost:27017", sp.GetRequiredService<ILogger<LogQueryService>>()));
 
 // System metrics service
 builder.Services.AddSingleton<ISystemMetricsService, SystemMetricsService>();
 
+// Setup service for initial configuration
+builder.Services.AddSingleton<ISetupService, SetupService>();
+
+#pragma warning disable ASP0000 // ServiceLocator pattern is intentional
 ServiceLocator.ServiceProvider = builder.Services.BuildServiceProvider();
+#pragma warning restore ASP0000
 builder.Services.AddBlazorBootstrap();
 
 
@@ -147,10 +193,21 @@ forwardedHeadersOptions.KnownNetworks.Clear();
 forwardedHeadersOptions.KnownProxies.Clear();
 app.UseForwardedHeaders(forwardedHeadersOptions);
 
-using (var scope = app.Services.CreateScope())
+// Load config from DB only if MongoDB is available
+if (mongoAvailable)
 {
-    var db = scope.ServiceProvider.GetRequiredService<IDbService>();
-    await GeneralConfigStatic.Load(db);
+    try
+    {
+        using (var scope = app.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<IDbService>();
+            await GeneralConfigStatic.Load(db);
+        }
+    }
+    catch (Exception ex)
+    {
+        Log.Warning(ex, "Could not load configuration from database - will use defaults");
+    }
 }
 
 // Configure the HTTP request pipeline.

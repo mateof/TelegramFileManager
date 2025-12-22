@@ -1,4 +1,5 @@
-﻿using BlazorBootstrap;
+#nullable disable
+using BlazorBootstrap;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.StaticFiles;
 using MongoDB.Driver;
@@ -129,7 +130,7 @@ namespace TelegramDownloader.Data
             {
                 model.channelName = _ts.getChatName(Convert.ToInt64(dbName));
             }
-            catch (Exception ex)
+            catch
             {
                 model.channelName = "Public or Shared";
             }

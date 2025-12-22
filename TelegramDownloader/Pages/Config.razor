@@ -10,6 +10,8 @@
 @inject ToastService toastService
 @inject TransactionInfoService tis
 @inject IHostApplicationLifetime applicationLifetime
+@inject ITelegramService ts
+@using TelegramDownloader.Shared
 
 <style>
     .config-page {
@@ -486,6 +488,36 @@
                 </div>
             </div>
 
+            <!-- Data Refresh Section -->
+            <div class="config-section">
+                <div class="config-section-header">
+                    <i class="bi bi-arrow-clockwise"></i>
+                    <span>Data Refresh</span>
+                </div>
+                <div class="config-section-body">
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-person-badge"></i>
+                                Enable Refresh for Own Channels
+                            </div>
+                            <div class="config-item-description">
+                                Allow refreshing data from Telegram for channels where you are admin or owner.
+                                By default, refresh is only available for channels you don't own (to sync changes made by others).
+                                <div class="alert alert-warning py-2 px-3 mb-0 mt-2" style="font-size: 0.85rem;">
+                                    <i class="bi bi-exclamation-triangle me-2"></i>
+                                    <strong>Warning:</strong> Refreshing a channel re-downloads all file metadata from Telegram.
+                                    This can take a long time for large channels.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputCheckbox @bind-Value="Model!.EnableRefreshOwnChannels" class="form-check-input config-switch" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Interface Section -->
             <div class="config-section">
                 <div class="config-section-header">
@@ -702,6 +734,87 @@
                 </div>
             </div>
 
+            <!-- Maintenance Section -->
+            <div class="config-section">
+                <div class="config-section-header">
+                    <i class="bi bi-tools"></i>
+                    <span>Maintenance</span>
+                </div>
+                <div class="config-section-body">
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-database-gear"></i>
+                                Database Cleanup
+                            </div>
+                            <div class="config-item-description">
+                                Scan for orphaned databases from channels you no longer have access to. These may be from channels you left or that were deleted.
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <button type="button" class="btn btn-outline-warning btn-sm d-flex align-items-center gap-2" @onclick="OpenDatabaseMaintenance">
+                                <i class="bi bi-search"></i>
+                                <span>Scan</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-star"></i>
+                                Orphaned Favorites
+                            </div>
+                            <div class="config-item-description">
+                                Remove favorite channels that you no longer have access to in Telegram.
+                                @if (orphanedFavoritesCount > 0)
+                                {
+                                    <span class="badge bg-warning text-dark ms-2">@orphanedFavoritesCount orphaned</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-success ms-2">All good</span>
+                                }
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <button type="button" class="btn btn-outline-danger btn-sm d-flex align-items-center gap-2"
+                                    @onclick="CleanOrphanedFavorites"
+                                    disabled="@(orphanedFavoritesCount == 0 || isCleaningFavorites)">
+                                @if (isCleaningFavorites)
+                                {
+                                    <span class="spinner-border spinner-border-sm" role="status"></span>
+                                    <span>Cleaning...</span>
+                                }
+                                else
+                                {
+                                    <i class="bi bi-trash3"></i>
+                                    <span>Clean (@orphanedFavoritesCount)</span>
+                                }
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-wrench-adjustable"></i>
+                                Path Repair Tool
+                            </div>
+                            <div class="config-item-description">
+                                Analyze and repair file path issues in your databases. Use this if files disappear after moving folders or if STRM exports are missing files.
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <button type="button" class="btn btn-outline-warning btn-sm d-flex align-items-center gap-2" @onclick="OpenPathRepairModal">
+                                <i class="bi bi-wrench"></i>
+                                <span>Repair</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- System Section -->
             <div class="config-section">
                 <div class="config-section-header">
@@ -769,6 +882,10 @@
     // FFmpeg availability
     private bool ffmpegAvailable = false;
 
+    // Orphaned favorites
+    private int orphanedFavoritesCount = 0;
+    private bool isCleaningFavorites = false;
+
     protected override async Task OnInitializedAsync()
     {
         Model = null;
@@ -776,6 +893,7 @@
         await RefreshCounters();
         RefreshImageCacheInfo();
         CheckFFmpegAvailability();
+        RefreshOrphanedFavoritesCount();
     }
 
     private void CheckFFmpegAvailability()
@@ -863,6 +981,81 @@
 
         // Stop the application - the container/service will restart it automatically
         applicationLifetime.StopApplication();
+    }
+
+    private void OpenDatabaseMaintenance()
+    {
+        MainLayout.OpenDatabaseMaintenanceModal();
+    }
+
+    private void OpenPathRepairModal()
+    {
+        MainLayout.OpenPathRepairModal();
+    }
+
+    private void RefreshOrphanedFavoritesCount()
+    {
+        try
+        {
+            orphanedFavoritesCount = 0;
+            if (GeneralConfigStatic.config?.FavouriteChannels != null)
+            {
+                foreach (var channelId in GeneralConfigStatic.config.FavouriteChannels)
+                {
+                    var (_, exists) = ts.GetChannelInfo(channelId);
+                    if (!exists)
+                    {
+                        orphanedFavoritesCount++;
+                    }
+                }
+            }
+        }
+        catch
+        {
+            orphanedFavoritesCount = 0;
+        }
+    }
+
+    private async Task CleanOrphanedFavorites()
+    {
+        isCleaningFavorites = true;
+        await InvokeAsync(StateHasChanged);
+
+        try
+        {
+            var orphanedIds = new List<long>();
+
+            if (GeneralConfigStatic.config?.FavouriteChannels != null)
+            {
+                foreach (var channelId in GeneralConfigStatic.config.FavouriteChannels.ToList())
+                {
+                    var (_, exists) = ts.GetChannelInfo(channelId);
+                    if (!exists)
+                    {
+                        orphanedIds.Add(channelId);
+                    }
+                }
+            }
+
+            // Remove all orphaned favorites
+            foreach (var id in orphanedIds)
+            {
+                GeneralConfigStatic.DeleteFavouriteChannel(id);
+            }
+
+            // Save changes to database
+            await GeneralConfigStatic.SaveChanges(db, GeneralConfigStatic.config);
+
+            RefreshOrphanedFavoritesCount();
+            toastService.Notify(new(ToastType.Success, $"Removed {orphanedIds.Count} orphaned favorite(s)") { Title = "Success", AutoHide = true });
+        }
+        catch (Exception ex)
+        {
+            toastService.Notify(new(ToastType.Danger, $"Error cleaning favorites: {ex.Message}") { Title = "Error", AutoHide = true });
+        }
+
+        isCleaningFavorites = false;
+        await InvokeAsync(StateHasChanged);
     }
 
     private void RefreshImageCacheInfo()

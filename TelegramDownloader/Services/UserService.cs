@@ -1,4 +1,5 @@
-﻿using TelegramDownloader.Models;
+#nullable disable
+using TelegramDownloader.Models;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Xml.Linq;
@@ -26,7 +27,7 @@ namespace TelegramDownloader.Services
             try
             {
                 json = await File.ReadAllTextAsync($"{USERDATAFOLDER}/userData.json");
-            } catch(Exception ex)
+            } catch
             {
                 return null;
             }

@@ -1,0 +1,636 @@
+@page "/setup"
+@layout SetupLayout
+@using TelegramDownloader.Services
+@using TelegramDownloader.Models
+@using TelegramDownloader.Data
+@using TelegramDownloader.Data.db
+@inject ISetupService SetupService
+@inject ITelegramService TelegramService
+@inject IDbService DbService
+@inject ILogQueryService LogQueryService
+@inject NavigationManager NavigationManager
+@inject ILogger<Setup> Logger
+
+<div class="setup-container">
+    <div class="setup-card">
+        <div class="setup-header">
+            <img src="/img/logo.png" alt="TelegramFileManager" class="setup-logo" onerror="this.style.display='none'" />
+            <h1>TelegramFileManager Setup</h1>
+            <p class="setup-subtitle">Configure your application to get started</p>
+        </div>
+
+        <div class="setup-progress">
+            <div class="progress-step @(currentStep >= 1 ? "active" : "") @(currentStep > 1 ? "completed" : "")">
+                <div class="step-number">1</div>
+                <div class="step-label">Database</div>
+            </div>
+            <div class="progress-line @(currentStep > 1 ? "completed" : "")"></div>
+            <div class="progress-step @(currentStep >= 2 ? "active" : "") @(currentStep > 2 ? "completed" : "")">
+                <div class="step-number">2</div>
+                <div class="step-label">Telegram</div>
+            </div>
+            <div class="progress-line @(currentStep > 2 ? "completed" : "")"></div>
+            <div class="progress-step @(currentStep >= 3 ? "active" : "")">
+                <div class="step-number">3</div>
+                <div class="step-label">Complete</div>
+            </div>
+        </div>
+
+        <div class="setup-content">
+            @if (currentStep == 1)
+            {
+                <div class="step-content">
+                    <h2><i class="bi bi-database me-2"></i>MongoDB Connection</h2>
+                    <p class="step-description">
+                        TelegramFileManager requires a MongoDB database to store your files and configuration.
+                        Please provide the connection string to your MongoDB instance.
+                    </p>
+
+                    @if (!string.IsNullOrEmpty(mongoError))
+                    {
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle me-2"></i>
+                            @mongoError
+                        </div>
+                    }
+
+                    <div class="form-group">
+                        <label for="mongoConnection">Connection String</label>
+                        <input type="text" id="mongoConnection" class="form-control"
+                               @bind="mongoConnectionString" @bind:event="oninput"
+                               placeholder="mongodb://localhost:27017" />
+                        <small class="form-text text-muted">
+                            Example: mongodb://localhost:27017 or mongodb://user:password@host:27017
+                        </small>
+                    </div>
+
+                    <div class="form-actions">
+                        <button class="btn btn-primary btn-lg" @onclick="TestAndSaveMongo" disabled="@isLoading">
+                            @if (isLoading)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                                <span>Testing connection...</span>
+                            }
+                            else
+                            {
+                                <span>Test & Continue</span>
+                                <i class="bi bi-arrow-right ms-2"></i>
+                            }
+                        </button>
+                    </div>
+                </div>
+            }
+            else if (currentStep == 2)
+            {
+                <div class="step-content">
+                    <h2><i class="bi bi-telegram me-2"></i>Telegram API Credentials</h2>
+                    <p class="step-description">
+                        To connect to Telegram, you need API credentials from
+                        <a href="https://my.telegram.org/apps" target="_blank">my.telegram.org</a>.
+                    </p>
+
+                    <div class="info-box">
+                        <h4><i class="bi bi-info-circle me-2"></i>How to get your credentials:</h4>
+                        <ol>
+                            <li>Go to <a href="https://my.telegram.org/apps" target="_blank">my.telegram.org/apps</a></li>
+                            <li>Log in with your phone number</li>
+                            <li>Create a new application if you don't have one</li>
+                            <li>Copy the <strong>api_id</strong> and <strong>api_hash</strong></li>
+                        </ol>
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(telegramError))
+                    {
+                        <div class="alert alert-danger">
+                            <i class="bi bi-exclamation-triangle me-2"></i>
+                            @telegramError
+                        </div>
+                    }
+
+                    <div class="form-group">
+                        <label for="apiId">API ID</label>
+                        <input type="text" id="apiId" class="form-control"
+                               @bind="apiId" @bind:event="oninput"
+                               placeholder="12345678" />
+                    </div>
+
+                    <div class="form-group">
+                        <label for="apiHash">API Hash</label>
+                        <input type="text" id="apiHash" class="form-control"
+                               @bind="apiHash" @bind:event="oninput"
+                               placeholder="0123456789abcdef0123456789abcdef" />
+                    </div>
+
+                    <div class="form-actions">
+                        <button class="btn btn-outline-secondary" @onclick="GoBack" disabled="@isLoading">
+                            <i class="bi bi-arrow-left me-2"></i>Back
+                        </button>
+                        <button class="btn btn-primary btn-lg" @onclick="TestAndSaveTelegram" disabled="@isLoading">
+                            @if (isLoading)
+                            {
+                                <span class="spinner-border spinner-border-sm me-2"></span>
+                                <span>Validating...</span>
+                            }
+                            else
+                            {
+                                <span>Save & Continue</span>
+                                <i class="bi bi-arrow-right ms-2"></i>
+                            }
+                        </button>
+                    </div>
+                </div>
+            }
+            else if (currentStep == 3)
+            {
+                <div class="step-content setup-complete">
+                    <div class="success-icon">
+                        <i class="bi bi-check-circle-fill"></i>
+                    </div>
+                    <h2>Setup Complete!</h2>
+                    <p class="step-description">
+                        Your TelegramFileManager is now configured and ready to use.
+                        Click the button below to start using the application.
+                    </p>
+
+                    <div class="config-summary">
+                        <h4>Configuration Summary</h4>
+                        <div class="summary-item">
+                            <i class="bi bi-database text-success"></i>
+                            <span>MongoDB: Connected</span>
+                        </div>
+                        <div class="summary-item">
+                            <i class="bi bi-telegram text-success"></i>
+                            <span>Telegram API: Configured</span>
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <button class="btn btn-success btn-lg" @onclick="FinishSetup">
+                            <i class="bi bi-rocket-takeoff me-2"></i>
+                            Launch Application
+                        </button>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+<style>
+    .setup-container {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+        padding: 2rem;
+    }
+
+    .setup-card {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(10px);
+        border-radius: 1rem;
+        padding: 2.5rem;
+        max-width: 600px;
+        width: 100%;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .setup-header {
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+
+    .setup-logo {
+        width: 80px;
+        height: 80px;
+        margin-bottom: 1rem;
+    }
+
+    .setup-header h1 {
+        color: white;
+        font-size: 1.75rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .setup-subtitle {
+        color: rgba(255, 255, 255, 0.6);
+        margin: 0;
+    }
+
+    .setup-progress {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 2rem;
+        padding: 0 1rem;
+    }
+
+    .progress-step {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .step-number {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: rgba(255, 255, 255, 0.1);
+        border: 2px solid rgba(255, 255, 255, 0.2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: rgba(255, 255, 255, 0.5);
+        font-weight: bold;
+        transition: all 0.3s ease;
+    }
+
+    .progress-step.active .step-number {
+        background: #e94560;
+        border-color: #e94560;
+        color: white;
+    }
+
+    .progress-step.completed .step-number {
+        background: #28a745;
+        border-color: #28a745;
+        color: white;
+    }
+
+    .step-label {
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 0.85rem;
+    }
+
+    .progress-step.active .step-label,
+    .progress-step.completed .step-label {
+        color: white;
+    }
+
+    .progress-line {
+        width: 60px;
+        height: 2px;
+        background: rgba(255, 255, 255, 0.2);
+        margin: 0 0.5rem;
+        margin-bottom: 1.5rem;
+        transition: background 0.3s ease;
+    }
+
+    .progress-line.completed {
+        background: #28a745;
+    }
+
+    .step-content h2 {
+        color: white;
+        font-size: 1.5rem;
+        margin-bottom: 1rem;
+    }
+
+    .step-description {
+        color: rgba(255, 255, 255, 0.7);
+        margin-bottom: 1.5rem;
+        line-height: 1.6;
+    }
+
+    .step-description a {
+        color: #e94560;
+    }
+
+    .form-group {
+        margin-bottom: 1.5rem;
+    }
+
+    .form-group label {
+        display: block;
+        color: rgba(255, 255, 255, 0.8);
+        margin-bottom: 0.5rem;
+        font-weight: 500;
+    }
+
+    .form-control {
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        color: white;
+        padding: 0.75rem 1rem;
+        border-radius: 0.5rem;
+        width: 100%;
+        transition: all 0.3s ease;
+    }
+
+    .form-control:focus {
+        background: rgba(255, 255, 255, 0.15);
+        border-color: #e94560;
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(233, 69, 96, 0.2);
+    }
+
+    .form-control::placeholder {
+        color: rgba(255, 255, 255, 0.4);
+    }
+
+    .form-text {
+        color: rgba(255, 255, 255, 0.5) !important;
+        font-size: 0.85rem;
+        margin-top: 0.5rem;
+    }
+
+    .form-actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: flex-end;
+        margin-top: 2rem;
+    }
+
+    .btn-primary {
+        background: #e94560;
+        border-color: #e94560;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+        background: #d13652;
+        border-color: #d13652;
+    }
+
+    .btn-primary:disabled {
+        background: #e94560;
+        border-color: #e94560;
+        opacity: 0.7;
+    }
+
+    .btn-outline-secondary {
+        color: rgba(255, 255, 255, 0.7);
+        border-color: rgba(255, 255, 255, 0.3);
+    }
+
+    .btn-outline-secondary:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: white;
+    }
+
+    .alert-danger {
+        background: rgba(220, 53, 69, 0.2);
+        border: 1px solid rgba(220, 53, 69, 0.4);
+        color: #ff6b6b;
+        padding: 1rem;
+        border-radius: 0.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .info-box {
+        background: rgba(13, 110, 253, 0.15);
+        border: 1px solid rgba(13, 110, 253, 0.3);
+        border-radius: 0.5rem;
+        padding: 1rem 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .info-box h4 {
+        color: #6ea8fe;
+        font-size: 1rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .info-box ol {
+        color: rgba(255, 255, 255, 0.7);
+        margin: 0;
+        padding-left: 1.25rem;
+    }
+
+    .info-box li {
+        margin-bottom: 0.5rem;
+    }
+
+    .info-box a {
+        color: #6ea8fe;
+    }
+
+    .setup-complete {
+        text-align: center;
+    }
+
+    .success-icon {
+        font-size: 5rem;
+        color: #28a745;
+        margin-bottom: 1rem;
+    }
+
+    .config-summary {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 0.5rem;
+        padding: 1.5rem;
+        margin: 2rem 0;
+        text-align: left;
+    }
+
+    .config-summary h4 {
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .summary-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        color: rgba(255, 255, 255, 0.7);
+        padding: 0.5rem 0;
+    }
+
+    .summary-item i {
+        font-size: 1.25rem;
+    }
+
+    .btn-success {
+        background: #28a745;
+        border-color: #28a745;
+    }
+
+    .btn-success:hover {
+        background: #218838;
+        border-color: #1e7e34;
+    }
+
+    @@media (max-width: 576px) {
+        .setup-card {
+            padding: 1.5rem;
+        }
+
+        .progress-line {
+            width: 30px;
+        }
+
+        .form-actions {
+            flex-direction: column;
+        }
+
+        .form-actions .btn {
+            width: 100%;
+        }
+    }
+</style>
+
+@code {
+    private int currentStep = 1;
+    private bool isLoading = false;
+
+    private string mongoConnectionString = "";
+    private string mongoError = "";
+
+    private string apiId = "";
+    private string apiHash = "";
+    private string telegramError = "";
+
+    protected override void OnInitialized()
+    {
+        // Check current setup status using cached/sync method
+        var status = SetupService.GetCachedStatus();
+
+        // Pre-fill existing values if available
+        mongoConnectionString = GeneralConfigStatic.tlconfig?.mongo_connection_string
+            ?? Environment.GetEnvironmentVariable("connectionString")
+            ?? "mongodb://localhost:27017";
+
+        apiId = GeneralConfigStatic.tlconfig?.api_id
+            ?? Environment.GetEnvironmentVariable("api_id")
+            ?? "";
+
+        apiHash = GeneralConfigStatic.tlconfig?.hash_id
+            ?? Environment.GetEnvironmentVariable("hash_id")
+            ?? "";
+
+        // Set initial step based on status
+        switch (status.CurrentStep)
+        {
+            case SetupStep.MongoDbRequired:
+                currentStep = 1;
+                if (!string.IsNullOrEmpty(status.MongoDbError))
+                {
+                    mongoError = status.MongoDbError;
+                }
+                break;
+            case SetupStep.TelegramRequired:
+                currentStep = 2;
+                break;
+            case SetupStep.Complete:
+                // Redirect to home if setup is already complete
+                NavigationManager.NavigateTo("/", forceLoad: true);
+                break;
+        }
+    }
+
+    private async Task TestAndSaveMongo()
+    {
+        mongoError = "";
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            var result = await SetupService.TestMongoConnection(mongoConnectionString);
+
+            if (result.Success)
+            {
+                await SetupService.SaveConfiguration(mongoConnectionString, null, null);
+
+                // Reinitialize DbService with the new connection string
+                try
+                {
+                    DbService.ReinitializeConnection(mongoConnectionString);
+                    LogQueryService.ReinitializeConnection(mongoConnectionString);
+
+                    // Load configuration from database now that connection is available
+                    await GeneralConfigStatic.Load(DbService);
+                    Logger.LogInformation("Configuration loaded from database after setup");
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Failed to reinitialize database connection");
+                    mongoError = $"Connection verified but failed to initialize service: {ex.Message}";
+                    return;
+                }
+
+                // Reconfigure Serilog to use MongoDB now that connection is verified
+                SetupService.ReconfigureSerilogWithMongo(mongoConnectionString);
+
+                currentStep = 2;
+            }
+            else
+            {
+                mongoError = result.Error ?? "Unknown error occurred";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error testing MongoDB connection");
+            mongoError = $"Unexpected error: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task TestAndSaveTelegram()
+    {
+        telegramError = "";
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            var result = await SetupService.TestTelegramCredentials(apiId, apiHash);
+
+            if (result.Success)
+            {
+                await SetupService.SaveConfiguration(null, apiId, apiHash);
+
+                // Initialize Telegram client with the new credentials
+                try
+                {
+                    TelegramService.InitializeClient();
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Failed to initialize Telegram client");
+                    telegramError = $"Credentials saved but failed to initialize client: {ex.Message}";
+                    return;
+                }
+
+                // Mark setup as complete so navigation works properly
+                SetupService.MarkSetupComplete();
+                currentStep = 3;
+            }
+            else
+            {
+                telegramError = result.Error ?? "Unknown error occurred";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error validating Telegram credentials");
+            telegramError = $"Unexpected error: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void GoBack()
+    {
+        if (currentStep > 1)
+        {
+            currentStep--;
+        }
+    }
+
+    private void FinishSetup()
+    {
+        NavigationManager.NavigateTo("/", forceLoad: true);
+    }
+}

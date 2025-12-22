@@ -160,7 +160,7 @@
         var ext = File.Type?.ToLower() ?? "";
         var color = GetFileColor(ext);
 
-        return @<svg xmlns="http://www.w3.org/2000/svg" width="@IconSize" height="@IconSize" viewBox="0 0 24 24" fill="none" stroke="@color" stroke-width="1.5">
+        return @<svg xmlns="http://www.w3.org/2000/svg" width="@IconSize" height="@IconSize" viewBox="0 0 24 24" fill="none" stroke="@color" stroke-width="0.5">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" fill="@color" fill-opacity="0.1"/>
             <polyline points="14 2 14 8 20 8" fill="none"/>
             <text x="12" y="16" font-size="6" text-anchor="middle" fill="@color" font-weight="bold">@GetExtensionLabel(ext)</text>

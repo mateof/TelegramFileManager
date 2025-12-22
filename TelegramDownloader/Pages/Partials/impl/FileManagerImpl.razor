@@ -106,11 +106,14 @@
 <TelegramDownloader.Pages.Modals.VideoPlayerModal @ref="videoPlayer"></TelegramDownloader.Pages.Modals.VideoPlayerModal>
 <TelegramDownloader.Pages.Modals.PdfViewerModal @ref="pdfViewer"></TelegramDownloader.Pages.Modals.PdfViewerModal>
 <TelegramDownloader.Pages.Modals.ImageViewerModal @ref="imageViewer"></TelegramDownloader.Pages.Modals.ImageViewerModal>
+<TelegramDownloader.Pages.Modals.ExportStrmModal @ref="exportStrmModal" OnExportCompleted="OnStrmExportCompleted"></TelegramDownloader.Pages.Modals.ExportStrmModal>
 
 
 
 
 @code {
+#nullable disable
+#pragma warning disable BL0005 // Setting component parameters from code for modal pattern
     private Modals.DowloadFromTelegram Modal { get; set; }
     [Parameter]
     public string id { get; set; }
@@ -128,6 +131,7 @@
     private ImageViewerModal imageViewer { get; set; } = default!;
 
     private MediaUrlModal mediaUrlModal { get; set; } = default!;
+    private ExportStrmModal exportStrmModal { get; set; } = default!;
 
     public string[] ContextItems = new string[] { "Open", "Delete", "Download", "Rename", "Details", "Add to Playlist"};
     private bool isMyChannel = false;
@@ -466,7 +470,7 @@
         if (args.Item.Text == "Strm" && args.FileDetails.Count() > 0)
         {
             var file = args.FileDetails.FirstOrDefault();
-            MyNavigationManager.NavigateTo($"/api/file/strm?idChannel={id}&path={file.FilterPath + file.Name + "/"}&host={MyNavigationManager.BaseUri}", true);
+            exportStrmModal.Open(id, file.FilterPath + file.Name + "/", MyNavigationManager.BaseUri);
         }
         if (args.Item.Text == "Preload" && args.FileDetails.Count() > 0)
         {
@@ -883,7 +887,7 @@
             if (args.Folder != null)
             {
                 var path = args.Folder.FilterPath + args.Folder.Name + "/";
-                MyNavigationManager.NavigateTo($"/api/file/strm?idChannel={id}&path={path}&host={MyNavigationManager.BaseUri}", true);
+                exportStrmModal.Open(id, path, MyNavigationManager.BaseUri);
             }
         }
         catch (Exception e)
@@ -892,6 +896,18 @@
             nm.sendMessage("Error", "Error generating STRM files", NotificationTypes.Error);
         }
         await Task.CompletedTask;
+    }
+
+    private void OnStrmExportCompleted(string message)
+    {
+        if (message.StartsWith("Error"))
+        {
+            nm.sendMessage("Export Error", message, NotificationTypes.Error);
+        }
+        else
+        {
+            nm.sendMessage("Export Complete", message, NotificationTypes.Success);
+        }
     }
 
     private async Task OnMobilePreloadFilesAsync(MfmPreloadFilesEventArgs args)
@@ -989,7 +1005,16 @@
 
     private async Task playAudio(FileManagerDirectoryContent fileDetails)
     {
-        await JSRuntime.InvokeVoidAsync("openAudioPlayerModal", await getMediaUrl(fileDetails.Id, fileDetails.Name, fileDetails.Size), null, fileDetails.Name);
+        try
+        {
+            var url = await getMediaUrl(fileDetails.Id, fileDetails.Name, fileDetails.Size);
+            await JSRuntime.InvokeVoidAsync("openAudioPlayerModal", url, null, fileDetails.Name);
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Error playing audio file: {Name}", fileDetails.Name);
+            nm.sendMessage("Error", "Error playing audio file", NotificationTypes.Error);
+        }
     }
 
     private async Task OpenImageViewer(FileManagerDirectoryContent clickedImage)

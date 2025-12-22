@@ -1,4 +1,5 @@
-﻿using BlazorBootstrap;
+#nullable disable
+using BlazorBootstrap;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
 using Syncfusion.Blazor.Inputs;
@@ -45,12 +46,73 @@ namespace TelegramDownloader.Data
             _persistence = persistence;
             // createDownloadFolder();
             mut.WaitOne();
-            if (client == null)
+            try
             {
-                newClient();
+                if (client == null && HasValidCredentials())
+                {
+                    newClient();
+                }
+                else if (!HasValidCredentials())
+                {
+                    _logger.LogWarning("TelegramService: Credentials not configured - setup required");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "TelegramService: Could not initialize client - setup may be required");
+            }
+            finally
+            {
+                mut.ReleaseMutex();
+            }
+        }
+
+        private static bool HasValidCredentials()
+        {
+            var apiId = GeneralConfigStatic.tlconfig?.api_id ?? Environment.GetEnvironmentVariable("api_id");
+            var apiHash = GeneralConfigStatic.tlconfig?.hash_id ?? Environment.GetEnvironmentVariable("hash_id");
+            return !string.IsNullOrWhiteSpace(apiId) && !string.IsNullOrWhiteSpace(apiHash);
+        }
+
+        public bool IsConfigured => HasValidCredentials() && client != null;
+
+        /// <summary>
+        /// Initializes or reinitializes the Telegram client.
+        /// Call this after setup is complete to create the client with new credentials.
+        /// </summary>
+        public void InitializeClient()
+        {
+            if (client != null)
+            {
+                _logger.LogInformation("Client already initialized");
+                return;
             }
 
-            mut.ReleaseMutex();
+            if (!HasValidCredentials())
+            {
+                _logger.LogWarning("Cannot initialize client - credentials not configured");
+                return;
+            }
+
+            mut.WaitOne();
+            try
+            {
+                if (client == null) // Double-check after acquiring lock
+                {
+                    _logger.LogInformation("Initializing Telegram client after setup");
+                    newClient();
+                    _logger.LogInformation("Telegram client initialized successfully");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to initialize Telegram client: {Message}", ex.Message);
+                throw;
+            }
+            finally
+            {
+                mut.ReleaseMutex();
+            }
         }
 
         private void createDownloadFolder()
@@ -156,8 +218,15 @@ namespace TelegramDownloader.Data
 
         public async Task<string> checkAuth(string number, bool isPhone = false)
         {
+            // Return early if client is not initialized (setup required)
+            if (client == null)
+            {
+                _logger.LogWarning("checkAuth called but client is null - setup required");
+                return "setup_required";
+            }
+
             _logger.LogInformation("Checking authentication - IsPhone: {IsPhone}", isPhone);
-            if (client.UserId != null && number == null)
+            if (client.UserId != 0 && number == null)
             {
                 UserData ud = await UserService.getUserDataFromFile();
                 if (ud != null)
@@ -288,6 +357,97 @@ namespace TelegramDownloader.Data
                 return canPost;
             }
             return true;
+        }
+
+        public bool isChannelOwner(long id)
+        {
+            if (chats == null)
+                return false;
+            var peer = chats.chats[id];
+            if (peer is TL.Channel channel)
+            {
+                return channel.IsActive && channel.flags.HasFlag(TL.Channel.Flags.creator);
+            }
+            return false;
+        }
+
+        public async Task LeaveChannel(long id)
+        {
+            try
+            {
+                _logger.LogInformation("Leaving channel with ID: {Id}", id);
+                var peer = chats.chats[id];
+                if (peer is TL.Channel channel)
+                {
+                    var inputChannel = new InputChannel(channel.id, channel.access_hash);
+                    await client.Channels_LeaveChannel(inputChannel);
+                    _logger.LogInformation("Successfully left channel: {Id}", id);
+                }
+                else
+                {
+                    throw new Exception("The specified chat is not a channel");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error leaving channel: {Id}", id);
+                throw;
+            }
+        }
+
+        public async Task DeleteChannel(long id)
+        {
+            try
+            {
+                _logger.LogInformation("Deleting channel with ID: {Id}", id);
+                var peer = chats.chats[id];
+                if (peer is TL.Channel channel)
+                {
+                    if (!channel.flags.HasFlag(TL.Channel.Flags.creator))
+                    {
+                        throw new Exception("You are not the owner of this channel");
+                    }
+                    var inputChannel = new InputChannel(channel.id, channel.access_hash);
+                    await client.Channels_DeleteChannel(inputChannel);
+                    _logger.LogInformation("Successfully deleted channel: {Id}", id);
+                }
+                else
+                {
+                    throw new Exception("The specified chat is not a channel");
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error deleting channel: {Id}", id);
+                throw;
+            }
+        }
+
+        public (string? name, bool exists) GetChannelInfo(long id)
+        {
+            try
+            {
+                if (chats == null || !chats.chats.ContainsKey(id))
+                {
+                    return (null, false);
+                }
+
+                var peer = chats.chats[id];
+                if (peer is TL.Channel channel)
+                {
+                    return (channel.title, true);
+                }
+                else if (peer is TL.Chat chat)
+                {
+                    return (chat.title, true);
+                }
+
+                return (peer.ToString(), true);
+            }
+            catch
+            {
+                return (null, false);
+            }
         }
 
         public async Task<List<ChatViewBase>> GetFouriteChannels(bool mustRefresh = true)
@@ -820,7 +980,6 @@ namespace TelegramDownloader.Data
             _logger.LogDebug("DownloadFileStream - Offset: {Offset}, Limit: {Limit}", offset, limit);
             int totalLimit = limit;
             long currentOffset = offset;
-            Byte[] response;
 
             if (message is Message msg && msg.media is MessageMediaDocument doc)
             {
@@ -885,7 +1044,7 @@ namespace TelegramDownloader.Data
                         return memoryStream.ToArray();
                     }
                 }
-                catch (Exception e)
+                catch
                 {
                     throw new InvalidOperationException("Unexpected file type returned.");
                 }

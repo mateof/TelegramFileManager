@@ -1,4 +1,5 @@
-﻿namespace TelegramDownloader.Models.GitHub
+#nullable disable
+namespace TelegramDownloader.Models.GitHub
 {
     public class GithubVersionModel
     {

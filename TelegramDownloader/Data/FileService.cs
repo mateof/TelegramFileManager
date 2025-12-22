@@ -1,4 +1,5 @@
-﻿using BlazorBootstrap;
+#nullable disable
+using BlazorBootstrap;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.StaticFiles;
 using MongoDB.Driver;
@@ -873,7 +874,7 @@ namespace TelegramDownloader.Data
             try
             {
                 model.channelName = _ts.getChatName(Convert.ToInt64(dbName));
-            } catch(Exception ex) {
+            } catch {
                 model.channelName = "Public or Shared";
             }
             var tcs = new TaskCompletionSource<bool>();
@@ -1280,10 +1281,10 @@ namespace TelegramDownloader.Data
             {
                 Directory.Delete(basePath, true);
             }
-            catch (Exception ex)
+            catch
             {
             }
-            
+
             Directory.CreateDirectory(basePath);
             List<BsonFileManagerModel> filesAndFolders = await _db.getAllChildFilesInDirectory(dbName, path);
             foreach (BsonFileManagerModel file in filesAndFolders)
@@ -1314,6 +1315,45 @@ namespace TelegramDownloader.Data
             Directory.Delete(basePath, true);
             return zipPath;
         }
+
+        public async Task CreateStrmFilesToLocal(string path, string dbName, string host, string destinationFolder)
+        {
+            String folderPathName = Path.GetFileName(path.TrimEnd('/'));
+            String basePath = Path.Combine(LOCALDIR, destinationFolder, folderPathName);
+
+            // Create destination directory
+            Directory.CreateDirectory(basePath);
+
+            List<BsonFileManagerModel> filesAndFolders = await _db.getAllChildFilesInDirectory(dbName, path);
+            foreach (BsonFileManagerModel file in filesAndFolders)
+            {
+                String filePath = Path.Combine(basePath, file.FilePath.Substring(path.Length));
+                if (file.IsFile)
+                {
+                    if (FileExtensionTypeTest.isVideoExtension(file.Type) || FileExtensionTypeTest.isAudioExtension(file.Type))
+                    {
+                        string contenido = Path.Combine(host, "api/file/GetFileStream", dbName, file.Id, "file" + file.Type).Replace("\\", "/");
+                        if (GeneralConfigStatic.config.PreloadFilesOnStream || HelperService.bytesToMegaBytes(file.Size) < GeneralConfigStatic.config.MaxPreloadFileSizeInMb)
+                        {
+                            contenido = Path.Combine(host, "api/file/GetFileByTfmId", Uri.EscapeDataString(file.Name)).Replace("\\", "/") + $"?idChannel={dbName}&idFile={file.Id}";
+                        }
+                        string pattern = $@"\.({file.Type.Replace(".", "")})$";
+                        // Ensure parent directory exists
+                        var parentDir = Path.GetDirectoryName(Regex.Replace(filePath, pattern, ".strm"));
+                        if (!string.IsNullOrEmpty(parentDir))
+                        {
+                            Directory.CreateDirectory(parentDir);
+                        }
+                        File.WriteAllText(Regex.Replace(filePath, pattern, ".strm"), contenido);
+                    }
+                }
+                else
+                {
+                    Directory.CreateDirectory(filePath);
+                }
+            }
+        }
+
         public async Task UploadFileFromServer(string dbName, string currentPath, List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files, InfoDownloadTaksModel dm = null) // ItemsUploadedEventArgs<FileManagerDirectoryContent> args)
         {
             _logger.LogInformation("Starting upload from server - DbName: {DbName}, Path: {Path}, FilesCount: {Count}",
@@ -1797,7 +1837,7 @@ namespace TelegramDownloader.Data
             {
                 return MIMETypesDictionary[extension.Replace(".", "")] ?? "application/octet-stream";
             }
-            catch (Exception e)
+            catch
             {
                 return "application/octet-stream";
             }
@@ -1940,6 +1980,28 @@ namespace TelegramDownloader.Data
                     // Try to find the folder matching the path
                     var matchingFolder = Data.FirstOrDefault(x => x.FilePath + "/" == path)
                         ?? Data.FirstOrDefault(x => x.FilePath == path.TrimEnd('/'));
+
+                    // If not found in Data, try searching by name and parent FilterPath
+                    // This handles cases where FilePath format doesn't match (e.g., first-level folders)
+                    if (matchingFolder == null)
+                    {
+                        // Extract folder name and parent path from the navigation path
+                        // e.g., "/FolderA/" -> name = "FolderA", parentPath = "/"
+                        // e.g., "/Parent/Child/" -> name = "Child", parentPath = "/Parent/"
+                        var pathParts = path.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+                        if (pathParts.Length > 0)
+                        {
+                            var folderName = pathParts[pathParts.Length - 1];
+                            var parentPath = pathParts.Length == 1
+                                ? "/"
+                                : "/" + string.Join("/", pathParts.Take(pathParts.Length - 1)) + "/";
+
+                            // Search for folder by name and parent FilterPath
+                            matchingFolder = collectionName == null
+                                ? await _db.getFolderByNameAndParentPath(dbName, folderName, parentPath)
+                                : await _db.getFolderByNameAndParentPath(dbName, folderName, parentPath, collectionName);
+                        }
+                    }
 
                     if (matchingFolder != null)
                     {
