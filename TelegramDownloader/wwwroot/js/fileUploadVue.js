@@ -871,11 +871,22 @@ window.extractAudioArtwork = (audioUrl) => {
             return;
         }
 
+        const urlLower = audioUrl.toLowerCase();
+
         // Skip artwork extraction for FLAC files - jsmediatags has issues with them
         // and they require downloading too much data
-        const urlLower = audioUrl.toLowerCase();
         if (urlLower.includes('.flac') || urlLower.includes('flac')) {
             console.log('Skipping artwork extraction for FLAC file');
+            window._artworkCache[audioUrl] = null;
+            resolve(null);
+            return;
+        }
+
+        // Skip artwork extraction for local files (not from API)
+        // jsmediatags tries to download the entire file which can hang the connection
+        const isLocalFile = !audioUrl.includes('/api/file/');
+        if (isLocalFile) {
+            console.log('Skipping artwork extraction for local file');
             window._artworkCache[audioUrl] = null;
             resolve(null);
             return;
@@ -888,12 +899,12 @@ window.extractAudioArtwork = (audioUrl) => {
             return;
         }
 
-        // Add timeout to prevent hanging
+        // Add timeout to prevent hanging (reduced from 10s to 5s)
         const timeoutId = setTimeout(() => {
             console.log('Artwork extraction timed out');
             window._artworkCache[audioUrl] = null;
             resolve(null);
-        }, 10000); // 10 second timeout
+        }, 5000); // 5 second timeout
 
         try {
             jsmediatags.read(audioUrl, {
