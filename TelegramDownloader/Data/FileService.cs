@@ -2264,5 +2264,126 @@ namespace TelegramDownloader.Data
         {
             throw new NotImplementedException("PreloadFilesToTemp is implemented in FileServiceV2");
         }
+
+        public async Task DownloadPlaylistToLocal(PlaylistModel playlist, string destinationFolder)
+        {
+            _logger.LogInformation("Starting playlist download - Playlist: {Name}, Tracks: {Count}, Destination: {Dest}",
+                playlist.Name, playlist.TrackCount, destinationFolder);
+
+            NotificationModel nm = new NotificationModel();
+            nm.sendEvent(new Notification($"Starting download of playlist '{playlist.Name}'", "Playlist Download", NotificationTypes.Info));
+
+            try
+            {
+                // Create destination folder if it doesn't exist
+                Directory.CreateDirectory(destinationFolder);
+
+                int downloaded = 0;
+                int failed = 0;
+
+                foreach (var track in playlist.Tracks)
+                {
+                    try
+                    {
+                        string destPath = System.IO.Path.Combine(destinationFolder, track.FileName);
+
+                        // Check if file already exists
+                        if (File.Exists(destPath))
+                        {
+                            _logger.LogInformation("File already exists, skipping: {FileName}", track.FileName);
+                            downloaded++;
+                            continue;
+                        }
+
+                        // Handle local files - copy instead of download
+                        if (track.IsLocalFile && !string.IsNullOrEmpty(track.DirectUrl))
+                        {
+                            try
+                            {
+                                // Extract local path from URL
+                                var uri = new Uri(track.DirectUrl);
+                                var localPath = Uri.UnescapeDataString(uri.AbsolutePath);
+                                // Remove the static file prefix to get the actual file path
+                                if (localPath.Contains(STATICRELATIVELOCALDIR.Replace("\\", "/")))
+                                {
+                                    var relativePath = localPath.Substring(localPath.IndexOf(STATICRELATIVELOCALDIR.Replace("\\", "/")) + STATICRELATIVELOCALDIR.Length);
+                                    var sourcePath = System.IO.Path.Combine(Directory.GetCurrentDirectory(), STATICRELATIVELOCALDIR, relativePath.TrimStart('/'));
+                                    if (File.Exists(sourcePath))
+                                    {
+                                        File.Copy(sourcePath, destPath);
+                                        downloaded++;
+                                        _logger.LogInformation("Copied local track {Downloaded}/{Total}: {FileName}",
+                                            downloaded, playlist.TrackCount, track.FileName);
+                                        continue;
+                                    }
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(ex, "Could not copy local file: {FileName}", track.FileName);
+                            }
+                            // If we couldn't copy, count as skipped (local file already exists somewhere)
+                            downloaded++;
+                            continue;
+                        }
+
+                        // Get file info from MongoDB for Telegram files
+                        var file = await getItemById(track.ChannelId, track.FileId);
+                        if (file == null)
+                        {
+                            _logger.LogWarning("File not found for track: {FileName}", track.FileName);
+                            failed++;
+                            continue;
+                        }
+
+                        if (file.isSplit)
+                        {
+                            // Handle split files
+                            int i = 1;
+                            List<string> splitPaths = new List<string>();
+                            foreach (int messageId in file.ListMessageId)
+                            {
+                                string filePathPart = System.IO.Path.Combine(destinationFolder, $"({i})" + track.FileName);
+                                await downloadFromTelegram(track.ChannelId, messageId, filePathPart, file);
+                                splitPaths.Add(filePathPart);
+                                i++;
+                            }
+                            await mergeFileStreamAsync(splitPaths, destPath);
+                            foreach (string filePath in splitPaths)
+                            {
+                                File.Delete(filePath);
+                            }
+                        }
+                        else
+                        {
+                            // Download single file
+                            await downloadFromTelegram(track.ChannelId, (int)file.MessageId, destPath, file);
+                        }
+
+                        downloaded++;
+                        _logger.LogInformation("Downloaded track {Downloaded}/{Total}: {FileName}",
+                            downloaded, playlist.TrackCount, track.FileName);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error downloading track: {FileName}", track.FileName);
+                        failed++;
+                    }
+                }
+
+                string message = failed > 0
+                    ? $"Playlist '{playlist.Name}' completed: {downloaded} downloaded, {failed} failed"
+                    : $"Playlist '{playlist.Name}' downloaded successfully ({downloaded} tracks)";
+
+                nm.sendEvent(new Notification(message, "Playlist Download",
+                    failed > 0 ? NotificationTypes.Warn : NotificationTypes.Success));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error downloading playlist: {Name}", playlist.Name);
+                nm.sendEvent(new Notification($"Error downloading playlist: {ex.Message}", "Playlist Download", NotificationTypes.Error));
+                throw;
+            }
+        }
     }
 }

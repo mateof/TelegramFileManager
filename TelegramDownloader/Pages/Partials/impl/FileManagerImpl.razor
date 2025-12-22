@@ -11,6 +11,7 @@
 @using TelegramDownloader.Pages.Partials
 @using TelegramDownloader.Services
 @using TelegramDownloader.Shared.MobileFileManager
+@using TelegramDownloader.Shared
 @inject IFileService fs
 @inject ITelegramService ts
 @inject ILogger<FileManager> Logger
@@ -96,6 +97,8 @@
             OnPreloadFiles="OnMobilePreloadFilesAsync"
             CanAddToPlaylist="true"
             OnAddToPlaylist="OnMobileAddToPlaylistAsync"
+            CanSaveToPlaylist="true"
+            OnSaveToPlaylist="OnMobileSaveToPlaylistAsync"
             OnPathChanged="OnMobilePathChanged" />
     </div>
 }
@@ -156,7 +159,8 @@
         new ToolBarItemModel() { Name = "View" },
         new ToolBarItemModel() { Name = "Details" },
         new ToolBarItemModel() { Name = "UrlMedia", Text = "Url Media", TooltipText = "Url Media", PrefixIcon = "bi bi-collection-play-fill", Visible = false },
-        new ToolBarItemModel() { Name = "Strm", Text = "Strm", TooltipText = "Strm folder", PrefixIcon = "bi bi-collection-play-fill", Visible = false }
+        new ToolBarItemModel() { Name = "Strm", Text = "Strm", TooltipText = "Strm folder", PrefixIcon = "bi bi-collection-play-fill", Visible = false },
+        new ToolBarItemModel() { Name = "Playlists", Text = "Playlists", TooltipText = "Manage Playlists", PrefixIcon = "bi bi-music-note-list" }
 
     };
 
@@ -309,7 +313,8 @@
                 new ToolBarItemModel() { Name = "View" },
                 new ToolBarItemModel() { Name = "Details" },
                 new ToolBarItemModel() { Name = "UrlMedia", Text = "Url Media", TooltipText = "Url Media", PrefixIcon = "bi bi-collection-play-fill", Visible = false },
-                new ToolBarItemModel() { Name = "Strm", Text = "Strm", TooltipText = "Strm folder", PrefixIcon = "bi bi-collection-play-fill", Visible = false }
+                new ToolBarItemModel() { Name = "Strm", Text = "Strm", TooltipText = "Strm folder", PrefixIcon = "bi bi-collection-play-fill", Visible = false },
+                new ToolBarItemModel() { Name = "Playlists", Text = "Playlists", TooltipText = "Manage Playlists", PrefixIcon = "bi bi-music-note-list" }
             };
 
             if (isMyChannel)
@@ -481,6 +486,10 @@
                 var count = await fs.PreloadFilesToTemp(channelId, args.FileDetails.ToList());
                 nm.sendMessage("Preload Complete", $"Preloaded {count} files to cache", NotificationTypes.Success);
             });
+        }
+        if (args.Item.Text == "Playlists")
+        {
+            MainLayout.OpenPlaylistManager();
         }
         Console.WriteLine("");
     }
@@ -961,6 +970,60 @@
         }
     }
 
+    private async Task OnMobileSaveToPlaylistAsync(MfmSaveToPlaylistEventArgs args)
+    {
+        try
+        {
+            var tracks = new List<PlaylistTrackModel>();
+            var channelId = isShared ? bsi.ChannelId : id;
+            var channelName = isShared ? bsi.Name : channelId;
+
+            if (args.IsMultiple && args.Files.Length > 0)
+            {
+                foreach (var file in args.Files)
+                {
+                    tracks.Add(new PlaylistTrackModel
+                    {
+                        FileId = file.Id,
+                        ChannelId = channelId,
+                        ChannelName = channelName,
+                        FileName = file.Name,
+                        FileType = Path.GetExtension(file.Name).TrimStart('.').ToLowerInvariant(),
+                        FileSize = file.Size,
+                        Order = tracks.Count
+                    });
+                }
+            }
+            else if (args.File != null)
+            {
+                tracks.Add(new PlaylistTrackModel
+                {
+                    FileId = args.File.Id,
+                    ChannelId = channelId,
+                    ChannelName = channelName,
+                    FileName = args.File.Name,
+                    FileType = Path.GetExtension(args.File.Name).TrimStart('.').ToLowerInvariant(),
+                    FileSize = args.File.Size,
+                    Order = 0
+                });
+            }
+
+            if (tracks.Count > 0)
+            {
+                var saveModal = MainLayout.GetSaveToPlaylistModal();
+                if (saveModal != null)
+                {
+                    await saveModal.Open(tracks);
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e, "Error on OnMobileSaveToPlaylistAsync");
+            nm.sendMessage("Error", "Error saving to playlist", NotificationTypes.Error);
+        }
+    }
+
     #endregion
 
     #region Shared Helper Methods
@@ -1137,11 +1200,16 @@
         else
             item = await fs.getItemById(id, idFile);
         string localdir = MyNavigationManager.BaseUri;
+        var channelId = isShared ? bsi.ChannelId : id;
+
+        // Always use GetFileStream format with MongoDB document ID for consistency
+        // This ensures playlist functionality can extract channelId and fileId correctly
         if (forcePreDownload || (HelperService.bytesToMegaBytes(size) <= GeneralConfigStatic.config.MaxPreloadFileSizeInMb && item != null && item.MessageId != null))
         {
-            return new System.Uri(Path.Combine(localdir, "api/file/GetFile", name).Replace("\\", "/") + $"?idChannel={(isShared ? bsi.ChannelId : id)}&idFile={item.MessageId}").AbsoluteUri;
+            // Still use the preload endpoint but append the file ID info in a way that's extractable
+            return new System.Uri(Path.Combine(localdir, "api/file/GetFile", name).Replace("\\", "/") + $"?idChannel={channelId}&idFile={item.MessageId}&docId={idFile}").AbsoluteUri;
         }
-        return new System.Uri(Path.Combine(localdir, "api/file/GetFileStream", isShared ? bsi.ChannelId : id, idFile, name).Replace("\\", "/")).AbsoluteUri;
+        return new System.Uri(Path.Combine(localdir, "api/file/GetFileStream", channelId, idFile, name).Replace("\\", "/")).AbsoluteUri;
     }
 
     private async Task<string> getVideoUrl(string idFile, String name, long size)

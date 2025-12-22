@@ -116,4 +116,12 @@ namespace TelegramDownloader.Shared.MobileFileManager
         public string Type { get; set; } = "audio/mpeg";
         public bool IsMultiple => Files.Length > 0;
     }
+
+    public class MfmSaveToPlaylistEventArgs
+    {
+        public FileManagerDirectoryContent? File { get; set; }
+        public FileManagerDirectoryContent[] Files { get; set; } = Array.Empty<FileManagerDirectoryContent>();
+        public string ChannelId { get; set; } = string.Empty;
+        public bool IsMultiple => Files.Length > 0;
+    }
 }

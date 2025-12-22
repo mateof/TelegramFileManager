@@ -59,6 +59,9 @@ namespace TelegramDownloader.Shared.MobileFileManager
         public bool CanAddToPlaylist { get; set; } = false;
 
         [Parameter]
+        public bool CanSaveToPlaylist { get; set; } = false;
+
+        [Parameter]
         public string RootFolderName { get; set; } = "Root";
 
         #endregion
@@ -118,6 +121,9 @@ namespace TelegramDownloader.Shared.MobileFileManager
 
         [Parameter]
         public EventCallback<MfmAddToPlaylistEventArgs> OnAddToPlaylist { get; set; }
+
+        [Parameter]
+        public EventCallback<MfmSaveToPlaylistEventArgs> OnSaveToPlaylist { get; set; }
 
         [Parameter]
         public EventCallback<string> OnPathChanged { get; set; }
@@ -1098,8 +1104,35 @@ namespace TelegramDownloader.Shared.MobileFileManager
         private bool IsAudioFile(FileManagerDirectoryContent file)
         {
             if (!file.IsFile || string.IsNullOrEmpty(file.Type)) return false;
-            var audioTypes = new HashSet<string> { ".mp3", ".ogg", ".flac", ".aac", ".wav" };
+            var audioTypes = new HashSet<string> { ".mp3", ".ogg", ".flac", ".aac", ".wav", ".m4a" };
             return audioTypes.Contains(file.Type.ToLower());
+        }
+
+        private async Task SaveToPlaylistItem(FileManagerDirectoryContent item)
+        {
+            var args = new MfmSaveToPlaylistEventArgs
+            {
+                File = item,
+                ChannelId = Id
+            };
+
+            await OnSaveToPlaylist.InvokeAsync(args);
+            CloseContextMenu();
+        }
+
+        private async Task SaveSelectedToPlaylist()
+        {
+            var audioFiles = SelectedItems.Where(f => IsAudioFile(f)).ToArray();
+            if (audioFiles.Length == 0) return;
+
+            var args = new MfmSaveToPlaylistEventArgs
+            {
+                Files = audioFiles,
+                ChannelId = Id
+            };
+
+            await OnSaveToPlaylist.InvokeAsync(args);
+            ClearSelection();
         }
 
         #endregion

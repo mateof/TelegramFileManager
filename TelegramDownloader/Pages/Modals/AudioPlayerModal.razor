@@ -1,3 +1,4 @@
+@using TelegramDownloader.Shared
 @inject IJSRuntime JSRuntime
 @implements IDisposable
 
@@ -459,6 +460,67 @@
         cursor: pointer;
     }
 
+    .audio-btn-visualizer {
+        background: none;
+        border: none;
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 1rem;
+        cursor: pointer;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        transition: all 0.2s ease;
+        margin-left: 0.5rem;
+    }
+
+    .audio-btn-visualizer:hover {
+        color: #e94560;
+        background: rgba(233, 69, 96, 0.1);
+    }
+
+    .audio-btn-visualizer.active {
+        color: #e94560;
+    }
+
+    /* Saved Playlist Actions */
+    .saved-playlist-actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 0.75rem;
+        padding-top: 0.75rem;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .btn-saved-playlist {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        background: rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 8px;
+        color: rgba(255, 255, 255, 0.8);
+        font-size: 0.8rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .btn-saved-playlist:hover:not(:disabled) {
+        background: rgba(233, 69, 96, 0.2);
+        border-color: #e94560;
+        color: #fff;
+    }
+
+    .btn-saved-playlist:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .btn-saved-playlist i {
+        font-size: 1rem;
+    }
+
     /* Playlist Styles */
     .audio-playlist {
         max-height: 180px;
@@ -720,7 +782,22 @@
                         <input type="range" class="audio-volume-slider" min="0" max="100" value="@volume"
                                @onchange="ChangeVolume" />
                     </div>
+                    <button class="audio-btn-visualizer @(enableVisualizer ? "active" : "")" @onclick="ToggleVisualizer" title="@(enableVisualizer ? "Disable visualizer" : "Enable visualizer")">
+                        <i class="bi @(enableVisualizer ? "bi-soundwave" : "bi-slash-circle")"></i>
+                    </button>
                 </div>
+            </div>
+
+            <!-- Saved Playlists Actions -->
+            <div class="saved-playlist-actions">
+                <button class="btn btn-sm btn-saved-playlist" @onclick="SaveCurrentToPlaylist" title="Save current track to playlist" disabled="@string.IsNullOrEmpty(audioUrl)">
+                    <i class="bi bi-plus-circle"></i>
+                    <span>Save to Playlist</span>
+                </button>
+                <button class="btn btn-sm btn-saved-playlist" @onclick="OpenPlaylistManager" title="Open playlist manager">
+                    <i class="bi bi-music-note-list"></i>
+                    <span>Playlists</span>
+                </button>
             </div>
 
             @if (playlist.Count > 0)
@@ -805,6 +882,7 @@
 
     // Real-time visualizer
     private bool useRealVisualizer = false;
+    private bool enableVisualizer = true; // User preference - can be toggled
     private double[] visualizerBars = new double[13];
     private CancellationTokenSource? visualizerCts;
 
@@ -892,12 +970,14 @@
         if (_disposed) return;
         try
         {
-            // Show modal with current song without changing anything
+            // Show modal - works even without current song (shows empty playlist or playlist)
+            isVisible = true;
+            await InvokeAsync(StateHasChanged);
+            await Task.Delay(100);
+
+            // Only start progress timer if there's a current track
             if (!string.IsNullOrEmpty(audioUrl))
             {
-                isVisible = true;
-                await InvokeAsync(StateHasChanged);
-                await Task.Delay(100);
                 StartProgressTimer();
                 await UpdateProgress();
             }
@@ -1085,6 +1165,13 @@
 
     private async Task StartRealVisualizer()
     {
+        // Don't start visualizer if user disabled it
+        if (!enableVisualizer)
+        {
+            useRealVisualizer = false;
+            return;
+        }
+
         try
         {
             // Initialize the audio visualizer in JavaScript
@@ -1100,6 +1187,45 @@
         catch
         {
             useRealVisualizer = false;
+        }
+    }
+
+    private async Task ToggleVisualizer()
+    {
+        enableVisualizer = !enableVisualizer;
+
+        // Save preference to localStorage
+        await JSRuntime.InvokeVoidAsync("localStorage.setItem", "audioPlayerVisualizerEnabled", enableVisualizer.ToString().ToLower());
+
+        if (enableVisualizer && isPlaying)
+        {
+            // Re-initialize visualizer if playing
+            await StartRealVisualizer();
+        }
+        else if (!enableVisualizer)
+        {
+            // Destroy visualizer and disconnect Web Audio API
+            StopRealVisualizer();
+            useRealVisualizer = false;
+            await JSRuntime.InvokeVoidAsync("destroyAudioVisualizer");
+        }
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task LoadVisualizerPreference()
+    {
+        try
+        {
+            var stored = await JSRuntime.InvokeAsync<string>("localStorage.getItem", "audioPlayerVisualizerEnabled");
+            if (!string.IsNullOrEmpty(stored))
+            {
+                enableVisualizer = stored.ToLower() == "true";
+            }
+        }
+        catch
+        {
+            enableVisualizer = true;
         }
     }
 
@@ -1199,8 +1325,114 @@
         catch { }
     }
 
-    // Playlist methods
-    private async Task PlayTrack(int index)
+    // Saved Playlist methods (for persistent playlists in MongoDB)
+    private void SaveCurrentToPlaylist()
+    {
+        if (string.IsNullOrEmpty(audioUrl)) return;
+
+        // Open SaveToPlaylistModal - need to extract track info from URL
+        // The modal is in MainLayout, we call it via static method
+        var saveModal = MainLayout.GetSaveToPlaylistModal();
+        if (saveModal != null)
+        {
+            // Check if it's a local file (URL doesn't contain /api/file/)
+            bool isLocalFile = !audioUrl.Contains("/api/file/");
+
+            // Create track model from current playing track
+            var track = new Models.PlaylistTrackModel
+            {
+                FileId = isLocalFile ? "" : ExtractFileIdFromUrl(audioUrl),
+                ChannelId = isLocalFile ? "" : ExtractChannelIdFromUrl(audioUrl),
+                ChannelName = isLocalFile ? "Local" : "",
+                FileName = audioTitle,
+                FileType = ExtractFileTypeFromUrl(audioUrl),
+                FileSize = 0,
+                DirectUrl = isLocalFile ? audioUrl : null
+            };
+
+            _ = saveModal.Open(track);
+        }
+    }
+
+    private void OpenPlaylistManager()
+    {
+        MainLayout.OpenPlaylistManager();
+    }
+
+    private string ExtractFileIdFromUrl(string url)
+    {
+        try
+        {
+            // Format 1: /api/file/GetFile/{name}?idChannel={channelId}&idFile={msgId}&docId={fileId}
+            if (url.Contains("GetFile") && url.Contains("docId="))
+            {
+                var uri = new Uri(url, UriKind.RelativeOrAbsolute);
+                if (!uri.IsAbsoluteUri)
+                    uri = new Uri("http://localhost" + (url.StartsWith("/") ? url : "/" + url));
+                var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+                return query["docId"] ?? "";
+            }
+
+            // Format 2: /api/file/GetFileStream/{channelId}/{fileId}/filename
+            var parts = url.Split('/');
+            var getFileStreamIndex = Array.IndexOf(parts, "GetFileStream");
+            if (getFileStreamIndex >= 0 && getFileStreamIndex + 2 < parts.Length)
+            {
+                return parts[getFileStreamIndex + 2];
+            }
+        }
+        catch { }
+        return "";
+    }
+
+    private string ExtractChannelIdFromUrl(string url)
+    {
+        try
+        {
+            // Format 1: /api/file/GetFile/{name}?idChannel={channelId}&idFile={msgId}&docId={fileId}
+            if (url.Contains("GetFile") && url.Contains("idChannel="))
+            {
+                var uri = new Uri(url, UriKind.RelativeOrAbsolute);
+                if (!uri.IsAbsoluteUri)
+                    uri = new Uri("http://localhost" + (url.StartsWith("/") ? url : "/" + url));
+                var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+                return query["idChannel"] ?? "";
+            }
+
+            // Format 2: /api/file/GetFileStream/{channelId}/{fileId}/filename
+            var parts = url.Split('/');
+            var getFileStreamIndex = Array.IndexOf(parts, "GetFileStream");
+            if (getFileStreamIndex >= 0 && getFileStreamIndex + 1 < parts.Length)
+            {
+                return parts[getFileStreamIndex + 1];
+            }
+        }
+        catch { }
+        return "";
+    }
+
+    private string ExtractFileTypeFromUrl(string url)
+    {
+        try
+        {
+            // Remove query string first
+            var urlWithoutQuery = url.Split('?')[0];
+            var lastPart = urlWithoutQuery.Split('/').LastOrDefault() ?? "";
+            var ext = System.IO.Path.GetExtension(lastPart);
+            return string.IsNullOrEmpty(ext) ? ".mp3" : ext;
+        }
+        catch { return ".mp3"; }
+    }
+
+    // Playlist methods (in-memory playlist for current session)
+    public async Task ClearPlaylist()
+    {
+        playlist.Clear();
+        currentTrackIndex = -1;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public async Task PlayTrack(int index)
     {
         if (index >= 0 && index < playlist.Count)
         {
@@ -1594,6 +1826,18 @@
             }
         }
         catch { }
+    }
+
+    private bool _firstRender = true;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _firstRender = false;
+            await LoadVisualizerPreference();
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     public void Dispose()

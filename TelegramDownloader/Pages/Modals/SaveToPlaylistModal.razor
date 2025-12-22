@@ -1,0 +1,425 @@
+@using TelegramDownloader.Data.db
+@using TelegramDownloader.Models
+
+@inject IDbService db
+
+<div class="modal @ModalClass" tabindex="-1" role="dialog" style="display:@ModalDisplay">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content save-playlist-modal">
+            <!-- Header -->
+            <div class="modal-header save-playlist-header">
+                <div class="modal-title-wrapper">
+                    <div class="modal-icon">
+                        <i class="bi bi-plus-circle"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title">Save to Playlist</h5>
+                        <p class="modal-subtitle">@(tracks.Count > 1 ? $"Add {tracks.Count} tracks" : trackName)</p>
+                    </div>
+                </div>
+                <button type="button" class="btn-close-modal" @onclick="Close" aria-label="Close">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+
+            <!-- Body -->
+            <div class="modal-body save-playlist-body">
+                @if (ShowBackdrop)
+                {
+                    @if (isLoading)
+                    {
+                        <div class="loading-container">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <!-- Create New Playlist Option -->
+                        <div class="create-new-section">
+                            <div class="section-label">Create new playlist</div>
+                            <div class="input-group">
+                                <input type="text" class="form-control" placeholder="New playlist name..."
+                                       @bind="newPlaylistName" @bind:event="oninput"
+                                       @onkeypress="HandleNewPlaylistKeyPress" />
+                                <button class="btn btn-primary" @onclick="CreateAndAddToNew"
+                                        disabled="@(string.IsNullOrWhiteSpace(newPlaylistName) || isSaving)">
+                                    @if (isSaving && isCreatingNew)
+                                    {
+                                        <span class="spinner-border spinner-border-sm"></span>
+                                    }
+                                    else
+                                    {
+                                        <i class="bi bi-plus-lg"></i>
+                                    }
+                                </button>
+                            </div>
+                        </div>
+
+                        @if (playlists.Count > 0)
+                        {
+                            <div class="divider">
+                                <span>or add to existing</span>
+                            </div>
+
+                            <div class="playlists-list">
+                                @foreach (var playlist in playlists)
+                                {
+                                    <div class="playlist-option @(selectedPlaylistId == playlist.Id ? "selected" : "")"
+                                         @onclick="() => SelectPlaylist(playlist.Id)">
+                                        <div class="playlist-option-icon">
+                                            <i class="bi bi-music-note-list"></i>
+                                        </div>
+                                        <div class="playlist-option-info">
+                                            <div class="playlist-option-name">@playlist.Name</div>
+                                            <div class="playlist-option-count">@playlist.TrackCount tracks</div>
+                                        </div>
+                                        <div class="playlist-option-check">
+                                            @if (selectedPlaylistId == playlist.Id)
+                                            {
+                                                <i class="bi bi-check-circle-fill"></i>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    }
+                }
+            </div>
+
+            <!-- Footer -->
+            <div class="modal-footer save-playlist-footer">
+                <button type="button" class="btn btn-secondary" @onclick="Close">
+                    Cancel
+                </button>
+                <button type="button" class="btn btn-primary" @onclick="AddToSelected"
+                        disabled="@(string.IsNullOrEmpty(selectedPlaylistId) || isSaving)">
+                    @if (isSaving && !isCreatingNew)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2"></span>
+                    }
+                    <i class="bi bi-plus-lg me-1"></i> Add to Playlist
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (ShowBackdrop)
+{
+    <div class="modal-backdrop fade show"></div>
+}
+
+<style>
+    .save-playlist-modal {
+        max-height: 80vh;
+    }
+
+    .save-playlist-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+    }
+
+    .modal-title-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .modal-icon {
+        width: 42px;
+        height: 42px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .modal-icon i {
+        font-size: 1.25rem;
+    }
+
+    .modal-subtitle {
+        margin: 0;
+        opacity: 0.8;
+        font-size: 0.8rem;
+        max-width: 200px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .btn-close-modal {
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        color: white;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .btn-close-modal:hover {
+        background: rgba(255, 255, 255, 0.3);
+    }
+
+    .save-playlist-body {
+        padding: 1.25rem;
+        max-height: 50vh;
+        overflow-y: auto;
+    }
+
+    .loading-container {
+        display: flex;
+        justify-content: center;
+        padding: 2rem;
+    }
+
+    .create-new-section {
+        margin-bottom: 1rem;
+    }
+
+    .section-label {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        color: #6c757d;
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+    }
+
+    .divider {
+        display: flex;
+        align-items: center;
+        margin: 1.25rem 0;
+        color: #6c757d;
+        font-size: 0.8rem;
+    }
+
+    .divider::before,
+    .divider::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: #dee2e6;
+    }
+
+    .divider span {
+        padding: 0 1rem;
+    }
+
+    .playlists-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .playlist-option {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        background: #f8f9fa;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: all 0.2s;
+        border: 2px solid transparent;
+    }
+
+    .playlist-option:hover {
+        background: #e9ecef;
+    }
+
+    .playlist-option.selected {
+        background: #e8f0fe;
+        border-color: #667eea;
+    }
+
+    .playlist-option-icon {
+        width: 40px;
+        height: 40px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+    }
+
+    .playlist-option-info {
+        flex: 1;
+    }
+
+    .playlist-option-name {
+        font-weight: 500;
+    }
+
+    .playlist-option-count {
+        font-size: 0.75rem;
+        color: #6c757d;
+    }
+
+    .playlist-option-check {
+        color: #667eea;
+        font-size: 1.25rem;
+    }
+
+    .save-playlist-footer {
+        border-top: 1px solid #dee2e6;
+    }
+</style>
+
+@code {
+    public string ModalDisplay = "none;";
+    public string ModalClass = "";
+    public bool ShowBackdrop = false;
+
+    private List<PlaylistModel> playlists = new();
+    private List<PlaylistTrackModel> tracks = new();
+    private string trackName = "";
+    private string? selectedPlaylistId = null;
+    private string newPlaylistName = "";
+    private bool isLoading = false;
+    private bool isSaving = false;
+    private bool isCreatingNew = false;
+
+    [Parameter]
+    public EventCallback<string> OnTrackAdded { get; set; }
+
+    public async Task Open(PlaylistTrackModel track)
+    {
+        tracks = new List<PlaylistTrackModel> { track };
+        trackName = track.FileName;
+        await OpenInternal();
+    }
+
+    public async Task Open(List<PlaylistTrackModel> trackList)
+    {
+        tracks = trackList;
+        trackName = trackList.Count > 0 ? trackList[0].FileName : "";
+        await OpenInternal();
+    }
+
+    private async Task OpenInternal()
+    {
+        isLoading = true;
+        selectedPlaylistId = null;
+        newPlaylistName = "";
+        isSaving = false;
+
+        ModalDisplay = "block;";
+        ModalClass = "Show";
+        ShowBackdrop = true;
+        StateHasChanged();
+
+        await LoadPlaylists();
+        isLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task LoadPlaylists()
+    {
+        try
+        {
+            playlists = await db.GetAllPlaylists();
+        }
+        catch
+        {
+            playlists = new();
+        }
+    }
+
+    public void Close()
+    {
+        ModalDisplay = "none";
+        ModalClass = "";
+        ShowBackdrop = false;
+        tracks.Clear();
+        StateHasChanged();
+    }
+
+    private void SelectPlaylist(string id)
+    {
+        selectedPlaylistId = id;
+    }
+
+    private async Task HandleNewPlaylistKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(newPlaylistName))
+        {
+            await CreateAndAddToNew();
+        }
+    }
+
+    private async Task CreateAndAddToNew()
+    {
+        if (string.IsNullOrWhiteSpace(newPlaylistName) || tracks.Count == 0) return;
+
+        isSaving = true;
+        isCreatingNew = true;
+        StateHasChanged();
+
+        try
+        {
+            // Create new playlist
+            var playlist = new PlaylistModel
+            {
+                Name = newPlaylistName.Trim(),
+                Tracks = tracks.Select((t, i) => { t.Order = i; return t; }).ToList()
+            };
+
+            await db.CreatePlaylist(playlist);
+
+            await OnTrackAdded.InvokeAsync($"Added {tracks.Count} track(s) to new playlist '{playlist.Name}'");
+            Close();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error creating playlist: {ex.Message}");
+        }
+        finally
+        {
+            isSaving = false;
+            isCreatingNew = false;
+        }
+    }
+
+    private async Task AddToSelected()
+    {
+        if (string.IsNullOrEmpty(selectedPlaylistId) || tracks.Count == 0) return;
+
+        isSaving = true;
+        isCreatingNew = false;
+        StateHasChanged();
+
+        try
+        {
+            var playlist = playlists.FirstOrDefault(p => p.Id == selectedPlaylistId);
+            if (playlist == null) return;
+
+            foreach (var track in tracks)
+            {
+                // Check if track already exists in playlist
+                if (!playlist.Tracks.Any(t => t.FileId == track.FileId))
+                {
+                    await db.AddTrackToPlaylist(selectedPlaylistId, track);
+                }
+            }
+
+            await OnTrackAdded.InvokeAsync($"Added {tracks.Count} track(s) to '{playlist.Name}'");
+            Close();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error adding to playlist: {ex.Message}");
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+}

@@ -240,29 +240,56 @@ namespace TelegramDownloader.Controllers
             var file = _fs.ExistFileIntempFolder($"{idChannel}-{idFile}-{id}");
             if ( file == null )
             {
-                // HttpResponseMessage fullResponse = new HttpResponseMessage(HttpStatusCode.OK); // Request.CreateResponse(HttpStatusCode.OK);
-                TL.Message idM = await _ts.getMessageFile(idChannel, Convert.ToInt32(idFile));
-                ChatMessages cm = new ChatMessages();
-                cm.message = idM;
                 string filePath = System.IO.Path.Combine(FileService.TEMPDIR, "_temp", $"{idChannel}-{idFile}-{id}");
-                file = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite);
-                DownloadModel dm = new DownloadModel();
-                dm.tis = _tis;
-                dm.startDate = DateTime.Now;
-                dm.path = filePath;
-                if (cm.message is Message msgBase)
+
+                // Check if file exists (might be downloading by another request - race condition)
+                if (System.IO.File.Exists(filePath))
                 {
-                    if (msgBase.media is MessageMediaDocument mediaDoc &&
-                        mediaDoc.document is TL.Document doc)
+                    // File exists, wait for it to be ready and return it
+                    for (int i = 0; i < 60; i++) // Wait up to 30 seconds
                     {
-                        dm._size = doc.size;
-                        dm.name = doc.Filename;
+                        await Task.Delay(500);
+                        try
+                        {
+                            file = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                            break;
+                        }
+                        catch (IOException)
+                        {
+                            // File still being written, wait more
+                        }
+                    }
+                    if (file == null)
+                    {
+                        return StatusCode(503, "File is being processed, please try again");
                     }
                 }
-                dm.channelName = _ts.getChatName(Convert.ToInt64(idChannel));
-                _tis.addToDownloadList(dm);
-                await _ts.DownloadFileAndReturn(cm, file, model: dm);
-                file.Position = 0; 
+                else
+                {
+                    // File doesn't exist, download it
+                    TL.Message idM = await _ts.getMessageFile(idChannel, Convert.ToInt32(idFile));
+                    ChatMessages cm = new ChatMessages();
+                    cm.message = idM;
+
+                    file = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite, FileShare.ReadWrite);
+                    DownloadModel dm = new DownloadModel();
+                    dm.tis = _tis;
+                    dm.startDate = DateTime.Now;
+                    dm.path = filePath;
+                    if (cm.message is Message msgBase)
+                    {
+                        if (msgBase.media is MessageMediaDocument mediaDoc &&
+                            mediaDoc.document is TL.Document doc)
+                        {
+                            dm._size = doc.size;
+                            dm.name = doc.Filename;
+                        }
+                    }
+                    dm.channelName = _ts.getChatName(Convert.ToInt64(idChannel));
+                    _tis.addToDownloadList(dm);
+                    await _ts.DownloadFileAndReturn(cm, file, model: dm);
+                    file.Position = 0;
+                }
             }
             var request = HttpContext.Request;
             var rangeHeader = request.Headers["Range"].ToString();

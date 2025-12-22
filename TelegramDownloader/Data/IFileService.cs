@@ -44,5 +44,6 @@ namespace TelegramDownloader.Data
         Task refreshChannelFIles(string channelId, bool force = false);
         bool isChannelRefreshing(string channelId);
         Task<int> PreloadFilesToTemp(string channelId, List<FileManagerDirectoryContent> items);
+        Task DownloadPlaylistToLocal(PlaylistModel playlist, string destinationFolder);
     }
 }

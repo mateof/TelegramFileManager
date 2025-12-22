@@ -1181,5 +1181,137 @@ namespace TelegramDownloader.Data.db
 
         #endregion
 
+        #region Playlist Operations
+
+        private const string PLAYLIST_COLLECTION = "playlists";
+
+        public async Task<PlaylistModel> CreatePlaylist(PlaylistModel playlist)
+        {
+            if (string.IsNullOrEmpty(playlist.Id))
+            {
+                playlist.Id = MongoDB.Bson.ObjectId.GenerateNewId().ToString();
+            }
+            playlist.DateCreated = DateTime.Now;
+            playlist.DateModified = DateTime.Now;
+
+            var collection = getDatabase(CONFIG_DB_NAME).GetCollection<PlaylistModel>(PLAYLIST_COLLECTION);
+            await collection.InsertOneAsync(playlist);
+
+            _logger.LogInformation("Created playlist {Name} with Id {Id}", playlist.Name, playlist.Id);
+            return playlist;
+        }
+
+        public async Task<List<PlaylistModel>> GetAllPlaylists()
+        {
+            var collection = getDatabase(CONFIG_DB_NAME).GetCollection<PlaylistModel>(PLAYLIST_COLLECTION);
+            var playlists = await (await collection.FindAsync(Builders<PlaylistModel>.Filter.Empty)).ToListAsync();
+            return playlists.OrderByDescending(p => p.DateModified).ToList();
+        }
+
+        public async Task<PlaylistModel?> GetPlaylistById(string id)
+        {
+            var collection = getDatabase(CONFIG_DB_NAME).GetCollection<PlaylistModel>(PLAYLIST_COLLECTION);
+            return await (await collection.FindAsync(Builders<PlaylistModel>.Filter.Eq(x => x.Id, id))).FirstOrDefaultAsync();
+        }
+
+        public async Task UpdatePlaylist(PlaylistModel playlist)
+        {
+            playlist.DateModified = DateTime.Now;
+
+            var collection = getDatabase(CONFIG_DB_NAME).GetCollection<PlaylistModel>(PLAYLIST_COLLECTION);
+            var filter = Builders<PlaylistModel>.Filter.Eq(x => x.Id, playlist.Id);
+            await collection.ReplaceOneAsync(filter, playlist, new ReplaceOptions { IsUpsert = false });
+
+            _logger.LogInformation("Updated playlist {Name} with Id {Id}", playlist.Name, playlist.Id);
+        }
+
+        public async Task DeletePlaylist(string id)
+        {
+            var collection = getDatabase(CONFIG_DB_NAME).GetCollection<PlaylistModel>(PLAYLIST_COLLECTION);
+            await collection.DeleteOneAsync(Builders<PlaylistModel>.Filter.Eq(x => x.Id, id));
+
+            _logger.LogInformation("Deleted playlist with Id {Id}", id);
+        }
+
+        public async Task AddTrackToPlaylist(string playlistId, PlaylistTrackModel track)
+        {
+            var collection = getDatabase(CONFIG_DB_NAME).GetCollection<PlaylistModel>(PLAYLIST_COLLECTION);
+
+            // Get current playlist to determine next order
+            var playlist = await GetPlaylistById(playlistId);
+            if (playlist == null)
+            {
+                _logger.LogWarning("Playlist {Id} not found when adding track", playlistId);
+                return;
+            }
+
+            // Set order to be at the end
+            track.Order = playlist.Tracks.Count;
+            track.DateAdded = DateTime.Now;
+
+            var filter = Builders<PlaylistModel>.Filter.Eq(x => x.Id, playlistId);
+            var update = Builders<PlaylistModel>.Update
+                .Push(x => x.Tracks, track)
+                .Set(x => x.DateModified, DateTime.Now);
+
+            await collection.UpdateOneAsync(filter, update);
+
+            _logger.LogInformation("Added track {FileName} to playlist {Id}", track.FileName, playlistId);
+        }
+
+        public async Task RemoveTrackFromPlaylist(string playlistId, string fileId)
+        {
+            var collection = getDatabase(CONFIG_DB_NAME).GetCollection<PlaylistModel>(PLAYLIST_COLLECTION);
+
+            var filter = Builders<PlaylistModel>.Filter.Eq(x => x.Id, playlistId);
+            var update = Builders<PlaylistModel>.Update
+                .PullFilter(x => x.Tracks, t => t.FileId == fileId)
+                .Set(x => x.DateModified, DateTime.Now);
+
+            await collection.UpdateOneAsync(filter, update);
+
+            // Reorder remaining tracks
+            var playlist = await GetPlaylistById(playlistId);
+            if (playlist != null && playlist.Tracks.Count > 0)
+            {
+                for (int i = 0; i < playlist.Tracks.Count; i++)
+                {
+                    playlist.Tracks[i].Order = i;
+                }
+                await UpdatePlaylist(playlist);
+            }
+
+            _logger.LogInformation("Removed track {FileId} from playlist {Id}", fileId, playlistId);
+        }
+
+        public async Task ReorderPlaylistTracks(string playlistId, List<string> orderedFileIds)
+        {
+            var playlist = await GetPlaylistById(playlistId);
+            if (playlist == null)
+            {
+                _logger.LogWarning("Playlist {Id} not found when reordering tracks", playlistId);
+                return;
+            }
+
+            // Reorder tracks based on the provided order
+            var reorderedTracks = new List<PlaylistTrackModel>();
+            for (int i = 0; i < orderedFileIds.Count; i++)
+            {
+                var track = playlist.Tracks.FirstOrDefault(t => t.FileId == orderedFileIds[i]);
+                if (track != null)
+                {
+                    track.Order = i;
+                    reorderedTracks.Add(track);
+                }
+            }
+
+            playlist.Tracks = reorderedTracks;
+            await UpdatePlaylist(playlist);
+
+            _logger.LogInformation("Reordered {Count} tracks in playlist {Id}", reorderedTracks.Count, playlistId);
+        }
+
+        #endregion
+
     }
 }

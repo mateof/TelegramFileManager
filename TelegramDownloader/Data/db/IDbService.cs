@@ -74,6 +74,16 @@ namespace TelegramDownloader.Data.db
         Task<DatabaseStats> GetDatabaseStats(string dbName);
         Task<FilterPathAnalysisResult> AnalyzeFilterPaths(string dbName, string collectionName = "directory");
         Task<int> RepairFilterPaths(string dbName, string collectionName = "directory");
+
+        // Playlist operations
+        Task<PlaylistModel> CreatePlaylist(PlaylistModel playlist);
+        Task<List<PlaylistModel>> GetAllPlaylists();
+        Task<PlaylistModel?> GetPlaylistById(string id);
+        Task UpdatePlaylist(PlaylistModel playlist);
+        Task DeletePlaylist(string id);
+        Task AddTrackToPlaylist(string playlistId, PlaylistTrackModel track);
+        Task RemoveTrackFromPlaylist(string playlistId, string fileId);
+        Task ReorderPlaylistTracks(string playlistId, List<string> orderedFileIds);
     }
 
     public class DatabaseStats

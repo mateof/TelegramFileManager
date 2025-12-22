@@ -649,6 +649,45 @@ window.stopVisualizerAnimation = () => {
     }
 };
 
+// Destroy the audio visualizer and disconnect Web Audio API
+// This can help with audio quality for FLAC and other high-quality formats
+window.destroyAudioVisualizer = () => {
+    try {
+        // Stop any running animation
+        window.stopVisualizerAnimation();
+
+        // Disconnect the analyser from the audio chain if connected
+        if (window._audioVisualizer.analyser) {
+            try {
+                window._audioVisualizer.analyser.disconnect();
+            } catch (e) { /* already disconnected */ }
+        }
+
+        // Disconnect the source but keep it (can't reconnect MediaElementSource)
+        // The source will remain connected to destination for audio playback
+        if (window._audioVisualizer.source && window._audioVisualizer.audioContext) {
+            try {
+                // Reconnect source directly to destination (bypassing analyser)
+                window._audioVisualizer.source.disconnect();
+                window._audioVisualizer.source.connect(window._audioVisualizer.audioContext.destination);
+            } catch (e) { /* ignore */ }
+        }
+
+        // Clear the data array
+        window._audioVisualizer.dataArray = null;
+        window._audioVisualizer.analyser = null;
+
+        // Mark as not initialized so it can be re-initialized if needed
+        window._audioVisualizer.isInitialized = false;
+
+        console.log('Audio visualizer destroyed - audio quality mode enabled');
+        return true;
+    } catch (e) {
+        console.error('Error destroying audio visualizer:', e);
+        return false;
+    }
+};
+
 window.addToAudioPlaylist = (url, type = "audio/mpeg", title = "") => {
     if (type === null) type = "audio/mpeg";
     try {
