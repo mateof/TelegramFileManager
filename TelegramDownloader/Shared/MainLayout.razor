@@ -685,6 +685,14 @@
     public static Pages.Modals.PlaylistManagerModal? GetPlaylistManager() => _instance?.playlistManager;
     public static Pages.Modals.SaveToPlaylistModal? GetSaveToPlaylistModal() => _instance?.saveToPlaylist;
 
+    public static void OpenPlaylistManagerWithPlaylist(string playlistId)
+    {
+        if (_instance != null && _instance.playlistManager != null)
+        {
+            _instance.InvokeAsync(async () => await _instance.playlistManager.OpenWithPlaylist(playlistId));
+        }
+    }
+
     // Playlist event handlers
     private async Task OnPlayPlaylist((Models.PlaylistModel playlist, int? startIndex) args)
     {
@@ -703,6 +711,9 @@
         // Clear current playlist and add all tracks
         await audioPlayer.ClearPlaylist();
         await audioPlayer.AddMultipleToPlaylist(playlistItems);
+
+        // Set the playlist name and ID so it shows as active in the sidebar
+        await audioPlayer.SetPlaylistName(args.playlist.Name, args.playlist.Id);
 
         // Show the modal first (in case it's not visible)
         await audioPlayer.ShowCurrentModal();
@@ -755,10 +766,20 @@
         });
     }
 
-    private void OnPlaylistNotify(string message)
+    private async Task OnPlaylistNotify(string message)
     {
         NotificationModel nm = new NotificationModel();
         nm.sendEvent(new Notification(message, "Playlist", NotificationTypes.Success));
+
+        // Refresh audio player's saved playlists sidebar
+        if (audioPlayer != null)
+        {
+            try
+            {
+                await audioPlayer.RefreshSavedPlaylists();
+            }
+            catch { }
+        }
     }
 
     public void Dispose()

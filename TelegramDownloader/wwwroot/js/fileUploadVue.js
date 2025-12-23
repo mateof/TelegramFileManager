@@ -394,21 +394,71 @@ window.openFileUploadModal = (id, path, url) => {
     fileModal.showModal = true;
 }
 
+// Store reference to audio player for direct calls
+window._audioPlayerRef = null;
+
+window.setAudioPlayerRef = (dotNetRef) => {
+    window._audioPlayerRef = dotNetRef;
+}
+
 window.openAudioPlayerModal = (file, type = "audio/mpeg", title = "") => {
-    // Call Blazor component via JSInvokable
     if (type === null) {
         type = "audio/mpeg";
     }
+
+    // Try using direct reference first (more reliable)
+    if (window._audioPlayerRef) {
+        try {
+            window._audioPlayerRef.invokeMethodAsync('ShowModalFromJs', file, type, title)
+                .catch(e => {
+                    console.log('ShowModalFromJs error, falling back to static:', e);
+                    fallbackOpenAudioPlayer(file, type, title);
+                });
+            return;
+        } catch (e) {
+            console.log('Direct ref error:', e);
+        }
+    }
+
+    // Fallback to static method
+    fallbackOpenAudioPlayer(file, type, title);
+}
+
+function fallbackOpenAudioPlayer(file, type, title) {
     try {
-        DotNet.invokeMethodAsync('TelegramDownloader', 'OpenAudioPlayer', file, type, title).catch(() => {});
-    } catch (e) { console.log('OpenAudioPlayer error:', e); }
+        DotNet.invokeMethodAsync('TelegramDownloader', 'OpenAudioPlayer', file, type, title)
+            .catch(e => console.log('OpenAudioPlayer static error:', e));
+    } catch (e) {
+        console.log('OpenAudioPlayer error:', e);
+    }
 }
 
 window.openAudioModal = () => {
-    // Abrir el modal con la canción actual (si hay una)
+    // Try using direct reference first
+    if (window._audioPlayerRef) {
+        try {
+            window._audioPlayerRef.invokeMethodAsync('ShowCurrentModalFromJs')
+                .catch(e => {
+                    console.log('ShowCurrentModalFromJs error, falling back to static:', e);
+                    fallbackOpenAudioModal();
+                });
+            return;
+        } catch (e) {
+            console.log('Direct ref error:', e);
+        }
+    }
+
+    // Fallback to static method
+    fallbackOpenAudioModal();
+}
+
+function fallbackOpenAudioModal() {
     try {
-        DotNet.invokeMethodAsync('TelegramDownloader', 'OpenAudioPlayerCurrent').catch(() => {});
-    } catch (e) { console.log('OpenAudioPlayerCurrent error:', e); }
+        DotNet.invokeMethodAsync('TelegramDownloader', 'OpenAudioPlayerCurrent')
+            .catch(e => console.log('OpenAudioPlayerCurrent static error:', e));
+    } catch (e) {
+        console.log('OpenAudioPlayerCurrent error:', e);
+    }
 }
 
 window.playAudioPlayer = (url, type) => {

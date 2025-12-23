@@ -605,6 +605,27 @@
         StateHasChanged();
     }
 
+    public async Task OpenWithPlaylist(string playlistId)
+    {
+        isLoading = true;
+        selectedPlaylist = null;
+        playlistToDelete = null;
+        newPlaylistName = "";
+
+        ModalDisplay = "block;";
+        ModalClass = "Show";
+        ShowBackdrop = true;
+        StateHasChanged();
+
+        await LoadPlaylists();
+
+        // Select the specified playlist
+        selectedPlaylist = playlists.FirstOrDefault(p => p.Id == playlistId);
+
+        isLoading = false;
+        StateHasChanged();
+    }
+
     private async Task LoadPlaylists()
     {
         try
