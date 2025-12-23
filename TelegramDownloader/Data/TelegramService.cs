@@ -259,6 +259,8 @@ namespace TelegramDownloader.Data
             }
             try
             {
+                if (number == null)
+                    return "phone";
                 return await DoLogin(number);
             }
             catch (Exception ex)

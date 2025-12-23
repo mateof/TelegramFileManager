@@ -672,6 +672,27 @@
         background: rgba(0, 0, 0, 0.2);
     }
 
+    /* Expanded mode - show more tracks */
+    .audio-player-content.expanded {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+    }
+
+    .audio-player-content.expanded .playlist-section {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    .audio-player-content.expanded .audio-playlist {
+        flex: 1;
+        max-height: none !important;
+        overflow-y: auto;
+    }
+
     .audio-playlist::-webkit-scrollbar {
         width: 6px;
     }
@@ -873,12 +894,27 @@
         }
 
         .audio-player-sidebar {
-            display: none;
+            display: none !important;
+        }
+
+        .audio-player-main {
+            height: 100%;
+            max-height: 100%;
+            overflow: hidden;
         }
 
         .audio-player-content {
             padding: 1rem;
             padding-top: 3rem;
+            height: 100%;
+            max-height: 100%;
+            box-sizing: border-box;
+        }
+
+        /* Avoid overlap with close button */
+        .current-playlist-badge {
+            margin-right: 3rem;
+            max-width: calc(100% - 3.5rem);
         }
 
         .album-art {
@@ -917,6 +953,7 @@
 
         .audio-playlist {
             max-height: 35vh;
+            padding-bottom: 1rem;
         }
 
         .audio-volume-container {
@@ -1005,13 +1042,79 @@
         margin-top: 0.5rem;
     }
 
-    .audio-player-content.expanded .audio-playlist {
-        max-height: calc(100vh - 280px);
+    @@media (min-width: 769px) {
+        .audio-player-content.expanded {
+            overflow: hidden;
+            padding: 0.75rem;
+        }
+
+        .audio-player-content.expanded .compact-now-playing {
+            padding: 0.35rem 0.5rem;
+            margin-bottom: 0.35rem;
+        }
+
+        .audio-player-content.expanded .audio-controls {
+            padding: 0.5rem;
+        }
+
+        .audio-player-content.expanded .playlist-section {
+            display: flex;
+            flex-direction: column;
+            margin-top: 0.25rem;
+        }
+
+        .audio-player-content.expanded .queue-header-row {
+            flex-shrink: 0;
+            padding-bottom: 0.25rem;
+        }
+
+        .audio-player-content.expanded .audio-playlist {
+            flex: 1;
+            min-height: 0;
+            max-height: calc(90vh - 200px);
+            overflow-y: auto;
+        }
+
+        .audio-player-content.expanded .playlist-item {
+            padding: 0.4rem 0.5rem;
+        }
     }
 
     @@media (max-width: 768px) {
+        .audio-player-content.expanded {
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .audio-player-content.expanded .compact-now-playing {
+            flex: 0 0 auto;
+        }
+
+        .audio-player-content.expanded .audio-controls {
+            flex: 0 0 auto;
+        }
+
+        .audio-player-content.expanded .playlist-section {
+            flex: 1 1 0;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .audio-player-content.expanded .queue-header-row {
+            flex: 0 0 auto;
+            margin-bottom: 0.5rem;
+        }
+
         .audio-player-content.expanded .audio-playlist {
-            max-height: calc(100vh - 220px);
+            flex: 1 1 0;
+            min-height: 0;
+            max-height: none;
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: 1rem;
         }
     }
 

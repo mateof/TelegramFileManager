@@ -303,8 +303,9 @@ try
 
     Log.Information("TelegramFileManager application started. Listening on: {Urls}", string.Join(", ", listeningUrls));
 
-    // Open browser automatically if not in Docker
-    if (!isDocker && listeningUrls.Any())
+    // Open browser automatically if not in Docker and not disabled in config
+    var shouldOpenBrowser = GeneralConfigStatic.tlconfig?.open_browser_on_startup ?? true;
+    if (!isDocker && shouldOpenBrowser && listeningUrls.Any())
     {
         var urlToOpen = listeningUrls.FirstOrDefault(u => u.StartsWith("http://")) ?? listeningUrls.First();
 
