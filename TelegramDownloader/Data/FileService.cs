@@ -1639,7 +1639,7 @@ namespace TelegramDownloader.Data
             return contentType;
         }
 
-        public async Task refreshChannelFIles(string channelId, bool force = false)
+        public async Task refreshChannelFIles(string channelId, bool force = false, RefreshChannelOptions? refreshOptions = null)
         {
             int totalNewMessages = 0;
             refreshMutex.WaitOne();
@@ -1648,7 +1648,11 @@ namespace TelegramDownloader.Data
             DateTime init = DateTime.Now;
             List<int> presentIds = await _db.getAllIdsFromChannel(channelId);
             _logger.LogInformation($"Refresh channel with id: {channelId}");
-            List<TelegramChatDocuments> telegramChatDocuments = (await _ts.searchAllChannelFiles(Convert.ToInt64(channelId), (presentIds.Count > 0 && !force) ? presentIds.Max() : 0)).Where(x => x.name != null).ToList();
+
+            // Use default options if none provided
+            refreshOptions ??= new RefreshChannelOptions();
+
+            List<TelegramChatDocuments> telegramChatDocuments = (await _ts.searchAllChannelFiles(Convert.ToInt64(channelId), (presentIds.Count > 0 && !force) ? presentIds.Max() : 0, refreshOptions)).Where(x => x.name != null).ToList();
             _logger.LogInformation($"Get the telegram files in: {(DateTime.Now - init).TotalSeconds} seconds  for channel id:{channelId}");
             List<string> fileNames = await _db.getAllFileNamesFromChannel(channelId);
             var nameCount = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);

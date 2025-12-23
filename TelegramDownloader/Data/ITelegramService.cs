@@ -41,7 +41,7 @@ namespace TelegramDownloader.Data
         Task logOff();
         Task sendVerificationCode(string vc);
         Task<Message> uploadFile(string chatId, Stream file, string fileName, string mimeType = null, UploadModel um = null, string caption = null);
-        Task<List<TelegramChatDocuments>> searchAllChannelFiles(long id, int lastId);
+        Task<List<TelegramChatDocuments>> searchAllChannelFiles(long id, int lastId, Models.RefreshChannelOptions? options = null);
         bool isMyChat(long id);
         bool isChannelOwner(long id);
         Task<TL.Channel?> CreateChannel(string title, string about);

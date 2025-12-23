@@ -1261,90 +1261,403 @@ namespace TelegramDownloader.Data
             return null;
         }
 
-        public async Task<List<TelegramChatDocuments>> searchAllChannelFiles(long id, int lastId = 0)
+        /// <summary>
+        /// Optimized method to get all media files from a channel using Messages_Search with filters.
+        /// This is much faster than iterating through all messages because Telegram's servers do the filtering.
+        /// </summary>
+        /// <param name="id">Channel ID</param>
+        /// <param name="lastId">Only get messages with ID greater than this (for incremental updates)</param>
+        /// <param name="options">Options specifying which media types to fetch</param>
+        /// <returns>List of documents found in the channel</returns>
+        public async Task<List<TelegramChatDocuments>> searchAllChannelFiles(long id, int lastId = 0, Models.RefreshChannelOptions? options = null)
         {
-            List<TelegramChatDocuments> telegramChatDocuments = new List<TelegramChatDocuments>();
-            List<ChatMessages> result = await getAllFileMessages(id, lastId);
+            options ??= new Models.RefreshChannelOptions();
 
-            foreach (var msg in result)
-                if (msg.message is Message msgBase)
-                {
-                    if (msgBase.media is MessageMediaDocument mediaDoc &&
-                        mediaDoc.document is TL.Document doc)
-                    {
-                        TelegramChatDocuments tcd = new TelegramChatDocuments();
-                        tcd.id = msgBase.id;
-                        tcd.documentType = DocumentType.Document;
-                        tcd.name = doc.Filename;
-                        tcd.fileSize = doc.size;
-                        tcd.extension = Path.GetExtension(doc.Filename);
-                        tcd.creationDate = msgBase.date;
-                        tcd.modifiedDate = msgBase.edit_date < msgBase.date ? msgBase.date : msgBase.edit_date;
-                        telegramChatDocuments.Add(tcd);
-                    }
-                }
+            var startTime = DateTime.Now;
+            _logger.LogInformation("═══════════════════════════════════════════════════════════════");
+            _logger.LogInformation("Starting channel refresh - ChannelId: {ChannelId}, LastId: {LastId}", id, lastId);
+            _logger.LogInformation("Selected types: {Types}", options.GetSelectionSummary());
+            _logger.LogInformation("═══════════════════════════════════════════════════════════════");
+
+            List<TelegramChatDocuments> telegramChatDocuments = new List<TelegramChatDocuments>();
+            InputPeer peer = chats.chats[id];
+
+            int phaseNumber = 0;
+            int docsCount = 0, audioCount = 0, videoCount = 0, photosCount = 0;
+
+            // Search for documents (general files like PDF, ZIP, etc.)
+            if (options.IncludeDocuments)
+            {
+                phaseNumber++;
+                _logger.LogInformation("📁 Phase {Phase}: Searching for documents (PDF, ZIP, etc.)...", phaseNumber);
+                docsCount = await SearchDocuments(peer, lastId, telegramChatDocuments);
+                _logger.LogInformation("📁 Phase {Phase} complete: Found {Count} documents", phaseNumber, docsCount);
+            }
+
+            // Search for audio files
+            if (options.IncludeAudio)
+            {
+                phaseNumber++;
+                _logger.LogInformation("🎵 Phase {Phase}: Searching for audio files...", phaseNumber);
+                audioCount = await SearchAudio(peer, lastId, telegramChatDocuments);
+                _logger.LogInformation("🎵 Phase {Phase} complete: Found {Count} audio files", phaseNumber, audioCount);
+            }
+
+            // Search for video files
+            if (options.IncludeVideo)
+            {
+                phaseNumber++;
+                _logger.LogInformation("🎬 Phase {Phase}: Searching for video files...", phaseNumber);
+                videoCount = await SearchVideo(peer, lastId, telegramChatDocuments);
+                _logger.LogInformation("🎬 Phase {Phase} complete: Found {Count} video files", phaseNumber, videoCount);
+            }
+
+            // Search for photos
+            if (options.IncludePhotos)
+            {
+                phaseNumber++;
+                _logger.LogInformation("🖼️ Phase {Phase}: Searching for photos...", phaseNumber);
+                photosCount = await SearchPhotos(peer, lastId, telegramChatDocuments);
+                _logger.LogInformation("🖼️ Phase {Phase} complete: Found {Count} photos", phaseNumber, photosCount);
+            }
+
+            var elapsed = DateTime.Now - startTime;
+            _logger.LogInformation("═══════════════════════════════════════════════════════════════");
+            _logger.LogInformation("✅ Refresh complete - Total: {Total} files", telegramChatDocuments.Count);
+            _logger.LogInformation("   📁 Documents: {Docs} | 🎵 Audio: {Audio} | 🎬 Video: {Video} | 🖼️ Photos: {Photos}",
+                docsCount, audioCount, videoCount, photosCount);
+            _logger.LogInformation("⏱️ Time elapsed: {Elapsed:mm\\:ss\\.fff}", elapsed);
+            _logger.LogInformation("═══════════════════════════════════════════════════════════════");
+
             return telegramChatDocuments;
         }
 
-        //public async Task<List<TelegramChatDocuments>> searchAllChannelFiles(long id)
-        //{
-        //    InputPeer channel = chats.chats[id];
-        //    List<TelegramChatDocuments> telegramChatDocuments = new List<TelegramChatDocuments>();
-        //    for (int offset_id = 0; ;)
-        //    {
-        //        Messages_MessagesBase result = await client.Messages_Search<InputMessagesFilterDocument>(
-        //        peer: channel,
-        //        text: "",
-        //        offset_id: offset_id,
-        //        limit: 0);
-        //        if (result.Messages.Length == 0) break;
-        //        foreach (var msgBase in result.Messages.OfType<Message>())
-        //        {
-        //            if (msgBase.media is MessageMediaDocument mediaDoc &&
-        //                mediaDoc.document is TL.Document doc)
-        //            {
-        //                TelegramChatDocuments tcd = new TelegramChatDocuments();
-        //                tcd.id = msgBase.id;
-        //                tcd.documentType = DocumentType.Document;
-        //                tcd.name = doc.Filename;
-        //                tcd.extension = Path.GetExtension(doc.Filename);
-        //                tcd.creationDate = msgBase.date;
-        //                tcd.modifiedDate = msgBase.edit_date;
-        //                telegramChatDocuments.Add(tcd);
-        //            }
-        //        }
-        //        offset_id = result.Messages[^1].ID;
-        //    }
+        private async Task<int> SearchDocuments(InputPeer peer, int lastId, List<TelegramChatDocuments> results)
+        {
+            int totalCount = 0;
+            int fetchedCount = 0;
+            int addedCount = 0;
+            int batchNumber = 0;
+            int initialResultsCount = results.Count;
+            HashSet<int> existingIds = results.Select(r => r.id).ToHashSet();
 
-        //    for (int offset_id = 0; ;)
-        //    {
-        //        Messages_MessagesBase result = await client.Messages_Search<InputMessagesFilterPhotos>(
-        //        peer: channel,
-        //        text: "",
-        //        offset_id: offset_id,
-        //        limit: 0);
-        //        if (result.Messages.Length == 0) break;
-        //        foreach (var msgBase in result.Messages.OfType<Message>())
-        //        {
-        //            if (msgBase.media is MessageMediaPhoto mediaPhoto &&
-        //                mediaPhoto.photo is Photo photo)
-        //            {
-        //                TelegramChatDocuments tcd = new TelegramChatDocuments();
-        //                tcd.documentType = DocumentType.Photo;
-        //                tcd.id = msgBase.id;
-        //                // Nombre "falso" porque la foto no trae filename
-        //                tcd.name = $"{photo.id}.jpg";
-        //                tcd.extension = ".jpg";
-        //                tcd.creationDate = msgBase.date;
-        //                tcd.modifiedDate = msgBase.edit_date;
-        //                telegramChatDocuments.Add(tcd);
-        //            }
-        //        }
-        //        offset_id = result.Messages[^1].ID;
-        //    }
+            for (int offset_id = 0; ;)
+            {
+                batchNumber++;
+                var searchResult = await client.Messages_Search<InputMessagesFilterDocument>(
+                    peer: peer,
+                    q: "",
+                    offset_id: offset_id,
+                    limit: 100);
 
-        //    return telegramChatDocuments;
-        //}
+                if (searchResult.Messages.Length == 0) break;
+
+                // Get total count from first batch
+                if (totalCount == 0)
+                {
+                    totalCount = searchResult.Count;
+                    _logger.LogInformation("   📊 Total documents in channel: {Total}", totalCount);
+                }
+
+                int batchAdded = 0;
+                foreach (var msgBase in searchResult.Messages.OfType<Message>())
+                {
+                    fetchedCount++;
+
+                    // Skip messages we already have (incremental update)
+                    if (lastId > 0 && msgBase.id <= lastId)
+                    {
+                        _logger.LogInformation("   ⏭️ Reached lastId ({LastId}), stopping. Fetched: {Fetched}, Added: {Added}",
+                            lastId, fetchedCount, addedCount);
+                        return results.Count - initialResultsCount;
+                    }
+
+                    // Skip if already added (from another filter)
+                    if (existingIds.Contains(msgBase.id)) continue;
+
+                    if (msgBase.media is MessageMediaDocument mediaDoc &&
+                        mediaDoc.document is TL.Document doc)
+                    {
+                        if (!string.IsNullOrEmpty(doc.Filename))
+                        {
+                            results.Add(new TelegramChatDocuments
+                            {
+                                id = msgBase.id,
+                                documentType = DocumentType.Document,
+                                name = doc.Filename,
+                                fileSize = doc.size,
+                                extension = Path.GetExtension(doc.Filename),
+                                creationDate = msgBase.date,
+                                modifiedDate = msgBase.edit_date < msgBase.date ? msgBase.date : msgBase.edit_date
+                            });
+                            existingIds.Add(msgBase.id);
+                            addedCount++;
+                            batchAdded++;
+                        }
+                    }
+                }
+
+                double progress = totalCount > 0 ? (double)fetchedCount / totalCount * 100 : 0;
+                _logger.LogInformation("   📦 Batch {Batch}: Fetched {Fetched}/{Total} ({Progress:F1}%) - Added {BatchAdded} docs (Total added: {Added})",
+                    batchNumber, fetchedCount, totalCount, progress, batchAdded, addedCount);
+
+                offset_id = searchResult.Messages[^1].ID;
+
+                // Small delay to avoid rate limiting
+                await Task.Delay(100);
+            }
+
+            return results.Count - initialResultsCount;
+        }
+
+        private async Task<int> SearchAudio(InputPeer peer, int lastId, List<TelegramChatDocuments> results)
+        {
+            int totalCount = 0;
+            int fetchedCount = 0;
+            int addedCount = 0;
+            int batchNumber = 0;
+            int initialResultsCount = results.Count;
+            HashSet<int> existingIds = results.Select(r => r.id).ToHashSet();
+
+            for (int offset_id = 0; ;)
+            {
+                batchNumber++;
+                var searchResult = await client.Messages_Search<InputMessagesFilterMusic>(
+                    peer: peer,
+                    q: "",
+                    offset_id: offset_id,
+                    limit: 100);
+
+                if (searchResult.Messages.Length == 0) break;
+
+                // Get total count from first batch
+                if (totalCount == 0)
+                {
+                    totalCount = searchResult.Count;
+                    _logger.LogInformation("   📊 Total audio files in channel: {Total}", totalCount);
+                }
+
+                int batchAdded = 0;
+                foreach (var msgBase in searchResult.Messages.OfType<Message>())
+                {
+                    fetchedCount++;
+
+                    // Skip messages we already have (incremental update)
+                    if (lastId > 0 && msgBase.id <= lastId)
+                    {
+                        _logger.LogInformation("   ⏭️ Reached lastId ({LastId}), stopping. Fetched: {Fetched}, Added: {Added}",
+                            lastId, fetchedCount, addedCount);
+                        return results.Count - initialResultsCount;
+                    }
+
+                    // Skip if already added (from another filter)
+                    if (existingIds.Contains(msgBase.id)) continue;
+
+                    if (msgBase.media is MessageMediaDocument mediaDoc &&
+                        mediaDoc.document is TL.Document doc)
+                    {
+                        string filename = doc.Filename;
+                        // If no filename, create one from audio attributes
+                        if (string.IsNullOrEmpty(filename))
+                        {
+                            var audioAttr = doc.attributes.OfType<TL.DocumentAttributeAudio>().FirstOrDefault();
+                            if (audioAttr != null)
+                            {
+                                filename = !string.IsNullOrEmpty(audioAttr.title)
+                                    ? $"{audioAttr.performer} - {audioAttr.title}.mp3"
+                                    : $"audio_{doc.id}.mp3";
+                            }
+                            else
+                            {
+                                filename = $"audio_{doc.id}.mp3";
+                            }
+                        }
+
+                        results.Add(new TelegramChatDocuments
+                        {
+                            id = msgBase.id,
+                            documentType = DocumentType.Document,
+                            name = filename,
+                            fileSize = doc.size,
+                            extension = Path.GetExtension(filename),
+                            creationDate = msgBase.date,
+                            modifiedDate = msgBase.edit_date < msgBase.date ? msgBase.date : msgBase.edit_date
+                        });
+                        existingIds.Add(msgBase.id);
+                        addedCount++;
+                        batchAdded++;
+                    }
+                }
+
+                double progress = totalCount > 0 ? (double)fetchedCount / totalCount * 100 : 0;
+                _logger.LogInformation("   🎵 Batch {Batch}: Fetched {Fetched}/{Total} ({Progress:F1}%) - Added {BatchAdded} audio (Total added: {Added})",
+                    batchNumber, fetchedCount, totalCount, progress, batchAdded, addedCount);
+
+                offset_id = searchResult.Messages[^1].ID;
+
+                // Small delay to avoid rate limiting
+                await Task.Delay(100);
+            }
+
+            return results.Count - initialResultsCount;
+        }
+
+        private async Task<int> SearchVideo(InputPeer peer, int lastId, List<TelegramChatDocuments> results)
+        {
+            int totalCount = 0;
+            int fetchedCount = 0;
+            int addedCount = 0;
+            int batchNumber = 0;
+            int initialResultsCount = results.Count;
+            HashSet<int> existingIds = results.Select(r => r.id).ToHashSet();
+
+            for (int offset_id = 0; ;)
+            {
+                batchNumber++;
+                var searchResult = await client.Messages_Search<InputMessagesFilterVideo>(
+                    peer: peer,
+                    q: "",
+                    offset_id: offset_id,
+                    limit: 100);
+
+                if (searchResult.Messages.Length == 0) break;
+
+                // Get total count from first batch
+                if (totalCount == 0)
+                {
+                    totalCount = searchResult.Count;
+                    _logger.LogInformation("   📊 Total video files in channel: {Total}", totalCount);
+                }
+
+                int batchAdded = 0;
+                foreach (var msgBase in searchResult.Messages.OfType<Message>())
+                {
+                    fetchedCount++;
+
+                    // Skip messages we already have (incremental update)
+                    if (lastId > 0 && msgBase.id <= lastId)
+                    {
+                        _logger.LogInformation("   ⏭️ Reached lastId ({LastId}), stopping. Fetched: {Fetched}, Added: {Added}",
+                            lastId, fetchedCount, addedCount);
+                        return results.Count - initialResultsCount;
+                    }
+
+                    // Skip if already added (from another filter)
+                    if (existingIds.Contains(msgBase.id)) continue;
+
+                    if (msgBase.media is MessageMediaDocument mediaDoc &&
+                        mediaDoc.document is TL.Document doc)
+                    {
+                        string filename = doc.Filename;
+                        // If no filename, create one
+                        if (string.IsNullOrEmpty(filename))
+                        {
+                            filename = $"video_{doc.id}.mp4";
+                        }
+
+                        results.Add(new TelegramChatDocuments
+                        {
+                            id = msgBase.id,
+                            documentType = DocumentType.Document,
+                            name = filename,
+                            fileSize = doc.size,
+                            extension = Path.GetExtension(filename),
+                            creationDate = msgBase.date,
+                            modifiedDate = msgBase.edit_date < msgBase.date ? msgBase.date : msgBase.edit_date
+                        });
+                        existingIds.Add(msgBase.id);
+                        addedCount++;
+                        batchAdded++;
+                    }
+                }
+
+                double progress = totalCount > 0 ? (double)fetchedCount / totalCount * 100 : 0;
+                _logger.LogInformation("   🎬 Batch {Batch}: Fetched {Fetched}/{Total} ({Progress:F1}%) - Added {BatchAdded} video (Total added: {Added})",
+                    batchNumber, fetchedCount, totalCount, progress, batchAdded, addedCount);
+
+                offset_id = searchResult.Messages[^1].ID;
+
+                // Small delay to avoid rate limiting
+                await Task.Delay(100);
+            }
+
+            return results.Count - initialResultsCount;
+        }
+
+        private async Task<int> SearchPhotos(InputPeer peer, int lastId, List<TelegramChatDocuments> results)
+        {
+            int totalCount = 0;
+            int fetchedCount = 0;
+            int addedCount = 0;
+            int batchNumber = 0;
+            int initialResultsCount = results.Count;
+            HashSet<int> existingIds = results.Select(r => r.id).ToHashSet();
+
+            for (int offset_id = 0; ;)
+            {
+                batchNumber++;
+                var searchResult = await client.Messages_Search<InputMessagesFilterPhotos>(
+                    peer: peer,
+                    q: "",
+                    offset_id: offset_id,
+                    limit: 100);
+
+                if (searchResult.Messages.Length == 0) break;
+
+                // Get total count from first batch
+                if (totalCount == 0)
+                {
+                    totalCount = searchResult.Count;
+                    _logger.LogInformation("   📊 Total photos in channel: {Total}", totalCount);
+                }
+
+                int batchAdded = 0;
+                foreach (var msgBase in searchResult.Messages.OfType<Message>())
+                {
+                    fetchedCount++;
+
+                    // Skip messages we already have (incremental update)
+                    if (lastId > 0 && msgBase.id <= lastId)
+                    {
+                        _logger.LogInformation("   ⏭️ Reached lastId ({LastId}), stopping. Fetched: {Fetched}, Added: {Added}",
+                            lastId, fetchedCount, addedCount);
+                        return results.Count - initialResultsCount;
+                    }
+
+                    // Skip if already added
+                    if (existingIds.Contains(msgBase.id)) continue;
+
+                    if (msgBase.media is MessageMediaPhoto mediaPhoto &&
+                        mediaPhoto.photo is Photo photo)
+                    {
+                        results.Add(new TelegramChatDocuments
+                        {
+                            id = msgBase.id,
+                            documentType = DocumentType.Photo,
+                            name = $"{photo.id}.jpg",
+                            fileSize = photo.LargestPhotoSize?.FileSize ?? 0,
+                            extension = ".jpg",
+                            creationDate = msgBase.date,
+                            modifiedDate = msgBase.edit_date < msgBase.date ? msgBase.date : msgBase.edit_date
+                        });
+                        existingIds.Add(msgBase.id);
+                        addedCount++;
+                        batchAdded++;
+                    }
+                }
+
+                double progress = totalCount > 0 ? (double)fetchedCount / totalCount * 100 : 0;
+                _logger.LogInformation("   📷 Batch {Batch}: Fetched {Fetched}/{Total} ({Progress:F1}%) - Added {BatchAdded} photos (Total added: {Added})",
+                    batchNumber, fetchedCount, totalCount, progress, batchAdded, addedCount);
+
+                offset_id = searchResult.Messages[^1].ID;
+
+                // Small delay to avoid rate limiting
+                await Task.Delay(100);
+            }
+
+            return results.Count - initialResultsCount;
+        }
 
         public async Task<TL.Channel?> CreateChannel(string title, string about)
         {

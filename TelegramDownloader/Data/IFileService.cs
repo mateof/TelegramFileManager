@@ -41,7 +41,7 @@ namespace TelegramDownloader.Data
         Task UploadFile(string dbName, string currentPath, UploadFiles file);
         Task UploadFileFromServer(string dbName, string currentPath, List<FileManagerDirectoryContent> files, InfoDownloadTaksModel dm = null);
         Task AddUploadFileFromServer(string dbName, string currentPath, List<FileManagerDirectoryContent> files, InfoDownloadTaksModel idt = null);
-        Task refreshChannelFIles(string channelId, bool force = false);
+        Task refreshChannelFIles(string channelId, bool force = false, RefreshChannelOptions? refreshOptions = null);
         bool isChannelRefreshing(string channelId);
         Task<int> PreloadFilesToTemp(string channelId, List<FileManagerDirectoryContent> items);
         Task DownloadPlaylistToLocal(PlaylistModel playlist, string destinationFolder);
