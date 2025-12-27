@@ -151,6 +151,13 @@ jobs:
       - name: '📱 Install Android workload'
         run: dotnet workload install android maui-android --skip-sign-check
 
+      - name: '🔧 Setup Android SDK tools'
+        run: |
+          # Add Android SDK build-tools to PATH for apksigner
+          echo "$ANDROID_HOME/build-tools/34.0.0" >> $GITHUB_PATH
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
+          ls -la $ANDROID_HOME/build-tools/ || echo "No build-tools found"
+
       - name: '📦 Extract version'
         id: version
         run: |
@@ -235,15 +242,41 @@ jobs:
           TAG=${{ steps.version.outputs.tag }}
           mkdir -p releases
 
-          # Find the APK (signed or unsigned)
-          APK_PATH=$(find TFMAudioApp/bin/Release -name "*.apk" | head -1)
+          echo "🔍 Searching for APK files..."
+          find . -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
+
+          # Find the signed APK (prefer -Signed.apk)
+          APK_PATH=$(find . -name "*-Signed.apk" -type f | head -1)
+
+          # If no signed APK, look for any APK
+          if [ -z "$APK_PATH" ]; then
+            APK_PATH=$(find . -name "*.apk" -type f | head -1)
+          fi
 
           if [ -n "$APK_PATH" ]; then
+            echo "📦 Found APK: $APK_PATH"
+            echo "📊 APK size: $(ls -lh "$APK_PATH" | awk '{print $5}')"
+
+            # Verify APK is a valid zip file (APKs are zip archives)
+            if unzip -t "$APK_PATH" > /dev/null 2>&1; then
+              echo "✅ APK is a valid archive"
+            else
+              echo "⚠️ APK may be corrupted (not a valid zip)"
+            fi
+
+            # Check if APK is signed
+            if command -v apksigner &> /dev/null; then
+              apksigner verify "$APK_PATH" && echo "✅ APK signature valid" || echo "⚠️ APK signature verification failed"
+            elif command -v jarsigner &> /dev/null; then
+              jarsigner -verify "$APK_PATH" && echo "✅ APK signature valid" || echo "⚠️ APK signature verification failed"
+            fi
+
             cp "$APK_PATH" "releases/TFMAudioApp-${TAG}.apk"
             echo "✅ APK prepared: releases/TFMAudioApp-${TAG}.apk"
             ls -la releases/
           else
             echo "❌ No APK found!"
+            find . -type f -name "*.a*" | head -20
             exit 1
           fi
 
@@ -315,15 +348,15 @@ jobs:
             -o bin/windows-app
 
       - name: '🔐 Sign Windows App (if certificate available)'
-        continue-on-error: true
         shell: pwsh
         env:
           WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
           WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
         run: |
-          # Check if certificate is configured
-          if ([string]::IsNullOrEmpty($env:WINDOWS_CERT_BASE64)) {
-            Write-Host "⚠️ No Windows certificate configured, skipping signing"
+          # Check if certificate AND password are configured
+          if ([string]::IsNullOrEmpty($env:WINDOWS_CERT_BASE64) -or [string]::IsNullOrEmpty($env:WINDOWS_CERT_PASSWORD)) {
+            Write-Host "⚠️ Windows certificate or password not configured, skipping signing"
+            Write-Host "   To enable signing, configure WINDOWS_CERT_BASE64 and WINDOWS_CERT_PASSWORD secrets"
             exit 0
           }
 
@@ -337,20 +370,35 @@ jobs:
                       Where-Object { $_.FullName -match "x64" } |
                       Select-Object -First 1 -ExpandProperty FullName
 
-          if ($signTool) {
-            # Sign all EXE and DLL files
-            Get-ChildItem -Path "bin\windows-app" -Include "*.exe","*.dll" -Recurse | ForEach-Object {
-              & $signTool sign /f $certPath /p $env:WINDOWS_CERT_PASSWORD /t http://timestamp.digicert.com /fd SHA256 $_.FullName
-            }
-            Write-Host "✅ Windows app signed successfully"
-          } else {
+          if (-not $signTool) {
             Write-Host "⚠️ SignTool not found, skipping signing"
+            exit 0
+          }
+
+          # Test signing with one file first to validate password
+          $testFile = Get-ChildItem -Path "bin\windows-app" -Filter "*.exe" -Recurse | Select-Object -First 1
+          if ($testFile) {
+            Write-Host "🔐 Testing certificate password..."
+            $result = & $signTool sign /f $certPath /p $env:WINDOWS_CERT_PASSWORD /fd SHA256 $testFile.FullName 2>&1
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "⚠️ Certificate password appears to be incorrect, skipping signing"
+              Write-Host "   Please verify WINDOWS_CERT_PASSWORD secret is correct"
+              Remove-Item $certPath -Force -ErrorAction SilentlyContinue
+              exit 0
+            }
+            Write-Host "✅ Certificate validated, signing remaining files..."
+
+            # Sign remaining EXE and DLL files
+            Get-ChildItem -Path "bin\windows-app" -Include "*.exe","*.dll" -Recurse |
+              Where-Object { $_.FullName -ne $testFile.FullName } |
+              ForEach-Object {
+                & $signTool sign /f $certPath /p $env:WINDOWS_CERT_PASSWORD /t http://timestamp.digicert.com /fd SHA256 $_.FullName | Out-Null
+              }
+            Write-Host "✅ Windows app signed successfully"
           }
 
           # Clean up certificate
-          if (Test-Path $certPath) {
-            Remove-Item $certPath -Force
-          }
+          Remove-Item $certPath -Force -ErrorAction SilentlyContinue
 
       - name: '📦 Create Windows ZIP'
         shell: bash
