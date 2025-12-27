@@ -177,49 +177,58 @@ jobs:
         id: android-signing
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-        run: |
-          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
-            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > tfmaudio.keystore
-            echo "ANDROID_KEYSTORE_PATH=$(pwd)/tfmaudio.keystore" >> $GITHUB_ENV
-            echo "signing_available=true" >> $GITHUB_OUTPUT
-            echo "✅ Keystore configured for signing"
-          else
-            echo "signing_available=false" >> $GITHUB_OUTPUT
-            echo "⚠️ No keystore configured, APK will be unsigned"
-          fi
-
-      - name: '🔨 Build Android APK'
-        env:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ] && [ -n "$ANDROID_KEY_ALIAS" ]; then
+            # Use provided keystore from secrets
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > tfmaudio.keystore
+            echo "ANDROID_KEYSTORE_PATH=$(pwd)/tfmaudio.keystore" >> $GITHUB_ENV
+            echo "ANDROID_KEY_ALIAS=$ANDROID_KEY_ALIAS" >> $GITHUB_ENV
+            echo "ANDROID_KEY_PASSWORD=$ANDROID_KEY_PASSWORD" >> $GITHUB_ENV
+            echo "ANDROID_KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD" >> $GITHUB_ENV
+            echo "signing_type=release" >> $GITHUB_OUTPUT
+            echo "✅ Release keystore configured"
+          else
+            # Generate a temporary debug keystore (APKs must be signed to install)
+            echo "⚠️ No release keystore configured, generating debug keystore..."
+            keytool -genkeypair \
+              -v \
+              -keystore debug.keystore \
+              -alias debugkey \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass android \
+              -keypass android \
+              -dname "CN=Debug, OU=Debug, O=Debug, L=Debug, ST=Debug, C=US"
+            echo "ANDROID_KEYSTORE_PATH=$(pwd)/debug.keystore" >> $GITHUB_ENV
+            echo "ANDROID_KEY_ALIAS=debugkey" >> $GITHUB_ENV
+            echo "ANDROID_KEY_PASSWORD=android" >> $GITHUB_ENV
+            echo "ANDROID_KEYSTORE_PASSWORD=android" >> $GITHUB_ENV
+            echo "signing_type=debug" >> $GITHUB_OUTPUT
+            echo "✅ Debug keystore generated"
+          fi
+
+      - name: '🔨 Build Android APK'
+        run: |
           VERSION=${{ steps.version.outputs.version }}
           VERSION_CODE=${{ steps.version.outputs.version_code }}
+          SIGNING_TYPE=${{ steps.android-signing.outputs.signing_type }}
 
-          if [ "${{ steps.android-signing.outputs.signing_available }}" == "true" ]; then
-            echo "🔐 Building SIGNED APK..."
-            dotnet publish TFMAudioApp/TFMAudioApp.csproj \
-              -c Release \
-              -f net9.0-android \
-              -p:BuildSingleTarget=android \
-              -p:ApplicationDisplayVersion=$VERSION \
-              -p:ApplicationVersion=$VERSION_CODE \
-              -p:AndroidKeyStore=true \
-              -p:AndroidSigningKeyStore=$ANDROID_KEYSTORE_PATH \
-              -p:AndroidSigningKeyAlias=$ANDROID_KEY_ALIAS \
-              -p:AndroidSigningKeyPass=$ANDROID_KEY_PASSWORD \
-              -p:AndroidSigningStorePass=$ANDROID_KEYSTORE_PASSWORD
-          else
-            echo "⚠️ Building UNSIGNED APK (testing only)..."
-            dotnet publish TFMAudioApp/TFMAudioApp.csproj \
-              -c Release \
-              -f net9.0-android \
-              -p:BuildSingleTarget=android \
-              -p:ApplicationDisplayVersion=$VERSION \
-              -p:ApplicationVersion=$VERSION_CODE \
-              -p:AndroidKeyStore=false
-          fi
+          echo "🔐 Building APK with $SIGNING_TYPE signing..."
+          dotnet publish TFMAudioApp/TFMAudioApp.csproj \
+            -c Release \
+            -f net9.0-android \
+            -p:BuildSingleTarget=android \
+            -p:ApplicationDisplayVersion=$VERSION \
+            -p:ApplicationVersion=$VERSION_CODE \
+            -p:AndroidKeyStore=true \
+            -p:AndroidSigningKeyStore=$ANDROID_KEYSTORE_PATH \
+            -p:AndroidSigningKeyAlias=$ANDROID_KEY_ALIAS \
+            -p:AndroidSigningKeyPass=$ANDROID_KEY_PASSWORD \
+            -p:AndroidSigningStorePass=$ANDROID_KEYSTORE_PASSWORD
 
       - name: '📦 Prepare APK for release'
         run: |
