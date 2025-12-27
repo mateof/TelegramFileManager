@@ -209,12 +209,17 @@ jobs:
             -o bin/windows-app
 
       - name: '🔐 Sign Windows App (if certificate available)'
-        if: ${{ secrets.WINDOWS_CERT_BASE64 != '' }}
         shell: pwsh
         env:
           WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
           WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
         run: |
+          # Check if certificate is configured
+          if ([string]::IsNullOrEmpty($env:WINDOWS_CERT_BASE64)) {
+            Write-Host "⚠️ No Windows certificate configured, skipping signing"
+            exit 0
+          }
+
           # Decode certificate
           $certBytes = [Convert]::FromBase64String($env:WINDOWS_CERT_BASE64)
           $certPath = "$(Get-Location)\code_signing.pfx"
@@ -236,7 +241,9 @@ jobs:
           }
 
           # Clean up certificate
-          Remove-Item $certPath -Force
+          if (Test-Path $certPath) {
+            Remove-Item $certPath -Force
+          }
 
       - name: '📦 Create Windows ZIP'
         shell: bash
