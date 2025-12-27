@@ -173,16 +173,22 @@ jobs:
           echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
-      - name: '🔐 Decode Keystore'
-        if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' }}
+      - name: '🔐 Setup Android Signing'
+        id: android-signing
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: |
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > tfmaudio.keystore
-          echo "ANDROID_KEYSTORE_PATH=$(pwd)/tfmaudio.keystore" >> $GITHUB_ENV
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > tfmaudio.keystore
+            echo "ANDROID_KEYSTORE_PATH=$(pwd)/tfmaudio.keystore" >> $GITHUB_ENV
+            echo "signing_available=true" >> $GITHUB_OUTPUT
+            echo "✅ Keystore configured for signing"
+          else
+            echo "signing_available=false" >> $GITHUB_OUTPUT
+            echo "⚠️ No keystore configured, APK will be unsigned"
+          fi
 
-      - name: '🔨 Build Android APK (Signed)'
-        if: ${{ env.ANDROID_KEYSTORE_PATH != '' }}
+      - name: '🔨 Build Android APK'
         env:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
@@ -191,31 +197,29 @@ jobs:
           VERSION=${{ steps.version.outputs.version }}
           VERSION_CODE=${{ steps.version.outputs.version_code }}
 
-          dotnet publish TFMAudioApp/TFMAudioApp.csproj \
-            -c Release \
-            -f net9.0-android \
-            -p:BuildSingleTarget=android \
-            -p:ApplicationDisplayVersion=$VERSION \
-            -p:ApplicationVersion=$VERSION_CODE \
-            -p:AndroidKeyStore=true \
-            -p:AndroidSigningKeyStore=$ANDROID_KEYSTORE_PATH \
-            -p:AndroidSigningKeyAlias=$ANDROID_KEY_ALIAS \
-            -p:AndroidSigningKeyPass=$ANDROID_KEY_PASSWORD \
-            -p:AndroidSigningStorePass=$ANDROID_KEYSTORE_PASSWORD
-
-      - name: '🔨 Build Android APK (Unsigned - for testing)'
-        if: ${{ env.ANDROID_KEYSTORE_PATH == '' }}
-        run: |
-          VERSION=${{ steps.version.outputs.version }}
-          VERSION_CODE=${{ steps.version.outputs.version_code }}
-
-          echo "⚠️ Building unsigned APK (no keystore configured)"
-          dotnet publish TFMAudioApp/TFMAudioApp.csproj \
-            -c Release \
-            -f net9.0-android \
-            -p:BuildSingleTarget=android \
-            -p:ApplicationDisplayVersion=$VERSION \
-            -p:ApplicationVersion=$VERSION_CODE
+          if [ "${{ steps.android-signing.outputs.signing_available }}" == "true" ]; then
+            echo "🔐 Building SIGNED APK..."
+            dotnet publish TFMAudioApp/TFMAudioApp.csproj \
+              -c Release \
+              -f net9.0-android \
+              -p:BuildSingleTarget=android \
+              -p:ApplicationDisplayVersion=$VERSION \
+              -p:ApplicationVersion=$VERSION_CODE \
+              -p:AndroidKeyStore=true \
+              -p:AndroidSigningKeyStore=$ANDROID_KEYSTORE_PATH \
+              -p:AndroidSigningKeyAlias=$ANDROID_KEY_ALIAS \
+              -p:AndroidSigningKeyPass=$ANDROID_KEY_PASSWORD \
+              -p:AndroidSigningStorePass=$ANDROID_KEYSTORE_PASSWORD
+          else
+            echo "⚠️ Building UNSIGNED APK (testing only)..."
+            dotnet publish TFMAudioApp/TFMAudioApp.csproj \
+              -c Release \
+              -f net9.0-android \
+              -p:BuildSingleTarget=android \
+              -p:ApplicationDisplayVersion=$VERSION \
+              -p:ApplicationVersion=$VERSION_CODE \
+              -p:AndroidKeyStore=false
+          fi
 
       - name: '📦 Prepare APK for release'
         run: |
