@@ -87,15 +87,19 @@ public class AudioPlayerService : IAudioPlayerService, IDisposable
                 "--verbose=2",              // Enable verbose logging for debugging
                 "--no-lua",                 // Disable Lua scripting
                 "--no-snapshot-preview",    // No snapshot previews
-                "--network-caching=30000",  // 30 seconds of network buffer (server may need to download from Telegram)
-                "--live-caching=30000",     // 30 seconds for live streams
+                "--network-caching=60000",  // 60 seconds of network buffer (server may need to download from Telegram)
+                "--live-caching=60000",     // 60 seconds for live streams
                 "--file-caching=10000",     // 10 seconds file caching
                 "--http-reconnect",         // Auto-reconnect on connection drops
                 "--http-continuous",        // Enable continuous stream reading
                 "--sout-mux-caching=5000",  // Output muxer caching
-                "--tcp-caching=30000",      // TCP caching for slow connections
+                "--tcp-caching=60000",      // TCP caching for slow connections (increased for Telegram delays)
                 "--clock-jitter=0",         // Reduce jitter sensitivity
-                "--clock-synchro=0"         // Disable strict clock sync
+                "--clock-synchro=0",        // Disable strict clock sync
+                "--http-forward-cookies",   // Forward cookies (for session handling)
+                "--adaptive-logic=highest", // Use highest quality available
+                "--prefetch-buffer-size=1048576", // 1MB prefetch buffer
+                "--prefetch-read-size=524288"     // 512KB prefetch reads
             );
 
             // Log LibVLC messages for debugging
