@@ -304,31 +304,41 @@ jobs:
       - name: '📄 Checkout'
         uses: actions/checkout@v4
 
-      - name: '🔧 Setup .NET'
+      - name: '🔧 Setup .NET 9.0.100'
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.200'
+          dotnet-version: '9.0.100'
 
       - name: '🔍 Verify SDK version'
         run: |
           dotnet --version
           dotnet --list-sdks
 
-      - name: '🧹 Clean existing workloads and packs'
+      - name: '🧹 Clean ALL .NET data'
         run: |
-          # Remove any pre-installed workloads and packs to avoid version conflicts
-          dotnet workload clean --all || true
-          rm -rf ~/.dotnet/packs/Microsoft.MacCatalyst.* || true
-          rm -rf ~/.dotnet/packs/Microsoft.iOS.* || true
-          rm -rf ~/.dotnet/metadata/workloads || true
+          # Nuclear option - remove all workloads, packs, and manifests
+          rm -rf ~/.dotnet/packs || true
+          rm -rf ~/.dotnet/metadata || true
+          rm -rf ~/.dotnet/workloads || true
+          rm -rf ~/.nuget/packages/microsoft.maui* || true
+          rm -rf ~/.nuget/packages/microsoft.maccatalyst* || true
+          rm -rf ~/.nuget/packages/microsoft.ios* || true
 
-      - name: '🍎 Install MAUI workload'
+      - name: '🍎 Install MAUI workload with rollback'
         run: |
-          # Install workload using only stable sources
-          dotnet workload install maui-maccatalyst --skip-sign-check --source https://api.nuget.org/v3/index.json
+          # Create a rollback file to pin workload versions compatible with .NET 9.0.100
+          cat > workload-rollback.json << 'EOF'
+          {
+            "microsoft.net.sdk.maui": "9.0.0/9.0.100"
+          }
+          EOF
+
+          # Try installing with the rollback file
+          dotnet workload install maui-maccatalyst --skip-sign-check --from-rollback-file workload-rollback.json || \
+          dotnet workload install maui-maccatalyst --skip-sign-check
+
           dotnet workload list
-          # Show what SDK packs were installed
-          ls -la ~/.dotnet/packs/ | grep -i catalyst || true
+          ls -la ~/.dotnet/packs/ | grep -i catalyst || echo "No catalyst packs found"
 
       - name: '📦 Extract version'
         id: version
