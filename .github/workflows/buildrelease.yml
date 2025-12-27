@@ -9,6 +9,8 @@ permissions:
 
 env:
   DOTNET_VERSION: '9.0.x'
+  DOTNET_MULTILEVEL_LOOKUP: 0
+  DOTNET_NOLOGO: true
 
 jobs:
   # ==========================================
@@ -84,6 +86,11 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: '🔍 Verify SDK version'
+        run: |
+          dotnet --version
+          dotnet --list-sdks
 
       - name: '📱 Install Android workload'
         run: dotnet workload install android maui-android
@@ -190,6 +197,11 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: '🔍 Verify SDK version'
+        run: |
+          dotnet --version
+          dotnet --list-sdks
+
       - name: '🪟 Install MAUI workload'
         run: dotnet workload install maui-windows
 
@@ -289,6 +301,11 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: '🔍 Verify SDK version'
+        run: |
+          dotnet --version
+          dotnet --list-sdks
 
       - name: '🍎 Install MAUI workload'
         run: dotnet workload install maui
