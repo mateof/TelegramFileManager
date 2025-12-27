@@ -124,6 +124,7 @@ jobs:
           dotnet publish TFMAudioApp/TFMAudioApp.csproj \
             -c Release \
             -f net9.0-android \
+            -p:TargetFrameworks=net9.0-android \
             -p:ApplicationDisplayVersion=$VERSION \
             -p:ApplicationVersion=$VERSION_CODE \
             -p:AndroidKeyStore=true \
@@ -142,6 +143,7 @@ jobs:
           dotnet publish TFMAudioApp/TFMAudioApp.csproj \
             -c Release \
             -f net9.0-android \
+            -p:TargetFrameworks=net9.0-android \
             -p:ApplicationDisplayVersion=$VERSION \
             -p:ApplicationVersion=$VERSION_CODE
 
@@ -203,6 +205,7 @@ jobs:
           dotnet publish TFMAudioApp/TFMAudioApp.csproj `
             -c Release `
             -f net9.0-windows10.0.19041.0 `
+            -p:TargetFrameworks=net9.0-windows10.0.19041.0 `
             -p:ApplicationDisplayVersion=$VERSION `
             -p:WindowsPackageType=None `
             -p:PublishSingleFile=false `
@@ -298,6 +301,7 @@ jobs:
             -c Release \
             -f net9.0-maccatalyst \
             -r maccatalyst-x64 \
+            -p:TargetFrameworks=net9.0-maccatalyst \
             -p:ApplicationDisplayVersion=$VERSION \
             -p:CreatePackage=true \
             -o bin/macos-x64
@@ -310,6 +314,7 @@ jobs:
             -c Release \
             -f net9.0-maccatalyst \
             -r maccatalyst-arm64 \
+            -p:TargetFrameworks=net9.0-maccatalyst \
             -p:ApplicationDisplayVersion=$VERSION \
             -p:CreatePackage=true \
             -o bin/macos-arm64
