@@ -190,7 +190,29 @@ jobs:
         run: |
           if [ -n "$ANDROID_KEYSTORE_BASE64" ] && [ -n "$ANDROID_KEY_ALIAS" ]; then
             # Use provided keystore from secrets
+            echo "📦 Decoding keystore from base64..."
             echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > tfmaudio.keystore
+
+            # Verify keystore was decoded correctly
+            KEYSTORE_SIZE=$(stat -c%s tfmaudio.keystore 2>/dev/null || stat -f%z tfmaudio.keystore 2>/dev/null)
+            echo "📊 Keystore size: $KEYSTORE_SIZE bytes"
+
+            if [ "$KEYSTORE_SIZE" -lt 100 ]; then
+              echo "❌ Keystore appears corrupted (too small). Check ANDROID_KEYSTORE_BASE64 secret."
+              exit 1
+            fi
+
+            # Verify keystore credentials work
+            echo "🔍 Verifying keystore credentials..."
+            if keytool -list -keystore tfmaudio.keystore -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" > /dev/null 2>&1; then
+              echo "✅ Keystore credentials verified successfully"
+            else
+              echo "❌ Keystore verification failed. Check passwords and alias."
+              echo "   Trying to list keystore contents for debugging..."
+              keytool -list -keystore tfmaudio.keystore -storepass "$ANDROID_KEYSTORE_PASSWORD" 2>&1 || true
+              exit 1
+            fi
+
             echo "ANDROID_KEYSTORE_PATH=$(pwd)/tfmaudio.keystore" >> $GITHUB_ENV
             echo "ANDROID_KEY_ALIAS=$ANDROID_KEY_ALIAS" >> $GITHUB_ENV
             echo "ANDROID_KEY_PASSWORD=$ANDROID_KEY_PASSWORD" >> $GITHUB_ENV
