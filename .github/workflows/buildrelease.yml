@@ -412,8 +412,17 @@ jobs:
   upload-release:
     name: Upload to Release
     needs: [build-server, build-android, build-windows, build-macos]
+    if: always() && needs.build-server.result == 'success'
     runs-on: ubuntu-latest
     steps:
+      - name: '📊 Build Status Summary'
+        run: |
+          echo "Build Results:"
+          echo "  Server:  ${{ needs.build-server.result }}"
+          echo "  Android: ${{ needs.build-android.result }}"
+          echo "  Windows: ${{ needs.build-windows.result }}"
+          echo "  macOS:   ${{ needs.build-macos.result }}"
+
       - name: '📥 Download all artifacts'
         uses: actions/download-artifact@v4
         with:
@@ -422,7 +431,7 @@ jobs:
       - name: '📋 List artifacts'
         run: |
           echo "Downloaded artifacts:"
-          find artifacts -type f -name "*.*" | head -50
+          find artifacts -type f -name "*.*" 2>/dev/null | head -50 || echo "No artifacts found"
 
       - name: '🚀 Upload to GitHub Release'
         env:
