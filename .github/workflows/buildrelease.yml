@@ -1,4 +1,4 @@
-name: Publish utility on release
+name: Build and Release
 
 on:
   release:
@@ -7,76 +7,362 @@ on:
 permissions:
   contents: write
 
+env:
+  DOTNET_VERSION: '9.0.x'
+
 jobs:
-  build:
-    name: Build binaries
+  # ==========================================
+  # Build Server (TelegramDownloader)
+  # ==========================================
+  build-server:
+    name: Build Server
     runs-on: ubuntu-latest
     steps:
-
       - name: '📄 Checkout'
         uses: actions/checkout@v4
 
       - name: '🔧 Setup .NET'
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: '📦 Extract version'
         id: version
         run: |
-          TAG=${{github.event.release.tag_name}}
-          VERSION=${TAG:1}
+          TAG=${{ github.event.release.tag_name }}
+          VERSION=${TAG#v}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Building version: $VERSION"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
 
-      - name: '🔨 Build all platforms'
+      - name: '🔨 Build all server platforms'
         run: |
           VERSION=${{ steps.version.outputs.version }}
-          TAG=${{github.event.release.tag_name}}
 
-          echo "Building win-x64..."
-          dotnet publish TelegramDownloader/TelegramDownloader.csproj -r win-x64 -c Release -o bin/win-x64 -p:PublishSingleFile=true,Version=$VERSION --self-contained
+          platforms=("win-x64" "win-x86" "win-arm64" "linux-x64" "linux-arm" "linux-arm64" "osx-x64" "osx-arm64")
 
-          echo "Building win-x86..."
-          dotnet publish TelegramDownloader/TelegramDownloader.csproj -r win-x86 -c Release -o bin/win-x86 -p:PublishSingleFile=true,Version=$VERSION --self-contained
+          for platform in "${platforms[@]}"; do
+            echo "Building $platform..."
+            dotnet publish TelegramDownloader/TelegramDownloader.csproj \
+              -r $platform \
+              -c Release \
+              -o bin/server-$platform \
+              -p:PublishSingleFile=true \
+              -p:Version=$VERSION \
+              --self-contained
+          done
 
-          echo "Building win-arm64..."
-          dotnet publish TelegramDownloader/TelegramDownloader.csproj -r win-arm64 -c Release -o bin/win-arm64 -p:PublishSingleFile=true,Version=$VERSION --self-contained
-
-          echo "Building linux-x64..."
-          dotnet publish TelegramDownloader/TelegramDownloader.csproj -r linux-x64 -c Release -o bin/linux-x64 -p:PublishSingleFile=true,Version=$VERSION --self-contained
-
-          echo "Building linux-arm..."
-          dotnet publish TelegramDownloader/TelegramDownloader.csproj -r linux-arm -c Release -o bin/linux-arm -p:PublishSingleFile=true,Version=$VERSION --self-contained
-
-          echo "Building osx-x64..."
-          dotnet publish TelegramDownloader/TelegramDownloader.csproj -r osx-x64 -c Release -o bin/osx-x64 -p:PublishSingleFile=true,Version=$VERSION --self-contained
-
-          echo "Building osx-arm64..."
-          dotnet publish TelegramDownloader/TelegramDownloader.csproj -r osx-arm64 -c Release -o bin/osx-arm64 -p:PublishSingleFile=true,Version=$VERSION --self-contained
-
-      - name: '📦 Create ZIP archives'
+      - name: '📦 Create server ZIP archives'
         run: |
-          TAG=${{github.event.release.tag_name}}
+          TAG=${{ steps.version.outputs.tag }}
           mkdir -p releases
 
-          echo "Creating ZIP archives..."
-          zip -r releases/TelegramFileManager-${TAG}-win-x64.zip bin/win-x64
-          zip -r releases/TelegramFileManager-${TAG}-win-x86.zip bin/win-x86
-          zip -r releases/TelegramFileManager-${TAG}-win-arm64.zip bin/win-arm64
-          zip -r releases/TelegramFileManager-${TAG}-linux-x64.zip bin/linux-x64
-          zip -r releases/TelegramFileManager-${TAG}-linux-arm.zip bin/linux-arm
-          zip -r releases/TelegramFileManager-${TAG}-osx-x64.zip bin/osx-x64
-          zip -r releases/TelegramFileManager-${TAG}-osx-arm64.zip bin/osx-arm64
+          for dir in bin/server-*; do
+            platform=$(basename $dir | sed 's/server-//')
+            zip -r "releases/TelegramFileManager-Server-${TAG}-${platform}.zip" "$dir"
+          done
 
-          echo "Created archives:"
           ls -la releases/
 
-      - name: '🚀 Upload all release assets'
+      - name: '📤 Upload server artifacts'
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-binaries
+          path: releases/*.zip
+          retention-days: 1
+
+  # ==========================================
+  # Build Android APK (Signed)
+  # ==========================================
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: '📄 Checkout'
+        uses: actions/checkout@v4
+
+      - name: '🔧 Setup .NET'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: '📱 Install Android workload'
+        run: dotnet workload install android maui-android
+
+      - name: '📦 Extract version'
+        id: version
+        run: |
+          TAG=${{ github.event.release.tag_name }}
+          VERSION=${TAG#v}
+          # Extract version number for Android (must be integer)
+          VERSION_CODE=$(echo $VERSION | sed 's/\.//g' | sed 's/[^0-9]//g')
+          # If empty or starts with 0, use date-based version
+          if [ -z "$VERSION_CODE" ] || [ "${VERSION_CODE:0:1}" = "0" ]; then
+            VERSION_CODE=$(date +%Y%m%d)
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: '🔐 Decode Keystore'
+        if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' }}
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > tfmaudio.keystore
+          echo "ANDROID_KEYSTORE_PATH=$(pwd)/tfmaudio.keystore" >> $GITHUB_ENV
+
+      - name: '🔨 Build Android APK (Signed)'
+        if: ${{ env.ANDROID_KEYSTORE_PATH != '' }}
+        env:
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          VERSION_CODE=${{ steps.version.outputs.version_code }}
+
+          dotnet publish TFMAudioApp/TFMAudioApp.csproj \
+            -c Release \
+            -f net9.0-android \
+            -p:ApplicationDisplayVersion=$VERSION \
+            -p:ApplicationVersion=$VERSION_CODE \
+            -p:AndroidKeyStore=true \
+            -p:AndroidSigningKeyStore=$ANDROID_KEYSTORE_PATH \
+            -p:AndroidSigningKeyAlias=$ANDROID_KEY_ALIAS \
+            -p:AndroidSigningKeyPass=$ANDROID_KEY_PASSWORD \
+            -p:AndroidSigningStorePass=$ANDROID_KEYSTORE_PASSWORD
+
+      - name: '🔨 Build Android APK (Unsigned - for testing)'
+        if: ${{ env.ANDROID_KEYSTORE_PATH == '' }}
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+          VERSION_CODE=${{ steps.version.outputs.version_code }}
+
+          echo "⚠️ Building unsigned APK (no keystore configured)"
+          dotnet publish TFMAudioApp/TFMAudioApp.csproj \
+            -c Release \
+            -f net9.0-android \
+            -p:ApplicationDisplayVersion=$VERSION \
+            -p:ApplicationVersion=$VERSION_CODE
+
+      - name: '📦 Prepare APK for release'
+        run: |
+          TAG=${{ steps.version.outputs.tag }}
+          mkdir -p releases
+
+          # Find the APK (signed or unsigned)
+          APK_PATH=$(find TFMAudioApp/bin/Release -name "*.apk" | head -1)
+
+          if [ -n "$APK_PATH" ]; then
+            cp "$APK_PATH" "releases/TFMAudioApp-${TAG}.apk"
+            echo "✅ APK prepared: releases/TFMAudioApp-${TAG}.apk"
+            ls -la releases/
+          else
+            echo "❌ No APK found!"
+            exit 1
+          fi
+
+      - name: '📤 Upload Android artifact'
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: releases/*.apk
+          retention-days: 1
+
+  # ==========================================
+  # Build Windows App
+  # ==========================================
+  build-windows:
+    name: Build Windows App
+    runs-on: windows-latest
+    steps:
+      - name: '📄 Checkout'
+        uses: actions/checkout@v4
+
+      - name: '🔧 Setup .NET'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: '🪟 Install MAUI workload'
+        run: dotnet workload install maui-windows
+
+      - name: '📦 Extract version'
+        id: version
+        shell: bash
+        run: |
+          TAG=${{ github.event.release.tag_name }}
+          VERSION=${TAG#v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: '🔨 Build Windows App'
+        run: |
+          $VERSION = "${{ steps.version.outputs.version }}"
+
+          dotnet publish TFMAudioApp/TFMAudioApp.csproj `
+            -c Release `
+            -f net9.0-windows10.0.19041.0 `
+            -p:ApplicationDisplayVersion=$VERSION `
+            -p:WindowsPackageType=None `
+            -p:PublishSingleFile=false `
+            -o bin/windows-app
+
+      - name: '🔐 Sign Windows App (if certificate available)'
+        if: ${{ secrets.WINDOWS_CERT_BASE64 != '' }}
+        shell: pwsh
+        env:
+          WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          # Decode certificate
+          $certBytes = [Convert]::FromBase64String($env:WINDOWS_CERT_BASE64)
+          $certPath = "$(Get-Location)\code_signing.pfx"
+          [IO.File]::WriteAllBytes($certPath, $certBytes)
+
+          # Find signtool
+          $signTool = Get-ChildItem -Path "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter "signtool.exe" |
+                      Where-Object { $_.FullName -match "x64" } |
+                      Select-Object -First 1 -ExpandProperty FullName
+
+          if ($signTool) {
+            # Sign all EXE and DLL files
+            Get-ChildItem -Path "bin\windows-app" -Include "*.exe","*.dll" -Recurse | ForEach-Object {
+              & $signTool sign /f $certPath /p $env:WINDOWS_CERT_PASSWORD /t http://timestamp.digicert.com /fd SHA256 $_.FullName
+            }
+            Write-Host "✅ Windows app signed successfully"
+          } else {
+            Write-Host "⚠️ SignTool not found, skipping signing"
+          }
+
+          # Clean up certificate
+          Remove-Item $certPath -Force
+
+      - name: '📦 Create Windows ZIP'
+        shell: bash
+        run: |
+          TAG=${{ steps.version.outputs.tag }}
+          mkdir -p releases
+
+          cd bin
+          7z a -tzip "../releases/TFMAudioApp-Windows-${TAG}.zip" windows-app/*
+          cd ..
+
+          ls -la releases/
+
+      - name: '📤 Upload Windows artifact'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-app
+          path: releases/*.zip
+          retention-days: 1
+
+  # ==========================================
+  # Build macOS App
+  # ==========================================
+  build-macos:
+    name: Build macOS App
+    runs-on: macos-latest
+    steps:
+      - name: '📄 Checkout'
+        uses: actions/checkout@v4
+
+      - name: '🔧 Setup .NET'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: '🍎 Install MAUI workload'
+        run: dotnet workload install maui
+
+      - name: '📦 Extract version'
+        id: version
+        run: |
+          TAG=${{ github.event.release.tag_name }}
+          VERSION=${TAG#v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+      - name: '🔨 Build macOS App (Intel x64)'
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+
+          dotnet publish TFMAudioApp/TFMAudioApp.csproj \
+            -c Release \
+            -f net9.0-maccatalyst \
+            -r maccatalyst-x64 \
+            -p:ApplicationDisplayVersion=$VERSION \
+            -p:CreatePackage=true \
+            -o bin/macos-x64
+
+      - name: '🔨 Build macOS App (Apple Silicon arm64)'
+        run: |
+          VERSION=${{ steps.version.outputs.version }}
+
+          dotnet publish TFMAudioApp/TFMAudioApp.csproj \
+            -c Release \
+            -f net9.0-maccatalyst \
+            -r maccatalyst-arm64 \
+            -p:ApplicationDisplayVersion=$VERSION \
+            -p:CreatePackage=true \
+            -o bin/macos-arm64
+
+      - name: '📦 Create macOS ZIPs'
+        run: |
+          TAG=${{ steps.version.outputs.tag }}
+          mkdir -p releases
+
+          # Package Intel (x64) version
+          APP_X64=$(find bin/macos-x64 -name "*.app" -type d | head -1)
+          if [ -n "$APP_X64" ]; then
+            cd "$(dirname "$APP_X64")"
+            zip -r "${GITHUB_WORKSPACE}/releases/TFMAudioApp-macOS-Intel-${TAG}.zip" "$(basename "$APP_X64")"
+            cd "${GITHUB_WORKSPACE}"
+            echo "✅ macOS Intel app packaged"
+          fi
+
+          # Package Apple Silicon (arm64) version
+          APP_ARM64=$(find bin/macos-arm64 -name "*.app" -type d | head -1)
+          if [ -n "$APP_ARM64" ]; then
+            cd "$(dirname "$APP_ARM64")"
+            zip -r "${GITHUB_WORKSPACE}/releases/TFMAudioApp-macOS-AppleSilicon-${TAG}.zip" "$(basename "$APP_ARM64")"
+            cd "${GITHUB_WORKSPACE}"
+            echo "✅ macOS Apple Silicon app packaged"
+          fi
+
+          ls -la releases/
+
+      - name: '📤 Upload macOS artifact'
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-app
+          path: releases/*
+          retention-days: 1
+
+  # ==========================================
+  # Upload all artifacts to Release
+  # ==========================================
+  upload-release:
+    name: Upload to Release
+    needs: [build-server, build-android, build-windows, build-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: '📥 Download all artifacts'
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: '📋 List artifacts'
+        run: |
+          echo "Downloaded artifacts:"
+          find artifacts -type f -name "*.*" | head -50
+
+      - name: '🚀 Upload to GitHub Release'
         env:
           GH_TOKEN: ${{ secrets.TOKENBuild }}
+          GH_REPO: ${{ github.repository }}
         run: |
-          TAG=${{github.event.release.tag_name}}
+          TAG=${{ github.event.release.tag_name }}
 
           # Function to upload with retry
           upload_with_retry() {
@@ -86,27 +372,26 @@ jobs:
             local delay=10
 
             while [ $attempt -le $max_attempts ]; do
-              echo "Uploading $file (attempt $attempt/$max_attempts)..."
+              echo "Uploading $(basename $file) (attempt $attempt/$max_attempts)..."
               if gh release upload "$TAG" "$file" --clobber 2>&1; then
-                echo "✅ Successfully uploaded $file"
+                echo "✅ Successfully uploaded $(basename $file)"
                 return 0
               else
                 echo "⚠️ Upload failed, waiting ${delay}s before retry..."
                 sleep $delay
-                delay=$((delay * 2))  # Exponential backoff
+                delay=$((delay * 2))
                 attempt=$((attempt + 1))
               fi
             done
 
-            echo "❌ Failed to upload $file after $max_attempts attempts"
+            echo "❌ Failed to upload $(basename $file) after $max_attempts attempts"
             return 1
           }
 
-          # Upload all files with delays between each
-          for file in releases/*.zip; do
+          # Upload all files (zip, apk, pkg)
+          find artifacts -type f \( -name "*.zip" -o -name "*.apk" -o -name "*.pkg" \) | while read file; do
             upload_with_retry "$file"
-            echo "Waiting 5s before next upload..."
-            sleep 5
+            sleep 3
           done
 
           echo "✅ All uploads completed!"

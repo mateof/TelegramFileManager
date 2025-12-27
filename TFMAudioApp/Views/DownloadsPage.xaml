@@ -1,0 +1,271 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:TFMAudioApp.ViewModels"
+             xmlns:interfaces="clr-namespace:TFMAudioApp.Services.Interfaces"
+             xmlns:controls="clr-namespace:TFMAudioApp.Controls"
+             xmlns:behaviors="clr-namespace:TFMAudioApp.Behaviors"
+             x:Class="TFMAudioApp.Views.DownloadsPage"
+             x:DataType="vm:DownloadsViewModel"
+             Title="{Binding Title}"
+             BackgroundColor="{StaticResource PageBackgroundColor}">
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+        <!-- Stats Header -->
+        <Frame Grid.Row="0"
+               BackgroundColor="{StaticResource CardBackgroundColor}"
+               BorderColor="Transparent"
+               CornerRadius="0"
+               Padding="20">
+            <Grid ColumnDefinitions="*,Auto">
+                <VerticalStackLayout Grid.Column="0" Spacing="5">
+                    <Label Text="Cached Audio"
+                           FontSize="18"
+                           FontAttributes="Bold"/>
+                    <Label TextColor="{StaticResource Gray400}">
+                        <Label.FormattedText>
+                            <FormattedString>
+                                <Span Text="{Binding CachedTrackCount}"/>
+                                <Span Text=" tracks • "/>
+                                <Span Text="{Binding CacheSize}"/>
+                            </FormattedString>
+                        </Label.FormattedText>
+                    </Label>
+                </VerticalStackLayout>
+                <Button Grid.Column="1"
+                        Text="Clear All"
+                        BackgroundColor="{StaticResource Error}"
+                        TextColor="White"
+                        FontSize="12"
+                        Padding="15,8"
+                        Command="{Binding ClearAllCacheCommand}"
+                        IsVisible="{Binding CachedTrackCount, Converter={StaticResource InverseBoolConverter}}"/>
+            </Grid>
+        </Frame>
+
+        <!-- Tab Headers -->
+        <Grid Grid.Row="1"
+              ColumnDefinitions="*,*"
+              BackgroundColor="{StaticResource CardBackgroundColor}"
+              Padding="0">
+            <Button Grid.Column="0"
+                    Text="Downloads"
+                    BackgroundColor="Transparent"
+                    TextColor="{Binding SelectedTabIndex, Converter={StaticResource InverseBoolConverter}, ConverterParameter='Primary|Gray400'}"
+                    FontAttributes="{Binding SelectedTabIndex, Converter={StaticResource InverseBoolConverter}, ConverterParameter='Bold|None'}"
+                    BorderWidth="0"
+                    CornerRadius="0"
+                    Command="{Binding LoadDownloadsCommand}"
+                    Clicked="OnDownloadsTabClicked"/>
+            <Button Grid.Column="1"
+                    Text="Cached"
+                    BackgroundColor="Transparent"
+                    TextColor="{Binding SelectedTabIndex, Converter={StaticResource InverseBoolConverter}, ConverterParameter='Gray400|Primary'}"
+                    BorderWidth="0"
+                    CornerRadius="0"
+                    Command="{Binding LoadCachedTracksCommand}"
+                    Clicked="OnCachedTabClicked"/>
+            <BoxView Grid.Column="0"
+                     HeightRequest="3"
+                     Color="{StaticResource Primary}"
+                     VerticalOptions="End"
+                     IsVisible="{Binding SelectedTabIndex, Converter={StaticResource InverseBoolConverter}}"/>
+            <BoxView Grid.Column="1"
+                     HeightRequest="3"
+                     Color="{StaticResource Primary}"
+                     VerticalOptions="End"
+                     IsVisible="{Binding SelectedTabIndex}"/>
+        </Grid>
+
+        <!-- Content -->
+        <RefreshView Grid.Row="2"
+                     IsRefreshing="{Binding IsRefreshing}"
+                     Command="{Binding RefreshCommand}">
+            <Grid>
+                <!-- Downloads List -->
+                <CollectionView ItemsSource="{Binding Downloads}"
+                                IsVisible="{Binding SelectedTabIndex, Converter={StaticResource InverseBoolConverter}}">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="interfaces:DownloadItem">
+                            <SwipeView>
+                                <SwipeView.RightItems>
+                                    <SwipeItems>
+                                        <SwipeItem Text="Cancel"
+                                                   BackgroundColor="{StaticResource Error}"
+                                                   Command="{Binding Source={RelativeSource AncestorType={x:Type vm:DownloadsViewModel}}, Path=CancelDownloadCommand}"
+                                                   CommandParameter="{Binding .}"
+                                                   IsVisible="{Binding IsDownloading}"/>
+                                        <SwipeItem Text="Retry"
+                                                   BackgroundColor="{StaticResource Primary}"
+                                                   Command="{Binding Source={RelativeSource AncestorType={x:Type vm:DownloadsViewModel}}, Path=RetryDownloadCommand}"
+                                                   CommandParameter="{Binding .}"
+                                                   IsVisible="{Binding IsFailed}"/>
+                                        <SwipeItem Text="Remove"
+                                                   BackgroundColor="{StaticResource Gray600}"
+                                                   Command="{Binding Source={RelativeSource AncestorType={x:Type vm:DownloadsViewModel}}, Path=RemoveDownloadCommand}"
+                                                   CommandParameter="{Binding .}"/>
+                                    </SwipeItems>
+                                </SwipeView.RightItems>
+
+                                <Frame BackgroundColor="{StaticResource CardBackgroundColor}"
+                                       BorderColor="Transparent"
+                                       CornerRadius="8"
+                                       Padding="15"
+                                       Margin="10,5">
+                                    <Frame.Behaviors>
+                                        <behaviors:TapFeedbackBehavior/>
+                                    </Frame.Behaviors>
+                                    <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="Auto,*,Auto">
+                                        <!-- Icon -->
+                                        <Label Grid.Row="0" Grid.Column="0" Grid.RowSpan="2"
+                                               Text="⬇️"
+                                               FontSize="24"
+                                               VerticalOptions="Center"
+                                               Margin="0,0,10,0"/>
+
+                                        <!-- Track Info -->
+                                        <Label Grid.Row="0" Grid.Column="1"
+                                               Text="{Binding DisplayName}"
+                                               FontSize="14"
+                                               FontAttributes="Bold"
+                                               LineBreakMode="TailTruncation"/>
+                                        <Label Grid.Row="1" Grid.Column="1"
+                                               Text="{Binding ChannelName}"
+                                               FontSize="12"
+                                               TextColor="{StaticResource Gray400}"/>
+
+                                        <!-- Status -->
+                                        <VerticalStackLayout Grid.Row="0" Grid.Column="2" Grid.RowSpan="2"
+                                                             VerticalOptions="Center"
+                                                             HorizontalOptions="End">
+                                            <Label Text="⏳" FontSize="18" IsVisible="{Binding IsPending}" HorizontalOptions="Center"/>
+                                            <Label Text="✓" FontSize="18" TextColor="{StaticResource Primary}" IsVisible="{Binding IsCompleted}" HorizontalOptions="Center"/>
+                                            <Label Text="✗" FontSize="18" TextColor="{StaticResource Error}" IsVisible="{Binding IsFailed}" HorizontalOptions="Center"/>
+                                            <Label Text="{Binding Progress, StringFormat='{0:P0}'}"
+                                                   FontSize="12"
+                                                   TextColor="{StaticResource Gray400}"
+                                                   IsVisible="{Binding IsDownloading}"
+                                                   HorizontalOptions="Center"/>
+                                        </VerticalStackLayout>
+
+                                        <!-- Progress Bar (only for downloading) -->
+                                        <ProgressBar Grid.Row="1" Grid.Column="1"
+                                                     Progress="{Binding Progress}"
+                                                     ProgressColor="{StaticResource Primary}"
+                                                     IsVisible="{Binding IsDownloading}"
+                                                     Margin="0,5,0,0"/>
+                                    </Grid>
+                                </Frame>
+                            </SwipeView>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                    <CollectionView.EmptyView>
+                        <VerticalStackLayout HorizontalOptions="Center"
+                                             VerticalOptions="Center"
+                                             Padding="40">
+                            <Label Text="⬇️"
+                                   FontSize="64"
+                                   HorizontalOptions="Center"/>
+                            <Label Text="No downloads"
+                                   FontSize="18"
+                                   TextColor="{StaticResource Gray400}"
+                                   HorizontalOptions="Center"
+                                   Margin="0,10"/>
+                            <Label Text="Download tracks from playlists or channels"
+                                   FontSize="14"
+                                   TextColor="{StaticResource Gray500}"
+                                   HorizontalOptions="Center"
+                                   HorizontalTextAlignment="Center"/>
+                        </VerticalStackLayout>
+                    </CollectionView.EmptyView>
+                </CollectionView>
+
+                <!-- Cached Tracks List -->
+                <CollectionView ItemsSource="{Binding CachedTracks}"
+                                IsVisible="{Binding SelectedTabIndex}">
+                    <CollectionView.ItemTemplate>
+                        <DataTemplate x:DataType="interfaces:CachedTrack">
+                            <SwipeView>
+                                <SwipeView.RightItems>
+                                    <SwipeItems>
+                                        <SwipeItem Text="Delete"
+                                                   BackgroundColor="{StaticResource Error}"
+                                                   Command="{Binding Source={RelativeSource AncestorType={x:Type vm:DownloadsViewModel}}, Path=DeleteCachedTrackCommand}"
+                                                   CommandParameter="{Binding .}"/>
+                                    </SwipeItems>
+                                </SwipeView.RightItems>
+
+                                <Frame BackgroundColor="{StaticResource CardBackgroundColor}"
+                                       BorderColor="Transparent"
+                                       CornerRadius="8"
+                                       Padding="15"
+                                       Margin="10,5">
+                                    <Frame.Behaviors>
+                                        <behaviors:TapFeedbackBehavior/>
+                                    </Frame.Behaviors>
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <!-- Icon -->
+                                        <Label Grid.Column="0"
+                                               Text="🎵"
+                                               FontSize="24"
+                                               VerticalOptions="Center"
+                                               Margin="0,0,10,0"/>
+
+                                        <!-- Track Info -->
+                                        <VerticalStackLayout Grid.Column="1" VerticalOptions="Center">
+                                            <Label Text="{Binding DisplayName}"
+                                                   FontSize="14"
+                                                   FontAttributes="Bold"
+                                                   LineBreakMode="TailTruncation"/>
+                                            <Label Text="{Binding DisplayArtist}"
+                                                   FontSize="12"
+                                                   TextColor="{StaticResource Gray400}"/>
+                                        </VerticalStackLayout>
+
+                                        <!-- Size -->
+                                        <Label Grid.Column="2"
+                                               Text="{Binding FileSize, Converter={StaticResource FileSizeConverter}}"
+                                               FontSize="12"
+                                               TextColor="{StaticResource Gray400}"
+                                               VerticalOptions="Center"/>
+                                    </Grid>
+                                </Frame>
+                            </SwipeView>
+                        </DataTemplate>
+                    </CollectionView.ItemTemplate>
+                    <CollectionView.EmptyView>
+                        <VerticalStackLayout HorizontalOptions="Center"
+                                             VerticalOptions="Center"
+                                             Padding="40">
+                            <Label Text="💾"
+                                   FontSize="64"
+                                   HorizontalOptions="Center"/>
+                            <Label Text="No cached tracks"
+                                   FontSize="18"
+                                   TextColor="{StaticResource Gray400}"
+                                   HorizontalOptions="Center"
+                                   Margin="0,10"/>
+                            <Label Text="Downloaded tracks will appear here"
+                                   FontSize="14"
+                                   TextColor="{StaticResource Gray500}"
+                                   HorizontalOptions="Center"
+                                   HorizontalTextAlignment="Center"/>
+                        </VerticalStackLayout>
+                    </CollectionView.EmptyView>
+                </CollectionView>
+            </Grid>
+        </RefreshView>
+
+        <!-- Loading Indicator -->
+        <ActivityIndicator Grid.Row="2"
+                           IsRunning="{Binding IsBusy}"
+                           IsVisible="{Binding IsBusy}"
+                           Color="{StaticResource Primary}"
+                           HorizontalOptions="Center"
+                           VerticalOptions="Center"/>
+
+        <!-- Mini Player -->
+        <controls:MiniPlayerControl Grid.Row="3"/>
+    </Grid>
+</ContentPage>

@@ -1,0 +1,137 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:TFMAudioApp.ViewModels"
+             xmlns:controls="clr-namespace:TFMAudioApp.Controls"
+             x:Class="TFMAudioApp.Views.SettingsPage"
+             x:DataType="vm:SettingsViewModel"
+             Title="{Binding Title}"
+             BackgroundColor="{StaticResource PageBackgroundColor}">
+
+    <Grid RowDefinitions="*,Auto">
+        <ScrollView Grid.Row="0">
+        <VerticalStackLayout Padding="20" Spacing="20">
+
+            <!-- Server Connection -->
+            <Frame BackgroundColor="{StaticResource CardBackgroundColor}"
+                   BorderColor="Transparent"
+                   CornerRadius="12"
+                   Padding="20">
+                <VerticalStackLayout Spacing="15">
+                    <Label Text="Server Connection"
+                           FontSize="18"
+                           FontAttributes="Bold"/>
+
+                    <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                        <Label Grid.Row="0" Grid.Column="0"
+                               Text="Server"
+                               TextColor="{StaticResource Gray400}"/>
+                        <Label Grid.Row="0" Grid.Column="1"
+                               Text="{Binding ServerHost}"
+                               HorizontalTextAlignment="End"/>
+
+                        <Label Grid.Row="1" Grid.Column="0"
+                               Text="Port"
+                               TextColor="{StaticResource Gray400}"/>
+                        <Label Grid.Row="1" Grid.Column="1"
+                               Text="{Binding ServerPort}"
+                               HorizontalTextAlignment="End"/>
+                    </Grid>
+
+                    <HorizontalStackLayout Spacing="10" HorizontalOptions="End">
+                        <Label Text="{Binding IsConnected, Converter={StaticResource ConnectionStatusConverter}}"
+                               FontSize="16"
+                               TextColor="{Binding IsConnected, Converter={StaticResource BoolToColorConverter}}"/>
+                        <Label Text="{Binding IsConnected, Converter={StaticResource InverseBoolConverter}, ConverterParameter='Connected|Disconnected'}"
+                               VerticalOptions="Center"/>
+                    </HorizontalStackLayout>
+
+                    <Button Text="Change Server"
+                            BackgroundColor="{StaticResource Gray600}"
+                            TextColor="White"
+                            Command="{Binding OpenServerSetupCommand}"/>
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- Cache Settings -->
+            <Frame BackgroundColor="{StaticResource CardBackgroundColor}"
+                   BorderColor="Transparent"
+                   CornerRadius="12"
+                   Padding="20">
+                <VerticalStackLayout Spacing="15">
+                    <Label Text="Cache"
+                           FontSize="18"
+                           FontAttributes="Bold"/>
+
+                    <Grid ColumnDefinitions="*,Auto">
+                        <Label Grid.Column="0"
+                               Text="Cached Tracks"
+                               TextColor="{StaticResource Gray400}"/>
+                        <Label Grid.Column="1"
+                               Text="{Binding CachedTrackCount}"
+                               HorizontalTextAlignment="End"/>
+                    </Grid>
+
+                    <Grid ColumnDefinitions="*,Auto">
+                        <Label Grid.Column="0"
+                               Text="Cache Size"
+                               TextColor="{StaticResource Gray400}"/>
+                        <Label Grid.Column="1"
+                               Text="{Binding CacheSize}"
+                               HorizontalTextAlignment="End"/>
+                    </Grid>
+
+                    <Button Text="Clear Cache"
+                            BackgroundColor="{StaticResource Gray600}"
+                            TextColor="White"
+                            Command="{Binding ClearCacheCommand}"/>
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- Danger Zone -->
+            <Frame BackgroundColor="{StaticResource CardBackgroundColor}"
+                   BorderColor="{StaticResource Error}"
+                   CornerRadius="12"
+                   Padding="20">
+                <VerticalStackLayout Spacing="15">
+                    <Label Text="Danger Zone"
+                           FontSize="18"
+                           FontAttributes="Bold"
+                           TextColor="{StaticResource Error}"/>
+
+                    <Label Text="Disconnecting will clear your server configuration and all local data."
+                           TextColor="{StaticResource Gray400}"
+                           FontSize="12"/>
+
+                    <Button Text="Disconnect from Server"
+                            BackgroundColor="{StaticResource Error}"
+                            TextColor="White"
+                            Command="{Binding DisconnectCommand}"/>
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- App Info -->
+            <Frame BackgroundColor="{StaticResource CardBackgroundColor}"
+                   BorderColor="Transparent"
+                   CornerRadius="12"
+                   Padding="20">
+                <VerticalStackLayout Spacing="10" HorizontalOptions="Center">
+                    <Label Text="🎵" FontSize="32" HorizontalOptions="Center"/>
+                    <Label Text="TFM Audio"
+                           FontSize="16"
+                           FontAttributes="Bold"
+                           HorizontalOptions="Center"/>
+                    <Label Text="Version 1.0.0"
+                           FontSize="12"
+                           TextColor="{StaticResource Gray400}"
+                           HorizontalOptions="Center"/>
+                </VerticalStackLayout>
+            </Frame>
+
+        </VerticalStackLayout>
+        </ScrollView>
+
+        <!-- Mini Player -->
+        <controls:MiniPlayerControl Grid.Row="1"/>
+    </Grid>
+</ContentPage>

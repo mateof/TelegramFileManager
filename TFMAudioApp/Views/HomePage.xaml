@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:controls="clr-namespace:TFMAudioApp.Controls"
+             x:Class="TFMAudioApp.Views.HomePage"
+             Title="Home"
+             BackgroundColor="{StaticResource PageBackgroundColor}">
+
+    <!-- Audio playback handled by LibVLC (no visual element needed) -->
+
+    <Grid RowDefinitions="*,Auto">
+        <!-- Main content -->
+        <ScrollView Grid.Row="0">
+        <VerticalStackLayout Padding="20" Spacing="20">
+
+            <!-- Header -->
+            <Label Text="TFM Audio"
+                   FontSize="28"
+                   FontAttributes="Bold"
+                   TextColor="{StaticResource Primary}"
+                   HorizontalOptions="Center"/>
+
+            <!-- Welcome Card -->
+            <Frame BackgroundColor="{StaticResource CardBackgroundColor}"
+                   BorderColor="Transparent"
+                   CornerRadius="12"
+                   Padding="20">
+                <VerticalStackLayout Spacing="10">
+                    <Label Text="Welcome!"
+                           FontSize="20"
+                           FontAttributes="Bold"/>
+                    <Label Text="Your audio player is connected and ready to use."
+                           TextColor="{StaticResource Gray400}"/>
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- Quick Actions -->
+            <Label Text="Quick Actions"
+                   FontSize="18"
+                   FontAttributes="Bold"
+                   Margin="0,10,0,0"/>
+
+            <Grid ColumnDefinitions="*,*" RowDefinitions="Auto,Auto" ColumnSpacing="10" RowSpacing="10">
+                <Frame Grid.Row="0" Grid.Column="0"
+                       BackgroundColor="{StaticResource CardBackgroundColor}"
+                       BorderColor="Transparent"
+                       CornerRadius="12"
+                       Padding="15">
+                    <Frame.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnChannelsTapped"/>
+                    </Frame.GestureRecognizers>
+                    <VerticalStackLayout Spacing="5" HorizontalOptions="Center">
+                        <Label Text="📺" FontSize="32" HorizontalOptions="Center"/>
+                        <Label Text="Channels" HorizontalOptions="Center"/>
+                    </VerticalStackLayout>
+                </Frame>
+
+                <Frame Grid.Row="0" Grid.Column="1"
+                       BackgroundColor="{StaticResource CardBackgroundColor}"
+                       BorderColor="Transparent"
+                       CornerRadius="12"
+                       Padding="15">
+                    <Frame.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnPlaylistsTapped"/>
+                    </Frame.GestureRecognizers>
+                    <VerticalStackLayout Spacing="5" HorizontalOptions="Center">
+                        <Label Text="🎵" FontSize="32" HorizontalOptions="Center"/>
+                        <Label Text="Playlists" HorizontalOptions="Center"/>
+                    </VerticalStackLayout>
+                </Frame>
+
+                <Frame Grid.Row="1" Grid.Column="0"
+                       BackgroundColor="{StaticResource CardBackgroundColor}"
+                       BorderColor="Transparent"
+                       CornerRadius="12"
+                       Padding="15">
+                    <Frame.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnDownloadsTapped"/>
+                    </Frame.GestureRecognizers>
+                    <VerticalStackLayout Spacing="5" HorizontalOptions="Center">
+                        <Label Text="⬇️" FontSize="32" HorizontalOptions="Center"/>
+                        <Label Text="Downloads" HorizontalOptions="Center"/>
+                    </VerticalStackLayout>
+                </Frame>
+
+                <Frame Grid.Row="1" Grid.Column="1"
+                       BackgroundColor="{StaticResource CardBackgroundColor}"
+                       BorderColor="Transparent"
+                       CornerRadius="12"
+                       Padding="15">
+                    <Frame.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnSettingsTapped"/>
+                    </Frame.GestureRecognizers>
+                    <VerticalStackLayout Spacing="5" HorizontalOptions="Center">
+                        <Label Text="⚙️" FontSize="32" HorizontalOptions="Center"/>
+                        <Label Text="Settings" HorizontalOptions="Center"/>
+                    </VerticalStackLayout>
+                </Frame>
+            </Grid>
+
+        </VerticalStackLayout>
+        </ScrollView>
+
+        <!-- Mini Player -->
+        <controls:MiniPlayerControl Grid.Row="1"/>
+    </Grid>
+</ContentPage>

@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:TFMAudioApp.ViewModels"
+             x:Class="TFMAudioApp.Views.SetupPage"
+             x:DataType="vm:SetupViewModel"
+             Title="Server Setup"
+             BackgroundColor="{StaticResource PageBackgroundColor}">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="20" Spacing="20" VerticalOptions="Center" MaximumWidthRequest="400">
+
+            <!-- Logo/Title -->
+            <VerticalStackLayout Spacing="10" HorizontalOptions="Center">
+                <Label Text="🎵" FontSize="64" HorizontalOptions="Center"/>
+                <Label Text="TFM Audio"
+                       FontSize="28"
+                       FontAttributes="Bold"
+                       HorizontalOptions="Center"
+                       TextColor="{StaticResource Primary}"/>
+                <Label Text="Connect to your server"
+                       FontSize="14"
+                       TextColor="{StaticResource Gray400}"
+                       HorizontalOptions="Center"/>
+            </VerticalStackLayout>
+
+            <!-- Form -->
+            <Frame BackgroundColor="{StaticResource CardBackgroundColor}"
+                   BorderColor="Transparent"
+                   CornerRadius="12"
+                   Padding="20">
+                <VerticalStackLayout Spacing="15">
+
+                    <!-- Host -->
+                    <VerticalStackLayout Spacing="5">
+                        <Label Text="Server Host" FontSize="14" TextColor="{StaticResource Gray400}"/>
+                        <Entry Text="{Binding Host}"
+                               Placeholder="192.168.1.100 or hostname"
+                               Keyboard="Url"
+                               ReturnType="Next"/>
+                    </VerticalStackLayout>
+
+                    <!-- Port -->
+                    <VerticalStackLayout Spacing="5">
+                        <Label Text="Port" FontSize="14" TextColor="{StaticResource Gray400}"/>
+                        <Entry Text="{Binding Port}"
+                               Placeholder="5000"
+                               Keyboard="Numeric"
+                               ReturnType="Next"/>
+                    </VerticalStackLayout>
+
+                    <!-- API Key -->
+                    <VerticalStackLayout Spacing="5">
+                        <Label Text="API Key" FontSize="14" TextColor="{StaticResource Gray400}"/>
+                        <Entry Text="{Binding ApiKey}"
+                               Placeholder="Your API key"
+                               IsPassword="True"
+                               ReturnType="Done"/>
+                    </VerticalStackLayout>
+
+                    <!-- HTTPS Toggle -->
+                    <HorizontalStackLayout Spacing="10">
+                        <Switch IsToggled="{Binding UseHttps}" />
+                        <Label Text="Use HTTPS" VerticalOptions="Center"/>
+                    </HorizontalStackLayout>
+
+                </VerticalStackLayout>
+            </Frame>
+
+            <!-- Status -->
+            <Frame BackgroundColor="{StaticResource CardBackgroundColor}"
+                   BorderColor="Transparent"
+                   CornerRadius="8"
+                   Padding="15">
+                <HorizontalStackLayout Spacing="10" HorizontalOptions="Center">
+                    <Label Text="{Binding IsConnectionTested, Converter={StaticResource ConnectionStatusConverter}}"
+                           FontSize="20"
+                           TextColor="{Binding IsConnectionTested, Converter={StaticResource BoolToColorConverter}}"/>
+                    <Label Text="{Binding ConnectionStatus}"
+                           VerticalOptions="Center"/>
+                </HorizontalStackLayout>
+            </Frame>
+
+            <!-- Buttons -->
+            <VerticalStackLayout Spacing="10">
+                <Button Text="Test Connection"
+                        Command="{Binding TestConnectionCommand}"
+                        IsEnabled="{Binding CanConnect}"
+                        BackgroundColor="{StaticResource Gray600}"
+                        TextColor="White"/>
+
+                <Button Text="Connect"
+                        Command="{Binding ConnectCommand}"
+                        IsEnabled="{Binding IsConnectionTested}"
+                        BackgroundColor="{StaticResource Primary}"
+                        TextColor="White"
+                        FontAttributes="Bold"/>
+            </VerticalStackLayout>
+
+            <!-- Loading Indicator -->
+            <ActivityIndicator IsRunning="{Binding IsBusy}"
+                               IsVisible="{Binding IsBusy}"
+                               Color="{StaticResource Primary}"
+                               HorizontalOptions="Center"/>
+
+            <!-- Error Message -->
+            <Label Text="{Binding ErrorMessage}"
+                   TextColor="{StaticResource Error}"
+                   IsVisible="{Binding HasError}"
+                   HorizontalOptions="Center"/>
+
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

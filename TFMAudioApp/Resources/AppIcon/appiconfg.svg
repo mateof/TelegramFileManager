@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="456" height="456" viewBox="0 0 456 456" xmlns="http://www.w3.org/2000/svg">
+  <!-- Telegram paper plane (centered and sized for icon) -->
+  <g transform="translate(228, 215)">
+    <!-- Main paper plane body - simplified Telegram style -->
+    <path d="M-90 15 L90 -50 L30 60 L5 20 Z" fill="#FFFFFF"/>
+    <!-- Folded shadow part -->
+    <path d="M5 20 L30 60 L90 -50 L5 20 Z" fill="#D4E9F7"/>
+    <!-- Inner detail line -->
+    <path d="M5 20 L-35 10" stroke="#FFFFFF" stroke-width="4" fill="none"/>
+  </g>
+
+  <!-- Headphones around the plane -->
+  <g transform="translate(228, 228)">
+    <!-- Headband arc -->
+    <path d="M-80 30 C-90 -60, 0 -95, 0 -95 C0 -95, 90 -60, 80 30"
+          fill="none" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round"/>
+
+    <!-- Left ear cup outer -->
+    <ellipse cx="-85" cy="55" rx="30" ry="40" fill="#FFFFFF"/>
+    <!-- Left ear cup inner (matches background color) -->
+    <ellipse cx="-85" cy="55" rx="18" ry="25" fill="#229ED9"/>
+
+    <!-- Right ear cup outer -->
+    <ellipse cx="85" cy="55" rx="30" ry="40" fill="#FFFFFF"/>
+    <!-- Right ear cup inner (matches background color) -->
+    <ellipse cx="85" cy="55" rx="18" ry="25" fill="#229ED9"/>
+  </g>
+</svg>

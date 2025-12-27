@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<toolkit:Popup xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+               xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+               xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
+               x:Class="TFMAudioApp.Controls.ConfirmationPopup"
+               Color="Transparent">
+
+    <Border BackgroundColor="{StaticResource CardBackgroundColor}"
+            StrokeThickness="0"
+            Padding="24"
+            WidthRequest="320">
+        <Border.StrokeShape>
+            <RoundRectangle CornerRadius="20"/>
+        </Border.StrokeShape>
+
+        <VerticalStackLayout Spacing="16">
+
+            <!-- Icon -->
+            <Label x:Name="IconLabel"
+                   FontSize="48"
+                   HorizontalOptions="Center"/>
+
+            <!-- Title -->
+            <Label x:Name="TitleLabel"
+                   FontSize="20"
+                   FontAttributes="Bold"
+                   HorizontalOptions="Center"
+                   HorizontalTextAlignment="Center"/>
+
+            <!-- Message -->
+            <Label x:Name="MessageLabel"
+                   FontSize="14"
+                   TextColor="{StaticResource Gray400}"
+                   HorizontalOptions="Center"
+                   HorizontalTextAlignment="Center"/>
+
+            <!-- Buttons -->
+            <Grid ColumnDefinitions="*,12,*" Margin="0,8,0,0">
+                <Button x:Name="CancelButton"
+                        Grid.Column="0"
+                        BackgroundColor="{StaticResource Gray600}"
+                        TextColor="White"
+                        CornerRadius="12"
+                        HeightRequest="44"
+                        Clicked="OnCancelClicked"/>
+
+                <Button x:Name="AcceptButton"
+                        Grid.Column="2"
+                        BackgroundColor="{StaticResource Primary}"
+                        TextColor="White"
+                        CornerRadius="12"
+                        HeightRequest="44"
+                        Clicked="OnAcceptClicked"/>
+            </Grid>
+
+        </VerticalStackLayout>
+    </Border>
+</toolkit:Popup>

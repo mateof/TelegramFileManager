@@ -1,0 +1,132 @@
+# Build results
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# Visual Studio files
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+# Rider files
+.idea/
+
+# VS Code files
+.vscode/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# MAUI / .NET specific
+*.csproj.user
+*.rsuser
+*.svclog
+*.scc
+*.aps
+
+# NuGet
+*.nupkg
+*.snupkg
+**/[Pp]ackages/*
+!**/[Pp]ackages/build/
+*.nuget.props
+*.nuget.targets
+
+# Android
+*.apk
+*.aab
+*.keystore
+!tfmaudio-release.keystore
+*.jks
+local.properties
+*.dex
+*.class
+gen/
+proguard/
+
+# iOS / macOS
+*.ipa
+*.dSYM.zip
+*.dSYM
+*.xcuserstate
+*.xcworkspace
+!*.xcworkspace/contents.xcworkspacedata
+xcuserdata/
+*.pbxuser
+*.perspective
+*.perspectivev3
+*.mode1v3
+*.mode2v3
+Pods/
+Podfile.lock
+
+# Windows MSIX
+*.msix
+*.msixbundle
+*.appx
+*.appxbundle
+*.appxupload
+
+# Certificates and secrets
+*.pfx
+*.p12
+*.cer
+*.pem
+certificates/
+!certificates/.gitkeep
+
+# Database files
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Crash reports
+crashlytics-build.properties
+fabric.properties
+
+# Test results
+TestResults/
+*.trx
+*.coverage
+*.coveragexml
+
+# Publish output
+publish/
+artifacts/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*~
+
+# Generated files
+Generated/
+*.g.cs
+*.g.i.cs
+
+# MlaunchLog
+MlaunchLog/

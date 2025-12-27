@@ -1,0 +1,143 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<toolkit:Popup xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+               xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+               xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
+               xmlns:behaviors="clr-namespace:TFMAudioApp.Behaviors"
+               x:Class="TFMAudioApp.Controls.PlaylistPickerPopup"
+               Color="Transparent">
+
+    <Border BackgroundColor="{StaticResource CardBackgroundColor}"
+            StrokeThickness="0"
+            Padding="0"
+            MinimumWidthRequest="320"
+            MaximumWidthRequest="400"
+            MaximumHeightRequest="500">
+        <Border.StrokeShape>
+            <RoundRectangle CornerRadius="16"/>
+        </Border.StrokeShape>
+
+        <Grid RowDefinitions="Auto,Auto,*,Auto">
+            <!-- Header -->
+            <Grid Padding="20,15"
+                  ColumnDefinitions="*,Auto"
+                  BackgroundColor="{StaticResource Gray600}">
+                <VerticalStackLayout>
+                    <Label Text="Add to Playlist"
+                           FontSize="18"
+                           FontAttributes="Bold"/>
+                    <Label x:Name="TrackNameLabel"
+                           FontSize="13"
+                           TextColor="{StaticResource Gray400}"
+                           LineBreakMode="TailTruncation"/>
+                </VerticalStackLayout>
+                <Button Grid.Column="1"
+                        Text="X"
+                        BackgroundColor="Transparent"
+                        TextColor="{StaticResource Gray400}"
+                        FontSize="16"
+                        WidthRequest="36"
+                        HeightRequest="36"
+                        Clicked="OnCloseClicked"/>
+            </Grid>
+
+            <!-- Search -->
+            <Border Grid.Row="1"
+                    BackgroundColor="{StaticResource Gray600}"
+                    StrokeThickness="0"
+                    Margin="15,10"
+                    Padding="10,5">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="8"/>
+                </Border.StrokeShape>
+                <Entry x:Name="SearchEntry"
+                       Placeholder="Search playlists..."
+                       PlaceholderColor="{StaticResource Gray400}"
+                       TextColor="White"
+                       BackgroundColor="Transparent"
+                       TextChanged="OnSearchTextChanged"/>
+            </Border>
+
+            <!-- Playlists List -->
+            <CollectionView x:Name="PlaylistsCollection"
+                            Grid.Row="2"
+                            Margin="10,0"
+                            SelectionMode="Single"
+                            SelectionChanged="OnPlaylistSelected">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate>
+                        <Border BackgroundColor="Transparent"
+                                StrokeThickness="0"
+                                Padding="10,12"
+                                Margin="5,2">
+                            <Border.StrokeShape>
+                                <RoundRectangle CornerRadius="8"/>
+                            </Border.StrokeShape>
+                            <Border.Behaviors>
+                                <behaviors:TapFeedbackBehavior/>
+                            </Border.Behaviors>
+                            <VisualStateManager.VisualStateGroups>
+                                <VisualStateGroup x:Name="CommonStates">
+                                    <VisualState x:Name="Normal">
+                                        <VisualState.Setters>
+                                            <Setter Property="BackgroundColor" Value="Transparent"/>
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                    <VisualState x:Name="Selected">
+                                        <VisualState.Setters>
+                                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}"/>
+                                        </VisualState.Setters>
+                                    </VisualState>
+                                </VisualStateGroup>
+                            </VisualStateManager.VisualStateGroups>
+                            <Grid ColumnDefinitions="Auto,*,Auto">
+                                <Label Text="🎵"
+                                       FontSize="24"
+                                       VerticalOptions="Center"/>
+                                <VerticalStackLayout Grid.Column="1"
+                                                     Margin="12,0"
+                                                     VerticalOptions="Center">
+                                    <Label Text="{Binding Name}"
+                                           FontSize="15"
+                                           FontAttributes="Bold"
+                                           LineBreakMode="TailTruncation"/>
+                                    <Label Text="{Binding TrackCount, StringFormat='{0} tracks'}"
+                                           FontSize="12"
+                                           TextColor="{StaticResource Gray400}"/>
+                                </VerticalStackLayout>
+                                <Label Grid.Column="2"
+                                       Text=">"
+                                       FontSize="18"
+                                       TextColor="{StaticResource Gray400}"
+                                       VerticalOptions="Center"/>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+                <CollectionView.EmptyView>
+                    <VerticalStackLayout HorizontalOptions="Center"
+                                         VerticalOptions="Center"
+                                         Padding="20">
+                        <Label Text="🎵"
+                               FontSize="48"
+                               HorizontalOptions="Center"/>
+                        <Label x:Name="EmptyLabel"
+                               Text="No playlists found"
+                               FontSize="16"
+                               TextColor="{StaticResource Gray400}"
+                               HorizontalOptions="Center"/>
+                    </VerticalStackLayout>
+                </CollectionView.EmptyView>
+            </CollectionView>
+
+            <!-- Create New Playlist Button -->
+            <Button Grid.Row="3"
+                    Text="+ Create New Playlist"
+                    BackgroundColor="{StaticResource Gray600}"
+                    TextColor="{StaticResource Primary}"
+                    FontAttributes="Bold"
+                    CornerRadius="0"
+                    Margin="0"
+                    Clicked="OnCreatePlaylistClicked"/>
+        </Grid>
+    </Border>
+</toolkit:Popup>

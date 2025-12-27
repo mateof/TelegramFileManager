@@ -29,6 +29,7 @@
     <PackageReference Include="Serilog.Sinks.Console" Version="6.0.0" />
     <PackageReference Include="Serilog.Sinks.MongoDB" Version="7.0.0" />
     <PackageReference Include="QRCoder" Version="1.7.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="7.3.2" />
     <PackageReference Include="Syncfusion.Blazor" Version="29.2.11" />
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.22.1" />
     <PackageReference Include="Syncfusion.EJ2.AspNet.Core" Version="29.2.11" />

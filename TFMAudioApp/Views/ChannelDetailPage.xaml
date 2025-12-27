@@ -1,0 +1,311 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:TFMAudioApp.ViewModels"
+             xmlns:models="clr-namespace:TFMAudioApp.Models"
+             xmlns:behaviors="clr-namespace:TFMAudioApp.Behaviors"
+             xmlns:controls="clr-namespace:TFMAudioApp.Controls"
+             x:Class="TFMAudioApp.Views.ChannelDetailPage"
+             x:DataType="vm:ChannelDetailViewModel"
+             Title="{Binding Title}"
+             BackgroundColor="{StaticResource PageBackgroundColor}">
+
+    <Shell.BackButtonBehavior>
+        <BackButtonBehavior Command="{Binding GoBackCommand}"/>
+    </Shell.BackButtonBehavior>
+
+    <Grid RowDefinitions="*,Auto">
+        <!-- Main Content -->
+        <Grid Grid.Row="0" RowDefinitions="Auto,Auto,Auto,*,Auto">
+
+        <!-- Syncing Status Bar -->
+        <Border Grid.Row="0"
+                BackgroundColor="{StaticResource Gray600}"
+                StrokeThickness="0"
+                Padding="12,8"
+                IsVisible="{Binding StatusMessage, Converter={StaticResource StringToBoolConverter}}">
+            <Grid ColumnDefinitions="Auto,*">
+                <ActivityIndicator Grid.Column="0"
+                                   IsRunning="{Binding IsSyncing}"
+                                   IsVisible="{Binding IsSyncing}"
+                                   Color="{StaticResource Primary}"
+                                   HeightRequest="16"
+                                   WidthRequest="16"/>
+                <Label Grid.Column="1"
+                       Text="{Binding StatusMessage}"
+                       FontSize="13"
+                       TextColor="{StaticResource Gray300}"
+                       VerticalOptions="Center"
+                       Margin="8,0,0,0"/>
+            </Grid>
+        </Border>
+
+        <!-- Header with path, search, filter and play buttons -->
+        <Grid Grid.Row="1"
+              BackgroundColor="{StaticResource CardBackgroundColor}"
+              Padding="15,10"
+              ColumnDefinitions="*,Auto,Auto,Auto,Auto"
+              ColumnSpacing="8">
+            <Label Text="{Binding CurrentPath}"
+                   FontSize="14"
+                   TextColor="{StaticResource Gray400}"
+                   VerticalOptions="Center"/>
+
+            <!-- Search Button (monochrome) -->
+            <Border Grid.Column="1"
+                    BackgroundColor="{StaticResource Gray600}"
+                    StrokeThickness="0"
+                    WidthRequest="40"
+                    HeightRequest="40"
+                    StrokeShape="RoundRectangle 8">
+                <Border.Behaviors>
+                    <behaviors:TapFeedbackBehavior/>
+                </Border.Behaviors>
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnSearchTapped"/>
+                </Border.GestureRecognizers>
+                <!-- Search icon using Path -->
+                <Grid>
+                    <Ellipse WidthRequest="14" HeightRequest="14"
+                             Stroke="{StaticResource Gray200}"
+                             StrokeThickness="2"
+                             Fill="Transparent"
+                             HorizontalOptions="Center"
+                             VerticalOptions="Center"
+                             Margin="0,0,4,4"/>
+                    <BoxView WidthRequest="6" HeightRequest="2"
+                             BackgroundColor="{StaticResource Gray200}"
+                             CornerRadius="1"
+                             Rotation="45"
+                             HorizontalOptions="Center"
+                             VerticalOptions="Center"
+                             Margin="8,8,0,0"/>
+                </Grid>
+            </Border>
+
+            <!-- Filter Button (monochrome funnel icon) -->
+            <Border Grid.Column="2"
+                    x:Name="FilterButton"
+                    BackgroundColor="{StaticResource Gray600}"
+                    StrokeThickness="0"
+                    WidthRequest="40"
+                    HeightRequest="40"
+                    StrokeShape="RoundRectangle 8">
+                <Border.Behaviors>
+                    <behaviors:TapFeedbackBehavior/>
+                </Border.Behaviors>
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Tapped="OnFilterTapped"/>
+                </Border.GestureRecognizers>
+                <!-- Filter/Funnel icon using shapes -->
+                <Grid WidthRequest="18" HeightRequest="16"
+                      HorizontalOptions="Center"
+                      VerticalOptions="Center">
+                    <BoxView HeightRequest="2" WidthRequest="18"
+                             BackgroundColor="{StaticResource Gray200}"
+                             CornerRadius="1"
+                             VerticalOptions="Start"/>
+                    <BoxView HeightRequest="2" WidthRequest="12"
+                             BackgroundColor="{StaticResource Gray200}"
+                             CornerRadius="1"
+                             VerticalOptions="Center"
+                             HorizontalOptions="Center"/>
+                    <BoxView HeightRequest="2" WidthRequest="6"
+                             BackgroundColor="{StaticResource Gray200}"
+                             CornerRadius="1"
+                             VerticalOptions="End"
+                             HorizontalOptions="Center"/>
+                </Grid>
+            </Border>
+
+            <!-- Active Filter Indicator -->
+            <Border Grid.Column="3"
+                    BackgroundColor="{StaticResource Primary}"
+                    StrokeThickness="0"
+                    Padding="8,4"
+                    IsVisible="{Binding HasActiveFilters}"
+                    VerticalOptions="Center">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="10"/>
+                </Border.StrokeShape>
+                <Label Text="{Binding ActiveFilterCount, StringFormat='{0}'}"
+                       FontSize="12"
+                       TextColor="White"/>
+            </Border>
+
+            <!-- Play All Button -->
+            <Button Grid.Column="4"
+                    Text="▶"
+                    BackgroundColor="{StaticResource Primary}"
+                    TextColor="White"
+                    FontSize="16"
+                    WidthRequest="40"
+                    HeightRequest="40"
+                    CornerRadius="8"
+                    Command="{Binding PlayAllAudioCommand}"/>
+        </Grid>
+
+        <!-- Search Bar (collapsible) -->
+        <SearchBar Grid.Row="2"
+                   x:Name="SearchBarControl"
+                   Text="{Binding SearchText}"
+                   Placeholder="Search files..."
+                   BackgroundColor="{StaticResource CardBackgroundColor}"
+                   TextColor="White"
+                   PlaceholderColor="{StaticResource Gray400}"
+                   IsVisible="{Binding IsSearchVisible}"
+                   SearchCommand="{Binding SearchCommand}"
+                   Margin="10,5"/>
+
+        <!-- Files list with infinite scroll -->
+        <RefreshView Grid.Row="3"
+                     IsRefreshing="{Binding IsRefreshing}"
+                     Command="{Binding RefreshCommand}">
+            <Grid>
+                <!-- Skeleton Loading -->
+                <controls:SkeletonListContainer ItemCount="8"
+                                                 ShowIcon="True"
+                                                 ShowSubtitle="True"
+                                                 ShowTrailing="True"
+                                                 IsVisible="{Binding IsBusy}"/>
+
+                <CollectionView ItemsSource="{Binding Files}"
+                                IsVisible="{Binding IsBusy, Converter={StaticResource InverseBoolConverter}}"
+                            ItemsUpdatingScrollMode="KeepScrollOffset"
+                            RemainingItemsThreshold="5"
+                            RemainingItemsThresholdReachedCommand="{Binding LoadMoreCommand}">
+                <CollectionView.ItemsLayout>
+                    <LinearItemsLayout Orientation="Vertical" ItemSpacing="0"/>
+                </CollectionView.ItemsLayout>
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="models:ChannelFile">
+                        <Border BackgroundColor="{StaticResource CardBackgroundColor}"
+                                StrokeThickness="0"
+                                Padding="15"
+                                Margin="10,5"
+                                StrokeShape="RoundRectangle 8">
+                            <Border.Behaviors>
+                                <behaviors:TapFeedbackBehavior/>
+                            </Border.Behaviors>
+                            <Border.GestureRecognizers>
+                                <TapGestureRecognizer
+                                    Command="{Binding Source={RelativeSource AncestorType={x:Type vm:ChannelDetailViewModel}}, Path=OpenFileCommand}"
+                                    CommandParameter="{Binding .}"/>
+                            </Border.GestureRecognizers>
+                            <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="15">
+                                <!-- Icon based on type with cache indicator -->
+                                <Grid Grid.Column="0" WidthRequest="36" HeightRequest="36">
+                                    <Label Text="{Binding IconEmoji}"
+                                           FontSize="28"
+                                           VerticalOptions="Center"
+                                           HorizontalOptions="Center"/>
+                                    <!-- Cache indicator (checkmark badge) -->
+                                    <Border BackgroundColor="{StaticResource Primary}"
+                                            StrokeThickness="0"
+                                            WidthRequest="14"
+                                            HeightRequest="14"
+                                            HorizontalOptions="End"
+                                            VerticalOptions="End"
+                                            Margin="0,0,-2,-2"
+                                            IsVisible="{Binding IsCached}">
+                                        <Border.StrokeShape>
+                                            <RoundRectangle CornerRadius="7"/>
+                                        </Border.StrokeShape>
+                                        <Label Text="✓"
+                                               FontSize="8"
+                                               TextColor="White"
+                                               HorizontalOptions="Center"
+                                               VerticalOptions="Center"/>
+                                    </Border>
+                                </Grid>
+
+                                <Grid Grid.Column="1" RowDefinitions="Auto,Auto" VerticalOptions="Center">
+                                    <Label Grid.Row="0"
+                                           Text="{Binding Name}"
+                                           FontSize="14"
+                                           LineBreakMode="TailTruncation"/>
+                                    <Label Grid.Row="1"
+                                           Text="{Binding FileInfo}"
+                                           FontSize="12"
+                                           TextColor="{StaticResource Gray400}"
+                                           IsVisible="{Binding IsFile}"/>
+                                </Grid>
+
+                                <!-- Arrow for folders, add button for audio files -->
+                                <Label Grid.Column="2"
+                                       Text="›"
+                                       FontSize="28"
+                                       TextColor="{StaticResource Gray400}"
+                                       VerticalOptions="Center"
+                                       IsVisible="{Binding IsFolder}"/>
+
+                                <Button Grid.Column="2"
+                                        Text="+"
+                                        BackgroundColor="{StaticResource Primary}"
+                                        TextColor="White"
+                                        FontSize="20"
+                                        FontAttributes="Bold"
+                                        WidthRequest="36"
+                                        HeightRequest="36"
+                                        Padding="0"
+                                        CornerRadius="8"
+                                        IsVisible="{Binding IsFile}"
+                                        Command="{Binding Source={RelativeSource AncestorType={x:Type vm:ChannelDetailViewModel}}, Path=AddToPlaylistCommand}"
+                                        CommandParameter="{Binding .}"/>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+
+                <!-- Loading more indicator at bottom -->
+                <CollectionView.Footer>
+                    <VerticalStackLayout Padding="10"
+                                         IsVisible="{Binding IsLoadingMore}">
+                        <ActivityIndicator IsRunning="{Binding IsLoadingMore}"
+                                           Color="{StaticResource Primary}"
+                                           HeightRequest="30"/>
+                        <Label Text="Loading more..."
+                               FontSize="12"
+                               TextColor="{StaticResource Gray400}"
+                               HorizontalOptions="Center"/>
+                    </VerticalStackLayout>
+                </CollectionView.Footer>
+
+                <CollectionView.EmptyView>
+                    <VerticalStackLayout HorizontalOptions="Center"
+                                         VerticalOptions="Center"
+                                         Padding="40">
+                        <Label Text="📁"
+                               FontSize="64"
+                               HorizontalOptions="Center"/>
+                        <Label Text="No files found"
+                               FontSize="18"
+                               TextColor="{StaticResource Gray400}"
+                               HorizontalOptions="Center"
+                               Margin="0,10"/>
+                        <Label Text="Try changing the filter or search terms"
+                               FontSize="14"
+                               TextColor="{StaticResource Gray500}"
+                               HorizontalOptions="Center"/>
+                    </VerticalStackLayout>
+                </CollectionView.EmptyView>
+            </CollectionView>
+            </Grid>
+        </RefreshView>
+
+        <!-- Stats bar at bottom -->
+        <Grid Grid.Row="4"
+              BackgroundColor="{StaticResource CardBackgroundColor}"
+              Padding="15,8"
+              IsVisible="{Binding StatsText, Converter={StaticResource StringToBoolConverter}}">
+            <Label Text="{Binding StatsText}"
+                   FontSize="12"
+                   TextColor="{StaticResource Gray400}"
+                   HorizontalOptions="Center"/>
+        </Grid>
+        </Grid>
+
+        <!-- Mini Player -->
+        <controls:MiniPlayerControl Grid.Row="1"/>
+    </Grid>
+</ContentPage>
