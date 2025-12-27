@@ -23,10 +23,17 @@ jobs:
       - name: '📄 Checkout'
         uses: actions/checkout@v4
 
-      - name: '🔧 Setup .NET'
+      - name: '🔧 Setup .NET 10'
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          dotnet-version: '10.0.x'
+
+      - name: '🔍 Verify SDK version'
+        run: |
+          # Remove global.json to allow .NET 10 for server build
+          rm -f global.json
+          dotnet --version
+          dotnet --list-sdks
 
       - name: '📦 Extract version'
         id: version
@@ -91,9 +98,13 @@ jobs:
         run: |
           dotnet --version
           dotnet --list-sdks
+          dotnet workload list
+
+      - name: '🧹 Clean existing workloads'
+        run: dotnet workload clean --all || true
 
       - name: '📱 Install Android workload'
-        run: dotnet workload install android maui-android
+        run: dotnet workload install android maui-android --skip-sign-check
 
       - name: '📦 Extract version'
         id: version
@@ -183,7 +194,7 @@ jobs:
   # ==========================================
   build-windows:
     name: Build Windows App
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
       - name: '📄 Checkout'
         uses: actions/checkout@v4
@@ -197,9 +208,13 @@ jobs:
         run: |
           dotnet --version
           dotnet --list-sdks
+          dotnet workload list
+
+      - name: '🧹 Clean existing workloads'
+        run: dotnet workload clean --all
 
       - name: '🪟 Install MAUI workload'
-        run: dotnet workload install maui-windows
+        run: dotnet workload install maui-windows --skip-sign-check
 
       - name: '📦 Extract version'
         id: version
@@ -284,7 +299,7 @@ jobs:
   # ==========================================
   build-macos:
     name: Build macOS App
-    runs-on: macos-latest
+    runs-on: macos-14
     steps:
       - name: '📄 Checkout'
         uses: actions/checkout@v4
@@ -298,9 +313,17 @@ jobs:
         run: |
           dotnet --version
           dotnet --list-sdks
+          dotnet workload list
+
+      - name: '🧹 Clean existing workloads'
+        run: |
+          # Remove any pre-installed workloads to avoid version conflicts
+          dotnet workload clean --all || true
 
       - name: '🍎 Install MAUI workload'
-        run: dotnet workload install maui
+        run: |
+          dotnet workload install maui-maccatalyst --skip-sign-check
+          dotnet workload list
 
       - name: '📦 Extract version'
         id: version
