@@ -299,7 +299,7 @@ jobs:
   # ==========================================
   build-macos:
     name: Build macOS App
-    runs-on: macos-14
+    runs-on: macos-13
     steps:
       - name: '📄 Checkout'
         uses: actions/checkout@v4
@@ -307,23 +307,27 @@ jobs:
       - name: '🔧 Setup .NET'
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          dotnet-version: '9.0.200'
 
       - name: '🔍 Verify SDK version'
         run: |
           dotnet --version
           dotnet --list-sdks
-          dotnet workload list
 
-      - name: '🧹 Clean existing workloads'
+      - name: '🧹 Clean existing workloads and packs'
         run: |
-          # Remove any pre-installed workloads to avoid version conflicts
+          # Remove any pre-installed workloads and packs to avoid version conflicts
           dotnet workload clean --all || true
+          rm -rf ~/.dotnet/packs/Microsoft.MacCatalyst.* || true
+          rm -rf ~/.dotnet/packs/Microsoft.iOS.* || true
+          rm -rf ~/.dotnet/metadata/workloads || true
 
       - name: '🍎 Install MAUI workload'
         run: |
           dotnet workload install maui-maccatalyst --skip-sign-check
           dotnet workload list
+          # Show what SDK packs were installed
+          ls -la ~/.dotnet/packs/ | grep -i catalyst || true
 
       - name: '📦 Extract version'
         id: version
