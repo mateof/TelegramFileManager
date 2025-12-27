@@ -111,6 +111,10 @@ jobs:
           echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > tfmaudio.keystore
           echo "ANDROID_KEYSTORE_PATH=$(pwd)/tfmaudio.keystore" >> $GITHUB_ENV
 
+      - name: '📦 Restore Android dependencies'
+        run: |
+          dotnet restore TFMAudioApp/TFMAudioApp.csproj /p:TargetFramework=net9.0-android
+
       - name: '🔨 Build Android APK (Signed)'
         if: ${{ env.ANDROID_KEYSTORE_PATH != '' }}
         env:
@@ -122,9 +126,9 @@ jobs:
           VERSION_CODE=${{ steps.version.outputs.version_code }}
 
           dotnet publish TFMAudioApp/TFMAudioApp.csproj \
+            --no-restore \
             -c Release \
             -f net9.0-android \
-            -p:TargetFrameworks=net9.0-android \
             -p:ApplicationDisplayVersion=$VERSION \
             -p:ApplicationVersion=$VERSION_CODE \
             -p:AndroidKeyStore=true \
@@ -141,9 +145,9 @@ jobs:
 
           echo "⚠️ Building unsigned APK (no keystore configured)"
           dotnet publish TFMAudioApp/TFMAudioApp.csproj \
+            --no-restore \
             -c Release \
             -f net9.0-android \
-            -p:TargetFrameworks=net9.0-android \
             -p:ApplicationDisplayVersion=$VERSION \
             -p:ApplicationVersion=$VERSION_CODE
 
@@ -198,14 +202,18 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
+      - name: '📦 Restore Windows dependencies'
+        run: |
+          dotnet restore TFMAudioApp/TFMAudioApp.csproj /p:TargetFramework=net9.0-windows10.0.19041.0
+
       - name: '🔨 Build Windows App'
         run: |
           $VERSION = "${{ steps.version.outputs.version }}"
 
           dotnet publish TFMAudioApp/TFMAudioApp.csproj `
+            --no-restore `
             -c Release `
             -f net9.0-windows10.0.19041.0 `
-            -p:TargetFrameworks=net9.0-windows10.0.19041.0 `
             -p:ApplicationDisplayVersion=$VERSION `
             -p:WindowsPackageType=None `
             -p:PublishSingleFile=false `
@@ -293,15 +301,19 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
+      - name: '📦 Restore macOS dependencies'
+        run: |
+          dotnet restore TFMAudioApp/TFMAudioApp.csproj /p:TargetFramework=net9.0-maccatalyst
+
       - name: '🔨 Build macOS App (Intel x64)'
         run: |
           VERSION=${{ steps.version.outputs.version }}
 
           dotnet publish TFMAudioApp/TFMAudioApp.csproj \
+            --no-restore \
             -c Release \
             -f net9.0-maccatalyst \
             -r maccatalyst-x64 \
-            -p:TargetFrameworks=net9.0-maccatalyst \
             -p:ApplicationDisplayVersion=$VERSION \
             -p:CreatePackage=true \
             -o bin/macos-x64
@@ -311,10 +323,10 @@ jobs:
           VERSION=${{ steps.version.outputs.version }}
 
           dotnet publish TFMAudioApp/TFMAudioApp.csproj \
+            --no-restore \
             -c Release \
             -f net9.0-maccatalyst \
             -r maccatalyst-arm64 \
-            -p:TargetFrameworks=net9.0-maccatalyst \
             -p:ApplicationDisplayVersion=$VERSION \
             -p:CreatePackage=true \
             -o bin/macos-arm64
