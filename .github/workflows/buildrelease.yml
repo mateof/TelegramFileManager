@@ -1,8 +1,38 @@
 name: Build and Release
 
+# Triggers:
+# - Release published with tags:
+#   - server-v* : Build only Server
+#   - app-v*    : Build only TFMAudioApp (Android, Windows, macOS)
+#   - v*        : Build everything
+# - Manual workflow dispatch with checkboxes
+
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      build_server:
+        description: 'Build Server'
+        type: boolean
+        default: false
+      build_android:
+        description: 'Build Android App'
+        type: boolean
+        default: false
+      build_windows:
+        description: 'Build Windows App'
+        type: boolean
+        default: false
+      build_macos:
+        description: 'Build macOS App'
+        type: boolean
+        default: false
+      version:
+        description: 'Version (e.g., 1.0.0)'
+        type: string
+        required: false
+        default: '0.0.0-manual'
 
 permissions:
   contents: write
@@ -19,6 +49,10 @@ jobs:
   build-server:
     name: Build Server
     runs-on: ubuntu-latest
+    # Run if: manual with build_server OR release with server-v* or v* (but not app-v*)
+    if: |
+      (github.event_name == 'workflow_dispatch' && inputs.build_server) ||
+      (github.event_name == 'release' && (startsWith(github.event.release.tag_name, 'server-v') || (startsWith(github.event.release.tag_name, 'v') && !startsWith(github.event.release.tag_name, 'app-v'))))
     steps:
       - name: '📄 Checkout'
         uses: actions/checkout@v4
@@ -38,8 +72,15 @@ jobs:
       - name: '📦 Extract version'
         id: version
         run: |
-          TAG=${{ github.event.release.tag_name }}
-          VERSION=${TAG#v}
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+            TAG="v${VERSION}"
+          else
+            TAG=${{ github.event.release.tag_name }}
+            # Remove server-v or v prefix
+            VERSION=${TAG#server-v}
+            VERSION=${VERSION#v}
+          fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
@@ -85,6 +126,10 @@ jobs:
   build-android:
     name: Build Android APK
     runs-on: ubuntu-latest
+    # Run if: manual with build_android OR release with app-v* or v* (but not server-v*)
+    if: |
+      (github.event_name == 'workflow_dispatch' && inputs.build_android) ||
+      (github.event_name == 'release' && (startsWith(github.event.release.tag_name, 'app-v') || (startsWith(github.event.release.tag_name, 'v') && !startsWith(github.event.release.tag_name, 'server-v'))))
     steps:
       - name: '📄 Checkout'
         uses: actions/checkout@v4
@@ -109,8 +154,15 @@ jobs:
       - name: '📦 Extract version'
         id: version
         run: |
-          TAG=${{ github.event.release.tag_name }}
-          VERSION=${TAG#v}
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+            TAG="v${VERSION}"
+          else
+            TAG=${{ github.event.release.tag_name }}
+            # Remove app-v or v prefix
+            VERSION=${TAG#app-v}
+            VERSION=${VERSION#v}
+          fi
           # Extract version number for Android (must be integer)
           VERSION_CODE=$(echo $VERSION | sed 's/\.//g' | sed 's/[^0-9]//g')
           # If empty or starts with 0, use date-based version
@@ -195,6 +247,10 @@ jobs:
   build-windows:
     name: Build Windows App
     runs-on: windows-2022
+    # Run if: manual with build_windows OR release with app-v* or v* (but not server-v*)
+    if: |
+      (github.event_name == 'workflow_dispatch' && inputs.build_windows) ||
+      (github.event_name == 'release' && (startsWith(github.event.release.tag_name, 'app-v') || (startsWith(github.event.release.tag_name, 'v') && !startsWith(github.event.release.tag_name, 'server-v'))))
     steps:
       - name: '📄 Checkout'
         uses: actions/checkout@v4
@@ -220,8 +276,15 @@ jobs:
         id: version
         shell: bash
         run: |
-          TAG=${{ github.event.release.tag_name }}
-          VERSION=${TAG#v}
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+            TAG="v${VERSION}"
+          else
+            TAG=${{ github.event.release.tag_name }}
+            # Remove app-v or v prefix
+            VERSION=${TAG#app-v}
+            VERSION=${VERSION#v}
+          fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
@@ -239,6 +302,7 @@ jobs:
             -o bin/windows-app
 
       - name: '🔐 Sign Windows App (if certificate available)'
+        continue-on-error: true
         shell: pwsh
         env:
           WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
@@ -300,6 +364,10 @@ jobs:
   build-macos:
     name: Build macOS App
     runs-on: macos-15
+    # Run if: manual with build_macos OR release with app-v* or v* (but not server-v*)
+    if: |
+      (github.event_name == 'workflow_dispatch' && inputs.build_macos) ||
+      (github.event_name == 'release' && (startsWith(github.event.release.tag_name, 'app-v') || (startsWith(github.event.release.tag_name, 'v') && !startsWith(github.event.release.tag_name, 'server-v'))))
     steps:
       - name: '📄 Checkout'
         uses: actions/checkout@v4
@@ -343,8 +411,15 @@ jobs:
       - name: '📦 Extract version'
         id: version
         run: |
-          TAG=${{ github.event.release.tag_name }}
-          VERSION=${TAG#v}
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+            TAG="v${VERSION}"
+          else
+            TAG=${{ github.event.release.tag_name }}
+            # Remove app-v or v prefix
+            VERSION=${TAG#app-v}
+            VERSION=${VERSION#v}
+          fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
@@ -412,7 +487,11 @@ jobs:
   upload-release:
     name: Upload to Release
     needs: [build-server, build-android, build-windows, build-macos]
-    if: always() && needs.build-server.result == 'success'
+    # Run if release event AND at least one build succeeded (not skipped)
+    if: |
+      always() &&
+      github.event_name == 'release' &&
+      (needs.build-server.result == 'success' || needs.build-android.result == 'success' || needs.build-windows.result == 'success' || needs.build-macos.result == 'success')
     runs-on: ubuntu-latest
     steps:
       - name: '📊 Build Status Summary'

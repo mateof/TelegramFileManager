@@ -17,7 +17,7 @@ public class AudioPlayerService : IAudioPlayerService, IDisposable
     private readonly Random _random = new();
 
     private LibVLC? _libVLC;
-    private MediaPlayer? _mediaPlayer;
+    private LibVLCSharp.Shared.MediaPlayer? _mediaPlayer;
     private Media? _currentMedia;
     private System.Timers.Timer? _positionTimer;
     private List<Track> _originalQueue = new();
@@ -105,7 +105,7 @@ public class AudioPlayerService : IAudioPlayerService, IDisposable
             };
 
             // Create media player
-            _mediaPlayer = new MediaPlayer(_libVLC);
+            _mediaPlayer = new LibVLCSharp.Shared.MediaPlayer(_libVLC);
             _mediaPlayer.Volume = (int)(_volume * 100);
 
             // Setup event handlers

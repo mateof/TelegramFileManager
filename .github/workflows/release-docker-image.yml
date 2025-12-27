@@ -1,14 +1,21 @@
 name: Docker Image CI (Release)
 
+# Triggers:
+# - Push tags: server-v* OR v* (but NOT app-v*)
+# Docker is only built for Server releases
+
 on:
   push:
-    tags: [ 'v*.*.*' ]
+    tags:
+      - 'v*.*.*'
+      - 'server-v*.*.*'
 
 jobs:
 
   build:
-
     runs-on: ubuntu-latest
+    # Skip if it's an app-only release
+    if: ${{ !startsWith(github.ref_name, 'app-v') }}
 
     steps:
     - uses: actions/checkout@v4
@@ -16,10 +23,13 @@ jobs:
     - name: Extract version from tag
       id: version
       run: |
-        # Remove 'v' prefix from tag (v1.2.3 -> 1.2.3)
-        VERSION=${GITHUB_REF_NAME#v}
+        TAG=${GITHUB_REF_NAME}
+        # Remove 'server-v' or 'v' prefix
+        VERSION=${TAG#server-v}
+        VERSION=${VERSION#v}
         echo "version=$VERSION" >> $GITHUB_OUTPUT
-        echo "Extracted version: $VERSION"
+        echo "tag=$TAG" >> $GITHUB_OUTPUT
+        echo "Extracted version: $VERSION from tag: $TAG"
 
     - name: 'Login to GitHub Container Registry'
       uses: docker/login-action@v3
