@@ -257,9 +257,40 @@ public class AudioPlayerService : IAudioPlayerService, IDisposable
         _positionTimer?.Stop();
     }
 
+    private bool _isSeeking;
+    private DateTime _lastSeekTime = DateTime.MinValue;
+
     private void OnEndReached(object? sender, EventArgs e)
     {
         _positionTimer?.Stop();
+
+        // Check if this is a false "end reached" due to a failed seek on network stream
+        // If we were seeking recently (within 3 seconds) and position is not near the end, ignore this event
+        var timeSinceSeek = (DateTime.UtcNow - _lastSeekTime).TotalSeconds;
+        if (timeSinceSeek < 3 && _mediaPlayer != null)
+        {
+            var currentPos = _mediaPlayer.Position;
+            var length = _mediaPlayer.Length;
+            var positionMs = currentPos * length;
+            var remainingMs = length - positionMs;
+
+            // If more than 5 seconds remaining, this is likely a false end-of-stream from failed seek
+            if (remainingMs > 5000)
+            {
+                System.Diagnostics.Debug.WriteLine($"[AudioPlayer] Ignoring false EndReached after seek (remaining: {remainingMs}ms)");
+                // Try to resume playback
+                MainThread.BeginInvokeOnMainThread(async () =>
+                {
+                    await Task.Delay(500);
+                    if (_mediaPlayer != null && CurrentTrack != null)
+                    {
+                        System.Diagnostics.Debug.WriteLine("[AudioPlayer] Attempting to resume after false EndReached");
+                        await PlayAtIndexAsync(CurrentIndex);
+                    }
+                });
+                return;
+            }
+        }
 
         // Handle end of track on main thread
         MainThread.BeginInvokeOnMainThread(async () =>
@@ -297,7 +328,25 @@ public class AudioPlayerService : IAudioPlayerService, IDisposable
         }
 
         System.Diagnostics.Debug.WriteLine($"[AudioPlayer] LibVLC error occurred for track: {CurrentTrack?.FileName ?? "null"}");
-        System.Diagnostics.Debug.WriteLine($"[AudioPlayer] Error: {errorMsg}, retry count: {_retryCount}");
+        System.Diagnostics.Debug.WriteLine($"[AudioPlayer] Error: {errorMsg}, retry count: {_retryCount}, isSeeking: {_isSeeking}");
+
+        // If error occurred during seek on network stream, don't treat it as fatal
+        // Just ignore the seek and continue playing from current position
+        var timeSinceSeek = (DateTime.UtcNow - _lastSeekTime).TotalSeconds;
+        if (timeSinceSeek < 3)
+        {
+            System.Diagnostics.Debug.WriteLine("[AudioPlayer] Error during seek - attempting to resume playback");
+            MainThread.BeginInvokeOnMainThread(async () =>
+            {
+                await Task.Delay(500);
+                if (_mediaPlayer != null && CurrentTrack != null && State != PlaybackState.Playing)
+                {
+                    // Restart the track from the beginning if we can't seek
+                    await PlayAtIndexAsync(CurrentIndex);
+                }
+            });
+            return;
+        }
 
         // Retry playback if under max retries (server might have been downloading)
         if (_retryCount < MaxRetries && CurrentIndex >= 0 && CurrentIndex < Queue.Count)
@@ -552,7 +601,10 @@ public class AudioPlayerService : IAudioPlayerService, IDisposable
     {
         if (_mediaPlayer == null || _mediaPlayer.Length <= 0) return;
 
-        // Seeking is now allowed for all tracks (server supports progressive streaming with range requests)
+        // Mark that we're seeking to detect false EndReached events
+        _isSeeking = true;
+        _lastSeekTime = DateTime.UtcNow;
+
         System.Diagnostics.Debug.WriteLine($"[AudioPlayer] Seeking to {position}");
 
         try
@@ -560,13 +612,28 @@ public class AudioPlayerService : IAudioPlayerService, IDisposable
             await MainThread.InvokeOnMainThreadAsync(() =>
             {
                 var positionRatio = (float)(position.TotalMilliseconds / _mediaPlayer.Length);
-                _mediaPlayer.Position = Math.Clamp(positionRatio, 0f, 1f);
+                positionRatio = Math.Clamp(positionRatio, 0f, 0.99f); // Don't seek to exact end
+
+                System.Diagnostics.Debug.WriteLine($"[AudioPlayer] Setting position ratio: {positionRatio}");
+                _mediaPlayer.Position = positionRatio;
             });
+
+            // Wait a bit and check if seek succeeded
+            await Task.Delay(100);
+
+            if (_mediaPlayer != null)
+            {
+                var newPos = _mediaPlayer.Position * _mediaPlayer.Length;
+                System.Diagnostics.Debug.WriteLine($"[AudioPlayer] Position after seek: {newPos}ms");
+            }
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"[AudioPlayer] Seek failed: {ex.Message}");
-            // Don't propagate error - just ignore failed seek
+        }
+        finally
+        {
+            _isSeeking = false;
         }
     }
 
