@@ -10,10 +10,15 @@
 			Workloads needed:
 			- dotnet workload install android
 			- dotnet workload install maui (includes maccatalyst on Mac)
+
+			For CI builds, use -p:BuildSingleTarget=android|windows|maccatalyst
 		-->
-		<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('windows'))">net9.0-android;net9.0-windows10.0.19041.0</TargetFrameworks>
-		<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('osx'))">net9.0-android;net9.0-maccatalyst</TargetFrameworks>
-		<TargetFrameworks Condition="$([MSBuild]::IsOSPlatform('linux'))">net9.0-android</TargetFrameworks>
+		<TargetFrameworks Condition="'$(BuildSingleTarget)' == 'android'">net9.0-android</TargetFrameworks>
+		<TargetFrameworks Condition="'$(BuildSingleTarget)' == 'windows'">net9.0-windows10.0.19041.0</TargetFrameworks>
+		<TargetFrameworks Condition="'$(BuildSingleTarget)' == 'maccatalyst'">net9.0-maccatalyst</TargetFrameworks>
+		<TargetFrameworks Condition="'$(BuildSingleTarget)' == '' and $([MSBuild]::IsOSPlatform('windows'))">net9.0-android;net9.0-windows10.0.19041.0</TargetFrameworks>
+		<TargetFrameworks Condition="'$(BuildSingleTarget)' == '' and $([MSBuild]::IsOSPlatform('osx'))">net9.0-android;net9.0-maccatalyst</TargetFrameworks>
+		<TargetFrameworks Condition="'$(BuildSingleTarget)' == '' and $([MSBuild]::IsOSPlatform('linux'))">net9.0-android</TargetFrameworks>
 
 		<OutputType>Exe</OutputType>
 		<RootNamespace>TFMAudioApp</RootNamespace>
