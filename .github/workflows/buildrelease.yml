@@ -453,29 +453,34 @@ jobs:
             -p:CreatePackage=true \
             -o bin/macos-arm64
 
-      - name: '📦 Create macOS ZIPs'
+      - name: '📦 Prepare macOS packages for release'
         run: |
           TAG=${{ steps.version.outputs.tag }}
           mkdir -p releases
 
-          # Package Intel (x64) version
-          APP_X64=$(find bin/macos-x64 -name "*.app" -type d | head -1)
-          if [ -n "$APP_X64" ]; then
-            cd "$(dirname "$APP_X64")"
-            zip -r "${GITHUB_WORKSPACE}/releases/TFMAudioApp-macOS-Intel-${TAG}.zip" "$(basename "$APP_X64")"
-            cd "${GITHUB_WORKSPACE}"
-            echo "✅ macOS Intel app packaged"
+          echo "🔍 Looking for .pkg files..."
+          find bin -name "*.pkg" -type f 2>/dev/null || echo "No .pkg files found"
+
+          # Copy Intel (x64) .pkg
+          PKG_X64=$(find bin/macos-x64 -name "*.pkg" -type f | head -1)
+          if [ -n "$PKG_X64" ]; then
+            cp "$PKG_X64" "releases/TFMAudioApp-macOS-Intel-${TAG}.pkg"
+            echo "✅ macOS Intel package ready"
+          else
+            echo "⚠️ No Intel .pkg found"
           fi
 
-          # Package Apple Silicon (arm64) version
-          APP_ARM64=$(find bin/macos-arm64 -name "*.app" -type d | head -1)
-          if [ -n "$APP_ARM64" ]; then
-            cd "$(dirname "$APP_ARM64")"
-            zip -r "${GITHUB_WORKSPACE}/releases/TFMAudioApp-macOS-AppleSilicon-${TAG}.zip" "$(basename "$APP_ARM64")"
-            cd "${GITHUB_WORKSPACE}"
-            echo "✅ macOS Apple Silicon app packaged"
+          # Copy Apple Silicon (arm64) .pkg
+          PKG_ARM64=$(find bin/macos-arm64 -name "*.pkg" -type f | head -1)
+          if [ -n "$PKG_ARM64" ]; then
+            cp "$PKG_ARM64" "releases/TFMAudioApp-macOS-AppleSilicon-${TAG}.pkg"
+            echo "✅ macOS Apple Silicon package ready"
+          else
+            echo "⚠️ No Apple Silicon .pkg found"
           fi
 
+          echo ""
+          echo "📦 Release files:"
           ls -la releases/
 
       - name: '📤 Upload macOS artifact'
