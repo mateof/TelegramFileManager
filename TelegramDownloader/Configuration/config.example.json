@@ -3,5 +3,7 @@
   "api_id": "",
   "hash_id": "",
   "mongo_connection_string": "",
-  "avoid_checking_certificate":  false
+  "avoid_checking_certificate": false,
+  "open_browser_on_startup": true,
+  "mobile_api_key": "my_api_key"
 }

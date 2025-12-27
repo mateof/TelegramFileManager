@@ -12,6 +12,7 @@
 @inject IJSRuntime JS
 @inject ModalService ModalService
 @inject TransactionInfoService tis
+@inject IFileService FileService
 
 <PageTitle>TelegramFileManager</PageTitle>
 
@@ -139,6 +140,12 @@
         </article>
 
         <TelegramDownloader.Pages.Modals.AudioPlayerModal @ref="audioPlayer" />
+        <TelegramDownloader.Pages.Modals.PlaylistManagerModal @ref="playlistManager"
+            OnPlayPlaylist="OnPlayPlaylist"
+            OnDownloadPlaylist="OnDownloadPlaylist"
+            OnNotify="OnPlaylistNotify" />
+        <TelegramDownloader.Pages.Modals.SaveToPlaylistModal @ref="saveToPlaylist"
+            OnTrackAdded="OnPlaylistNotify" />
 
         <Offcanvas @ref="offcanvas" title="Menu">
             <BodyTemplate>
@@ -168,6 +175,14 @@
                 <button @onclick='() => NavigateAndClose("/loglist")' class="offcanvas-menu-item">
                     <i class="bi bi-journal-text"></i>
                     <span class="menu-text">Logs</span>
+                </button>
+
+                <div class="offcanvas-divider"></div>
+                <div class="offcanvas-section-title">Media</div>
+
+                <button @onclick="OpenPlaylistsAndClose" class="offcanvas-menu-item">
+                    <i class="bi bi-music-note-list"></i>
+                    <span class="menu-text">Playlists</span>
                 </button>
 
                 <div class="offcanvas-divider"></div>
@@ -312,6 +327,8 @@
     private Pages.Modals.DeleteLeaveChannelModal deleteLeaveChannelModal { get; set; } = default!;
     private Pages.Modals.DatabaseMaintenanceModal databaseMaintenanceModal { get; set; } = default!;
     private Pages.Modals.PathRepairModal pathRepairModal { get; set; } = default!;
+    private Pages.Modals.PlaylistManagerModal playlistManager { get; set; } = default!;
+    private Pages.Modals.SaveToPlaylistModal saveToPlaylist { get; set; } = default!;
     private NavMenu menu { get; set; }
     private VersionBadge versionBadge { get; set; }
     private bool active { get; set; } = true;
@@ -591,6 +608,16 @@
         NavManager.NavigateTo("/");
     }
 
+    private async Task OpenPlaylistsAndClose()
+    {
+        await JS.InvokeVoidAsync("blurActiveElement");
+        await offcanvas.HideAsync();
+        if (playlistManager != null)
+        {
+            await playlistManager.Open();
+        }
+    }
+
     private async Task checkWorkingTasks() {
         try
         {
@@ -643,6 +670,115 @@
         if (versionBadge != null)
         {
             await versionBadge.CloseModal();
+        }
+    }
+
+    // Playlist Manager Modal - static methods
+    public static void OpenPlaylistManager()
+    {
+        if (_instance != null && _instance.playlistManager != null)
+        {
+            _instance.InvokeAsync(async () => await _instance.playlistManager.Open());
+        }
+    }
+
+    public static Pages.Modals.PlaylistManagerModal? GetPlaylistManager() => _instance?.playlistManager;
+    public static Pages.Modals.SaveToPlaylistModal? GetSaveToPlaylistModal() => _instance?.saveToPlaylist;
+
+    public static void OpenPlaylistManagerWithPlaylist(string playlistId)
+    {
+        if (_instance != null && _instance.playlistManager != null)
+        {
+            _instance.InvokeAsync(async () => await _instance.playlistManager.OpenWithPlaylist(playlistId));
+        }
+    }
+
+    // Playlist event handlers
+    private async Task OnPlayPlaylist((Models.PlaylistModel playlist, int? startIndex) args)
+    {
+        if (audioPlayer == null || args.playlist.Tracks.Count == 0) return;
+
+        // Convert playlist tracks to audio player format and add all to playlist
+        var playlistItems = args.playlist.Tracks
+            .OrderBy(t => t.Order)
+            .Select(t => (
+                Url: GetTrackUrl(t),
+                Type: GetAudioMimeType(t.FileType),
+                Title: t.FileName
+            ))
+            .ToList();
+
+        // Clear current playlist and add all tracks
+        await audioPlayer.ClearPlaylist();
+        await audioPlayer.AddMultipleToPlaylist(playlistItems);
+
+        // Set the playlist name and ID so it shows as active in the sidebar
+        await audioPlayer.SetPlaylistName(args.playlist.Name, args.playlist.Id);
+
+        // Show the modal first (in case it's not visible)
+        await audioPlayer.ShowCurrentModal();
+
+        // Play from start index or first track
+        int startIdx = args.startIndex ?? 0;
+        await audioPlayer.PlayTrack(startIdx);
+    }
+
+    private string GetTrackUrl(Models.PlaylistTrackModel track)
+    {
+        // Local files have DirectUrl set
+        if (track.IsLocalFile)
+        {
+            return track.DirectUrl!;
+        }
+
+        // Telegram files - use GetFileByTfmId which supports cache
+        return $"{NavManager.BaseUri}api/file/GetFileByTfmId/{track.FileName}?idChannel={track.ChannelId}&idFile={track.FileId}";
+    }
+
+    private string GetAudioMimeType(string fileType)
+    {
+        return fileType?.ToLower() switch
+        {
+            ".mp3" => "audio/mpeg",
+            ".flac" => "audio/flac",
+            ".wav" => "audio/wav",
+            ".ogg" => "audio/ogg",
+            ".m4a" => "audio/mp4",
+            ".aac" => "audio/aac",
+            _ => "audio/mpeg"
+        };
+    }
+
+    private async Task OnDownloadPlaylist((Models.PlaylistModel playlist, string folder) args)
+    {
+        // Run download in background to not block UI
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await FileService.DownloadPlaylistToLocal(args.playlist, args.folder);
+            }
+            catch (Exception ex)
+            {
+                NotificationModel nm = new NotificationModel();
+                nm.sendEvent(new Notification($"Error downloading playlist: {ex.Message}", "Playlist Download", NotificationTypes.Error));
+            }
+        });
+    }
+
+    private async Task OnPlaylistNotify(string message)
+    {
+        NotificationModel nm = new NotificationModel();
+        nm.sendEvent(new Notification(message, "Playlist", NotificationTypes.Success));
+
+        // Refresh audio player's saved playlists sidebar
+        if (audioPlayer != null)
+        {
+            try
+            {
+                await audioPlayer.RefreshSavedPlaylists();
+            }
+            catch { }
         }
     }
 

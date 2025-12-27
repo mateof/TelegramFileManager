@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:behaviors="clr-namespace:TFMAudioApp.Behaviors"
+             x:Class="TFMAudioApp.Controls.OptionsBottomSheet"
+             x:Name="BottomSheet">
+
+    <Grid BackgroundColor="#80000000">
+        <Grid.GestureRecognizers>
+            <TapGestureRecognizer Tapped="OnBackgroundTapped"/>
+        </Grid.GestureRecognizers>
+
+        <!-- Bottom Sheet Container -->
+        <Border VerticalOptions="End"
+                StrokeThickness="0"
+                BackgroundColor="{StaticResource CardBackgroundColor}"
+                StrokeShape="RoundRectangle 24,24,0,0"
+                Padding="0">
+
+            <VerticalStackLayout Spacing="0">
+                <!-- Handle bar -->
+                <BoxView HeightRequest="4"
+                         WidthRequest="40"
+                         CornerRadius="2"
+                         BackgroundColor="{StaticResource Gray500}"
+                         HorizontalOptions="Center"
+                         Margin="0,12,0,8"/>
+
+                <!-- Title -->
+                <Label Text="Options"
+                       FontSize="18"
+                       FontAttributes="Bold"
+                       TextColor="White"
+                       HorizontalOptions="Center"
+                       Margin="0,8,0,16"/>
+
+                <!-- Option Items -->
+                <VerticalStackLayout Spacing="0" Padding="16,0,16,24">
+
+                    <!-- Add to Playlist -->
+                    <Border StrokeThickness="0"
+                            BackgroundColor="{StaticResource SurfaceColor}"
+                            StrokeShape="RoundRectangle 12"
+                            Padding="16"
+                            Margin="0,4">
+                        <Border.Behaviors>
+                            <behaviors:TapFeedbackBehavior/>
+                        </Border.Behaviors>
+                        <Border.GestureRecognizers>
+                            <TapGestureRecognizer Tapped="OnAddToPlaylistTapped"/>
+                        </Border.GestureRecognizers>
+                        <HorizontalStackLayout Spacing="16">
+                            <Border StrokeThickness="0"
+                                    BackgroundColor="{StaticResource Primary}"
+                                    StrokeShape="RoundRectangle 10"
+                                    WidthRequest="44"
+                                    HeightRequest="44">
+                                <Label Text="+"
+                                       FontSize="24"
+                                       FontAttributes="Bold"
+                                       TextColor="White"
+                                       HorizontalOptions="Center"
+                                       VerticalOptions="Center"/>
+                            </Border>
+                            <VerticalStackLayout VerticalOptions="Center">
+                                <Label Text="Add to Playlist"
+                                       FontSize="16"
+                                       FontAttributes="Bold"
+                                       TextColor="White"/>
+                                <Label Text="Save this track to a playlist"
+                                       FontSize="12"
+                                       TextColor="{StaticResource Gray400}"/>
+                            </VerticalStackLayout>
+                        </HorizontalStackLayout>
+                    </Border>
+
+                    <!-- View Queue -->
+                    <Border StrokeThickness="0"
+                            BackgroundColor="{StaticResource SurfaceColor}"
+                            StrokeShape="RoundRectangle 12"
+                            Padding="16"
+                            Margin="0,4">
+                        <Border.Behaviors>
+                            <behaviors:TapFeedbackBehavior/>
+                        </Border.Behaviors>
+                        <Border.GestureRecognizers>
+                            <TapGestureRecognizer Tapped="OnViewQueueTapped"/>
+                        </Border.GestureRecognizers>
+                        <HorizontalStackLayout Spacing="16">
+                            <Border StrokeThickness="0"
+                                    BackgroundColor="{StaticResource Secondary}"
+                                    StrokeShape="RoundRectangle 10"
+                                    WidthRequest="44"
+                                    HeightRequest="44">
+                                <Label Text="≡"
+                                       FontSize="24"
+                                       FontAttributes="Bold"
+                                       TextColor="White"
+                                       HorizontalOptions="Center"
+                                       VerticalOptions="Center"/>
+                            </Border>
+                            <VerticalStackLayout VerticalOptions="Center">
+                                <Label Text="View Queue"
+                                       FontSize="16"
+                                       FontAttributes="Bold"
+                                       TextColor="White"/>
+                                <Label Text="See upcoming tracks"
+                                       FontSize="12"
+                                       TextColor="{StaticResource Gray400}"/>
+                            </VerticalStackLayout>
+                        </HorizontalStackLayout>
+                    </Border>
+
+                    <!-- Share -->
+                    <Border StrokeThickness="0"
+                            BackgroundColor="{StaticResource SurfaceColor}"
+                            StrokeShape="RoundRectangle 12"
+                            Padding="16"
+                            Margin="0,4">
+                        <Border.Behaviors>
+                            <behaviors:TapFeedbackBehavior/>
+                        </Border.Behaviors>
+                        <Border.GestureRecognizers>
+                            <TapGestureRecognizer Tapped="OnShareTapped"/>
+                        </Border.GestureRecognizers>
+                        <HorizontalStackLayout Spacing="16">
+                            <Border StrokeThickness="0"
+                                    BackgroundColor="{StaticResource Tertiary}"
+                                    StrokeShape="RoundRectangle 10"
+                                    WidthRequest="44"
+                                    HeightRequest="44">
+                                <Label Text="↗"
+                                       FontSize="24"
+                                       FontAttributes="Bold"
+                                       TextColor="White"
+                                       HorizontalOptions="Center"
+                                       VerticalOptions="Center"/>
+                            </Border>
+                            <VerticalStackLayout VerticalOptions="Center">
+                                <Label Text="Share"
+                                       FontSize="16"
+                                       FontAttributes="Bold"
+                                       TextColor="White"/>
+                                <Label Text="Share with friends"
+                                       FontSize="12"
+                                       TextColor="{StaticResource Gray400}"/>
+                            </VerticalStackLayout>
+                        </HorizontalStackLayout>
+                    </Border>
+
+                    <!-- Stop Playback -->
+                    <Border StrokeThickness="0"
+                            BackgroundColor="{StaticResource SurfaceColor}"
+                            StrokeShape="RoundRectangle 12"
+                            Padding="16"
+                            Margin="0,4">
+                        <Border.Behaviors>
+                            <behaviors:TapFeedbackBehavior/>
+                        </Border.Behaviors>
+                        <Border.GestureRecognizers>
+                            <TapGestureRecognizer Tapped="OnStopTapped"/>
+                        </Border.GestureRecognizers>
+                        <HorizontalStackLayout Spacing="16">
+                            <Border StrokeThickness="0"
+                                    BackgroundColor="{StaticResource Error}"
+                                    StrokeShape="RoundRectangle 10"
+                                    WidthRequest="44"
+                                    HeightRequest="44">
+                                <Label Text="■"
+                                       FontSize="20"
+                                       TextColor="White"
+                                       HorizontalOptions="Center"
+                                       VerticalOptions="Center"/>
+                            </Border>
+                            <VerticalStackLayout VerticalOptions="Center">
+                                <Label Text="Stop Playback"
+                                       FontSize="16"
+                                       FontAttributes="Bold"
+                                       TextColor="White"/>
+                                <Label Text="Stop and clear queue"
+                                       FontSize="12"
+                                       TextColor="{StaticResource Gray400}"/>
+                            </VerticalStackLayout>
+                        </HorizontalStackLayout>
+                    </Border>
+
+                </VerticalStackLayout>
+
+                <!-- Cancel Button -->
+                <Border StrokeThickness="0"
+                        BackgroundColor="{StaticResource Gray600}"
+                        StrokeShape="RoundRectangle 12"
+                        Padding="16"
+                        Margin="16,0,16,24">
+                    <Border.Behaviors>
+                        <behaviors:TapFeedbackBehavior/>
+                    </Border.Behaviors>
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnCancelTapped"/>
+                    </Border.GestureRecognizers>
+                    <Label Text="Cancel"
+                           FontSize="16"
+                           FontAttributes="Bold"
+                           TextColor="White"
+                           HorizontalOptions="Center"/>
+                </Border>
+            </VerticalStackLayout>
+        </Border>
+    </Grid>
+</ContentView>

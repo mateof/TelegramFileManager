@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentView xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:controls="clr-namespace:TFMAudioApp.Controls"
+             xmlns:behaviors="clr-namespace:TFMAudioApp.Behaviors"
+             x:Class="TFMAudioApp.Controls.MiniPlayerControl"
+             x:Name="MiniPlayer"
+             HeightRequest="80">
+
+    <ContentView.GestureRecognizers>
+        <TapGestureRecognizer Tapped="OnPlayerTapped"/>
+    </ContentView.GestureRecognizers>
+
+    <Border StrokeThickness="0"
+            BackgroundColor="{StaticResource CardBackgroundColor}"
+            StrokeShape="RoundRectangle 20,20,0,0"
+            Margin="0">
+
+        <Grid RowDefinitions="Auto,*"
+              Padding="0"
+              ColumnSpacing="0"
+              RowSpacing="0">
+
+            <!-- Seekable progress slider at top -->
+            <Slider Grid.Row="0"
+                    x:Name="ProgressSlider"
+                    Minimum="0"
+                    Maximum="1"
+                    Value="{Binding Progress, Source={x:Reference MiniPlayer}}"
+                    MinimumTrackColor="{StaticResource Primary}"
+                    MaximumTrackColor="{StaticResource Gray700}"
+                    ThumbColor="{StaticResource Primary}"
+                    HeightRequest="20"
+                    Margin="0,-8,0,-8"
+                    VerticalOptions="Start"
+                    DragStarted="OnSeekStarted"
+                    DragCompleted="OnSeekCompleted"/>
+
+            <!-- Player content -->
+            <Grid Grid.Row="1"
+                  ColumnDefinitions="60,*,Auto,Auto,Auto"
+                  Padding="12,8"
+                  VerticalOptions="Center">
+
+                <!-- Track icon/artwork with glow -->
+                <Border Grid.Column="0"
+                        StrokeThickness="0"
+                        BackgroundColor="{StaticResource SurfaceColor}"
+                        StrokeShape="RoundRectangle 12"
+                        HeightRequest="52"
+                        WidthRequest="52"
+                        HorizontalOptions="Center"
+                        VerticalOptions="Center"
+                        Shadow="{Shadow Brush={StaticResource Primary}, Offset='0,2', Radius=8, Opacity=0.2}">
+                    <Label Text="🎵"
+                           FontSize="22"
+                           HorizontalOptions="Center"
+                           VerticalOptions="Center"/>
+                </Border>
+
+            <!-- Track info -->
+            <VerticalStackLayout Grid.Column="1"
+                                 Margin="10,0"
+                                 VerticalOptions="Center"
+                                 Spacing="2">
+                <Label x:Name="TrackNameLabel"
+                       Text="{Binding TrackName, Source={x:Reference MiniPlayer}}"
+                       FontSize="14"
+                       FontAttributes="Bold"
+                       LineBreakMode="TailTruncation"
+                       MaxLines="1"/>
+                <Label x:Name="ArtistLabel"
+                       Text="{Binding ArtistName, Source={x:Reference MiniPlayer}}"
+                       FontSize="12"
+                       TextColor="{StaticResource Gray400}"
+                       LineBreakMode="TailTruncation"
+                       MaxLines="1"/>
+            </VerticalStackLayout>
+
+                <!-- Previous button -->
+                <Border Grid.Column="2"
+                        StrokeThickness="0"
+                        BackgroundColor="{StaticResource SurfaceColor}"
+                        StrokeShape="RoundRectangle 10"
+                        WidthRequest="40"
+                        HeightRequest="40"
+                        HorizontalOptions="Center"
+                        VerticalOptions="Center">
+                    <Border.Behaviors>
+                        <behaviors:TapFeedbackBehavior/>
+                    </Border.Behaviors>
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnPreviousClicked"/>
+                    </Border.GestureRecognizers>
+                    <!-- Skip previous icon (|◀◀) -->
+                    <HorizontalStackLayout Spacing="2"
+                                           HorizontalOptions="Center"
+                                           VerticalOptions="Center">
+                        <BoxView WidthRequest="2" HeightRequest="12"
+                                 BackgroundColor="White"
+                                 CornerRadius="1"/>
+                        <Polygon Points="8,0 0,6 8,12"
+                                 Fill="White"/>
+                        <Polygon Points="8,0 0,6 8,12"
+                                 Fill="White"
+                                 Margin="-3,0,0,0"/>
+                    </HorizontalStackLayout>
+                </Border>
+
+                <!-- Play/Pause button with accent -->
+                <Border Grid.Column="3"
+                        StrokeThickness="0"
+                        Background="{StaticResource PrimaryGradient}"
+                        StrokeShape="RoundRectangle 22"
+                        WidthRequest="48"
+                        HeightRequest="48"
+                        HorizontalOptions="Center"
+                        VerticalOptions="Center">
+                    <Border.Behaviors>
+                        <behaviors:TapFeedbackBehavior/>
+                    </Border.Behaviors>
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnPlayPauseClicked"/>
+                    </Border.GestureRecognizers>
+                    <!-- Play/Pause icon container -->
+                    <Grid HorizontalOptions="Center"
+                          VerticalOptions="Center">
+                        <!-- Play icon (triangle) -->
+                        <Polygon x:Name="PlayIcon"
+                                 Points="0,0 14,9 0,18"
+                                 Fill="White"
+                                 HorizontalOptions="Center"
+                                 VerticalOptions="Center"
+                                 TranslationX="2"/>
+                        <!-- Pause icon (two bars) -->
+                        <HorizontalStackLayout x:Name="PauseIcon"
+                                               Spacing="4"
+                                               HorizontalOptions="Center"
+                                               VerticalOptions="Center"
+                                               IsVisible="False">
+                            <BoxView WidthRequest="4" HeightRequest="16"
+                                     BackgroundColor="White"
+                                     CornerRadius="1"/>
+                            <BoxView WidthRequest="4" HeightRequest="16"
+                                     BackgroundColor="White"
+                                     CornerRadius="1"/>
+                        </HorizontalStackLayout>
+                    </Grid>
+                </Border>
+
+                <!-- Next button -->
+                <Border Grid.Column="4"
+                        StrokeThickness="0"
+                        BackgroundColor="{StaticResource SurfaceColor}"
+                        StrokeShape="RoundRectangle 10"
+                        WidthRequest="40"
+                        HeightRequest="40"
+                        HorizontalOptions="Center"
+                        VerticalOptions="Center">
+                    <Border.Behaviors>
+                        <behaviors:TapFeedbackBehavior/>
+                    </Border.Behaviors>
+                    <Border.GestureRecognizers>
+                        <TapGestureRecognizer Tapped="OnNextClicked"/>
+                    </Border.GestureRecognizers>
+                    <!-- Skip next icon (▶▶|) -->
+                    <HorizontalStackLayout Spacing="2"
+                                           HorizontalOptions="Center"
+                                           VerticalOptions="Center">
+                        <Polygon Points="0,0 8,6 0,12"
+                                 Fill="White"/>
+                        <Polygon Points="0,0 8,6 0,12"
+                                 Fill="White"
+                                 Margin="-3,0,0,0"/>
+                        <BoxView WidthRequest="2" HeightRequest="12"
+                                 BackgroundColor="White"
+                                 CornerRadius="1"/>
+                    </HorizontalStackLayout>
+                </Border>
+            </Grid>
+
+        </Grid>
+    </Border>
+</ContentView>

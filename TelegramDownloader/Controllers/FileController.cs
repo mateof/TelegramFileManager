@@ -55,7 +55,12 @@ namespace TelegramDownloader.Controllers
 
         }
 
+        /// <summary>
+        /// File manager operations (read, delete, copy, move, create, search, rename)
+        /// </summary>
+        [HttpPost]
         [Route("FileOperations")]
+        [ProducesResponseType(typeof(object), 200)]
         public async Task<object> FileOperations([FromBody] Syncfusion.EJ2.FileManager.Base.FileManagerDirectoryContent args)
         {
 
@@ -147,7 +152,12 @@ namespace TelegramDownloader.Controllers
             return response;
         }
 
+        /// <summary>
+        /// Download a file from local storage
+        /// </summary>
+        [HttpPost]
         [Route("Download")]
+        [ProducesResponseType(typeof(FileResult), 200)]
         public IActionResult Download([FromForm] string downloadInput)
         {
             //Invoking download operation with the required parameters.
@@ -218,7 +228,12 @@ namespace TelegramDownloader.Controllers
             return Content("");
         }
 
+        /// <summary>
+        /// Get an image from local storage
+        /// </summary>
+        [HttpGet]
         [Route("GetImage")]
+        [ProducesResponseType(typeof(FileResult), 200)]
         public async Task<IActionResult> GetImage(string path)
         {
             //Invoking GetImage operation with the required parameters.
@@ -232,7 +247,16 @@ namespace TelegramDownloader.Controllers
             return this.operation.GetImage(path, "", false, null, null);
         }
 
+        /// <summary>
+        /// Download a file from Telegram by message ID
+        /// </summary>
+        /// <param name="id">File name</param>
+        /// <param name="idChannel">Telegram channel ID</param>
+        /// <param name="idFile">Telegram message ID</param>
+        [HttpGet]
         [Route("GetFile/{id}")]
+        [ProducesResponseType(typeof(FileStreamResult), 200)]
+        [ProducesResponseType(503)]
         public async Task<IActionResult> GetFile(string id, string? idChannel, string? idFile)
         {
             var fileName = id;
@@ -240,29 +264,56 @@ namespace TelegramDownloader.Controllers
             var file = _fs.ExistFileIntempFolder($"{idChannel}-{idFile}-{id}");
             if ( file == null )
             {
-                // HttpResponseMessage fullResponse = new HttpResponseMessage(HttpStatusCode.OK); // Request.CreateResponse(HttpStatusCode.OK);
-                TL.Message idM = await _ts.getMessageFile(idChannel, Convert.ToInt32(idFile));
-                ChatMessages cm = new ChatMessages();
-                cm.message = idM;
                 string filePath = System.IO.Path.Combine(FileService.TEMPDIR, "_temp", $"{idChannel}-{idFile}-{id}");
-                file = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite);
-                DownloadModel dm = new DownloadModel();
-                dm.tis = _tis;
-                dm.startDate = DateTime.Now;
-                dm.path = filePath;
-                if (cm.message is Message msgBase)
+
+                // Check if file exists (might be downloading by another request - race condition)
+                if (System.IO.File.Exists(filePath))
                 {
-                    if (msgBase.media is MessageMediaDocument mediaDoc &&
-                        mediaDoc.document is TL.Document doc)
+                    // File exists, wait for it to be ready and return it
+                    for (int i = 0; i < 60; i++) // Wait up to 30 seconds
                     {
-                        dm._size = doc.size;
-                        dm.name = doc.Filename;
+                        await Task.Delay(500);
+                        try
+                        {
+                            file = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                            break;
+                        }
+                        catch (IOException)
+                        {
+                            // File still being written, wait more
+                        }
+                    }
+                    if (file == null)
+                    {
+                        return StatusCode(503, "File is being processed, please try again");
                     }
                 }
-                dm.channelName = _ts.getChatName(Convert.ToInt64(idChannel));
-                _tis.addToDownloadList(dm);
-                await _ts.DownloadFileAndReturn(cm, file, model: dm);
-                file.Position = 0; 
+                else
+                {
+                    // File doesn't exist, download it
+                    TL.Message idM = await _ts.getMessageFile(idChannel, Convert.ToInt32(idFile));
+                    ChatMessages cm = new ChatMessages();
+                    cm.message = idM;
+
+                    file = new FileStream(filePath, FileMode.Create, FileAccess.ReadWrite, FileShare.ReadWrite);
+                    DownloadModel dm = new DownloadModel();
+                    dm.tis = _tis;
+                    dm.startDate = DateTime.Now;
+                    dm.path = filePath;
+                    if (cm.message is Message msgBase)
+                    {
+                        if (msgBase.media is MessageMediaDocument mediaDoc &&
+                            mediaDoc.document is TL.Document doc)
+                        {
+                            dm._size = doc.size;
+                            dm.name = doc.Filename;
+                        }
+                    }
+                    dm.channelName = _ts.getChatName(Convert.ToInt64(idChannel));
+                    _tis.addToDownloadList(dm);
+                    await _ts.DownloadFileAndReturn(cm, file, model: dm);
+                    file.Position = 0;
+                }
             }
             var request = HttpContext.Request;
             var rangeHeader = request.Headers["Range"].ToString();
@@ -278,7 +329,12 @@ namespace TelegramDownloader.Controllers
         /// <summary>
         /// View file inline (for PDF viewer, etc.) - doesn't trigger download
         /// </summary>
+        /// <param name="id">File name</param>
+        /// <param name="idChannel">Telegram channel ID</param>
+        /// <param name="idFile">Telegram message ID</param>
+        [HttpGet]
         [Route("ViewFile/{id}")]
+        [ProducesResponseType(typeof(FileStreamResult), 200)]
         public async Task<IActionResult> ViewFile(string id, string? idChannel, string? idFile)
         {
             var fileName = id;
@@ -318,7 +374,16 @@ namespace TelegramDownloader.Controllers
             };
         }
 
+        /// <summary>
+        /// Get file by TFM database ID (immediate download)
+        /// </summary>
+        /// <param name="id">File name</param>
+        /// <param name="idChannel">Telegram channel ID</param>
+        /// <param name="idFile">TFM database file ID</param>
+        [HttpGet]
         [Route("GetFileByTfmIdNow/{id}")]
+        [ProducesResponseType(typeof(FileStreamResult), 200)]
+        [ProducesResponseType(404)]
         public async Task<IActionResult> GetFileByTfmIdNow(string id, [FromQuery] string idChannel, [FromQuery] string idFile)
         {
             var fileName = id;
@@ -353,7 +418,17 @@ namespace TelegramDownloader.Controllers
             return new FileStreamResult(file, mimeType);
         }
 
+        /// <summary>
+        /// Get file by TFM database ID with background download (supports range requests)
+        /// </summary>
+        /// <param name="id">File name</param>
+        /// <param name="idChannel">Telegram channel ID</param>
+        /// <param name="idFile">TFM database file ID</param>
+        [HttpGet]
         [Route("GetFileByTfmId/{id}")]
+        [ProducesResponseType(typeof(FileStreamResult), 200)]
+        [ProducesResponseType(404)]
+        [ProducesResponseType(500)]
         public async Task<IActionResult> GetFileByTfmId(string id, [FromQuery] string idChannel, [FromQuery] string idFile)
         {
             var fileName = id;
@@ -412,7 +487,15 @@ namespace TelegramDownloader.Controllers
             }
         }
 
+        /// <summary>
+        /// Generate STRM files for a channel (for media player integration)
+        /// </summary>
+        /// <param name="idChannel">Telegram channel ID</param>
+        /// <param name="path">Path in channel</param>
+        /// <param name="host">Host URL for streaming</param>
+        [HttpGet]
         [Route("strm")]
+        [ProducesResponseType(typeof(FileStreamResult), 200)]
         public async Task<IActionResult> GetStrm([FromQuery] string idChannel, [FromQuery] string path, [FromQuery] string host)
         {
             String zip = await _fs.CreateStrmFiles(path, idChannel, host);
@@ -425,7 +508,17 @@ namespace TelegramDownloader.Controllers
             };
         }
 
+        /// <summary>
+        /// Stream file directly from Telegram (supports range requests for seeking)
+        /// </summary>
+        /// <param name="idChannel">Telegram channel ID</param>
+        /// <param name="idFile">TFM database file ID</param>
+        /// <param name="name">File name</param>
+        [HttpGet]
         [Route("GetFileStream/{idChannel}/{idFile}/{name}")]
+        [ProducesResponseType(206)]
+        [ProducesResponseType(416)]
+        [ProducesResponseType(500)]
         public async Task<IActionResult> GetFileStream(string idChannel, string idFile, string name)
         {
             var fileName = name;
@@ -569,7 +662,13 @@ namespace TelegramDownloader.Controllers
 
         }
 
+        /// <summary>
+        /// Export channel database to JSON file
+        /// </summary>
+        /// <param name="id">Telegram channel ID</param>
+        [HttpGet]
         [Route("export/{id}")]
+        [ProducesResponseType(typeof(FileStreamResult), 200)]
         public async Task<IActionResult> ExportDatabase(string id)
         {
             MemoryStream ms = await _fs.exportAllData(id);
@@ -582,7 +681,15 @@ namespace TelegramDownloader.Controllers
 
         }
 
+        /// <summary>
+        /// Create a shareable TFM file package
+        /// </summary>
+        /// <param name="id">Telegram channel ID</param>
+        /// <param name="bsonId">MongoDB document ID (optional)</param>
+        /// <param name="fileName">File name for the package</param>
+        [HttpGet]
         [Route("share/{id}")]
+        [ProducesResponseType(typeof(FileStreamResult), 200)]
         public async Task<IActionResult> ShareFiles(string id, string? bsonId, string? fileName)
         {
             ShareFilesModel sfm = new ShareFilesModel();

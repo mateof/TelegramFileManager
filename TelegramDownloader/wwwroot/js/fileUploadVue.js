@@ -394,21 +394,71 @@ window.openFileUploadModal = (id, path, url) => {
     fileModal.showModal = true;
 }
 
+// Store reference to audio player for direct calls
+window._audioPlayerRef = null;
+
+window.setAudioPlayerRef = (dotNetRef) => {
+    window._audioPlayerRef = dotNetRef;
+}
+
 window.openAudioPlayerModal = (file, type = "audio/mpeg", title = "") => {
-    // Call Blazor component via JSInvokable
     if (type === null) {
         type = "audio/mpeg";
     }
+
+    // Try using direct reference first (more reliable)
+    if (window._audioPlayerRef) {
+        try {
+            window._audioPlayerRef.invokeMethodAsync('ShowModalFromJs', file, type, title)
+                .catch(e => {
+                    console.log('ShowModalFromJs error, falling back to static:', e);
+                    fallbackOpenAudioPlayer(file, type, title);
+                });
+            return;
+        } catch (e) {
+            console.log('Direct ref error:', e);
+        }
+    }
+
+    // Fallback to static method
+    fallbackOpenAudioPlayer(file, type, title);
+}
+
+function fallbackOpenAudioPlayer(file, type, title) {
     try {
-        DotNet.invokeMethodAsync('TelegramDownloader', 'OpenAudioPlayer', file, type, title).catch(() => {});
-    } catch (e) { console.log('OpenAudioPlayer error:', e); }
+        DotNet.invokeMethodAsync('TelegramDownloader', 'OpenAudioPlayer', file, type, title)
+            .catch(e => console.log('OpenAudioPlayer static error:', e));
+    } catch (e) {
+        console.log('OpenAudioPlayer error:', e);
+    }
 }
 
 window.openAudioModal = () => {
-    // Abrir el modal con la canción actual (si hay una)
+    // Try using direct reference first
+    if (window._audioPlayerRef) {
+        try {
+            window._audioPlayerRef.invokeMethodAsync('ShowCurrentModalFromJs')
+                .catch(e => {
+                    console.log('ShowCurrentModalFromJs error, falling back to static:', e);
+                    fallbackOpenAudioModal();
+                });
+            return;
+        } catch (e) {
+            console.log('Direct ref error:', e);
+        }
+    }
+
+    // Fallback to static method
+    fallbackOpenAudioModal();
+}
+
+function fallbackOpenAudioModal() {
     try {
-        DotNet.invokeMethodAsync('TelegramDownloader', 'OpenAudioPlayerCurrent').catch(() => {});
-    } catch (e) { console.log('OpenAudioPlayerCurrent error:', e); }
+        DotNet.invokeMethodAsync('TelegramDownloader', 'OpenAudioPlayerCurrent')
+            .catch(e => console.log('OpenAudioPlayerCurrent static error:', e));
+    } catch (e) {
+        console.log('OpenAudioPlayerCurrent error:', e);
+    }
 }
 
 window.playAudioPlayer = (url, type) => {
@@ -649,6 +699,45 @@ window.stopVisualizerAnimation = () => {
     }
 };
 
+// Destroy the audio visualizer and disconnect Web Audio API
+// This can help with audio quality for FLAC and other high-quality formats
+window.destroyAudioVisualizer = () => {
+    try {
+        // Stop any running animation
+        window.stopVisualizerAnimation();
+
+        // Disconnect the analyser from the audio chain if connected
+        if (window._audioVisualizer.analyser) {
+            try {
+                window._audioVisualizer.analyser.disconnect();
+            } catch (e) { /* already disconnected */ }
+        }
+
+        // Disconnect the source but keep it (can't reconnect MediaElementSource)
+        // The source will remain connected to destination for audio playback
+        if (window._audioVisualizer.source && window._audioVisualizer.audioContext) {
+            try {
+                // Reconnect source directly to destination (bypassing analyser)
+                window._audioVisualizer.source.disconnect();
+                window._audioVisualizer.source.connect(window._audioVisualizer.audioContext.destination);
+            } catch (e) { /* ignore */ }
+        }
+
+        // Clear the data array
+        window._audioVisualizer.dataArray = null;
+        window._audioVisualizer.analyser = null;
+
+        // Mark as not initialized so it can be re-initialized if needed
+        window._audioVisualizer.isInitialized = false;
+
+        console.log('Audio visualizer destroyed - audio quality mode enabled');
+        return true;
+    } catch (e) {
+        console.error('Error destroying audio visualizer:', e);
+        return false;
+    }
+};
+
 window.addToAudioPlaylist = (url, type = "audio/mpeg", title = "") => {
     if (type === null) type = "audio/mpeg";
     try {
@@ -832,11 +921,22 @@ window.extractAudioArtwork = (audioUrl) => {
             return;
         }
 
+        const urlLower = audioUrl.toLowerCase();
+
         // Skip artwork extraction for FLAC files - jsmediatags has issues with them
         // and they require downloading too much data
-        const urlLower = audioUrl.toLowerCase();
         if (urlLower.includes('.flac') || urlLower.includes('flac')) {
             console.log('Skipping artwork extraction for FLAC file');
+            window._artworkCache[audioUrl] = null;
+            resolve(null);
+            return;
+        }
+
+        // Skip artwork extraction for local files (not from API)
+        // jsmediatags tries to download the entire file which can hang the connection
+        const isLocalFile = !audioUrl.includes('/api/file/');
+        if (isLocalFile) {
+            console.log('Skipping artwork extraction for local file');
             window._artworkCache[audioUrl] = null;
             resolve(null);
             return;
@@ -849,12 +949,12 @@ window.extractAudioArtwork = (audioUrl) => {
             return;
         }
 
-        // Add timeout to prevent hanging
+        // Add timeout to prevent hanging (reduced from 10s to 5s)
         const timeoutId = setTimeout(() => {
             console.log('Artwork extraction timed out');
             window._artworkCache[audioUrl] = null;
             resolve(null);
-        }, 10000); // 10 second timeout
+        }, 5000); // 5 second timeout
 
         try {
             jsmediatags.read(audioUrl, {

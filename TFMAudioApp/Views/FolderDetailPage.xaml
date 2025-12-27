@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:models="clr-namespace:TFMAudioApp.Models"
+             xmlns:controls="clr-namespace:TFMAudioApp.Controls"
+             x:Class="TFMAudioApp.Views.FolderDetailPage"
+             Title="Folder"
+             BackgroundColor="{StaticResource PageBackgroundColor}"
+             Shell.NavBarIsVisible="True">
+
+    <Grid RowDefinitions="*,Auto">
+        <Grid Grid.Row="0" RowDefinitions="Auto,*">
+
+        <!-- Header with folder info -->
+        <Border Grid.Row="0"
+                StrokeThickness="0"
+                BackgroundColor="{StaticResource CardBackgroundColor}"
+                Margin="16,16,16,8"
+                Padding="20"
+                StrokeShape="RoundRectangle 16">
+            <HorizontalStackLayout Spacing="16">
+                <Label x:Name="FolderIconLabel"
+                       Text="📁"
+                       FontSize="48"
+                       VerticalOptions="Center"/>
+                <VerticalStackLayout VerticalOptions="Center" Spacing="4">
+                    <Label x:Name="FolderTitleLabel"
+                           Text="Folder"
+                           FontSize="22"
+                           FontAttributes="Bold"
+                           TextColor="White"/>
+                    <Label x:Name="ChannelCountLabel"
+                           Text="0 channels"
+                           FontSize="14"
+                           TextColor="{StaticResource Gray400}"/>
+                </VerticalStackLayout>
+            </HorizontalStackLayout>
+        </Border>
+
+        <!-- Channels List -->
+        <CollectionView Grid.Row="1"
+                        x:Name="ChannelsCollection"
+                        Margin="0,8,0,0">
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="models:Channel">
+                    <Border StrokeThickness="0"
+                            BackgroundColor="{StaticResource CardBackgroundColor}"
+                            StrokeShape="RoundRectangle 12"
+                            Margin="16,4"
+                            Padding="16">
+                        <Border.GestureRecognizers>
+                            <TapGestureRecognizer Tapped="OnChannelTapped"/>
+                        </Border.GestureRecognizers>
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <!-- Channel icon -->
+                            <Border Grid.Column="0"
+                                    StrokeThickness="0"
+                                    BackgroundColor="{StaticResource SurfaceColor}"
+                                    StrokeShape="RoundRectangle 10"
+                                    WidthRequest="48"
+                                    HeightRequest="48">
+                                <Label Text="📺"
+                                       FontSize="24"
+                                       HorizontalOptions="Center"
+                                       VerticalOptions="Center"/>
+                            </Border>
+
+                            <!-- Channel info -->
+                            <VerticalStackLayout Grid.Column="1"
+                                                 Margin="14,0"
+                                                 VerticalOptions="Center"
+                                                 Spacing="2">
+                                <Label Text="{Binding Name}"
+                                       FontSize="16"
+                                       FontAttributes="Bold"
+                                       TextColor="White"
+                                       LineBreakMode="TailTruncation"
+                                       MaxLines="1"/>
+                                <Label Text="{Binding FileCount, StringFormat='{0} files'}"
+                                       FontSize="12"
+                                       TextColor="{StaticResource Gray400}"/>
+                            </VerticalStackLayout>
+
+                            <!-- Arrow -->
+                            <Label Grid.Column="2"
+                                   Text=">"
+                                   FontSize="20"
+                                   FontAttributes="Bold"
+                                   TextColor="{StaticResource Gray500}"
+                                   VerticalOptions="Center"/>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+
+            <CollectionView.EmptyView>
+                <VerticalStackLayout HorizontalOptions="Center"
+                                     VerticalOptions="Center"
+                                     Padding="40">
+                    <Label Text="📭"
+                           FontSize="64"
+                           HorizontalOptions="Center"/>
+                    <Label Text="No channels in this folder"
+                           FontSize="16"
+                           TextColor="{StaticResource Gray400}"
+                           HorizontalOptions="Center"
+                           Margin="0,16,0,0"/>
+                </VerticalStackLayout>
+            </CollectionView.EmptyView>
+        </CollectionView>
+        </Grid>
+
+        <!-- Mini Player -->
+        <controls:MiniPlayerControl Grid.Row="1"/>
+    </Grid>
+</ContentPage>

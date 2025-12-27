@@ -1,0 +1,273 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:TFMAudioApp.ViewModels"
+             xmlns:models="clr-namespace:TFMAudioApp.Models"
+             xmlns:controls="clr-namespace:TFMAudioApp.Controls"
+             xmlns:behaviors="clr-namespace:TFMAudioApp.Behaviors"
+             x:Class="TFMAudioApp.Views.PlaylistDetailPage"
+             x:DataType="vm:PlaylistDetailViewModel"
+             Title="{Binding Title}"
+             BackgroundColor="{StaticResource PageBackgroundColor}">
+
+    <Grid RowDefinitions="*,Auto">
+        <!-- Main Content -->
+        <Grid Grid.Row="0" RowDefinitions="Auto,Auto,Auto,*">
+
+        <!-- Offline/Syncing Status Bar -->
+        <Border Grid.Row="0"
+                BackgroundColor="{StaticResource Gray600}"
+                StrokeThickness="0"
+                Padding="12,8"
+                IsVisible="{Binding StatusMessage, Converter={StaticResource StringToBoolConverter}}">
+            <Grid ColumnDefinitions="Auto,*">
+                <!-- Offline icon -->
+                <Label Grid.Column="0"
+                       Text="📴"
+                       FontSize="14"
+                       VerticalOptions="Center"
+                       IsVisible="{Binding IsOfflineMode}"/>
+                <!-- Status message -->
+                <Label Grid.Column="1"
+                       Text="{Binding StatusMessage}"
+                       FontSize="13"
+                       TextColor="{StaticResource Gray300}"
+                       VerticalOptions="Center"
+                       Margin="8,0,0,0"/>
+            </Grid>
+        </Border>
+
+        <!-- Header with actions -->
+        <Frame Grid.Row="1"
+               BackgroundColor="{StaticResource CardBackgroundColor}"
+               BorderColor="Transparent"
+               CornerRadius="0"
+               Padding="20">
+            <VerticalStackLayout Spacing="15">
+                <HorizontalStackLayout Spacing="15" HorizontalOptions="Center">
+                    <!-- Playlist icon with cache badge -->
+                    <Grid WidthRequest="56" HeightRequest="56">
+                        <Label Text="🎵" FontSize="48" HorizontalOptions="Center" VerticalOptions="Center"/>
+                        <Border BackgroundColor="{StaticResource Primary}"
+                                StrokeThickness="0"
+                                WidthRequest="22"
+                                HeightRequest="22"
+                                HorizontalOptions="End"
+                                VerticalOptions="End"
+                                Margin="0,0,-4,-4"
+                                IsVisible="{Binding IsPlaylistCached}">
+                            <Border.StrokeShape>
+                                <RoundRectangle CornerRadius="11"/>
+                            </Border.StrokeShape>
+                            <Label Text="✓"
+                                   FontSize="12"
+                                   TextColor="White"
+                                   HorizontalOptions="Center"
+                                   VerticalOptions="Center"/>
+                        </Border>
+                    </Grid>
+                    <VerticalStackLayout VerticalOptions="Center">
+                        <Label Text="{Binding PlaylistName}"
+                               FontSize="24"
+                               FontAttributes="Bold"/>
+                        <HorizontalStackLayout Spacing="8">
+                            <Label Text="{Binding Tracks.Count, StringFormat='{0} tracks'}"
+                                   FontSize="14"
+                                   TextColor="{StaticResource Gray400}"/>
+                            <Label Text="• Available offline"
+                                   FontSize="14"
+                                   TextColor="{StaticResource Primary}"
+                                   IsVisible="{Binding IsPlaylistCached}"/>
+                        </HorizontalStackLayout>
+                        <!-- Download Progress (shown when downloading) -->
+                        <VerticalStackLayout Spacing="4" IsVisible="{Binding IsDownloading}">
+                            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="10">
+                                <ProgressBar Grid.Column="0"
+                                             Progress="{Binding DownloadProgress}"
+                                             ProgressColor="{StaticResource Primary}"
+                                             HeightRequest="4"
+                                             VerticalOptions="Center"/>
+                                <Button Grid.Column="1"
+                                        Text="✕"
+                                        BackgroundColor="{StaticResource Error}"
+                                        TextColor="White"
+                                        WidthRequest="32"
+                                        HeightRequest="32"
+                                        Padding="0"
+                                        CornerRadius="16"
+                                        Command="{Binding CancelDownloadCommand}"/>
+                            </Grid>
+                            <Label Text="{Binding DownloadStatusText}"
+                                   FontSize="12"
+                                   TextColor="{StaticResource Primary}"/>
+                        </VerticalStackLayout>
+                    </VerticalStackLayout>
+                </HorizontalStackLayout>
+
+                <!-- Action buttons -->
+                <HorizontalStackLayout Spacing="10" HorizontalOptions="Center">
+                    <Button Text="▶ Play All"
+                            BackgroundColor="{StaticResource Primary}"
+                            TextColor="White"
+                            Command="{Binding PlayAllCommand}"/>
+                    <Button Text="🔀 Shuffle"
+                            BackgroundColor="{StaticResource Gray600}"
+                            TextColor="White"
+                            Command="{Binding ShufflePlayCommand}"/>
+                    <!-- Download button - shown when not in offline mode -->
+                    <Button Text="⬇️ Download"
+                            BackgroundColor="{StaticResource Gray600}"
+                            TextColor="White"
+                            Command="{Binding DownloadPlaylistCommand}"
+                            IsVisible="{Binding CanDownload}"/>
+                    <!-- Remove Offline button - shown when in offline mode -->
+                    <Button Text="🗑️ Remove Offline"
+                            BackgroundColor="{StaticResource Error}"
+                            TextColor="White"
+                            Command="{Binding RemoveFromOfflineCommand}"
+                            IsVisible="{Binding CanRemoveOffline}"/>
+                </HorizontalStackLayout>
+
+            </VerticalStackLayout>
+        </Frame>
+
+        <!-- Description if any -->
+        <Label Grid.Row="2"
+               Text="{Binding Description}"
+               IsVisible="{Binding Description, Converter={StaticResource InverseBoolConverter}}"
+               TextColor="{StaticResource Gray400}"
+               Margin="20,10"
+               FontSize="14"/>
+
+        <!-- Tracks list -->
+        <RefreshView Grid.Row="3"
+                     IsRefreshing="{Binding IsRefreshing}"
+                     Command="{Binding RefreshCommand}">
+            <CollectionView ItemsSource="{Binding Tracks}"
+                            ItemsUpdatingScrollMode="KeepScrollOffset">
+                <CollectionView.ItemsLayout>
+                    <LinearItemsLayout Orientation="Vertical" ItemSpacing="0"/>
+                </CollectionView.ItemsLayout>
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="models:Track">
+                        <SwipeView>
+                            <SwipeView.RightItems>
+                                <SwipeItems>
+                                    <SwipeItem Text="Remove"
+                                               BackgroundColor="{StaticResource Error}"
+                                               Command="{Binding Source={RelativeSource AncestorType={x:Type vm:PlaylistDetailViewModel}}, Path=RemoveTrackCommand}"
+                                               CommandParameter="{Binding .}"/>
+                                </SwipeItems>
+                            </SwipeView.RightItems>
+
+                            <Border BackgroundColor="{StaticResource CardBackgroundColor}"
+                                    StrokeThickness="0"
+                                    Padding="15"
+                                    Margin="10,5"
+                                    StrokeShape="RoundRectangle 8">
+                                <Border.Behaviors>
+                                    <behaviors:TapFeedbackBehavior/>
+                                </Border.Behaviors>
+                                <Border.GestureRecognizers>
+                                    <TapGestureRecognizer
+                                        Command="{Binding Source={RelativeSource AncestorType={x:Type vm:PlaylistDetailViewModel}}, Path=PlayTrackCommand}"
+                                        CommandParameter="{Binding .}"/>
+                                </Border.GestureRecognizers>
+                                <Grid ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="15">
+                                    <!-- Track icon with cache/download indicator -->
+                                    <Grid Grid.Column="0" WidthRequest="36" HeightRequest="36">
+                                        <Label Text="🎵"
+                                               FontSize="24"
+                                               VerticalOptions="Center"
+                                               HorizontalOptions="Center"/>
+                                        <!-- Download progress ring (shown when downloading) -->
+                                        <controls:CircularProgressControl Progress="{Binding DownloadProgress}"
+                                                                           ProgressColor="{StaticResource Primary}"
+                                                                           BackgroundRingColor="{StaticResource Gray600}"
+                                                                           RingThickness="3"
+                                                                           WidthRequest="36"
+                                                                           HeightRequest="36"
+                                                                           IsVisible="{Binding IsDownloading}"/>
+                                        <!-- Cached indicator (shown when fully cached) -->
+                                        <Border BackgroundColor="{StaticResource Primary}"
+                                                StrokeThickness="0"
+                                                WidthRequest="14"
+                                                HeightRequest="14"
+                                                HorizontalOptions="End"
+                                                VerticalOptions="End"
+                                                Margin="0,0,-2,-2"
+                                                IsVisible="{Binding IsCached}">
+                                            <Border.StrokeShape>
+                                                <RoundRectangle CornerRadius="7"/>
+                                            </Border.StrokeShape>
+                                            <Label Text="✓"
+                                                   FontSize="8"
+                                                   TextColor="White"
+                                                   HorizontalOptions="Center"
+                                                   VerticalOptions="Center"/>
+                                        </Border>
+                                    </Grid>
+                                    <Grid Grid.Column="1" RowDefinitions="Auto,Auto" VerticalOptions="Center">
+                                        <Label Grid.Row="0"
+                                               Text="{Binding DisplayName}"
+                                               FontSize="16"
+                                               FontAttributes="Bold"
+                                               LineBreakMode="TailTruncation"/>
+                                        <Label Grid.Row="1"
+                                               Text="{Binding TrackInfo}"
+                                               FontSize="12"
+                                               TextColor="{StaticResource Gray400}"/>
+                                    </Grid>
+                                    <!-- Duration -->
+                                    <Label Grid.Column="2"
+                                           Text="{Binding DurationFormatted}"
+                                           FontSize="12"
+                                           TextColor="{StaticResource Gray400}"
+                                           VerticalOptions="Center"/>
+                                    <!-- Play indicator for cached tracks -->
+                                    <Label Grid.Column="3"
+                                           Text="▶"
+                                           FontSize="14"
+                                           TextColor="{StaticResource Primary}"
+                                           VerticalOptions="Center"
+                                           IsVisible="{Binding IsCached}"/>
+                                </Grid>
+                            </Border>
+                        </SwipeView>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+                <CollectionView.EmptyView>
+                    <VerticalStackLayout HorizontalOptions="Center"
+                                         VerticalOptions="Center"
+                                         Padding="40">
+                        <Label Text="🎵"
+                               FontSize="64"
+                               HorizontalOptions="Center"/>
+                        <Label Text="No tracks yet"
+                               FontSize="18"
+                               TextColor="{StaticResource Gray400}"
+                               HorizontalOptions="Center"
+                               Margin="0,10"/>
+                        <Label Text="Add tracks from channels"
+                               FontSize="14"
+                               TextColor="{StaticResource Gray500}"
+                               HorizontalOptions="Center"/>
+                    </VerticalStackLayout>
+                </CollectionView.EmptyView>
+            </CollectionView>
+        </RefreshView>
+
+        <!-- Error Message -->
+        <Label Grid.Row="3"
+               Text="{Binding ErrorMessage}"
+               TextColor="{StaticResource Error}"
+               IsVisible="{Binding HasError}"
+               HorizontalOptions="Center"
+               VerticalOptions="End"
+               Margin="0,0,0,20"/>
+        </Grid>
+
+        <!-- Mini Player -->
+        <controls:MiniPlayerControl Grid.Row="1"/>
+    </Grid>
+</ContentPage>

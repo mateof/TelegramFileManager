@@ -120,6 +120,11 @@ namespace TelegramDownloader.Models
         public string? hash_id { get; set;}
         public string? mongo_connection_string { get; set; }
         public bool? avoid_checking_certificate { get; set; }
+        public bool? open_browser_on_startup { get; set; }
+        /// <summary>
+        /// API key for mobile app authentication. If set, mobile API endpoints require this key in X-Api-Key header.
+        /// </summary>
+        public string? mobile_api_key { get; set; }
     }
 
     public class WebDavModel

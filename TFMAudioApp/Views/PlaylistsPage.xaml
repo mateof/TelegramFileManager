@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:TFMAudioApp.ViewModels"
+             xmlns:models="clr-namespace:TFMAudioApp.Models"
+             xmlns:controls="clr-namespace:TFMAudioApp.Controls"
+             xmlns:behaviors="clr-namespace:TFMAudioApp.Behaviors"
+             x:Class="TFMAudioApp.Views.PlaylistsPage"
+             x:DataType="vm:PlaylistsViewModel"
+             Title="{Binding Title}"
+             BackgroundColor="{StaticResource PageBackgroundColor}">
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+        <!-- Offline/Syncing Status Bar -->
+        <Border Grid.Row="0"
+                BackgroundColor="{StaticResource Gray600}"
+                StrokeThickness="0"
+                Padding="12,8"
+                IsVisible="{Binding StatusMessage, Converter={StaticResource StringToBoolConverter}}">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <!-- Offline icon -->
+                <Label Grid.Column="0"
+                       Text="📴"
+                       FontSize="14"
+                       VerticalOptions="Center"
+                       IsVisible="{Binding IsOfflineMode}"/>
+                <!-- Syncing indicator -->
+                <ActivityIndicator Grid.Column="0"
+                                   IsRunning="{Binding IsSyncing}"
+                                   IsVisible="{Binding IsSyncing}"
+                                   Color="{StaticResource Primary}"
+                                   HeightRequest="16"
+                                   WidthRequest="16"/>
+                <!-- Status message -->
+                <Label Grid.Column="1"
+                       Text="{Binding StatusMessage}"
+                       FontSize="13"
+                       TextColor="{StaticResource Gray300}"
+                       VerticalOptions="Center"
+                       Margin="8,0,0,0"/>
+            </Grid>
+        </Border>
+
+        <!-- Create New Playlist -->
+        <Frame Grid.Row="1"
+               BackgroundColor="{StaticResource CardBackgroundColor}"
+               BorderColor="Transparent"
+               CornerRadius="8"
+               Padding="15"
+               Margin="10">
+            <Grid ColumnDefinitions="*,Auto">
+                <Entry Grid.Column="0"
+                       Text="{Binding NewPlaylistName}"
+                       Placeholder="New playlist name..."
+                       PlaceholderColor="{StaticResource Gray400}"
+                       ReturnType="Done"
+                       ReturnCommand="{Binding CreatePlaylistCommand}"/>
+                <Button Grid.Column="1"
+                        Text="+"
+                        FontSize="20"
+                        BackgroundColor="{StaticResource Primary}"
+                        TextColor="White"
+                        WidthRequest="44"
+                        HeightRequest="44"
+                        CornerRadius="22"
+                        Margin="10,0,0,0"
+                        Command="{Binding CreatePlaylistCommand}"
+                        IsEnabled="{Binding IsCreatingPlaylist, Converter={StaticResource InverseBoolConverter}}"/>
+            </Grid>
+        </Frame>
+
+        <!-- Playlists List -->
+        <RefreshView Grid.Row="2"
+                     IsRefreshing="{Binding IsRefreshing}"
+                     Command="{Binding RefreshCommand}">
+            <CollectionView ItemsSource="{Binding Playlists}">
+                <CollectionView.ItemTemplate>
+                    <DataTemplate x:DataType="models:Playlist">
+                        <SwipeView>
+                            <SwipeView.RightItems>
+                                <SwipeItems>
+                                    <SwipeItem Text="Delete"
+                                               BackgroundColor="{StaticResource Error}"
+                                               Command="{Binding Source={RelativeSource AncestorType={x:Type vm:PlaylistsViewModel}}, Path=DeletePlaylistCommand}"
+                                               CommandParameter="{Binding .}"/>
+                                </SwipeItems>
+                            </SwipeView.RightItems>
+
+                            <Frame BackgroundColor="{StaticResource CardBackgroundColor}"
+                                   BorderColor="Transparent"
+                                   CornerRadius="8"
+                                   Padding="15"
+                                   Margin="10,5">
+                                <Frame.Behaviors>
+                                    <behaviors:TapFeedbackBehavior/>
+                                </Frame.Behaviors>
+                                <Frame.GestureRecognizers>
+                                    <TapGestureRecognizer
+                                        Command="{Binding Source={RelativeSource AncestorType={x:Type vm:PlaylistsViewModel}}, Path=NavigateToPlaylistCommand}"
+                                        CommandParameter="{Binding .}"/>
+                                </Frame.GestureRecognizers>
+                                <Grid ColumnDefinitions="Auto,*,Auto,Auto">
+                                    <!-- Playlist Icon with Cache Status -->
+                                    <Grid Grid.Column="0" WidthRequest="44" HeightRequest="44">
+                                        <Label Text="🎵"
+                                               FontSize="32"
+                                               VerticalOptions="Center"
+                                               HorizontalOptions="Center"/>
+                                        <!-- Downloaded badge (fully cached) -->
+                                        <Border BackgroundColor="{StaticResource Primary}"
+                                                StrokeThickness="0"
+                                                WidthRequest="18"
+                                                HeightRequest="18"
+                                                HorizontalOptions="End"
+                                                VerticalOptions="End"
+                                                Margin="0,0,-4,-4"
+                                                IsVisible="{Binding IsFullyCached}">
+                                            <Border.StrokeShape>
+                                                <RoundRectangle CornerRadius="9"/>
+                                            </Border.StrokeShape>
+                                            <Label Text="↓"
+                                                   FontSize="11"
+                                                   TextColor="White"
+                                                   HorizontalOptions="Center"
+                                                   VerticalOptions="Center"/>
+                                        </Border>
+                                        <!-- Partially cached badge -->
+                                        <Border BackgroundColor="{StaticResource Gray400}"
+                                                StrokeThickness="0"
+                                                WidthRequest="18"
+                                                HeightRequest="18"
+                                                HorizontalOptions="End"
+                                                VerticalOptions="End"
+                                                Margin="0,0,-4,-4"
+                                                IsVisible="{Binding IsPartiallyCached}">
+                                            <Border.StrokeShape>
+                                                <RoundRectangle CornerRadius="9"/>
+                                            </Border.StrokeShape>
+                                            <Label Text="↓"
+                                                   FontSize="11"
+                                                   TextColor="White"
+                                                   HorizontalOptions="Center"
+                                                   VerticalOptions="Center"/>
+                                        </Border>
+                                    </Grid>
+                                    <VerticalStackLayout Grid.Column="1"
+                                                         Margin="15,0"
+                                                         VerticalOptions="Center">
+                                        <Label Text="{Binding Name}"
+                                               FontSize="16"
+                                               FontAttributes="Bold"
+                                               LineBreakMode="TailTruncation"/>
+                                        <HorizontalStackLayout Spacing="5">
+                                            <Label Text="{Binding TrackCount, StringFormat='{0} tracks'}"
+                                                   FontSize="12"
+                                                   TextColor="{StaticResource Gray400}"/>
+                                            <Label Text="{Binding CachedTrackCount, StringFormat='({0} offline)'}"
+                                                   FontSize="12"
+                                                   TextColor="{StaticResource Primary}"
+                                                   IsVisible="{Binding IsPartiallyCached}"/>
+                                        </HorizontalStackLayout>
+                                    </VerticalStackLayout>
+                                    <!-- Fully cached indicator -->
+                                    <Label Grid.Column="2"
+                                           Text="Offline"
+                                           FontSize="10"
+                                           TextColor="{StaticResource Primary}"
+                                           BackgroundColor="{StaticResource PrimaryLight}"
+                                           Padding="6,2"
+                                           VerticalOptions="Center"
+                                           IsVisible="{Binding IsFullyCached}"/>
+                                    <Label Grid.Column="3"
+                                           Text="›"
+                                           FontSize="24"
+                                           TextColor="{StaticResource Gray400}"
+                                           VerticalOptions="Center"
+                                           Margin="5,0,0,0"/>
+                                </Grid>
+                            </Frame>
+                        </SwipeView>
+                    </DataTemplate>
+                </CollectionView.ItemTemplate>
+                <CollectionView.EmptyView>
+                    <VerticalStackLayout HorizontalOptions="Center"
+                                         VerticalOptions="Center"
+                                         Padding="40">
+                        <Label Text="🎵"
+                               FontSize="64"
+                               HorizontalOptions="Center"/>
+                        <Label Text="No playlists yet"
+                               FontSize="18"
+                               TextColor="{StaticResource Gray400}"
+                               HorizontalOptions="Center"
+                               Margin="0,10"/>
+                        <Label Text="Create your first playlist above"
+                               FontSize="14"
+                               TextColor="{StaticResource Gray500}"
+                               HorizontalOptions="Center"/>
+                    </VerticalStackLayout>
+                </CollectionView.EmptyView>
+            </CollectionView>
+        </RefreshView>
+
+        <!-- Error Message -->
+        <Label Grid.Row="2"
+               Text="{Binding ErrorMessage}"
+               TextColor="{StaticResource Error}"
+               IsVisible="{Binding HasError}"
+               HorizontalOptions="Center"
+               VerticalOptions="End"
+               Margin="0,0,0,20"/>
+
+        <!-- Mini Player -->
+        <controls:MiniPlayerControl Grid.Row="3"/>
+    </Grid>
+</ContentPage>

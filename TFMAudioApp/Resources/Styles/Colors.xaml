@@ -1,0 +1,84 @@
+﻿<?xml version="1.0" encoding="UTF-8" ?>
+<?xaml-comp compile="true" ?>
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml">
+
+    <!-- Note: For Android please see also Platforms\Android\Resources\values\colors.xml -->
+
+    <!-- Primary Colors - Telegram Blue Theme -->
+    <Color x:Key="Primary">#229ED9</Color>
+    <Color x:Key="PrimaryLight">#2AABEE</Color>
+    <Color x:Key="PrimaryDark">#1E96C8</Color>
+    <Color x:Key="PrimaryDarkText">#0F0F23</Color>
+
+    <!-- Secondary/Accent Colors -->
+    <Color x:Key="Secondary">#EC4899</Color>
+    <Color x:Key="SecondaryLight">#F472B6</Color>
+    <Color x:Key="SecondaryDark">#DB2777</Color>
+    <Color x:Key="SecondaryDarkText">#E0E0E0</Color>
+
+    <!-- Tertiary Colors -->
+    <Color x:Key="Tertiary">#10B981</Color>
+    <Color x:Key="TertiaryLight">#34D399</Color>
+    <Color x:Key="TertiaryDark">#059669</Color>
+
+    <Color x:Key="White">White</Color>
+    <Color x:Key="Black">Black</Color>
+    <Color x:Key="Magenta">#D600AA</Color>
+    <Color x:Key="MidnightBlue">#190649</Color>
+    <Color x:Key="OffBlack">#0F0F23</Color>
+
+    <!-- App-specific Colors - Dark Modern Theme -->
+    <Color x:Key="PageBackgroundColor">#0F0F23</Color>
+    <Color x:Key="CardBackgroundColor">#1A1A2E</Color>
+    <Color x:Key="CardBackgroundColorLight">#252542</Color>
+    <Color x:Key="SurfaceColor">#16213E</Color>
+    <Color x:Key="AccentColor">#229ED9</Color>
+    <Color x:Key="AccentSecondary">#EC4899</Color>
+
+    <!-- Status Colors -->
+    <Color x:Key="Success">#10B981</Color>
+    <Color x:Key="Warning">#F59E0B</Color>
+    <Color x:Key="Error">#EF4444</Color>
+    <Color x:Key="Info">#3B82F6</Color>
+
+    <!-- Gray Scale - Cooler tones -->
+    <Color x:Key="Gray100">#F3F4F6</Color>
+    <Color x:Key="Gray200">#E5E7EB</Color>
+    <Color x:Key="Gray300">#D1D5DB</Color>
+    <Color x:Key="Gray400">#9CA3AF</Color>
+    <Color x:Key="Gray500">#6B7280</Color>
+    <Color x:Key="Gray600">#374151</Color>
+    <Color x:Key="Gray700">#2D2D44</Color>
+    <Color x:Key="Gray800">#1F1F35</Color>
+    <Color x:Key="Gray900">#16162A</Color>
+    <Color x:Key="Gray950">#0D0D1A</Color>
+
+    <!-- Brushes -->
+    <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource Primary}"/>
+    <SolidColorBrush x:Key="SecondaryBrush" Color="{StaticResource Secondary}"/>
+    <SolidColorBrush x:Key="TertiaryBrush" Color="{StaticResource Tertiary}"/>
+    <SolidColorBrush x:Key="WhiteBrush" Color="{StaticResource White}"/>
+    <SolidColorBrush x:Key="BlackBrush" Color="{StaticResource Black}"/>
+
+    <SolidColorBrush x:Key="Gray100Brush" Color="{StaticResource Gray100}"/>
+    <SolidColorBrush x:Key="Gray200Brush" Color="{StaticResource Gray200}"/>
+    <SolidColorBrush x:Key="Gray300Brush" Color="{StaticResource Gray300}"/>
+    <SolidColorBrush x:Key="Gray400Brush" Color="{StaticResource Gray400}"/>
+    <SolidColorBrush x:Key="Gray500Brush" Color="{StaticResource Gray500}"/>
+    <SolidColorBrush x:Key="Gray600Brush" Color="{StaticResource Gray600}"/>
+    <SolidColorBrush x:Key="Gray900Brush" Color="{StaticResource Gray900}"/>
+    <SolidColorBrush x:Key="Gray950Brush" Color="{StaticResource Gray950}"/>
+
+    <!-- Gradient Brushes for modern effects -->
+    <LinearGradientBrush x:Key="PrimaryGradient" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="{StaticResource Primary}" Offset="0.0"/>
+        <GradientStop Color="{StaticResource Secondary}" Offset="1.0"/>
+    </LinearGradientBrush>
+
+    <LinearGradientBrush x:Key="CardGradient" StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="{StaticResource CardBackgroundColor}" Offset="0.0"/>
+        <GradientStop Color="{StaticResource CardBackgroundColorLight}" Offset="1.0"/>
+    </LinearGradientBrush>
+</ResourceDictionary>

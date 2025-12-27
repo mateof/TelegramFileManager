@@ -1,0 +1,757 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:TFMAudioApp.ViewModels"
+             x:Class="TFMAudioApp.Views.PlayerPage"
+             x:DataType="vm:PlayerViewModel"
+             Title="Now Playing"
+             BackgroundColor="{StaticResource PageBackgroundColor}"
+             Shell.NavBarIsVisible="False">
+
+    <!-- Audio playback handled by LibVLC (no visual element needed) -->
+
+    <Grid x:Name="MainGrid"
+          RowDefinitions="Auto,*,Auto,Auto,Auto,Auto"
+          Padding="24"
+          RowSpacing="20">
+        <Grid.GestureRecognizers>
+            <SwipeGestureRecognizer Direction="Down" Swiped="OnSwipedDown"/>
+        </Grid.GestureRecognizers>
+
+        <!-- Top bar with back button -->
+        <Grid Grid.Row="0" ColumnDefinitions="Auto,*,Auto">
+            <Border Grid.Column="0"
+                    StrokeThickness="1"
+                    Stroke="{StaticResource Gray600}"
+                    BackgroundColor="{StaticResource CardBackgroundColor}"
+                    StrokeShape="RoundRectangle 14"
+                    WidthRequest="48"
+                    HeightRequest="48">
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Command="{Binding GoBackCommand}"/>
+                </Border.GestureRecognizers>
+                <!-- Chevron down icon using Polygon -->
+                <Polygon Points="0,0 8,8 16,0"
+                         Stroke="{StaticResource Gray100}"
+                         StrokeThickness="2.5"
+                         Fill="Transparent"
+                         HorizontalOptions="Center"
+                         VerticalOptions="Center"/>
+            </Border>
+            <Label Grid.Column="1"
+                   Text="NOW PLAYING"
+                   FontSize="11"
+                   FontAttributes="Bold"
+                   CharacterSpacing="2"
+                   TextColor="{StaticResource Gray300}"
+                   HorizontalOptions="Center"
+                   VerticalOptions="Center"/>
+            <Border Grid.Column="2"
+                    StrokeThickness="1"
+                    Stroke="{StaticResource Gray600}"
+                    BackgroundColor="{StaticResource CardBackgroundColor}"
+                    StrokeShape="RoundRectangle 14"
+                    WidthRequest="48"
+                    HeightRequest="48">
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Command="{Binding ShowOptionsCommand}"/>
+                </Border.GestureRecognizers>
+                <!-- More options (3 dots vertical) -->
+                <VerticalStackLayout Spacing="3"
+                                     HorizontalOptions="Center"
+                                     VerticalOptions="Center">
+                    <Ellipse WidthRequest="4" HeightRequest="4"
+                             Fill="{StaticResource Gray100}"/>
+                    <Ellipse WidthRequest="4" HeightRequest="4"
+                             Fill="{StaticResource Gray100}"/>
+                    <Ellipse WidthRequest="4" HeightRequest="4"
+                             Fill="{StaticResource Gray100}"/>
+                </VerticalStackLayout>
+            </Border>
+        </Grid>
+
+        <!-- Album artwork with glow effect and flip animation -->
+        <Grid Grid.Row="1"
+              HorizontalOptions="Center"
+              VerticalOptions="Center">
+            <Grid.GestureRecognizers>
+                <TapGestureRecognizer Command="{Binding ToggleTrackInfoCommand}"/>
+            </Grid.GestureRecognizers>
+
+            <!-- Glow/Shadow effect -->
+            <BoxView WidthRequest="260"
+                     HeightRequest="260"
+                     CornerRadius="130"
+                     Color="{StaticResource Primary}"
+                     Opacity="0.15"
+                     Margin="0,10,0,0"/>
+
+            <!-- Loading animation - Rotating ray border (visibility controlled by code-behind) -->
+            <Grid x:Name="LoadingBorderContainer"
+                  WidthRequest="300"
+                  HeightRequest="300"
+                  IsVisible="False">
+                <!-- Outer glow pulse -->
+                <Border x:Name="LoadingGlow"
+                        WidthRequest="296"
+                        HeightRequest="296"
+                        StrokeThickness="4"
+                        Stroke="{StaticResource Primary}"
+                        BackgroundColor="Transparent"
+                        Opacity="0.6">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="28"/>
+                    </Border.StrokeShape>
+                </Border>
+                <!-- Rotating ray element 1 -->
+                <Border x:Name="LoadingRay1"
+                        WidthRequest="296"
+                        HeightRequest="296"
+                        StrokeThickness="3"
+                        BackgroundColor="Transparent"
+                        Opacity="0.9">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="28"/>
+                    </Border.StrokeShape>
+                    <Border.Stroke>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Color="Transparent" Offset="0.0"/>
+                            <GradientStop Color="Transparent" Offset="0.3"/>
+                            <GradientStop Color="{StaticResource Primary}" Offset="0.5"/>
+                            <GradientStop Color="White" Offset="0.55"/>
+                            <GradientStop Color="{StaticResource Primary}" Offset="0.6"/>
+                            <GradientStop Color="Transparent" Offset="0.7"/>
+                            <GradientStop Color="Transparent" Offset="1.0"/>
+                        </LinearGradientBrush>
+                    </Border.Stroke>
+                </Border>
+                <!-- Rotating ray element 2 (opposite) -->
+                <Border x:Name="LoadingRay2"
+                        WidthRequest="296"
+                        HeightRequest="296"
+                        StrokeThickness="3"
+                        BackgroundColor="Transparent"
+                        Opacity="0.9"
+                        Rotation="180">
+                    <Border.StrokeShape>
+                        <RoundRectangle CornerRadius="28"/>
+                    </Border.StrokeShape>
+                    <Border.Stroke>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                            <GradientStop Color="Transparent" Offset="0.0"/>
+                            <GradientStop Color="Transparent" Offset="0.3"/>
+                            <GradientStop Color="{StaticResource Primary}" Offset="0.5"/>
+                            <GradientStop Color="White" Offset="0.55"/>
+                            <GradientStop Color="{StaticResource Primary}" Offset="0.6"/>
+                            <GradientStop Color="Transparent" Offset="0.7"/>
+                            <GradientStop Color="Transparent" Offset="1.0"/>
+                        </LinearGradientBrush>
+                    </Border.Stroke>
+                </Border>
+            </Grid>
+
+            <!-- Front face - Album artwork -->
+            <Border x:Name="ArtworkFront"
+                    StrokeThickness="0"
+                    BackgroundColor="{StaticResource CardBackgroundColor}"
+                    StrokeShape="RoundRectangle 24"
+                    WidthRequest="280"
+                    HeightRequest="280"
+                    IsVisible="{Binding IsShowingTrackInfo, Converter={StaticResource InverseBoolConverter}}"
+                    Shadow="{Shadow Brush={StaticResource Primary}, Offset='0,8', Radius=40, Opacity=0.3}">
+                <Grid>
+                    <BoxView Color="{StaticResource CardBackgroundColor}"/>
+                    <Label Text="🎵"
+                           FontSize="100"
+                           HorizontalOptions="Center"
+                           VerticalOptions="Center"
+                           Opacity="0.9"/>
+                    <!-- Tap hint -->
+                    <Label Text="Tap for info"
+                           FontSize="10"
+                           TextColor="{StaticResource Gray500}"
+                           HorizontalOptions="Center"
+                           VerticalOptions="End"
+                           Margin="0,0,0,12"/>
+                </Grid>
+            </Border>
+
+            <!-- Back face - Track info -->
+            <Border x:Name="ArtworkBack"
+                    StrokeThickness="0"
+                    BackgroundColor="{StaticResource CardBackgroundColor}"
+                    StrokeShape="RoundRectangle 24"
+                    WidthRequest="280"
+                    HeightRequest="280"
+                    IsVisible="{Binding IsShowingTrackInfo}"
+                    Shadow="{Shadow Brush={StaticResource Primary}, Offset='0,8', Radius=40, Opacity=0.3}">
+                <Grid Padding="20" RowDefinitions="Auto,*,Auto">
+                    <!-- Header -->
+                    <Label Grid.Row="0"
+                           Text="FILE INFO"
+                           FontSize="11"
+                           FontAttributes="Bold"
+                           CharacterSpacing="2"
+                           TextColor="{StaticResource Gray400}"
+                           HorizontalOptions="Center"/>
+
+                    <!-- Info list -->
+                    <VerticalStackLayout Grid.Row="1"
+                                         Spacing="16"
+                                         VerticalOptions="Center">
+                        <!-- Channel -->
+                        <Grid ColumnDefinitions="Auto,*">
+                            <Label Text="📺"
+                                   FontSize="20"
+                                   VerticalOptions="Center"/>
+                            <VerticalStackLayout Grid.Column="1" Margin="12,0,0,0">
+                                <Label Text="Channel"
+                                       FontSize="11"
+                                       TextColor="{StaticResource Gray400}"/>
+                                <Label Text="{Binding ChannelName}"
+                                       FontSize="16"
+                                       FontAttributes="Bold"
+                                       LineBreakMode="TailTruncation"/>
+                            </VerticalStackLayout>
+                        </Grid>
+
+                        <!-- File Size -->
+                        <Grid ColumnDefinitions="Auto,*">
+                            <Label Text="📦"
+                                   FontSize="20"
+                                   VerticalOptions="Center"/>
+                            <VerticalStackLayout Grid.Column="1" Margin="12,0,0,0">
+                                <Label Text="Size"
+                                       FontSize="11"
+                                       TextColor="{StaticResource Gray400}"/>
+                                <Label Text="{Binding FileSizeText}"
+                                       FontSize="16"
+                                       FontAttributes="Bold"/>
+                            </VerticalStackLayout>
+                        </Grid>
+
+                        <!-- Duration -->
+                        <Grid ColumnDefinitions="Auto,*">
+                            <Label Text="⏱"
+                                   FontSize="20"
+                                   VerticalOptions="Center"/>
+                            <VerticalStackLayout Grid.Column="1" Margin="12,0,0,0">
+                                <Label Text="Duration"
+                                       FontSize="11"
+                                       TextColor="{StaticResource Gray400}"/>
+                                <Label Text="{Binding DurationText}"
+                                       FontSize="16"
+                                       FontAttributes="Bold"/>
+                            </VerticalStackLayout>
+                        </Grid>
+
+                        <!-- Bitrate -->
+                        <Grid ColumnDefinitions="Auto,*">
+                            <Label Text="📊"
+                                   FontSize="20"
+                                   VerticalOptions="Center"/>
+                            <VerticalStackLayout Grid.Column="1" Margin="12,0,0,0">
+                                <Label Text="Bitrate"
+                                       FontSize="11"
+                                       TextColor="{StaticResource Gray400}"/>
+                                <Label Text="{Binding BitrateText}"
+                                       FontSize="16"
+                                       FontAttributes="Bold"/>
+                            </VerticalStackLayout>
+                        </Grid>
+
+                        <!-- Format -->
+                        <Grid ColumnDefinitions="Auto,*">
+                            <Label Text="🎵"
+                                   FontSize="20"
+                                   VerticalOptions="Center"/>
+                            <VerticalStackLayout Grid.Column="1" Margin="12,0,0,0">
+                                <Label Text="Format"
+                                       FontSize="11"
+                                       TextColor="{StaticResource Gray400}"/>
+                                <Label Text="{Binding FileTypeText}"
+                                       FontSize="16"
+                                       FontAttributes="Bold"/>
+                            </VerticalStackLayout>
+                        </Grid>
+
+                        <!-- Date Added -->
+                        <Grid ColumnDefinitions="Auto,*">
+                            <Label Text="📅"
+                                   FontSize="20"
+                                   VerticalOptions="Center"/>
+                            <VerticalStackLayout Grid.Column="1" Margin="12,0,0,0">
+                                <Label Text="Added"
+                                       FontSize="11"
+                                       TextColor="{StaticResource Gray400}"/>
+                                <Label Text="{Binding DateAddedText}"
+                                       FontSize="16"
+                                       FontAttributes="Bold"/>
+                            </VerticalStackLayout>
+                        </Grid>
+                    </VerticalStackLayout>
+
+                    <!-- Tap to go back hint -->
+                    <Label Grid.Row="2"
+                           Text="Tap to go back"
+                           FontSize="10"
+                           TextColor="{StaticResource Gray500}"
+                           HorizontalOptions="Center"/>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- Track info -->
+        <VerticalStackLayout Grid.Row="2"
+                             HorizontalOptions="Center"
+                             Spacing="5">
+            <Label Text="{Binding TrackName}"
+                   FontSize="22"
+                   FontAttributes="Bold"
+                   HorizontalTextAlignment="Center"
+                   LineBreakMode="TailTruncation"
+                   MaxLines="2"/>
+            <Label Text="{Binding ArtistName}"
+                   FontSize="16"
+                   TextColor="{StaticResource Gray400}"
+                   HorizontalTextAlignment="Center"/>
+            <Label Text="{Binding ChannelName}"
+                   FontSize="14"
+                   TextColor="{StaticResource Gray500}"
+                   HorizontalTextAlignment="Center"/>
+        </VerticalStackLayout>
+
+        <!-- Progress bar and time -->
+        <VerticalStackLayout Grid.Row="3" Spacing="5">
+            <Slider x:Name="ProgressSlider"
+                    Minimum="0"
+                    Maximum="1"
+                    Value="{Binding Progress}"
+                    IsEnabled="{Binding CanSeek}"
+                    MinimumTrackColor="{StaticResource Primary}"
+                    MaximumTrackColor="{StaticResource Gray600}"
+                    ThumbColor="{StaticResource Primary}"
+                    DragCompleted="OnSeekCompleted"/>
+            <Grid ColumnDefinitions="*,*">
+                <Label Grid.Column="0"
+                       Text="{Binding PositionText}"
+                       FontSize="12"
+                       TextColor="{StaticResource Gray400}"
+                       HorizontalOptions="Start"/>
+                <Label Grid.Column="1"
+                       Text="{Binding DurationText}"
+                       FontSize="12"
+                       TextColor="{StaticResource Gray400}"
+                       HorizontalOptions="End"/>
+            </Grid>
+        </VerticalStackLayout>
+
+        <!-- Playback controls -->
+        <Grid Grid.Row="4"
+              ColumnDefinitions="*,*,Auto,*,*,*"
+              HeightRequest="100">
+
+            <!-- Shuffle button -->
+            <Border Grid.Column="0"
+                    StrokeThickness="0"
+                    BackgroundColor="{StaticResource CardBackgroundColor}"
+                    StrokeShape="RoundRectangle 14"
+                    WidthRequest="48"
+                    HeightRequest="48"
+                    HorizontalOptions="Center"
+                    VerticalOptions="Center">
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Command="{Binding ToggleShuffleCommand}"/>
+                </Border.GestureRecognizers>
+                <!-- Shuffle icon using Path -->
+                <Path Data="M 2 12 L 12 2 M 12 2 L 8 2 M 12 2 L 12 6 M 12 12 L 2 2 M 2 2 L 6 2 M 2 2 L 2 6"
+                      Stroke="{Binding ShuffleColor}"
+                      StrokeThickness="2.5"
+                      StrokeLineCap="Round"
+                      StrokeLineJoin="Round"
+                      Aspect="Uniform"
+                      WidthRequest="20"
+                      HeightRequest="20"
+                      HorizontalOptions="Center"
+                      VerticalOptions="Center"/>
+            </Border>
+
+            <!-- Previous button -->
+            <Border Grid.Column="1"
+                    StrokeThickness="0"
+                    BackgroundColor="{StaticResource CardBackgroundColor}"
+                    StrokeShape="RoundRectangle 16"
+                    WidthRequest="60"
+                    HeightRequest="60"
+                    HorizontalOptions="Center"
+                    VerticalOptions="Center">
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Command="{Binding PreviousCommand}"/>
+                </Border.GestureRecognizers>
+                <!-- Skip previous icon (|◀◀) -->
+                <HorizontalStackLayout Spacing="3"
+                                       HorizontalOptions="Center"
+                                       VerticalOptions="Center">
+                    <BoxView WidthRequest="3" HeightRequest="16"
+                             BackgroundColor="White"
+                             CornerRadius="1"/>
+                    <Polygon Points="10,0 0,8 10,16"
+                             Fill="White"/>
+                    <Polygon Points="10,0 0,8 10,16"
+                             Fill="White"
+                             Margin="-4,0,0,0"/>
+                </HorizontalStackLayout>
+            </Border>
+
+            <!-- Play/Pause button - Main action -->
+            <Border Grid.Column="2"
+                    StrokeThickness="0"
+                    Background="{StaticResource PrimaryGradient}"
+                    StrokeShape="RoundRectangle 40"
+                    WidthRequest="80"
+                    HeightRequest="80"
+                    HorizontalOptions="Center"
+                    VerticalOptions="Center"
+                    Shadow="{Shadow Brush={StaticResource Primary}, Offset='0,6', Radius=20, Opacity=0.5}">
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Command="{Binding PlayPauseCommand}"/>
+                </Border.GestureRecognizers>
+                <!-- Play/Pause icon container -->
+                <Grid x:Name="PlayPauseIconContainer"
+                      HorizontalOptions="Center"
+                      VerticalOptions="Center">
+                    <!-- Play icon (triangle) - shown when paused -->
+                    <Polygon x:Name="PlayIcon"
+                             Points="0,0 20,12 0,24"
+                             Fill="White"
+                             HorizontalOptions="Center"
+                             VerticalOptions="Center"
+                             TranslationX="3"/>
+                    <!-- Pause icon (two bars) - hidden by default -->
+                    <HorizontalStackLayout x:Name="PauseIcon"
+                                           Spacing="6"
+                                           HorizontalOptions="Center"
+                                           VerticalOptions="Center"
+                                           IsVisible="False">
+                        <BoxView WidthRequest="6" HeightRequest="24"
+                                 BackgroundColor="White"
+                                 CornerRadius="2"/>
+                        <BoxView WidthRequest="6" HeightRequest="24"
+                                 BackgroundColor="White"
+                                 CornerRadius="2"/>
+                    </HorizontalStackLayout>
+                </Grid>
+            </Border>
+
+            <!-- Next button -->
+            <Border Grid.Column="3"
+                    StrokeThickness="0"
+                    BackgroundColor="{StaticResource CardBackgroundColor}"
+                    StrokeShape="RoundRectangle 16"
+                    WidthRequest="60"
+                    HeightRequest="60"
+                    HorizontalOptions="Center"
+                    VerticalOptions="Center">
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Command="{Binding NextCommand}"/>
+                </Border.GestureRecognizers>
+                <!-- Skip next icon (▶▶|) -->
+                <HorizontalStackLayout Spacing="3"
+                                       HorizontalOptions="Center"
+                                       VerticalOptions="Center">
+                    <Polygon Points="0,0 10,8 0,16"
+                             Fill="White"/>
+                    <Polygon Points="0,0 10,8 0,16"
+                             Fill="White"
+                             Margin="-4,0,0,0"/>
+                    <BoxView WidthRequest="3" HeightRequest="16"
+                             BackgroundColor="White"
+                             CornerRadius="1"/>
+                </HorizontalStackLayout>
+            </Border>
+
+            <!-- Stop button -->
+            <Border Grid.Column="4"
+                    StrokeThickness="0"
+                    BackgroundColor="{StaticResource CardBackgroundColor}"
+                    StrokeShape="RoundRectangle 16"
+                    WidthRequest="60"
+                    HeightRequest="60"
+                    HorizontalOptions="Center"
+                    VerticalOptions="Center">
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Command="{Binding StopCommand}"/>
+                </Border.GestureRecognizers>
+                <!-- Stop icon (square) -->
+                <BoxView WidthRequest="18" HeightRequest="18"
+                         BackgroundColor="White"
+                         CornerRadius="2"
+                         HorizontalOptions="Center"
+                         VerticalOptions="Center"/>
+            </Border>
+
+            <!-- Repeat button -->
+            <Border Grid.Column="5"
+                    StrokeThickness="0"
+                    BackgroundColor="{StaticResource CardBackgroundColor}"
+                    StrokeShape="RoundRectangle 14"
+                    WidthRequest="48"
+                    HeightRequest="48"
+                    HorizontalOptions="Center"
+                    VerticalOptions="Center">
+                <Border.GestureRecognizers>
+                    <TapGestureRecognizer Command="{Binding ToggleRepeatCommand}"/>
+                </Border.GestureRecognizers>
+                <!-- Repeat icon using Path -->
+                <Grid HorizontalOptions="Center"
+                      VerticalOptions="Center">
+                    <Path Data="M 4 2 L 14 2 Q 18 2 18 6 L 18 8 M 18 8 L 15 5 M 18 8 L 21 5 M 18 14 L 8 14 Q 4 14 4 10 L 4 8 M 4 8 L 1 11 M 4 8 L 7 11"
+                          Stroke="{Binding RepeatColor}"
+                          StrokeThickness="2"
+                          StrokeLineCap="Round"
+                          StrokeLineJoin="Round"
+                          Aspect="Uniform"
+                          WidthRequest="22"
+                          HeightRequest="18"
+                          HorizontalOptions="Center"
+                          VerticalOptions="Center"/>
+                    <!-- "1" label for repeat one mode -->
+                    <Label Text="{Binding RepeatIcon}"
+                           FontSize="10"
+                           FontAttributes="Bold"
+                           TextColor="{Binding RepeatColor}"
+                           HorizontalOptions="Center"
+                           VerticalOptions="Center"/>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- Volume and extra controls (hidden on Android - uses system volume) -->
+        <Border Grid.Row="5"
+                StrokeThickness="0"
+                BackgroundColor="{StaticResource CardBackgroundColor}"
+                StrokeShape="RoundRectangle 16"
+                Padding="16,12">
+            <Border.IsVisible>
+                <OnPlatform x:TypeArguments="x:Boolean">
+                    <On Platform="Android" Value="False"/>
+                    <On Platform="iOS" Value="True"/>
+                    <On Platform="WinUI" Value="True"/>
+                    <On Platform="MacCatalyst" Value="True"/>
+                </OnPlatform>
+            </Border.IsVisible>
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <Label Grid.Column="0"
+                       Text="🔈"
+                       FontSize="16"
+                       TextColor="{StaticResource Gray400}"
+                       VerticalOptions="Center"/>
+                <Slider Grid.Column="1"
+                        Minimum="0"
+                        Maximum="1"
+                        Value="{Binding Volume}"
+                        MinimumTrackColor="{StaticResource Primary}"
+                        MaximumTrackColor="{StaticResource Gray600}"
+                        ThumbColor="White"
+                        Margin="12,0"/>
+                <Label Grid.Column="2"
+                       Text="🔊"
+                       FontSize="16"
+                       TextColor="{StaticResource Gray400}"
+                       VerticalOptions="Center"/>
+            </Grid>
+        </Border>
+
+        <!-- Options Bottom Sheet Overlay -->
+        <Grid Grid.RowSpan="6"
+              IsVisible="{Binding IsOptionsVisible}"
+              BackgroundColor="#80000000"
+              InputTransparent="False">
+            <Grid.GestureRecognizers>
+                <TapGestureRecognizer Command="{Binding HideOptionsCommand}"/>
+            </Grid.GestureRecognizers>
+
+            <!-- Bottom Sheet Container -->
+            <Border VerticalOptions="End"
+                    StrokeThickness="0"
+                    BackgroundColor="{StaticResource CardBackgroundColor}"
+                    StrokeShape="RoundRectangle 24,24,0,0"
+                    Padding="0">
+
+                <VerticalStackLayout Spacing="0">
+                    <!-- Handle bar -->
+                    <BoxView HeightRequest="4"
+                             WidthRequest="40"
+                             CornerRadius="2"
+                             BackgroundColor="{StaticResource Gray500}"
+                             HorizontalOptions="Center"
+                             Margin="0,12,0,8"/>
+
+                    <!-- Title -->
+                    <Label Text="Options"
+                           FontSize="18"
+                           FontAttributes="Bold"
+                           TextColor="White"
+                           HorizontalOptions="Center"
+                           Margin="0,8,0,16"/>
+
+                    <!-- Option Items -->
+                    <VerticalStackLayout Spacing="0" Padding="16,0,16,16">
+
+                        <!-- Add to Playlist -->
+                        <Border StrokeThickness="0"
+                                BackgroundColor="{StaticResource SurfaceColor}"
+                                StrokeShape="RoundRectangle 12"
+                                Padding="16"
+                                Margin="0,4">
+                            <Border.GestureRecognizers>
+                                <TapGestureRecognizer Command="{Binding AddToPlaylistCommand}"/>
+                            </Border.GestureRecognizers>
+                            <HorizontalStackLayout Spacing="16">
+                                <Border StrokeThickness="0"
+                                        BackgroundColor="{StaticResource Primary}"
+                                        StrokeShape="RoundRectangle 10"
+                                        WidthRequest="44"
+                                        HeightRequest="44">
+                                    <Label Text="+"
+                                           FontSize="24"
+                                           FontAttributes="Bold"
+                                           TextColor="White"
+                                           HorizontalOptions="Center"
+                                           VerticalOptions="Center"/>
+                                </Border>
+                                <VerticalStackLayout VerticalOptions="Center">
+                                    <Label Text="Add to Playlist"
+                                           FontSize="16"
+                                           FontAttributes="Bold"
+                                           TextColor="White"/>
+                                    <Label Text="Save this track to a playlist"
+                                           FontSize="12"
+                                           TextColor="{StaticResource Gray400}"/>
+                                </VerticalStackLayout>
+                            </HorizontalStackLayout>
+                        </Border>
+
+                        <!-- View Queue -->
+                        <Border StrokeThickness="0"
+                                BackgroundColor="{StaticResource SurfaceColor}"
+                                StrokeShape="RoundRectangle 12"
+                                Padding="16"
+                                Margin="0,4">
+                            <Border.GestureRecognizers>
+                                <TapGestureRecognizer Command="{Binding ViewQueueCommand}"/>
+                            </Border.GestureRecognizers>
+                            <HorizontalStackLayout Spacing="16">
+                                <Border StrokeThickness="0"
+                                        BackgroundColor="{StaticResource Secondary}"
+                                        StrokeShape="RoundRectangle 10"
+                                        WidthRequest="44"
+                                        HeightRequest="44">
+                                    <Label Text="≡"
+                                           FontSize="24"
+                                           FontAttributes="Bold"
+                                           TextColor="White"
+                                           HorizontalOptions="Center"
+                                           VerticalOptions="Center"/>
+                                </Border>
+                                <VerticalStackLayout VerticalOptions="Center">
+                                    <Label Text="View Queue"
+                                           FontSize="16"
+                                           FontAttributes="Bold"
+                                           TextColor="White"/>
+                                    <Label Text="See upcoming tracks"
+                                           FontSize="12"
+                                           TextColor="{StaticResource Gray400}"/>
+                                </VerticalStackLayout>
+                            </HorizontalStackLayout>
+                        </Border>
+
+                        <!-- Share -->
+                        <Border StrokeThickness="0"
+                                BackgroundColor="{StaticResource SurfaceColor}"
+                                StrokeShape="RoundRectangle 12"
+                                Padding="16"
+                                Margin="0,4">
+                            <Border.GestureRecognizers>
+                                <TapGestureRecognizer Command="{Binding ShareTrackCommand}"/>
+                            </Border.GestureRecognizers>
+                            <HorizontalStackLayout Spacing="16">
+                                <Border StrokeThickness="0"
+                                        BackgroundColor="{StaticResource Tertiary}"
+                                        StrokeShape="RoundRectangle 10"
+                                        WidthRequest="44"
+                                        HeightRequest="44">
+                                    <Label Text="↗"
+                                           FontSize="24"
+                                           FontAttributes="Bold"
+                                           TextColor="White"
+                                           HorizontalOptions="Center"
+                                           VerticalOptions="Center"/>
+                                </Border>
+                                <VerticalStackLayout VerticalOptions="Center">
+                                    <Label Text="Share"
+                                           FontSize="16"
+                                           FontAttributes="Bold"
+                                           TextColor="White"/>
+                                    <Label Text="Share with friends"
+                                           FontSize="12"
+                                           TextColor="{StaticResource Gray400}"/>
+                                </VerticalStackLayout>
+                            </HorizontalStackLayout>
+                        </Border>
+
+                        <!-- Stop Playback -->
+                        <Border StrokeThickness="0"
+                                BackgroundColor="{StaticResource SurfaceColor}"
+                                StrokeShape="RoundRectangle 12"
+                                Padding="16"
+                                Margin="0,4">
+                            <Border.GestureRecognizers>
+                                <TapGestureRecognizer Command="{Binding StopFromOptionsCommand}"/>
+                            </Border.GestureRecognizers>
+                            <HorizontalStackLayout Spacing="16">
+                                <Border StrokeThickness="0"
+                                        BackgroundColor="{StaticResource Error}"
+                                        StrokeShape="RoundRectangle 10"
+                                        WidthRequest="44"
+                                        HeightRequest="44">
+                                    <Label Text="■"
+                                           FontSize="20"
+                                           TextColor="White"
+                                           HorizontalOptions="Center"
+                                           VerticalOptions="Center"/>
+                                </Border>
+                                <VerticalStackLayout VerticalOptions="Center">
+                                    <Label Text="Stop Playback"
+                                           FontSize="16"
+                                           FontAttributes="Bold"
+                                           TextColor="White"/>
+                                    <Label Text="Stop and clear queue"
+                                           FontSize="12"
+                                           TextColor="{StaticResource Gray400}"/>
+                                </VerticalStackLayout>
+                            </HorizontalStackLayout>
+                        </Border>
+
+                    </VerticalStackLayout>
+
+                    <!-- Cancel Button -->
+                    <Border StrokeThickness="0"
+                            BackgroundColor="{StaticResource Gray600}"
+                            StrokeShape="RoundRectangle 12"
+                            Padding="16"
+                            Margin="16,0,16,24">
+                        <Border.GestureRecognizers>
+                            <TapGestureRecognizer Command="{Binding HideOptionsCommand}"/>
+                        </Border.GestureRecognizers>
+                        <Label Text="Cancel"
+                               FontSize="16"
+                               FontAttributes="Bold"
+                               TextColor="White"
+                               HorizontalOptions="Center"/>
+                    </Border>
+                </VerticalStackLayout>
+            </Border>
+        </Grid>
+    </Grid>
+</ContentPage>

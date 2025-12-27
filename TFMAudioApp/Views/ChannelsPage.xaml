@@ -1,0 +1,344 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:TFMAudioApp.ViewModels"
+             xmlns:models="clr-namespace:TFMAudioApp.Models"
+             xmlns:controls="clr-namespace:TFMAudioApp.Controls"
+             xmlns:behaviors="clr-namespace:TFMAudioApp.Behaviors"
+             x:Class="TFMAudioApp.Views.ChannelsPage"
+             x:DataType="vm:ChannelsViewModel"
+             Title="{Binding Title}"
+             BackgroundColor="{StaticResource PageBackgroundColor}">
+
+    <Grid RowDefinitions="Auto,Auto,*,Auto">
+
+        <!-- Syncing Status Bar -->
+        <Border Grid.Row="0"
+                BackgroundColor="{StaticResource Gray600}"
+                StrokeThickness="0"
+                Padding="12,8"
+                IsVisible="{Binding StatusMessage, Converter={StaticResource StringToBoolConverter}}">
+            <Grid ColumnDefinitions="Auto,*">
+                <ActivityIndicator Grid.Column="0"
+                                   IsRunning="{Binding IsSyncing}"
+                                   IsVisible="{Binding IsSyncing}"
+                                   Color="{StaticResource Primary}"
+                                   HeightRequest="16"
+                                   WidthRequest="16"/>
+                <Label Grid.Column="1"
+                       Text="{Binding StatusMessage}"
+                       FontSize="13"
+                       TextColor="{StaticResource Gray300}"
+                       VerticalOptions="Center"
+                       Margin="8,0,0,0"/>
+            </Grid>
+        </Border>
+
+        <!-- Search Bar -->
+        <SearchBar Grid.Row="1"
+                   Text="{Binding SearchQuery}"
+                   Placeholder="Search channels..."
+                   BackgroundColor="{StaticResource CardBackgroundColor}"
+                   TextColor="White"
+                   PlaceholderColor="{StaticResource Gray400}"
+                   Margin="10"/>
+
+        <!-- Tab View using custom implementation -->
+        <Grid Grid.Row="2" RowDefinitions="Auto,*">
+
+            <!-- Tab Headers -->
+            <ScrollView Grid.Row="0" Orientation="Horizontal" HorizontalScrollBarVisibility="Never">
+                <HorizontalStackLayout Spacing="8"
+                                       HorizontalOptions="Center"
+                                       Margin="10,0,10,10">
+                    <Button x:Name="AllTabButton"
+                            Text="All"
+                            BackgroundColor="{StaticResource Primary}"
+                            TextColor="White"
+                            CornerRadius="20"
+                            Padding="20,8"
+                            Clicked="OnAllTabClicked"/>
+                    <Button x:Name="FavoritesTabButton"
+                            Text="Favorites"
+                            BackgroundColor="{StaticResource Gray600}"
+                            TextColor="White"
+                            CornerRadius="20"
+                            Padding="20,8"
+                            Clicked="OnFavoritesTabClicked"/>
+                    <Button x:Name="OwnedTabButton"
+                            Text="My Channels"
+                            BackgroundColor="{StaticResource Gray600}"
+                            TextColor="White"
+                            CornerRadius="20"
+                            Padding="20,8"
+                            Clicked="OnOwnedTabClicked"/>
+                    <Button x:Name="FoldersTabButton"
+                            Text="Folders"
+                            BackgroundColor="{StaticResource Gray600}"
+                            TextColor="White"
+                            CornerRadius="20"
+                            Padding="20,8"
+                            Clicked="OnFoldersTabClicked"/>
+                </HorizontalStackLayout>
+            </ScrollView>
+
+            <!-- Content Area -->
+            <RefreshView Grid.Row="1"
+                         IsRefreshing="{Binding IsRefreshing}"
+                         Command="{Binding RefreshCommand}">
+                <Grid>
+                    <!-- Skeleton Loading -->
+                    <controls:SkeletonListContainer ItemCount="6"
+                                                     ShowIcon="True"
+                                                     ShowSubtitle="True"
+                                                     ShowTrailing="True"
+                                                     IsVisible="{Binding IsBusy}"/>
+
+                    <!-- All Channels List -->
+                    <CollectionView x:Name="AllChannelsView"
+                                    ItemsSource="{Binding AllChannels}"
+                                    IsVisible="{Binding SelectedTabIndex, Converter={StaticResource IndexEqualConverter}, ConverterParameter=0}">
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate x:DataType="models:Channel">
+                                <Frame BackgroundColor="{StaticResource CardBackgroundColor}"
+                                       BorderColor="Transparent"
+                                       CornerRadius="8"
+                                       Padding="15"
+                                       Margin="10,5">
+                                    <Frame.Behaviors>
+                                        <behaviors:TapFeedbackBehavior/>
+                                    </Frame.Behaviors>
+                                    <Frame.GestureRecognizers>
+                                        <TapGestureRecognizer
+                                            Command="{Binding Source={RelativeSource AncestorType={x:Type vm:ChannelsViewModel}}, Path=NavigateToChannelCommand}"
+                                            CommandParameter="{Binding .}"/>
+                                    </Frame.GestureRecognizers>
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <Label Grid.Column="0"
+                                               Text="📺"
+                                               FontSize="32"
+                                               VerticalOptions="Center"/>
+                                        <VerticalStackLayout Grid.Column="1"
+                                                             Margin="15,0"
+                                                             VerticalOptions="Center">
+                                            <Label Text="{Binding Name}"
+                                                   FontSize="16"
+                                                   FontAttributes="Bold"
+                                                   LineBreakMode="TailTruncation"/>
+                                            <Label Text="{Binding FileCount, StringFormat='{0} files'}"
+                                                   FontSize="12"
+                                                   TextColor="{StaticResource Gray400}"/>
+                                        </VerticalStackLayout>
+                                        <Button Grid.Column="2"
+                                                Text="{Binding IsFavorite, Converter={StaticResource BoolToTextConverter}, ConverterParameter='★|☆'}"
+                                                BackgroundColor="Transparent"
+                                                FontSize="24"
+                                                TextColor="{StaticResource Primary}"
+                                                Command="{Binding Source={RelativeSource AncestorType={x:Type vm:ChannelsViewModel}}, Path=ToggleFavoriteCommand}"
+                                                CommandParameter="{Binding .}"/>
+                                    </Grid>
+                                </Frame>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                        <CollectionView.EmptyView>
+                            <VerticalStackLayout HorizontalOptions="Center"
+                                                 VerticalOptions="Center"
+                                                 Padding="20">
+                                <Label Text="No channels found"
+                                       TextColor="{StaticResource Gray400}"
+                                       HorizontalOptions="Center"/>
+                            </VerticalStackLayout>
+                        </CollectionView.EmptyView>
+                    </CollectionView>
+
+                    <!-- Favorite Channels List (Index 1) -->
+                    <CollectionView x:Name="FavoriteChannelsView"
+                                    ItemsSource="{Binding FavoriteChannels}"
+                                    IsVisible="{Binding SelectedTabIndex, Converter={StaticResource IndexEqualConverter}, ConverterParameter=1}">
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate x:DataType="models:Channel">
+                                <Frame BackgroundColor="{StaticResource CardBackgroundColor}"
+                                       BorderColor="Transparent"
+                                       CornerRadius="8"
+                                       Padding="15"
+                                       Margin="10,5">
+                                    <Frame.Behaviors>
+                                        <behaviors:TapFeedbackBehavior/>
+                                    </Frame.Behaviors>
+                                    <Frame.GestureRecognizers>
+                                        <TapGestureRecognizer
+                                            Command="{Binding Source={RelativeSource AncestorType={x:Type vm:ChannelsViewModel}}, Path=NavigateToChannelCommand}"
+                                            CommandParameter="{Binding .}"/>
+                                    </Frame.GestureRecognizers>
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <Label Grid.Column="0"
+                                               Text="📺"
+                                               FontSize="32"
+                                               VerticalOptions="Center"/>
+                                        <VerticalStackLayout Grid.Column="1"
+                                                             Margin="15,0"
+                                                             VerticalOptions="Center">
+                                            <Label Text="{Binding Name}"
+                                                   FontSize="16"
+                                                   FontAttributes="Bold"
+                                                   LineBreakMode="TailTruncation"/>
+                                            <Label Text="{Binding FileCount, StringFormat='{0} files'}"
+                                                   FontSize="12"
+                                                   TextColor="{StaticResource Gray400}"/>
+                                        </VerticalStackLayout>
+                                        <Button Grid.Column="2"
+                                                Text="★"
+                                                BackgroundColor="Transparent"
+                                                FontSize="24"
+                                                TextColor="{StaticResource Primary}"
+                                                Command="{Binding Source={RelativeSource AncestorType={x:Type vm:ChannelsViewModel}}, Path=ToggleFavoriteCommand}"
+                                                CommandParameter="{Binding .}"/>
+                                    </Grid>
+                                </Frame>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                        <CollectionView.EmptyView>
+                            <VerticalStackLayout HorizontalOptions="Center"
+                                                 VerticalOptions="Center"
+                                                 Padding="20">
+                                <Label Text="No favorite channels"
+                                       TextColor="{StaticResource Gray400}"
+                                       HorizontalOptions="Center"/>
+                                <Label Text="Tap the star on any channel to add it to favorites"
+                                       TextColor="{StaticResource Gray500}"
+                                       FontSize="12"
+                                       HorizontalOptions="Center"
+                                       Margin="0,10,0,0"/>
+                            </VerticalStackLayout>
+                        </CollectionView.EmptyView>
+                    </CollectionView>
+
+                    <!-- Owned Channels List (Index 2) -->
+                    <CollectionView x:Name="OwnedChannelsView"
+                                    ItemsSource="{Binding OwnedChannels}"
+                                    IsVisible="{Binding SelectedTabIndex, Converter={StaticResource IndexEqualConverter}, ConverterParameter=2}">
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate x:DataType="models:Channel">
+                                <Frame BackgroundColor="{StaticResource CardBackgroundColor}"
+                                       BorderColor="Transparent"
+                                       CornerRadius="8"
+                                       Padding="15"
+                                       Margin="10,5">
+                                    <Frame.Behaviors>
+                                        <behaviors:TapFeedbackBehavior/>
+                                    </Frame.Behaviors>
+                                    <Frame.GestureRecognizers>
+                                        <TapGestureRecognizer
+                                            Command="{Binding Source={RelativeSource AncestorType={x:Type vm:ChannelsViewModel}}, Path=NavigateToChannelCommand}"
+                                            CommandParameter="{Binding .}"/>
+                                    </Frame.GestureRecognizers>
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <Label Grid.Column="0"
+                                               Text="👑"
+                                               FontSize="32"
+                                               VerticalOptions="Center"/>
+                                        <VerticalStackLayout Grid.Column="1"
+                                                             Margin="15,0"
+                                                             VerticalOptions="Center">
+                                            <Label Text="{Binding Name}"
+                                                   FontSize="16"
+                                                   FontAttributes="Bold"
+                                                   LineBreakMode="TailTruncation"/>
+                                            <Label Text="{Binding FileCount, StringFormat='{0} files'}"
+                                                   FontSize="12"
+                                                   TextColor="{StaticResource Gray400}"/>
+                                        </VerticalStackLayout>
+                                        <Button Grid.Column="2"
+                                                Text="{Binding IsFavorite, Converter={StaticResource BoolToTextConverter}, ConverterParameter='★|☆'}"
+                                                BackgroundColor="Transparent"
+                                                FontSize="24"
+                                                TextColor="{StaticResource Primary}"
+                                                Command="{Binding Source={RelativeSource AncestorType={x:Type vm:ChannelsViewModel}}, Path=ToggleFavoriteCommand}"
+                                                CommandParameter="{Binding .}"/>
+                                    </Grid>
+                                </Frame>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                        <CollectionView.EmptyView>
+                            <VerticalStackLayout HorizontalOptions="Center"
+                                                 VerticalOptions="Center"
+                                                 Padding="20">
+                                <Label Text="No owned channels"
+                                       TextColor="{StaticResource Gray400}"
+                                       HorizontalOptions="Center"/>
+                                <Label Text="Channels where you are the owner will appear here"
+                                       TextColor="{StaticResource Gray500}"
+                                       FontSize="12"
+                                       HorizontalOptions="Center"
+                                       Margin="0,10,0,0"/>
+                            </VerticalStackLayout>
+                        </CollectionView.EmptyView>
+                    </CollectionView>
+
+                    <!-- Folders List (Index 3) -->
+                    <CollectionView x:Name="FoldersView"
+                                    ItemsSource="{Binding Folders}"
+                                    IsVisible="{Binding SelectedTabIndex, Converter={StaticResource IndexEqualConverter}, ConverterParameter=3}">
+                        <CollectionView.ItemTemplate>
+                            <DataTemplate x:DataType="models:ChannelFolder">
+                                <Frame BackgroundColor="{StaticResource CardBackgroundColor}"
+                                       BorderColor="Transparent"
+                                       CornerRadius="8"
+                                       Padding="15"
+                                       Margin="10,5">
+                                    <Frame.Behaviors>
+                                        <behaviors:TapFeedbackBehavior/>
+                                    </Frame.Behaviors>
+                                    <Frame.GestureRecognizers>
+                                        <TapGestureRecognizer
+                                            Command="{Binding Source={RelativeSource AncestorType={x:Type vm:ChannelsViewModel}}, Path=SelectFolderCommand}"
+                                            CommandParameter="{Binding .}"/>
+                                    </Frame.GestureRecognizers>
+                                    <Grid ColumnDefinitions="Auto,*,Auto">
+                                        <Label Grid.Column="0"
+                                               Text="{Binding IconEmoji, TargetNullValue='📁'}"
+                                               FontSize="32"
+                                               VerticalOptions="Center"/>
+                                        <VerticalStackLayout Grid.Column="1"
+                                                             Margin="15,0"
+                                                             VerticalOptions="Center">
+                                            <Label Text="{Binding Title}"
+                                                   FontSize="16"
+                                                   FontAttributes="Bold"
+                                                   LineBreakMode="TailTruncation"/>
+                                            <Label Text="{Binding ChannelCount, StringFormat='{0} channels'}"
+                                                   FontSize="12"
+                                                   TextColor="{StaticResource Gray400}"/>
+                                        </VerticalStackLayout>
+                                        <Label Grid.Column="2"
+                                               Text=">"
+                                               FontSize="24"
+                                               TextColor="{StaticResource Gray400}"
+                                               VerticalOptions="Center"/>
+                                    </Grid>
+                                </Frame>
+                            </DataTemplate>
+                        </CollectionView.ItemTemplate>
+                        <CollectionView.EmptyView>
+                            <VerticalStackLayout HorizontalOptions="Center"
+                                                 VerticalOptions="Center"
+                                                 Padding="20">
+                                <Label Text="No folders found"
+                                       TextColor="{StaticResource Gray400}"
+                                       HorizontalOptions="Center"/>
+                                <Label Text="Folders are synced from Telegram"
+                                       TextColor="{StaticResource Gray500}"
+                                       FontSize="12"
+                                       HorizontalOptions="Center"
+                                       Margin="0,10,0,0"/>
+                            </VerticalStackLayout>
+                        </CollectionView.EmptyView>
+                    </CollectionView>
+                </Grid>
+            </RefreshView>
+        </Grid>
+
+        <!-- Mini Player -->
+        <controls:MiniPlayerControl Grid.Row="3"/>
+    </Grid>
+</ContentPage>

@@ -148,6 +148,9 @@ builder.Services.AddSingleton<TransactionInfoService>();
 builder.Services.AddSingleton<FileManagerService>();
 builder.Services.AddSingleton<GHService>();
 
+// Progressive download service for streaming with background caching
+builder.Services.AddSingleton<IProgressiveDownloadService, ProgressiveDownloadService>();
+
 // Task persistence services
 builder.Services.AddSingleton<ITaskPersistenceService, TaskPersistenceService>();
 builder.Services.AddHostedService<TaskResumeService>();
@@ -166,6 +169,57 @@ builder.Services.AddSingleton<ISetupService, SetupService>();
 ServiceLocator.ServiceProvider = builder.Services.BuildServiceProvider();
 #pragma warning restore ASP0000
 builder.Services.AddBlazorBootstrap();
+
+// Add controllers for Mobile API
+builder.Services.AddControllers();
+
+// Swagger/OpenAPI for Mobile API documentation
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+    {
+        Title = "TelegramFileManager Mobile API",
+        Version = "v1",
+        Description = "REST API for mobile audio player application. Provides access to playlists, Telegram channels, file navigation and audio streaming.",
+        Contact = new Microsoft.OpenApi.Models.OpenApiContact
+        {
+            Name = "TFM"
+        }
+    });
+
+    // Include only Mobile API controllers (FileController uses Syncfusion types that break Swagger)
+    c.DocInclusionPredicate((docName, apiDesc) =>
+    {
+        var controllerName = apiDesc.ActionDescriptor.RouteValues["controller"];
+        return controllerName?.StartsWith("Mobile") == true;
+    });
+
+    // API Key authentication
+    c.AddSecurityDefinition("ApiKey", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    {
+        Description = "API Key for mobile app authentication. Add to request header as: X-Api-Key: your-api-key",
+        Name = "X-Api-Key",
+        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
+        Scheme = "ApiKey"
+    });
+
+    c.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+    {
+        {
+            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+            {
+                Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                {
+                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                    Id = "ApiKey"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
 
 
 
@@ -257,6 +311,17 @@ app.UseStaticFiles(new StaticFileOptions
 //    RequestPath = "/workingDir"
 //});
 
+// Swagger UI - available in all environments for mobile app development
+app.UseSwagger();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "TFM Mobile API v1");
+    c.RoutePrefix = "api-docs";
+});
+
+// API Key authentication middleware for mobile endpoints
+app.UseMiddleware<TelegramDownloader.Middleware.ApiKeyMiddleware>();
+
 app.UseRouting();
 app.MapControllers();
 
@@ -303,8 +368,9 @@ try
 
     Log.Information("TelegramFileManager application started. Listening on: {Urls}", string.Join(", ", listeningUrls));
 
-    // Open browser automatically if not in Docker
-    if (!isDocker && listeningUrls.Any())
+    // Open browser automatically if not in Docker and not disabled in config
+    var shouldOpenBrowser = GeneralConfigStatic.tlconfig?.open_browser_on_startup ?? true;
+    if (!isDocker && shouldOpenBrowser && listeningUrls.Any())
     {
         var urlToOpen = listeningUrls.FirstOrDefault(u => u.StartsWith("http://")) ?? listeningUrls.First();
 

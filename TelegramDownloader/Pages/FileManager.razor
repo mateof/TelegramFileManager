@@ -83,20 +83,108 @@
     ConfirmText="Refresh"
     ConfirmIcon="bi-arrow-clockwise"
     ProcessingText="Refreshing..."
+    Size="TelegramDownloader.Pages.Modals.ConfirmationModal.ConfirmationSize.Large"
     Type="TelegramDownloader.Pages.Modals.ConfirmationModal.ConfirmationType.Warning"
     OnConfirm="executeRefreshData">
     <div class="mb-3">
-        <p>Are you sure you want to refresh data for <strong>@chatName</strong>?</p>
+        <p>Refresh data for <strong>@chatName</strong>. Select which media types to fetch:</p>
     </div>
-    <div class="alert alert-warning py-2 px-3 mb-0" style="font-size: 0.9rem;">
-        <i class="bi bi-exclamation-triangle me-2"></i>
-        <strong>This will:</strong>
-        <ul class="mb-0 mt-2">
-            <li>Re-download all file metadata from Telegram</li>
-            <li>Sync any changes made in the channel</li>
-            <li>May take a long time for large channels</li>
-        </ul>
+
+    <div class="refresh-options mb-3">
+        <div class="row g-2">
+            <div class="col-6">
+                <div class="form-check refresh-option-card @(refreshOptions.IncludeDocuments ? "selected" : "")">
+                    <input class="form-check-input" type="checkbox" id="chkDocuments"
+                           @bind="refreshOptions.IncludeDocuments" />
+                    <label class="form-check-label" for="chkDocuments">
+                        <i class="bi bi-file-earmark-text"></i>
+                        <span>Documents</span>
+                        <small>PDF, ZIP, etc.</small>
+                    </label>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="form-check refresh-option-card @(refreshOptions.IncludeAudio ? "selected" : "")">
+                    <input class="form-check-input" type="checkbox" id="chkAudio"
+                           @bind="refreshOptions.IncludeAudio" />
+                    <label class="form-check-label" for="chkAudio">
+                        <i class="bi bi-music-note-beamed"></i>
+                        <span>Audio</span>
+                        <small>MP3, music files</small>
+                    </label>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="form-check refresh-option-card @(refreshOptions.IncludeVideo ? "selected" : "")">
+                    <input class="form-check-input" type="checkbox" id="chkVideo"
+                           @bind="refreshOptions.IncludeVideo" />
+                    <label class="form-check-label" for="chkVideo">
+                        <i class="bi bi-camera-video"></i>
+                        <span>Video</span>
+                        <small>MP4, video files</small>
+                    </label>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="form-check refresh-option-card @(refreshOptions.IncludePhotos ? "selected" : "")">
+                    <input class="form-check-input" type="checkbox" id="chkPhotos"
+                           @bind="refreshOptions.IncludePhotos" />
+                    <label class="form-check-label" for="chkPhotos">
+                        <i class="bi bi-image"></i>
+                        <span>Photos</span>
+                        <small>JPG, PNG images</small>
+                    </label>
+                </div>
+            </div>
+        </div>
     </div>
+
+    <div class="alert alert-info py-2 px-3 mb-0" style="font-size: 0.85rem;">
+        <i class="bi bi-info-circle me-2"></i>
+        Only new files will be added. Existing files won't be duplicated.
+    </div>
+
+    <style>
+        .refresh-option-card {
+            background: var(--bs-tertiary-bg);
+            border: 2px solid var(--bs-border-color);
+            border-radius: 0.5rem;
+            padding: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .refresh-option-card:hover {
+            border-color: var(--bs-primary);
+            background: var(--bs-primary-bg-subtle);
+        }
+        .refresh-option-card.selected {
+            border-color: var(--bs-primary);
+            background: var(--bs-primary-bg-subtle);
+        }
+        .refresh-option-card .form-check-input {
+            float: right;
+            margin-top: 0.25rem;
+        }
+        .refresh-option-card label {
+            display: flex;
+            flex-direction: column;
+            gap: 0.1rem;
+            cursor: pointer;
+            width: 100%;
+        }
+        .refresh-option-card label i {
+            font-size: 1.25rem;
+            color: var(--bs-primary);
+        }
+        .refresh-option-card label span {
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+        .refresh-option-card label small {
+            color: var(--bs-secondary-color);
+            font-size: 0.75rem;
+        }
+    </style>
 </TelegramDownloader.Pages.Modals.ConfirmationModal>
 
 @code {
@@ -116,6 +204,9 @@
     private bool isMyChannel = true;
     private bool showRefresh = true;
     private bool isRefreshing = false;
+
+    // Refresh options
+    private RefreshChannelOptions refreshOptions = new RefreshChannelOptions();
 
     // Show refresh button if: not my channel OR (is my channel AND EnableRefreshOwnChannels is enabled)
     private bool canShowRefresh => !isMyChannel || GeneralConfigStatic.config.EnableRefreshOwnChannels;
@@ -173,13 +264,19 @@
 
     private async Task executeRefreshData()
     {
+        if (!refreshOptions.HasAnySelection)
+        {
+            nm.sendMessage("Warning", "Please select at least one media type", NotificationTypes.Error);
+            return;
+        }
+
         isRefreshing = true;
         showRefresh = false;
         await InvokeAsync(StateHasChanged);
 
         try
         {
-            await fs.refreshChannelFIles(id);
+            await fs.refreshChannelFIles(id, refreshOptions: refreshOptions);
 
             // Refresh the file manager to show updated data
             if (fileManagerImpl != null)

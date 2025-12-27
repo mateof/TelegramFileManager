@@ -185,6 +185,15 @@
             }
 
         }
+
+        // Navigate to path from URL after components are rendered
+        if (_pendingPathNavigation)
+        {
+            _pendingPathNavigation = false;
+            // Small delay to ensure components are fully initialized
+            await Task.Delay(100);
+            await NavigateToPathFromUrl();
+        }
     }
 
     private async Task DetectMobileView()
@@ -210,12 +219,12 @@
         finally
         {
             _viewportDetected = true;
+            _pendingPathNavigation = true;
             StateHasChanged();
-
-            // After viewport is detected, navigate to path from URL if present
-            await NavigateToPathFromUrl();
         }
     }
+
+    private bool _pendingPathNavigation = false;
 
     private async Task NavigateToPathFromUrl()
     {
@@ -225,14 +234,24 @@
             var query = HttpUtility.ParseQueryString(uri.Query);
             var pathFromUrl = query["path"];
 
-            if (!string.IsNullOrEmpty(pathFromUrl) && mobileFileManager != null)
-            {
-                // Decode the path and ensure it ends with /
-                var decodedPath = Uri.UnescapeDataString(pathFromUrl);
-                if (!decodedPath.EndsWith("/"))
-                    decodedPath += "/";
+            if (string.IsNullOrEmpty(pathFromUrl))
+                return;
 
+            // Decode the path and ensure it ends with /
+            var decodedPath = Uri.UnescapeDataString(pathFromUrl);
+            if (!decodedPath.EndsWith("/"))
+                decodedPath += "/";
+
+            // Handle mobile file manager
+            if (_isMobileView && mobileFileManager != null)
+            {
                 await mobileFileManager.NavigateToPathSilent(decodedPath);
+            }
+            // Handle desktop file manager
+            else if (!_isMobileView && FileManager != null)
+            {
+                FileManager.Path = decodedPath;
+                await FileManager.RefreshFilesAsync();
             }
         }
         catch (Exception ex)

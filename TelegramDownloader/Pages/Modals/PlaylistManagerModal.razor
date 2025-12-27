@@ -1,0 +1,881 @@
+@using TelegramDownloader.Data.db
+@using TelegramDownloader.Models
+@using TelegramDownloader.Shared
+
+@inject IDbService db
+@inject IJSRuntime JSRuntime
+@inject NavigationManager NavigationManager
+
+<div class="modal @ModalClass" tabindex="-1" role="dialog" style="display:@ModalDisplay">
+    <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
+        <div class="modal-content playlist-manager-modal">
+            <!-- Header -->
+            <div class="modal-header playlist-manager-header">
+                <div class="modal-title-wrapper">
+                    <div class="modal-icon">
+                        <i class="bi bi-music-note-list"></i>
+                    </div>
+                    <div>
+                        <h5 class="modal-title">@(selectedPlaylist != null ? "Edit Playlist" : "Playlists")</h5>
+                        <p class="modal-subtitle">@(selectedPlaylist != null ? selectedPlaylist.Name : "Manage your saved playlists")</p>
+                    </div>
+                </div>
+                <button type="button" class="btn-close-modal" @onclick="HandleClose" aria-label="Close">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+
+            <!-- Body -->
+            <div class="modal-body playlist-manager-body">
+                @if (ShowBackdrop)
+                {
+                    @if (isLoading)
+                    {
+                        <div class="loading-container">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                        </div>
+                    }
+                    else if (selectedPlaylist == null)
+                    {
+                        <!-- Playlist List View -->
+                        <div class="playlist-list-view">
+                            <!-- Create New Playlist -->
+                            <div class="create-playlist-section">
+                                <div class="input-group">
+                                    <input type="text" class="form-control" placeholder="New playlist name..."
+                                           @bind="newPlaylistName" @bind:event="oninput"
+                                           @onkeypress="HandleNewPlaylistKeyPress" />
+                                    <button class="btn btn-primary" @onclick="CreateNewPlaylist"
+                                            disabled="@string.IsNullOrWhiteSpace(newPlaylistName)">
+                                        <i class="bi bi-plus-lg"></i> Create
+                                    </button>
+                                </div>
+                            </div>
+
+                            @if (playlists.Count == 0)
+                            {
+                                <div class="empty-state">
+                                    <i class="bi bi-music-note-list"></i>
+                                    <p>No playlists yet</p>
+                                    <span>Create your first playlist above</span>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="playlists-container">
+                                    @foreach (var playlist in playlists)
+                                    {
+                                        <div class="playlist-card" @onclick="() => SelectPlaylist(playlist)">
+                                            <div class="playlist-card-icon">
+                                                <i class="bi bi-music-note-list"></i>
+                                            </div>
+                                            <div class="playlist-card-info">
+                                                <div class="playlist-card-name">@playlist.Name</div>
+                                                <div class="playlist-card-meta">
+                                                    <span><i class="bi bi-music-note"></i> @playlist.TrackCount tracks</span>
+                                                    <span><i class="bi bi-clock"></i> @playlist.DateModified.ToString("MMM dd, yyyy")</span>
+                                                </div>
+                                            </div>
+                                            <div class="playlist-card-actions">
+                                                <button class="btn btn-sm btn-icon" @onclick:stopPropagation="true"
+                                                        @onclick="() => PlayPlaylist(playlist)" title="Play">
+                                                    <i class="bi bi-play-fill"></i>
+                                                </button>
+                                                <button class="btn btn-sm btn-icon btn-danger" @onclick:stopPropagation="true"
+                                                        @onclick="() => ConfirmDeletePlaylist(playlist)" title="Delete">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <!-- Playlist Detail View -->
+                        <div class="playlist-detail-view">
+                            <!-- Back button and playlist info -->
+                            <div class="playlist-detail-header">
+                                <button class="btn btn-back" @onclick="BackToList">
+                                    <i class="bi bi-arrow-left"></i> Back
+                                </button>
+                                <div class="playlist-name-edit">
+                                    @if (isEditingName)
+                                    {
+                                        <div class="input-group">
+                                            <input type="text" class="form-control" @bind="editingPlaylistName"
+                                                   @onkeypress="HandleEditNameKeyPress" />
+                                            <button class="btn btn-success" @onclick="SavePlaylistName">
+                                                <i class="bi bi-check"></i>
+                                            </button>
+                                            <button class="btn btn-secondary" @onclick="CancelEditName">
+                                                <i class="bi bi-x"></i>
+                                            </button>
+                                        </div>
+                                    }
+                                    else
+                                    {
+                                        <h6 class="playlist-name" @onclick="StartEditName">
+                                            @selectedPlaylist.Name
+                                            <i class="bi bi-pencil edit-icon"></i>
+                                        </h6>
+                                    }
+                                </div>
+                            </div>
+
+                            <!-- Actions -->
+                            <div class="playlist-actions">
+                                <button class="btn btn-primary" @onclick="() => PlayPlaylist(selectedPlaylist)">
+                                    <i class="bi bi-play-fill"></i> Play All
+                                </button>
+                                <button class="btn btn-outline-primary" @onclick="OpenDownloadModal">
+                                    <i class="bi bi-download"></i> Download
+                                </button>
+                            </div>
+
+                            <!-- Track list -->
+                            @if (selectedPlaylist.Tracks.Count == 0)
+                            {
+                                <div class="empty-state">
+                                    <i class="bi bi-music-note"></i>
+                                    <p>No tracks in this playlist</p>
+                                    <span>Add tracks from the file manager</span>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="tracks-container">
+                                    @for (int i = 0; i < selectedPlaylist.Tracks.Count; i++)
+                                    {
+                                        var track = selectedPlaylist.Tracks[i];
+                                        var index = i;
+                                        <div class="track-item @(dragOverIndex == index ? "drag-over" : "") @(draggedIndex == index ? "dragging" : "")"
+                                             draggable="true"
+                                             @ondragstart="() => OnDragStart(index)"
+                                             @ondragover:preventDefault="true"
+                                             @ondragover="() => OnDragOver(index)"
+                                             @ondrop="() => OnDrop(index)"
+                                             @ondragend="OnDragEnd">
+                                            <div class="track-drag-handle">
+                                                <i class="bi bi-grip-vertical"></i>
+                                            </div>
+                                            <div class="track-number">@(index + 1)</div>
+                                            <div class="track-info">
+                                                <div class="track-name">@track.FileName</div>
+                                                <div class="track-meta">
+                                                    <span class="track-channel"><i class="bi bi-telegram"></i> @track.ChannelName</span>
+                                                </div>
+                                            </div>
+                                            <div class="track-actions">
+                                                <button class="btn btn-sm btn-icon" @onclick="() => PlayTrack(track, index)" title="Play">
+                                                    <i class="bi bi-play-fill"></i>
+                                                </button>
+                                                <button class="btn btn-sm btn-icon btn-danger" @onclick="() => RemoveTrack(track)" title="Remove">
+                                                    <i class="bi bi-x"></i>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+                }
+            </div>
+
+            <!-- Footer -->
+            <div class="modal-footer playlist-manager-footer">
+                <button type="button" class="btn btn-secondary" @onclick="HandleClose">
+                    Close
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Download to Local Modal -->
+@if (showDownloadModal)
+{
+    <div class="modal show" tabindex="-1" style="display:block; background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-download me-2"></i>Download Playlist</h5>
+                    <button type="button" class="btn-close" @onclick="CloseDownloadModal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Select destination folder for: <strong>@selectedPlaylist?.Name</strong></p>
+                    <div class="mb-3">
+                        <TelegramDownloader.Shared.Ddtree idTree="playlistDownloadTree" @ref="ddtree" />
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseDownloadModal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="StartDownload" disabled="@isDownloading">
+                        @if (isDownloading)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2"></span>
+                            <span>Downloading...</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-download me-2"></i>
+                            <span>Download</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- Delete Confirmation Modal -->
+@if (playlistToDelete != null)
+{
+    <div class="modal show" tabindex="-1" style="display:block; background: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-exclamation-triangle text-danger me-2"></i>Delete Playlist</h5>
+                    <button type="button" class="btn-close" @onclick="CancelDeletePlaylist"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Are you sure you want to delete <strong>@playlistToDelete.Name</strong>?</p>
+                    <p class="text-muted small">This action cannot be undone.</p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CancelDeletePlaylist">Cancel</button>
+                    <button type="button" class="btn btn-danger" @onclick="DeletePlaylist">
+                        <i class="bi bi-trash me-2"></i>Delete
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (ShowBackdrop)
+{
+    <div class="modal-backdrop fade show"></div>
+}
+
+<style>
+    .playlist-manager-modal {
+        max-height: 90vh;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .playlist-manager-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+    }
+
+    .modal-title-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
+
+    .modal-icon {
+        width: 48px;
+        height: 48px;
+        background: rgba(255, 255, 255, 0.2);
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .modal-icon i {
+        font-size: 1.5rem;
+    }
+
+    .modal-subtitle {
+        margin: 0;
+        opacity: 0.8;
+        font-size: 0.875rem;
+    }
+
+    .btn-close-modal {
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        color: white;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .btn-close-modal:hover {
+        background: rgba(255, 255, 255, 0.3);
+    }
+
+    .playlist-manager-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 1.5rem;
+        min-height: 300px;
+        max-height: 60vh;
+    }
+
+    .loading-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 200px;
+    }
+
+    .create-playlist-section {
+        margin-bottom: 1.5rem;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 3rem 1rem;
+        color: #6c757d;
+    }
+
+    .empty-state i {
+        font-size: 3rem;
+        margin-bottom: 1rem;
+        opacity: 0.5;
+    }
+
+    .empty-state p {
+        margin: 0;
+        font-weight: 500;
+    }
+
+    .empty-state span {
+        font-size: 0.875rem;
+    }
+
+    .playlists-container {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+
+    .playlist-card {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 1rem;
+        background: #f8f9fa;
+        border-radius: 12px;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .playlist-card:hover {
+        background: #e9ecef;
+        transform: translateX(4px);
+    }
+
+    .playlist-card-icon {
+        width: 48px;
+        height: 48px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 1.25rem;
+    }
+
+    .playlist-card-info {
+        flex: 1;
+    }
+
+    .playlist-card-name {
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+
+    .playlist-card-meta {
+        display: flex;
+        gap: 1rem;
+        font-size: 0.75rem;
+        color: #6c757d;
+    }
+
+    .playlist-card-meta i {
+        margin-right: 0.25rem;
+    }
+
+    .playlist-card-actions {
+        display: flex;
+        gap: 0.5rem;
+    }
+
+    .btn-icon {
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        background: white;
+        border: 1px solid #dee2e6;
+        color: #495057;
+    }
+
+    .btn-icon:hover {
+        background: #667eea;
+        border-color: #667eea;
+        color: white;
+    }
+
+    .btn-icon.btn-danger:hover {
+        background: #dc3545;
+        border-color: #dc3545;
+    }
+
+    /* Playlist Detail View */
+    .playlist-detail-header {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .btn-back {
+        padding: 0.5rem 1rem;
+    }
+
+    .playlist-name-edit {
+        flex: 1;
+    }
+
+    .playlist-name {
+        margin: 0;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .edit-icon {
+        font-size: 0.875rem;
+        opacity: 0.5;
+    }
+
+    .playlist-name:hover .edit-icon {
+        opacity: 1;
+    }
+
+    .playlist-actions {
+        display: flex;
+        gap: 0.75rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .tracks-container {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .track-item {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.75rem;
+        background: #f8f9fa;
+        border-radius: 8px;
+        transition: all 0.2s;
+    }
+
+    .track-item:hover {
+        background: #e9ecef;
+    }
+
+    .track-item.dragging {
+        opacity: 0.5;
+    }
+
+    .track-item.drag-over {
+        border-top: 2px solid #667eea;
+    }
+
+    .track-drag-handle {
+        cursor: grab;
+        color: #adb5bd;
+        padding: 0.25rem;
+    }
+
+    .track-drag-handle:active {
+        cursor: grabbing;
+    }
+
+    .track-number {
+        width: 24px;
+        text-align: center;
+        font-size: 0.875rem;
+        color: #6c757d;
+    }
+
+    .track-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .track-name {
+        font-weight: 500;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .track-meta {
+        font-size: 0.75rem;
+        color: #6c757d;
+    }
+
+    .track-channel i {
+        margin-right: 0.25rem;
+    }
+
+    .track-actions {
+        display: flex;
+        gap: 0.25rem;
+    }
+
+    .playlist-manager-footer {
+        border-top: 1px solid #dee2e6;
+    }
+</style>
+
+@code {
+    public string ModalDisplay = "none;";
+    public string ModalClass = "";
+    public bool ShowBackdrop = false;
+
+    private List<PlaylistModel> playlists = new();
+    private PlaylistModel? selectedPlaylist = null;
+    private PlaylistModel? playlistToDelete = null;
+    private string newPlaylistName = "";
+    private bool isLoading = false;
+
+    // Edit name state
+    private bool isEditingName = false;
+    private string editingPlaylistName = "";
+
+    // Drag and drop state
+    private int? draggedIndex = null;
+    private int? dragOverIndex = null;
+
+    // Download modal state
+    private bool showDownloadModal = false;
+    private bool isDownloading = false;
+    private Ddtree? ddtree;
+
+    [Parameter]
+    public EventCallback<(PlaylistModel playlist, int? startIndex)> OnPlayPlaylist { get; set; }
+
+    [Parameter]
+    public EventCallback<(PlaylistModel playlist, string folder)> OnDownloadPlaylist { get; set; }
+
+    [Parameter]
+    public EventCallback<string> OnNotify { get; set; }
+
+    public async Task Open()
+    {
+        isLoading = true;
+        selectedPlaylist = null;
+        playlistToDelete = null;
+        newPlaylistName = "";
+
+        ModalDisplay = "block;";
+        ModalClass = "Show";
+        ShowBackdrop = true;
+        StateHasChanged();
+
+        await LoadPlaylists();
+        isLoading = false;
+        StateHasChanged();
+    }
+
+    public async Task OpenWithPlaylist(string playlistId)
+    {
+        isLoading = true;
+        selectedPlaylist = null;
+        playlistToDelete = null;
+        newPlaylistName = "";
+
+        ModalDisplay = "block;";
+        ModalClass = "Show";
+        ShowBackdrop = true;
+        StateHasChanged();
+
+        await LoadPlaylists();
+
+        // Select the specified playlist
+        selectedPlaylist = playlists.FirstOrDefault(p => p.Id == playlistId);
+
+        isLoading = false;
+        StateHasChanged();
+    }
+
+    private async Task LoadPlaylists()
+    {
+        try
+        {
+            playlists = await db.GetAllPlaylists();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading playlists: {ex.Message}");
+            playlists = new();
+        }
+    }
+
+    private void HandleClose()
+    {
+        if (showDownloadModal)
+        {
+            CloseDownloadModal();
+            return;
+        }
+        Close();
+    }
+
+    public void Close()
+    {
+        ModalDisplay = "none";
+        ModalClass = "";
+        ShowBackdrop = false;
+        selectedPlaylist = null;
+        playlistToDelete = null;
+        StateHasChanged();
+    }
+
+    private async Task HandleNewPlaylistKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !string.IsNullOrWhiteSpace(newPlaylistName))
+        {
+            await CreateNewPlaylist();
+        }
+    }
+
+    private async Task CreateNewPlaylist()
+    {
+        if (string.IsNullOrWhiteSpace(newPlaylistName)) return;
+
+        try
+        {
+            var playlist = new PlaylistModel
+            {
+                Name = newPlaylistName.Trim()
+            };
+
+            await db.CreatePlaylist(playlist);
+            newPlaylistName = "";
+            await LoadPlaylists();
+            await OnNotify.InvokeAsync($"Playlist '{playlist.Name}' created");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error creating playlist: {ex.Message}");
+        }
+    }
+
+    private void SelectPlaylist(PlaylistModel playlist)
+    {
+        selectedPlaylist = playlist;
+        StateHasChanged();
+    }
+
+    private void BackToList()
+    {
+        selectedPlaylist = null;
+        isEditingName = false;
+        StateHasChanged();
+    }
+
+    // Edit name
+    private void StartEditName()
+    {
+        editingPlaylistName = selectedPlaylist?.Name ?? "";
+        isEditingName = true;
+    }
+
+    private void CancelEditName()
+    {
+        isEditingName = false;
+    }
+
+    private async Task HandleEditNameKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await SavePlaylistName();
+        }
+        else if (e.Key == "Escape")
+        {
+            CancelEditName();
+        }
+    }
+
+    private async Task SavePlaylistName()
+    {
+        if (selectedPlaylist == null || string.IsNullOrWhiteSpace(editingPlaylistName)) return;
+
+        selectedPlaylist.Name = editingPlaylistName.Trim();
+        await db.UpdatePlaylist(selectedPlaylist);
+        isEditingName = false;
+        await LoadPlaylists();
+
+        // Refresh selected playlist
+        selectedPlaylist = playlists.FirstOrDefault(p => p.Id == selectedPlaylist.Id);
+        await OnNotify.InvokeAsync("Playlist name updated");
+    }
+
+    // Delete playlist
+    private void ConfirmDeletePlaylist(PlaylistModel playlist)
+    {
+        playlistToDelete = playlist;
+    }
+
+    private void CancelDeletePlaylist()
+    {
+        playlistToDelete = null;
+    }
+
+    private async Task DeletePlaylist()
+    {
+        if (playlistToDelete == null) return;
+
+        var name = playlistToDelete.Name;
+        await db.DeletePlaylist(playlistToDelete.Id);
+        playlistToDelete = null;
+
+        if (selectedPlaylist?.Id == playlistToDelete?.Id)
+        {
+            selectedPlaylist = null;
+        }
+
+        await LoadPlaylists();
+        await OnNotify.InvokeAsync($"Playlist '{name}' deleted");
+    }
+
+    // Play playlist
+    private async Task PlayPlaylist(PlaylistModel playlist)
+    {
+        await OnPlayPlaylist.InvokeAsync((playlist, null));
+        Close();
+    }
+
+    private async Task PlayTrack(PlaylistTrackModel track, int index)
+    {
+        if (selectedPlaylist != null)
+        {
+            await OnPlayPlaylist.InvokeAsync((selectedPlaylist, index));
+            Close();
+        }
+    }
+
+    // Remove track
+    private async Task RemoveTrack(PlaylistTrackModel track)
+    {
+        if (selectedPlaylist == null) return;
+
+        await db.RemoveTrackFromPlaylist(selectedPlaylist.Id, track.FileId);
+
+        // Refresh playlist
+        selectedPlaylist = await db.GetPlaylistById(selectedPlaylist.Id);
+        await LoadPlaylists();
+        await OnNotify.InvokeAsync($"Track removed from playlist");
+    }
+
+    // Drag and drop
+    private void OnDragStart(int index)
+    {
+        draggedIndex = index;
+    }
+
+    private void OnDragOver(int index)
+    {
+        if (draggedIndex != null && draggedIndex != index)
+        {
+            dragOverIndex = index;
+        }
+    }
+
+    private async Task OnDrop(int targetIndex)
+    {
+        if (draggedIndex == null || selectedPlaylist == null) return;
+
+        var tracks = selectedPlaylist.Tracks;
+        if (draggedIndex.Value >= 0 && draggedIndex.Value < tracks.Count &&
+            targetIndex >= 0 && targetIndex < tracks.Count)
+        {
+            var item = tracks[draggedIndex.Value];
+            tracks.RemoveAt(draggedIndex.Value);
+            tracks.Insert(targetIndex, item);
+
+            // Update order
+            var orderedIds = tracks.Select(t => t.FileId).ToList();
+            await db.ReorderPlaylistTracks(selectedPlaylist.Id, orderedIds);
+
+            // Refresh
+            selectedPlaylist = await db.GetPlaylistById(selectedPlaylist.Id);
+        }
+
+        draggedIndex = null;
+        dragOverIndex = null;
+    }
+
+    private void OnDragEnd()
+    {
+        draggedIndex = null;
+        dragOverIndex = null;
+    }
+
+    // Download
+    private void OpenDownloadModal()
+    {
+        showDownloadModal = true;
+    }
+
+    private void CloseDownloadModal()
+    {
+        showDownloadModal = false;
+        isDownloading = false;
+    }
+
+    private async Task StartDownload()
+    {
+        if (selectedPlaylist == null || ddtree?.selectedNode == null) return;
+
+        var folder = ddtree.selectedNode.FirstOrDefault();
+        if (string.IsNullOrEmpty(folder)) return;
+
+        isDownloading = true;
+        StateHasChanged();
+
+        await OnDownloadPlaylist.InvokeAsync((selectedPlaylist, folder));
+
+        CloseDownloadModal();
+        await OnNotify.InvokeAsync($"Download started for playlist '{selectedPlaylist.Name}'");
+    }
+
+    public async Task RefreshPlaylists()
+    {
+        await LoadPlaylists();
+        if (selectedPlaylist != null)
+        {
+            selectedPlaylist = playlists.FirstOrDefault(p => p.Id == selectedPlaylist.Id);
+        }
+        StateHasChanged();
+    }
+}
