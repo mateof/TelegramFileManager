@@ -446,7 +446,7 @@ jobs:
   # ==========================================
   build-macos:
     name: Build macOS App
-    runs-on: macos-15
+    runs-on: macos-14
     # Run if: manual with build_macos OR release with app-v* or v* (but not server-v*)
     if: |
       (github.event_name == 'workflow_dispatch' && inputs.build_macos) ||
@@ -465,31 +465,17 @@ jobs:
           dotnet --version
           dotnet --list-sdks
 
-      - name: '🧹 Clean ALL .NET data'
+      - name: '🍎 Install MAUI workload'
         run: |
-          # Nuclear option - remove all workloads, packs, and manifests
-          rm -rf ~/.dotnet/packs || true
-          rm -rf ~/.dotnet/metadata || true
-          rm -rf ~/.dotnet/workloads || true
-          rm -rf ~/.nuget/packages/microsoft.maui* || true
-          rm -rf ~/.nuget/packages/microsoft.maccatalyst* || true
-          rm -rf ~/.nuget/packages/microsoft.ios* || true
-
-      - name: '🍎 Install MAUI workload with rollback'
-        run: |
-          # Create a rollback file to pin workload versions compatible with .NET 9.0.100
-          cat > workload-rollback.json << 'EOF'
-          {
-            "microsoft.net.sdk.maui": "9.0.0/9.0.100"
-          }
-          EOF
-
-          # Try installing with the rollback file
-          dotnet workload install maui-maccatalyst --skip-sign-check --from-rollback-file workload-rollback.json || \
+          # Install MAUI workload for maccatalyst
           dotnet workload install maui-maccatalyst --skip-sign-check
 
+          # List installed workloads
           dotnet workload list
-          ls -la ~/.dotnet/packs/ | grep -i catalyst || echo "No catalyst packs found"
+
+          # Show Xcode version
+          echo "Xcode version:"
+          xcodebuild -version
 
       - name: '📦 Extract version'
         id: version
