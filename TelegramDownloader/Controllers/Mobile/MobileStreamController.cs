@@ -279,14 +279,16 @@ namespace TelegramDownloader.Controllers.Mobile
                     return PhysicalFile(filePath, mimeType, name, enableRangeProcessing: true);
                 }
 
-                // Calculate what we need to serve
+                // For initial request without Range, return first chunk as 206 with full size info
+                // LibVLC will use Content-Range to know the total duration
                 if (!hasRange)
                 {
-                    // No range - start from beginning
                     from = 0;
-                    to = Math.Min(12 * 524288, totalLength - 1); // First ~6MB
+                    to = Math.Min(2 * 1024 * 1024, totalLength - 1); // First 2MB
                 }
-                else if (to == 0 || to >= totalLength)
+
+                // Handle Range request
+                if (to == 0 || to >= totalLength)
                 {
                     // Open-ended range
                     to = Math.Min(from + (5 * 524288), totalLength - 1); // ~2.5MB chunk
@@ -780,6 +782,98 @@ namespace TelegramDownloader.Controllers.Mobile
         // Allow 3 concurrent downloads for better playlist download throughput
         // (balance between speed and not overwhelming Telegram API)
         private static readonly SemaphoreSlim _downloadSemaphoreSequential = new(3);
+
+        /// <summary>
+        /// Stream file progressively for initial request (no Range header).
+        /// This ensures LibVLC receives Content-Length = full file size so it knows the duration.
+        /// The actual data is streamed as it becomes available from cache or Telegram.
+        /// </summary>
+        private async Task StreamProgressivelyAsync(
+            string channelId,
+            BsonFileManagerModel dbFile,
+            string filePath,
+            long totalLength,
+            ProgressiveDownloadInfo downloadInfo)
+        {
+            const int chunkSize = 524288; // 512KB chunks
+            long position = 0;
+
+            try
+            {
+                while (position < totalLength)
+                {
+                    // Check how much is available in cache
+                    long availableBytes = 0;
+                    if (System.IO.File.Exists(filePath))
+                    {
+                        availableBytes = new FileInfo(filePath).Length;
+                    }
+
+                    if (position < availableBytes)
+                    {
+                        // Read from cache
+                        var bytesToRead = (int)Math.Min(chunkSize, availableBytes - position);
+                        using var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                        fs.Seek(position, SeekOrigin.Begin);
+                        var buffer = new byte[bytesToRead];
+                        var read = await fs.ReadAsync(buffer, 0, bytesToRead);
+                        if (read > 0)
+                        {
+                            await Response.Body.WriteAsync(buffer, 0, read);
+                            await Response.Body.FlushAsync();
+                            position += read;
+                        }
+                    }
+                    else
+                    {
+                        // Need to get from Telegram
+                        if (!dbFile.MessageId.HasValue)
+                        {
+                            _logger.LogError("File has no MessageId, cannot stream from Telegram");
+                            break;
+                        }
+
+                        var message = await _ts.getMessageFile(channelId, dbFile.MessageId.Value);
+                        if (message == null)
+                        {
+                            _logger.LogError("Message not found in Telegram");
+                            break;
+                        }
+
+                        // Align to 512KB boundary for Telegram
+                        var alignedFrom = (position / chunkSize) * chunkSize;
+                        var downloadLength = Math.Min(chunkSize * 4, totalLength - alignedFrom); // Download 2MB at a time
+
+                        var data = await _ts.DownloadFileStream(message, alignedFrom, (int)downloadLength);
+
+                        var skipBytes = position - alignedFrom;
+                        var bytesToWrite = (int)Math.Min(data.Length - skipBytes, totalLength - position);
+
+                        if (bytesToWrite > 0)
+                        {
+                            await Response.Body.WriteAsync(data, (int)skipBytes, bytesToWrite);
+                            await Response.Body.FlushAsync();
+                            position += bytesToWrite;
+                        }
+                    }
+
+                    // Check if client disconnected
+                    if (HttpContext.RequestAborted.IsCancellationRequested)
+                    {
+                        _logger.LogDebug("Client disconnected during progressive streaming");
+                        break;
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogDebug("Progressive streaming cancelled");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error during progressive streaming at position {Position}", position);
+            }
+        }
 
         private static string GetMimeType(string extension)
         {

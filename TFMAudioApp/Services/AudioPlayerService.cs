@@ -80,32 +80,21 @@ public class AudioPlayerService : IAudioPlayerService, IDisposable
             // Initialize LibVLC core
             Core.Initialize();
 
-            // Create LibVLC instance with audio-only optimizations and network settings
-            // Increased timeouts to handle server-side file downloads from Telegram
+            // Create LibVLC instance with minimal options for stability
             _libVLC = new LibVLC(
-                "--no-video",               // Disable video for audio-only playback
-                "--verbose=2",              // Enable verbose logging for debugging
-                "--no-lua",                 // Disable Lua scripting
-                "--no-snapshot-preview",    // No snapshot previews
-                "--network-caching=60000",  // 60 seconds of network buffer (server may need to download from Telegram)
-                "--live-caching=60000",     // 60 seconds for live streams
-                "--file-caching=10000",     // 10 seconds file caching
-                "--http-reconnect",         // Auto-reconnect on connection drops
-                "--http-continuous",        // Enable continuous stream reading
-                "--sout-mux-caching=5000",  // Output muxer caching
-                "--tcp-caching=60000",      // TCP caching for slow connections (increased for Telegram delays)
-                "--clock-jitter=0",         // Reduce jitter sensitivity
-                "--clock-synchro=0",        // Disable strict clock sync
-                "--http-forward-cookies",   // Forward cookies (for session handling)
-                "--adaptive-logic=highest", // Use highest quality available
-                "--prefetch-buffer-size=1048576", // 1MB prefetch buffer
-                "--prefetch-read-size=524288"     // 512KB prefetch reads
+                "--no-video",              // Disable video for audio-only playback
+                "--quiet",                 // Minimal logging
+                "--no-lua",                // Disable Lua scripting
+                "--no-snapshot-preview"    // No snapshot previews
             );
 
-            // Log LibVLC messages for debugging
+            // Only log errors from LibVLC
             _libVLC.Log += (s, e) =>
             {
-                System.Diagnostics.Debug.WriteLine($"[LibVLC] {e.Level}: {e.Message}");
+                if (e.Level == LogLevel.Error)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[LibVLC] {e.Level}: {e.Message}");
+                }
             };
 
             // Create media player
@@ -603,41 +592,33 @@ public class AudioPlayerService : IAudioPlayerService, IDisposable
 
     public async Task SeekAsync(TimeSpan position)
     {
-        if (_mediaPlayer == null || _mediaPlayer.Length <= 0) return;
+        if (_mediaPlayer == null || _mediaPlayer.Length <= 0)
+        {
+            System.Diagnostics.Debug.WriteLine($"[AudioPlayer] SeekAsync: Cannot seek - player null or length 0");
+            return;
+        }
 
-        // Mark that we're seeking to detect false EndReached events
-        _isSeeking = true;
         _lastSeekTime = DateTime.UtcNow;
+        var length = _mediaPlayer.Length;
+        var isSeekable = _mediaPlayer.IsSeekable;
+        var posBefore = _mediaPlayer.Position;
+        var timeBefore = _mediaPlayer.Time;
 
-        System.Diagnostics.Debug.WriteLine($"[AudioPlayer] Seeking to {position}");
+        System.Diagnostics.Debug.WriteLine($"[AudioPlayer] === SEEK START === target={position.TotalSeconds:F1}s, isSeekable={isSeekable}");
 
-        try
+        await MainThread.InvokeOnMainThreadAsync(() =>
         {
-            await MainThread.InvokeOnMainThreadAsync(() =>
-            {
-                var positionRatio = (float)(position.TotalMilliseconds / _mediaPlayer.Length);
-                positionRatio = Math.Clamp(positionRatio, 0f, 0.99f); // Don't seek to exact end
+            // Try using Time property (milliseconds) - sometimes works better than Position
+            _mediaPlayer.Time = (long)position.TotalMilliseconds;
+        });
 
-                System.Diagnostics.Debug.WriteLine($"[AudioPlayer] Setting position ratio: {positionRatio}");
-                _mediaPlayer.Position = positionRatio;
-            });
-
-            // Wait a bit and check if seek succeeded
-            await Task.Delay(100);
-
-            if (_mediaPlayer != null)
-            {
-                var newPos = _mediaPlayer.Position * _mediaPlayer.Length;
-                System.Diagnostics.Debug.WriteLine($"[AudioPlayer] Position after seek: {newPos}ms");
-            }
-        }
-        catch (Exception ex)
+        // Check if seek worked
+        await Task.Delay(200);
+        if (_mediaPlayer != null)
         {
-            System.Diagnostics.Debug.WriteLine($"[AudioPlayer] Seek failed: {ex.Message}");
-        }
-        finally
-        {
-            _isSeeking = false;
+            var posAfter = _mediaPlayer.Position;
+            var timeAfter = _mediaPlayer.Time;
+            System.Diagnostics.Debug.WriteLine($"[AudioPlayer] === SEEK END === before={timeBefore}ms, after={timeAfter}ms, isSeekable={isSeekable}");
         }
     }
 
