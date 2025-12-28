@@ -124,4 +124,10 @@ namespace TelegramDownloader.Shared.MobileFileManager
         public string ChannelId { get; set; } = string.Empty;
         public bool IsMultiple => Files.Length > 0;
     }
+
+    public class MfmFilterChangedEventArgs
+    {
+        public string SearchText { get; set; } = string.Empty;
+        public HashSet<string> TypeFilters { get; set; } = new();
+    }
 }

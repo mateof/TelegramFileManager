@@ -128,6 +128,16 @@ namespace TelegramDownloader.Shared.MobileFileManager
         [Parameter]
         public EventCallback<string> OnPathChanged { get; set; }
 
+        [Parameter]
+        public EventCallback<MfmFilterChangedEventArgs> OnFilterChanged { get; set; }
+
+        // Initial values from URL
+        [Parameter]
+        public string InitialSearch { get; set; } = string.Empty;
+
+        [Parameter]
+        public HashSet<string> InitialFilters { get; set; } = new();
+
         #endregion
 
         #region State
@@ -212,6 +222,19 @@ namespace TelegramDownloader.Shared.MobileFileManager
         protected override async Task OnInitializedAsync()
         {
             _previousId = Id;
+
+            // Initialize from URL parameters
+            if (!string.IsNullOrEmpty(InitialSearch))
+            {
+                SearchText = InitialSearch;
+                ShowSearch = true;
+            }
+
+            if (InitialFilters.Count > 0)
+            {
+                SelectedTypeFilters = new HashSet<string>(InitialFilters);
+            }
+
             await LoadFiles();
         }
 
@@ -1203,6 +1226,7 @@ namespace TelegramDownloader.Shared.MobileFileManager
                     {
                         await LoadFiles();
                     }
+                    await NotifyFilterChanged();
                     StateHasChanged();
                 });
             };
@@ -1214,6 +1238,7 @@ namespace TelegramDownloader.Shared.MobileFileManager
             SearchText = string.Empty;
             ResetPagination();
             await LoadFiles();
+            await NotifyFilterChanged();
         }
 
         private async Task CloseSearch()
@@ -1222,6 +1247,7 @@ namespace TelegramDownloader.Shared.MobileFileManager
             SearchText = string.Empty;
             ResetPagination();
             await LoadFiles();
+            await NotifyFilterChanged();
         }
 
         #endregion
@@ -1339,10 +1365,21 @@ namespace TelegramDownloader.Shared.MobileFileManager
             StateHasChanged();
         }
 
-        private void ApplyFiltersAndClose()
+        private async Task ApplyFiltersAndClose()
         {
             ShowFilterDialog = false;
+            await NotifyFilterChanged();
             StateHasChanged();
+        }
+
+        private async Task NotifyFilterChanged()
+        {
+            var args = new MfmFilterChangedEventArgs
+            {
+                SearchText = SearchText,
+                TypeFilters = new HashSet<string>(SelectedTypeFilters)
+            };
+            await OnFilterChanged.InvokeAsync(args);
         }
 
         private void UploadFiles()
