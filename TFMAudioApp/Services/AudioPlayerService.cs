@@ -592,34 +592,21 @@ public class AudioPlayerService : IAudioPlayerService, IDisposable
 
     public async Task SeekAsync(TimeSpan position)
     {
-        if (_mediaPlayer == null || _mediaPlayer.Length <= 0)
-        {
-            System.Diagnostics.Debug.WriteLine($"[AudioPlayer] SeekAsync: Cannot seek - player null or length 0");
-            return;
-        }
+        if (_mediaPlayer == null) return;
+
+        var length = _mediaPlayer.Length;
+        if (length <= 0) return;
 
         _lastSeekTime = DateTime.UtcNow;
-        var length = _mediaPlayer.Length;
-        var isSeekable = _mediaPlayer.IsSeekable;
-        var posBefore = _mediaPlayer.Position;
-        var timeBefore = _mediaPlayer.Time;
 
-        System.Diagnostics.Debug.WriteLine($"[AudioPlayer] === SEEK START === target={position.TotalSeconds:F1}s, isSeekable={isSeekable}");
+        // Use Position (0.0 to 1.0 ratio) which is more reliable than Time
+        var positionRatio = (float)(position.TotalMilliseconds / length);
+        positionRatio = Math.Clamp(positionRatio, 0f, 0.99f);
 
         await MainThread.InvokeOnMainThreadAsync(() =>
         {
-            // Try using Time property (milliseconds) - sometimes works better than Position
-            _mediaPlayer.Time = (long)position.TotalMilliseconds;
+            _mediaPlayer.Position = positionRatio;
         });
-
-        // Check if seek worked
-        await Task.Delay(200);
-        if (_mediaPlayer != null)
-        {
-            var posAfter = _mediaPlayer.Position;
-            var timeAfter = _mediaPlayer.Time;
-            System.Diagnostics.Debug.WriteLine($"[AudioPlayer] === SEEK END === before={timeBefore}ms, after={timeAfter}ms, isSeekable={isSeekable}");
-        }
     }
 
     public async Task PlayAtIndexAsync(int index)
