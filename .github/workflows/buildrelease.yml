@@ -446,7 +446,7 @@ jobs:
   # ==========================================
   build-macos:
     name: Build macOS App
-    runs-on: macos-14
+    runs-on: macos-15
     # Run if: manual with build_macos OR release with app-v* or v* (but not server-v*)
     if: |
       (github.event_name == 'workflow_dispatch' && inputs.build_macos) ||
@@ -465,6 +465,20 @@ jobs:
           dotnet --version
           dotnet --list-sdks
 
+      - name: '🔧 Select Xcode version'
+        run: |
+          # List available Xcode versions
+          echo "Available Xcode versions:"
+          ls -d /Applications/Xcode*.app 2>/dev/null || echo "No Xcode apps found"
+
+          # Use the latest stable Xcode
+          sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer || \
+          sudo xcode-select -s /Applications/Xcode_16.1.app/Contents/Developer || \
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+          echo "Selected Xcode:"
+          xcodebuild -version
+
       - name: '🍎 Install MAUI workload'
         run: |
           # Install MAUI workload for maccatalyst
@@ -472,10 +486,6 @@ jobs:
 
           # List installed workloads
           dotnet workload list
-
-          # Show Xcode version
-          echo "Xcode version:"
-          xcodebuild -version
 
       - name: '📦 Extract version'
         id: version
