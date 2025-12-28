@@ -479,13 +479,26 @@ jobs:
           echo "Selected Xcode:"
           xcodebuild -version
 
-      - name: '🍎 Install MAUI workload'
+      - name: '🍎 Install MAUI workload with version pinning'
         run: |
-          # Install MAUI workload for maccatalyst
-          dotnet workload install maui-maccatalyst --skip-sign-check
+          # Create rollback file to pin workload versions compatible with .NET 9.0.100 and Xcode 16.x
+          cat > rollback.json << 'EOF'
+          {
+            "microsoft.net.sdk.maui": "9.0.0/9.0.100",
+            "microsoft.net.sdk.maccatalyst": "18.0.9600/9.0.100"
+          }
+          EOF
 
-          # List installed workloads
+          echo "Rollback file contents:"
+          cat rollback.json
+
+          # Install with rollback file to pin versions
+          dotnet workload install maui-maccatalyst --skip-sign-check --from-rollback-file rollback.json
+
+          # List installed workloads and SDKs
           dotnet workload list
+          echo "Installed packs:"
+          ls ~/.dotnet/packs/ | grep -i catalyst || true
 
       - name: '📦 Extract version'
         id: version
