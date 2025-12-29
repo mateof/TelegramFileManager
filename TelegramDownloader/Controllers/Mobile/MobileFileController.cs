@@ -238,7 +238,16 @@ namespace TelegramDownloader.Controllers.Mobile
                 // Apply filter
                 if (!string.IsNullOrEmpty(request.Filter) && request.Filter.ToLower() != "all")
                 {
-                    items = items.Where(i => i.IsFolder || i.Category.ToLower() == request.Filter.ToLower()).ToList();
+                    var filterLower = request.Filter.ToLower();
+                    if (filterLower == "audio_folders")
+                    {
+                        // audio_folders = show audio files and folders
+                        items = items.Where(i => i.IsFolder || i.Category.ToLower() == "audio").ToList();
+                    }
+                    else
+                    {
+                        items = items.Where(i => i.IsFolder || i.Category.ToLower() == filterLower).ToList();
+                    }
                 }
 
                 // Apply search
