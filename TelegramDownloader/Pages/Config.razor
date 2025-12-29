@@ -322,6 +322,44 @@
                     <div class="config-item">
                         <div class="config-item-info">
                             <div class="config-item-label">
+                                <i class="bi bi-memory"></i>
+                                Memory-Based Split
+                            </div>
+                            <div class="config-item-description">
+                                Split large files in memory instead of creating temporary files on disk.
+                                This is more efficient for systems with limited disk space.
+                                <span class="badge bg-info ms-2">Requires Split Size > 0</span>
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputCheckbox @bind-Value="Model!.EnableMemorySplitUpload" class="form-check-input config-switch" disabled="@(Model.SplitSize == 0)" />
+                        </div>
+                    </div>
+
+                    @if (Model.EnableMemorySplitUpload && Model.SplitSize > 0)
+                    {
+                        <div class="config-item">
+                            <div class="config-item-info">
+                                <div class="config-item-label">
+                                    <i class="bi bi-sliders2"></i>
+                                    Memory Chunk Size
+                                </div>
+                                <div class="config-item-description">
+                                    Size of each chunk when splitting in memory (1-4 GB). Must be ≤ Split Size.
+                                </div>
+                            </div>
+                            <div class="config-item-control">
+                                <div class="config-range-group">
+                                    <RangeInput TValue="int" @bind-Value="Model.MemorySplitSizeGB" Min="1" Max="@GetMaxMemorySplitSize()" style="width: 120px;" />
+                                    <span class="config-range-value">@Model.MemorySplitSizeGB GB</span>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
                                 <i class="bi bi-chat-square-text"></i>
                                 Show Path in Caption
                             </div>
@@ -1114,6 +1152,12 @@
             size /= 1024;
         }
         return $"{size:0.##} {sizes[order]}";
+    }
+
+    private int GetMaxMemorySplitSize()
+    {
+        // MemorySplitSizeGB must be <= SplitSize and <= 4
+        return Math.Min(Model?.SplitSize ?? 4, 4);
     }
 
     public void Dispose()
