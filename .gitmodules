@@ -1,0 +1,3 @@
+[submodule "libs/WTelegramClient"]
+	path = libs/WTelegramClient
+	url = https://github.com/mateof/MyCustomWTelegramClient.git
