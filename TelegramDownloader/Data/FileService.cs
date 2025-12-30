@@ -1401,60 +1401,131 @@ namespace TelegramDownloader.Data
                         long max = (long)MaxSize * (long)TelegramService.splitSizeGB;
                         if (fileInfo.Length > max)
                         {
-
-                            List<string> filesSplit = await splitFileStreamAsync(folderPath, file.Name, MaxSize);
-                            // File.Delete(System.IO.Path.Combine(folderPath, file.Name));
-                            int i = 1;
                             model.ListMessageId = new List<int>();
                             model.isSplit = true;
-                            foreach (string s in filesSplit)
+
+                            // Check if memory-based splitting is enabled
+                            if (GeneralConfigStatic.config.EnableMemorySplitUpload)
                             {
-                                int attempts = 3;
-                                int waitForNextAttempt = 1000;
-                                UploadModel um = new UploadModel();
-                                um.tis = _tis;
-                                um.startDate = DateTime.Now;
-                                um.path = currentFilePath;
-                                um.chatName = _ts.getChatName(Convert.ToInt64(dbName));
-                                // add upload to task list
-                                idt.addUpload(um);
-                                while (attempts != 0 || um.state == StateTask.Canceled)
-                                    try
+                                // Memory-based splitting - read chunks directly without creating temp files
+                                long chunkSizeBytes = (long)GeneralConfigStatic.config.MemorySplitSizeGB * 1024L * 1024L * 1024L;
+                                int totalChunks = (int)Math.Ceiling((double)fileInfo.Length / chunkSizeBytes);
+
+                                _logger.LogInformation("Using memory-based split for {FileName} - {TotalChunks} chunks of {ChunkSizeGB} GB",
+                                    file.Name, totalChunks, GeneralConfigStatic.config.MemorySplitSizeGB);
+
+                                for (int chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++)
+                                {
+                                    long chunkStart = (long)chunkIndex * chunkSizeBytes;
+                                    long chunkLength = Math.Min(chunkSizeBytes, fileInfo.Length - chunkStart);
+
+                                    int attempts = 3;
+                                    int waitForNextAttempt = 1000;
+                                    UploadModel um = new UploadModel();
+                                    um.tis = _tis;
+                                    um.startDate = DateTime.Now;
+                                    um.path = currentFilePath;
+                                    um.chatName = _ts.getChatName(Convert.ToInt64(dbName));
+                                    idt.addUpload(um);
+
+                                    while (attempts != 0 && um.state != StateTask.Canceled)
                                     {
-                                        wt = new WaitingTime();
-                                        using (FileStream fs = new FileStream(s, FileMode.Open, FileAccess.Read, FileShare.Read))
-                                            m = await _ts.uploadFile(dbName, fs, $"({i} of {filesSplit.Count}) - " + file.Name, um: um, caption: getCaption(filePath));
-                                        attempts = 0;
-                                        await wt.Sleep(); // sleep 1 second to avoid 420 flood_wait_x
-                                    }
-                                    catch (Exception e)
-                                    {
-                                        if (e.InnerException is ThreadInterruptedException)
+                                        try
                                         {
-                                            _logger.LogInformation(e, "Current work cancelled");
-                                            throw e;
-                                        }
-                                        _logger.LogError(e, "Exception sending file to Telegram - FileName: {FileName}, Attempt: {Attempt}, Remaining: {Remaining}",
-                                            file.Name, 4 - attempts, attempts - 1);
-                                        attempts--;
-                                        // waitForNextAttempt *= 2;
-                                        if (attempts == 0 || um.state == StateTask.Canceled)
-                                        {
-                                            if (um.state == StateTask.Canceled)
+                                            wt = new WaitingTime();
+                                            using (var chunkStream = new Services.Streams.FileChunkStream(currentFilePath, chunkStart, chunkLength))
                                             {
-                                                um.SendNotification();
-                                                return;
+                                                string chunkFileName = $"({chunkIndex + 1} of {totalChunks}) - " + file.Name;
+                                                m = await _ts.uploadFile(dbName, chunkStream, chunkFileName, um: um, caption: getCaption(filePath));
                                             }
-                                            um.state = StateTask.Error;
-                                            throw e;
+                                            attempts = 0;
+                                            await wt.Sleep();
                                         }
-                                        _logger.LogWarning("Retrying upload in {DelayMs}ms - FileName: {FileName}", waitForNextAttempt, file.Name);
-                                        await Task.Delay(waitForNextAttempt);
+                                        catch (Exception e)
+                                        {
+                                            if (e.InnerException is ThreadInterruptedException)
+                                            {
+                                                _logger.LogInformation(e, "Current work cancelled");
+                                                throw;
+                                            }
+                                            _logger.LogError(e, "Exception sending chunk to Telegram - FileName: {FileName}, Chunk: {Chunk}/{Total}, Attempt: {Attempt}",
+                                                file.Name, chunkIndex + 1, totalChunks, 4 - attempts);
+                                            attempts--;
+                                            if (attempts == 0 || um.state == StateTask.Canceled)
+                                            {
+                                                if (um.state == StateTask.Canceled)
+                                                {
+                                                    um.SendNotification();
+                                                    return;
+                                                }
+                                                um.state = StateTask.Error;
+                                                throw;
+                                            }
+                                            _logger.LogWarning("Retrying chunk upload in {DelayMs}ms - FileName: {FileName}, Chunk: {Chunk}",
+                                                waitForNextAttempt, file.Name, chunkIndex + 1);
+                                            await Task.Delay(waitForNextAttempt);
+                                        }
                                     }
 
-                                model.ListMessageId.Add(m.ID);
-                                File.Delete(s);
-                                i++;
+                                    model.ListMessageId.Add(m.ID);
+                                }
+
+                                _logger.LogInformation("Memory-based split upload completed for {FileName} - {TotalChunks} chunks", file.Name, totalChunks);
+                            }
+                            else
+                            {
+                                // Disk-based splitting - create temp split files
+                                List<string> filesSplit = await splitFileStreamAsync(folderPath, file.Name, MaxSize);
+                                int i = 1;
+
+                                foreach (string s in filesSplit)
+                                {
+                                    int attempts = 3;
+                                    int waitForNextAttempt = 1000;
+                                    UploadModel um = new UploadModel();
+                                    um.tis = _tis;
+                                    um.startDate = DateTime.Now;
+                                    um.path = currentFilePath;
+                                    um.chatName = _ts.getChatName(Convert.ToInt64(dbName));
+                                    idt.addUpload(um);
+
+                                    while (attempts != 0 || um.state == StateTask.Canceled)
+                                        try
+                                        {
+                                            wt = new WaitingTime();
+                                            using (FileStream fs = new FileStream(s, FileMode.Open, FileAccess.Read, FileShare.Read))
+                                                m = await _ts.uploadFile(dbName, fs, $"({i} of {filesSplit.Count}) - " + file.Name, um: um, caption: getCaption(filePath));
+                                            attempts = 0;
+                                            await wt.Sleep();
+                                        }
+                                        catch (Exception e)
+                                        {
+                                            if (e.InnerException is ThreadInterruptedException)
+                                            {
+                                                _logger.LogInformation(e, "Current work cancelled");
+                                                throw e;
+                                            }
+                                            _logger.LogError(e, "Exception sending file to Telegram - FileName: {FileName}, Attempt: {Attempt}, Remaining: {Remaining}",
+                                                file.Name, 4 - attempts, attempts - 1);
+                                            attempts--;
+                                            if (attempts == 0 || um.state == StateTask.Canceled)
+                                            {
+                                                if (um.state == StateTask.Canceled)
+                                                {
+                                                    um.SendNotification();
+                                                    return;
+                                                }
+                                                um.state = StateTask.Error;
+                                                throw e;
+                                            }
+                                            _logger.LogWarning("Retrying upload in {DelayMs}ms - FileName: {FileName}", waitForNextAttempt, file.Name);
+                                            await Task.Delay(waitForNextAttempt);
+                                        }
+
+                                    model.ListMessageId.Add(m.ID);
+                                    File.Delete(s);
+                                    i++;
+                                }
                             }
 
                         }

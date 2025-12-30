@@ -40,9 +40,9 @@ public partial class PlaylistPickerPopup : Popup
         }
     }
 
-    private void OnPlaylistSelected(object? sender, SelectionChangedEventArgs e)
+    private void OnPlaylistTapped(object? sender, TappedEventArgs e)
     {
-        if (e.CurrentSelection.FirstOrDefault() is Playlist playlist)
+        if (e.Parameter is Playlist playlist)
         {
             _selectedPlaylist = playlist;
             Result = new PlaylistPickerResult

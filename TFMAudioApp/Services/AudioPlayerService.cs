@@ -17,7 +17,7 @@ public class AudioPlayerService : IAudioPlayerService, IDisposable
     private readonly Random _random = new();
 
     private LibVLC? _libVLC;
-    private MediaPlayer? _mediaPlayer;
+    private LibVLCSharp.Shared.MediaPlayer? _mediaPlayer;
     private Media? _currentMedia;
     private System.Timers.Timer? _positionTimer;
     private List<Track> _originalQueue = new();
@@ -80,32 +80,25 @@ public class AudioPlayerService : IAudioPlayerService, IDisposable
             // Initialize LibVLC core
             Core.Initialize();
 
-            // Create LibVLC instance with audio-only optimizations and network settings
-            // Increased timeouts to handle server-side file downloads from Telegram
+            // Create LibVLC instance with minimal options for stability
             _libVLC = new LibVLC(
-                "--no-video",               // Disable video for audio-only playback
-                "--verbose=2",              // Enable verbose logging for debugging
-                "--no-lua",                 // Disable Lua scripting
-                "--no-snapshot-preview",    // No snapshot previews
-                "--network-caching=30000",  // 30 seconds of network buffer (server may need to download from Telegram)
-                "--live-caching=30000",     // 30 seconds for live streams
-                "--file-caching=10000",     // 10 seconds file caching
-                "--http-reconnect",         // Auto-reconnect on connection drops
-                "--http-continuous",        // Enable continuous stream reading
-                "--sout-mux-caching=5000",  // Output muxer caching
-                "--tcp-caching=30000",      // TCP caching for slow connections
-                "--clock-jitter=0",         // Reduce jitter sensitivity
-                "--clock-synchro=0"         // Disable strict clock sync
+                "--no-video",              // Disable video for audio-only playback
+                "--quiet",                 // Minimal logging
+                "--no-lua",                // Disable Lua scripting
+                "--no-snapshot-preview"    // No snapshot previews
             );
 
-            // Log LibVLC messages for debugging
+            // Only log errors from LibVLC
             _libVLC.Log += (s, e) =>
             {
-                System.Diagnostics.Debug.WriteLine($"[LibVLC] {e.Level}: {e.Message}");
+                if (e.Level == LogLevel.Error)
+                {
+                    System.Diagnostics.Debug.WriteLine($"[LibVLC] {e.Level}: {e.Message}");
+                }
             };
 
             // Create media player
-            _mediaPlayer = new MediaPlayer(_libVLC);
+            _mediaPlayer = new LibVLCSharp.Shared.MediaPlayer(_libVLC);
             _mediaPlayer.Volume = (int)(_volume * 100);
 
             // Setup event handlers
@@ -257,9 +250,40 @@ public class AudioPlayerService : IAudioPlayerService, IDisposable
         _positionTimer?.Stop();
     }
 
+    private bool _isSeeking;
+    private DateTime _lastSeekTime = DateTime.MinValue;
+
     private void OnEndReached(object? sender, EventArgs e)
     {
         _positionTimer?.Stop();
+
+        // Check if this is a false "end reached" due to a failed seek on network stream
+        // If we were seeking recently (within 3 seconds) and position is not near the end, ignore this event
+        var timeSinceSeek = (DateTime.UtcNow - _lastSeekTime).TotalSeconds;
+        if (timeSinceSeek < 3 && _mediaPlayer != null)
+        {
+            var currentPos = _mediaPlayer.Position;
+            var length = _mediaPlayer.Length;
+            var positionMs = currentPos * length;
+            var remainingMs = length - positionMs;
+
+            // If more than 5 seconds remaining, this is likely a false end-of-stream from failed seek
+            if (remainingMs > 5000)
+            {
+                System.Diagnostics.Debug.WriteLine($"[AudioPlayer] Ignoring false EndReached after seek (remaining: {remainingMs}ms)");
+                // Try to resume playback
+                MainThread.BeginInvokeOnMainThread(async () =>
+                {
+                    await Task.Delay(500);
+                    if (_mediaPlayer != null && CurrentTrack != null)
+                    {
+                        System.Diagnostics.Debug.WriteLine("[AudioPlayer] Attempting to resume after false EndReached");
+                        await PlayAtIndexAsync(CurrentIndex);
+                    }
+                });
+                return;
+            }
+        }
 
         // Handle end of track on main thread
         MainThread.BeginInvokeOnMainThread(async () =>
@@ -297,7 +321,25 @@ public class AudioPlayerService : IAudioPlayerService, IDisposable
         }
 
         System.Diagnostics.Debug.WriteLine($"[AudioPlayer] LibVLC error occurred for track: {CurrentTrack?.FileName ?? "null"}");
-        System.Diagnostics.Debug.WriteLine($"[AudioPlayer] Error: {errorMsg}, retry count: {_retryCount}");
+        System.Diagnostics.Debug.WriteLine($"[AudioPlayer] Error: {errorMsg}, retry count: {_retryCount}, isSeeking: {_isSeeking}");
+
+        // If error occurred during seek on network stream, don't treat it as fatal
+        // Just ignore the seek and continue playing from current position
+        var timeSinceSeek = (DateTime.UtcNow - _lastSeekTime).TotalSeconds;
+        if (timeSinceSeek < 3)
+        {
+            System.Diagnostics.Debug.WriteLine("[AudioPlayer] Error during seek - attempting to resume playback");
+            MainThread.BeginInvokeOnMainThread(async () =>
+            {
+                await Task.Delay(500);
+                if (_mediaPlayer != null && CurrentTrack != null && State != PlaybackState.Playing)
+                {
+                    // Restart the track from the beginning if we can't seek
+                    await PlayAtIndexAsync(CurrentIndex);
+                }
+            });
+            return;
+        }
 
         // Retry playback if under max retries (server might have been downloading)
         if (_retryCount < MaxRetries && CurrentIndex >= 0 && CurrentIndex < Queue.Count)
@@ -550,24 +592,21 @@ public class AudioPlayerService : IAudioPlayerService, IDisposable
 
     public async Task SeekAsync(TimeSpan position)
     {
-        if (_mediaPlayer == null || _mediaPlayer.Length <= 0) return;
+        if (_mediaPlayer == null) return;
 
-        // Seeking is now allowed for all tracks (server supports progressive streaming with range requests)
-        System.Diagnostics.Debug.WriteLine($"[AudioPlayer] Seeking to {position}");
+        var length = _mediaPlayer.Length;
+        if (length <= 0) return;
 
-        try
+        _lastSeekTime = DateTime.UtcNow;
+
+        // Use Position (0.0 to 1.0 ratio) which is more reliable than Time
+        var positionRatio = (float)(position.TotalMilliseconds / length);
+        positionRatio = Math.Clamp(positionRatio, 0f, 0.99f);
+
+        await MainThread.InvokeOnMainThreadAsync(() =>
         {
-            await MainThread.InvokeOnMainThreadAsync(() =>
-            {
-                var positionRatio = (float)(position.TotalMilliseconds / _mediaPlayer.Length);
-                _mediaPlayer.Position = Math.Clamp(positionRatio, 0f, 1f);
-            });
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[AudioPlayer] Seek failed: {ex.Message}");
-            // Don't propagate error - just ignore failed seek
-        }
+            _mediaPlayer.Position = positionRatio;
+        });
     }
 
     public async Task PlayAtIndexAsync(int index)

@@ -227,7 +227,7 @@ namespace TelegramDownloader.Controllers.Mobile
                     Directory.CreateDirectory(tempPath);
                 }
 
-                // Check if file is completely cached
+                // Check if file is completely cached - serve directly with full Range support
                 if (System.IO.File.Exists(filePath))
                 {
                     var fileInfo = new FileInfo(filePath);
@@ -236,17 +236,6 @@ namespace TelegramDownloader.Controllers.Mobile
                         _logger.LogDebug("Serving fully cached file: {FileName} ({Size} bytes)", name, fileInfo.Length);
                         return PhysicalFile(filePath, mimeType, name, enableRangeProcessing: true);
                     }
-                }
-
-                // Start or get background download
-                var downloadInfo = await _progressiveDownload.StartOrGetDownloadAsync(
-                    cacheFileName, channelId, dbFile, filePath);
-
-                // If download completed while we were waiting, serve the file
-                if (downloadInfo.IsComplete)
-                {
-                    _logger.LogDebug("Download completed, serving cached file: {FileName}", name);
-                    return PhysicalFile(filePath, mimeType, name, enableRangeProcessing: true);
                 }
 
                 // Parse range header
@@ -266,37 +255,33 @@ namespace TelegramDownloader.Controllers.Mobile
 
                 long totalLength = dbFile.Size;
 
-                // Check if requested range is available in local cache
-                var downloadedBytes = downloadInfo.DownloadedBytes;
+                // Check how much is already cached
+                long cachedBytes = 0;
                 if (System.IO.File.Exists(filePath))
                 {
-                    downloadedBytes = Math.Max(downloadedBytes, new System.IO.FileInfo(filePath).Length);
+                    cachedBytes = new FileInfo(filePath).Length;
                 }
 
-                // If no range or range is within cached portion, serve from cache
-                if (!hasRange && downloadedBytes >= totalLength)
-                {
-                    return PhysicalFile(filePath, mimeType, name, enableRangeProcessing: true);
-                }
-
-                // Calculate what we need to serve
+                // For initial request without Range, return first chunk as 206 with full size info
+                // LibVLC will use Content-Range to know the total duration
                 if (!hasRange)
                 {
-                    // No range - start from beginning
                     from = 0;
-                    to = Math.Min(12 * 524288, totalLength - 1); // First ~6MB
+                    to = Math.Min(2 * 1024 * 1024, totalLength - 1); // First 2MB
                 }
-                else if (to == 0 || to >= totalLength)
+
+                // Handle Range request
+                if (to == 0 || to >= totalLength)
                 {
                     // Open-ended range
                     to = Math.Min(from + (5 * 524288), totalLength - 1); // ~2.5MB chunk
                 }
 
                 // Check if range is available locally
-                if (from < downloadedBytes)
+                if (from < cachedBytes)
                 {
                     // Part or all of range is in cache
-                    var availableEnd = Math.Min(to, downloadedBytes - 1);
+                    var availableEnd = Math.Min(to, cachedBytes - 1);
                     var length = availableEnd - from + 1;
 
                     _logger.LogDebug("Serving from cache: bytes {From}-{To} of {Total}", from, availableEnd, totalLength);

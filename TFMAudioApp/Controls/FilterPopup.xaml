@@ -9,11 +9,13 @@
             StrokeThickness="0"
             Padding="20"
             MinimumWidthRequest="340"
-            MaximumWidthRequest="400">
+            MaximumWidthRequest="400"
+            MaximumHeightRequest="600">
         <Border.StrokeShape>
             <RoundRectangle CornerRadius="20"/>
         </Border.StrokeShape>
 
+        <ScrollView>
         <VerticalStackLayout Spacing="16">
             <!-- Header -->
             <Grid ColumnDefinitions="*,Auto">
@@ -141,5 +143,6 @@
                         Clicked="OnApplyClicked"/>
             </Grid>
         </VerticalStackLayout>
+        </ScrollView>
     </Border>
 </toolkit:Popup>

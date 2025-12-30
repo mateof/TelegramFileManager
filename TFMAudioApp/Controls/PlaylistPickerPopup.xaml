@@ -61,8 +61,7 @@
             <CollectionView x:Name="PlaylistsCollection"
                             Grid.Row="2"
                             Margin="10,0"
-                            SelectionMode="Single"
-                            SelectionChanged="OnPlaylistSelected">
+                            SelectionMode="None">
                 <CollectionView.ItemTemplate>
                     <DataTemplate>
                         <Border BackgroundColor="Transparent"
@@ -72,23 +71,9 @@
                             <Border.StrokeShape>
                                 <RoundRectangle CornerRadius="8"/>
                             </Border.StrokeShape>
-                            <Border.Behaviors>
-                                <behaviors:TapFeedbackBehavior/>
-                            </Border.Behaviors>
-                            <VisualStateManager.VisualStateGroups>
-                                <VisualStateGroup x:Name="CommonStates">
-                                    <VisualState x:Name="Normal">
-                                        <VisualState.Setters>
-                                            <Setter Property="BackgroundColor" Value="Transparent"/>
-                                        </VisualState.Setters>
-                                    </VisualState>
-                                    <VisualState x:Name="Selected">
-                                        <VisualState.Setters>
-                                            <Setter Property="BackgroundColor" Value="{StaticResource Primary}"/>
-                                        </VisualState.Setters>
-                                    </VisualState>
-                                </VisualStateGroup>
-                            </VisualStateManager.VisualStateGroups>
+                            <Border.GestureRecognizers>
+                                <TapGestureRecognizer Tapped="OnPlaylistTapped" CommandParameter="{Binding}"/>
+                            </Border.GestureRecognizers>
                             <Grid ColumnDefinitions="Auto,*,Auto">
                                 <Label Text="🎵"
                                        FontSize="24"

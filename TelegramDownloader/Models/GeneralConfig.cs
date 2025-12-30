@@ -19,13 +19,23 @@ namespace TelegramDownloader.Models
 
         public static async Task SaveChanges(IDbService db, GeneralConfig gc)
         {
+            // Validate MemorySplitSizeGB <= SplitSize
+            if (gc.EnableMemorySplitUpload && gc.SplitSize > 0 && gc.MemorySplitSizeGB > gc.SplitSize)
+            {
+                gc.MemorySplitSizeGB = gc.SplitSize;
+            }
+
+            // Ensure MemorySplitSizeGB is within valid range (1-4 GB)
+            if (gc.MemorySplitSizeGB < 1) gc.MemorySplitSizeGB = 1;
+            if (gc.MemorySplitSizeGB > 4) gc.MemorySplitSizeGB = 4;
+
             await db.SaveConfig(gc);
             config = gc;
             if (gc.SplitSize > 0)
             {
                 TelegramService.SetSplitSizeGB();
             }
-            
+
 
         }
 
@@ -111,6 +121,20 @@ namespace TelegramDownloader.Models
         /// By default, refresh is only available for channels you don't own.
         /// </summary>
         public bool EnableRefreshOwnChannels { get; set; } = false;
+
+        // Memory Split Upload Settings
+        /// <summary>
+        /// Enable memory-based file splitting for large file uploads.
+        /// When enabled, files larger than MemorySplitSizeGB will be read and uploaded in chunks
+        /// without creating temporary split files on disk.
+        /// </summary>
+        public bool EnableMemorySplitUpload { get; set; } = false;
+
+        /// <summary>
+        /// Size in GB for each memory chunk when uploading large files (1-4 GB).
+        /// Only used when EnableMemorySplitUpload is true.
+        /// </summary>
+        public int MemorySplitSizeGB { get; set; } = 2;
 
     }
 

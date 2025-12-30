@@ -173,6 +173,18 @@ builder.Services.AddBlazorBootstrap();
 // Add controllers for Mobile API
 builder.Services.AddControllers();
 
+// CORS for PWA and mobile apps
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("MobilePolicy", policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              .WithExposedHeaders("Content-Length", "Content-Range", "Accept-Ranges");
+    });
+});
+
 // Swagger/OpenAPI for Mobile API documentation
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
@@ -318,6 +330,9 @@ app.UseSwaggerUI(c =>
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "TFM Mobile API v1");
     c.RoutePrefix = "api-docs";
 });
+
+// CORS must be before routing
+app.UseCors("MobilePolicy");
 
 // API Key authentication middleware for mobile endpoints
 app.UseMiddleware<TelegramDownloader.Middleware.ApiKeyMiddleware>();

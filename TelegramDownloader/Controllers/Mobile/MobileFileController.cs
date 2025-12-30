@@ -132,13 +132,17 @@ namespace TelegramDownloader.Controllers.Mobile
                     items = items.Where(i => i.Name.ToLower().Contains(searchLower)).ToList();
                 }
 
-                // Sort
+                // Sort - folders always first, then apply sorting
                 items = (request.SortBy?.ToLower(), request.SortDescending) switch
                 {
                     ("date", true) => items.OrderBy(i => !i.IsFolder).ThenByDescending(i => i.DateModified).ToList(),
                     ("date", false) => items.OrderBy(i => !i.IsFolder).ThenBy(i => i.DateModified).ToList(),
                     ("size", true) => items.OrderBy(i => !i.IsFolder).ThenByDescending(i => i.Size).ToList(),
                     ("size", false) => items.OrderBy(i => !i.IsFolder).ThenBy(i => i.Size).ToList(),
+                    ("name", true) => items.OrderBy(i => !i.IsFolder).ThenByDescending(i => i.Name).ToList(),
+                    ("name", false) => items.OrderBy(i => !i.IsFolder).ThenBy(i => i.Name).ToList(),
+                    ("type", true) => items.OrderBy(i => !i.IsFolder).ThenByDescending(i => i.Type).ToList(),
+                    ("type", false) => items.OrderBy(i => !i.IsFolder).ThenBy(i => i.Type).ToList(),
                     _ => items.OrderBy(i => !i.IsFolder).ThenBy(i => i.Name).ToList()
                 };
 
@@ -238,7 +242,16 @@ namespace TelegramDownloader.Controllers.Mobile
                 // Apply filter
                 if (!string.IsNullOrEmpty(request.Filter) && request.Filter.ToLower() != "all")
                 {
-                    items = items.Where(i => i.IsFolder || i.Category.ToLower() == request.Filter.ToLower()).ToList();
+                    var filterLower = request.Filter.ToLower();
+                    if (filterLower == "audio_folders")
+                    {
+                        // audio_folders = show audio files and folders
+                        items = items.Where(i => i.IsFolder || i.Category.ToLower() == "audio").ToList();
+                    }
+                    else
+                    {
+                        items = items.Where(i => i.IsFolder || i.Category.ToLower() == filterLower).ToList();
+                    }
                 }
 
                 // Apply search
@@ -248,13 +261,17 @@ namespace TelegramDownloader.Controllers.Mobile
                     items = items.Where(i => i.Name.ToLower().Contains(searchLower)).ToList();
                 }
 
-                // Sort
+                // Sort - folders always first, then apply sorting
                 items = (request.SortBy?.ToLower(), request.SortDescending) switch
                 {
                     ("date", true) => items.OrderBy(i => !i.IsFolder).ThenByDescending(i => i.DateModified).ToList(),
                     ("date", false) => items.OrderBy(i => !i.IsFolder).ThenBy(i => i.DateModified).ToList(),
                     ("size", true) => items.OrderBy(i => !i.IsFolder).ThenByDescending(i => i.Size).ToList(),
                     ("size", false) => items.OrderBy(i => !i.IsFolder).ThenBy(i => i.Size).ToList(),
+                    ("name", true) => items.OrderBy(i => !i.IsFolder).ThenByDescending(i => i.Name).ToList(),
+                    ("name", false) => items.OrderBy(i => !i.IsFolder).ThenBy(i => i.Name).ToList(),
+                    ("type", true) => items.OrderBy(i => !i.IsFolder).ThenByDescending(i => i.Type).ToList(),
+                    ("type", false) => items.OrderBy(i => !i.IsFolder).ThenBy(i => i.Type).ToList(),
                     _ => items.OrderBy(i => !i.IsFolder).ThenBy(i => i.Name).ToList()
                 };
 

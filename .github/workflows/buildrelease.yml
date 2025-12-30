@@ -1,8 +1,38 @@
 name: Build and Release
 
+# Triggers:
+# - Release published with tags:
+#   - server-v* : Build only Server
+#   - app-v*    : Build only TFMAudioApp (Android, Windows, macOS)
+#   - v*        : Build everything
+# - Manual workflow dispatch with checkboxes
+
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      build_server:
+        description: 'Build Server'
+        type: boolean
+        default: false
+      build_android:
+        description: 'Build Android App'
+        type: boolean
+        default: false
+      build_windows:
+        description: 'Build Windows App'
+        type: boolean
+        default: false
+      build_macos:
+        description: 'Build macOS App'
+        type: boolean
+        default: false
+      version:
+        description: 'Version (e.g., 1.0.0)'
+        type: string
+        required: false
+        default: '0.0.0-manual'
 
 permissions:
   contents: write
@@ -19,6 +49,10 @@ jobs:
   build-server:
     name: Build Server
     runs-on: ubuntu-latest
+    # Run if: manual with build_server OR release with server-v* or v* (but not app-v*)
+    if: |
+      (github.event_name == 'workflow_dispatch' && inputs.build_server) ||
+      (github.event_name == 'release' && (startsWith(github.event.release.tag_name, 'server-v') || (startsWith(github.event.release.tag_name, 'v') && !startsWith(github.event.release.tag_name, 'app-v'))))
     steps:
       - name: '📄 Checkout'
         uses: actions/checkout@v4
@@ -38,8 +72,15 @@ jobs:
       - name: '📦 Extract version'
         id: version
         run: |
-          TAG=${{ github.event.release.tag_name }}
-          VERSION=${TAG#v}
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+            TAG="v${VERSION}"
+          else
+            TAG=${{ github.event.release.tag_name }}
+            # Remove server-v or v prefix
+            VERSION=${TAG#server-v}
+            VERSION=${VERSION#v}
+          fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
@@ -85,6 +126,10 @@ jobs:
   build-android:
     name: Build Android APK
     runs-on: ubuntu-latest
+    # Run if: manual with build_android OR release with app-v* or v* (but not server-v*)
+    if: |
+      (github.event_name == 'workflow_dispatch' && inputs.build_android) ||
+      (github.event_name == 'release' && (startsWith(github.event.release.tag_name, 'app-v') || (startsWith(github.event.release.tag_name, 'v') && !startsWith(github.event.release.tag_name, 'server-v'))))
     steps:
       - name: '📄 Checkout'
         uses: actions/checkout@v4
@@ -106,11 +151,25 @@ jobs:
       - name: '📱 Install Android workload'
         run: dotnet workload install android maui-android --skip-sign-check
 
+      - name: '🔧 Setup Android SDK tools'
+        run: |
+          # Add Android SDK build-tools to PATH for apksigner
+          echo "$ANDROID_HOME/build-tools/34.0.0" >> $GITHUB_PATH
+          echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
+          ls -la $ANDROID_HOME/build-tools/ || echo "No build-tools found"
+
       - name: '📦 Extract version'
         id: version
         run: |
-          TAG=${{ github.event.release.tag_name }}
-          VERSION=${TAG#v}
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+            TAG="v${VERSION}"
+          else
+            TAG=${{ github.event.release.tag_name }}
+            # Remove app-v or v prefix
+            VERSION=${TAG#app-v}
+            VERSION=${VERSION#v}
+          fi
           # Extract version number for Android (must be integer)
           VERSION_CODE=$(echo $VERSION | sed 's/\.//g' | sed 's/[^0-9]//g')
           # If empty or starts with 0, use date-based version
@@ -121,24 +180,73 @@ jobs:
           echo "version_code=$VERSION_CODE" >> $GITHUB_OUTPUT
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
-      - name: '🔐 Decode Keystore'
-        if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' }}
+      - name: '🔐 Setup Android Signing'
+        id: android-signing
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-        run: |
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > tfmaudio.keystore
-          echo "ANDROID_KEYSTORE_PATH=$(pwd)/tfmaudio.keystore" >> $GITHUB_ENV
-
-      - name: '🔨 Build Android APK (Signed)'
-        if: ${{ env.ANDROID_KEYSTORE_PATH != '' }}
-        env:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
         run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ] && [ -n "$ANDROID_KEY_ALIAS" ]; then
+            # Use provided keystore from secrets
+            echo "📦 Decoding keystore from base64..."
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > tfmaudio.keystore
+
+            # Verify keystore was decoded correctly
+            KEYSTORE_SIZE=$(stat -c%s tfmaudio.keystore 2>/dev/null || stat -f%z tfmaudio.keystore 2>/dev/null)
+            echo "📊 Keystore size: $KEYSTORE_SIZE bytes"
+
+            if [ "$KEYSTORE_SIZE" -lt 100 ]; then
+              echo "❌ Keystore appears corrupted (too small). Check ANDROID_KEYSTORE_BASE64 secret."
+              exit 1
+            fi
+
+            # Verify keystore credentials work
+            echo "🔍 Verifying keystore credentials..."
+            if keytool -list -keystore tfmaudio.keystore -storepass "$ANDROID_KEYSTORE_PASSWORD" -alias "$ANDROID_KEY_ALIAS" > /dev/null 2>&1; then
+              echo "✅ Keystore credentials verified successfully"
+            else
+              echo "❌ Keystore verification failed. Check passwords and alias."
+              echo "   Trying to list keystore contents for debugging..."
+              keytool -list -keystore tfmaudio.keystore -storepass "$ANDROID_KEYSTORE_PASSWORD" 2>&1 || true
+              exit 1
+            fi
+
+            echo "ANDROID_KEYSTORE_PATH=$(pwd)/tfmaudio.keystore" >> $GITHUB_ENV
+            echo "ANDROID_KEY_ALIAS=$ANDROID_KEY_ALIAS" >> $GITHUB_ENV
+            echo "ANDROID_KEY_PASSWORD=$ANDROID_KEY_PASSWORD" >> $GITHUB_ENV
+            echo "ANDROID_KEYSTORE_PASSWORD=$ANDROID_KEYSTORE_PASSWORD" >> $GITHUB_ENV
+            echo "signing_type=release" >> $GITHUB_OUTPUT
+            echo "✅ Release keystore configured"
+          else
+            # Generate a temporary debug keystore (APKs must be signed to install)
+            echo "⚠️ No release keystore configured, generating debug keystore..."
+            keytool -genkeypair \
+              -v \
+              -keystore debug.keystore \
+              -alias debugkey \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass android \
+              -keypass android \
+              -dname "CN=Debug, OU=Debug, O=Debug, L=Debug, ST=Debug, C=US"
+            echo "ANDROID_KEYSTORE_PATH=$(pwd)/debug.keystore" >> $GITHUB_ENV
+            echo "ANDROID_KEY_ALIAS=debugkey" >> $GITHUB_ENV
+            echo "ANDROID_KEY_PASSWORD=android" >> $GITHUB_ENV
+            echo "ANDROID_KEYSTORE_PASSWORD=android" >> $GITHUB_ENV
+            echo "signing_type=debug" >> $GITHUB_OUTPUT
+            echo "✅ Debug keystore generated"
+          fi
+
+      - name: '🔨 Build Android APK'
+        run: |
           VERSION=${{ steps.version.outputs.version }}
           VERSION_CODE=${{ steps.version.outputs.version_code }}
+          SIGNING_TYPE=${{ steps.android-signing.outputs.signing_type }}
 
+          echo "🔐 Building APK with $SIGNING_TYPE signing..."
           dotnet publish TFMAudioApp/TFMAudioApp.csproj \
             -c Release \
             -f net9.0-android \
@@ -151,34 +259,46 @@ jobs:
             -p:AndroidSigningKeyPass=$ANDROID_KEY_PASSWORD \
             -p:AndroidSigningStorePass=$ANDROID_KEYSTORE_PASSWORD
 
-      - name: '🔨 Build Android APK (Unsigned - for testing)'
-        if: ${{ env.ANDROID_KEYSTORE_PATH == '' }}
-        run: |
-          VERSION=${{ steps.version.outputs.version }}
-          VERSION_CODE=${{ steps.version.outputs.version_code }}
-
-          echo "⚠️ Building unsigned APK (no keystore configured)"
-          dotnet publish TFMAudioApp/TFMAudioApp.csproj \
-            -c Release \
-            -f net9.0-android \
-            -p:BuildSingleTarget=android \
-            -p:ApplicationDisplayVersion=$VERSION \
-            -p:ApplicationVersion=$VERSION_CODE
-
       - name: '📦 Prepare APK for release'
         run: |
           TAG=${{ steps.version.outputs.tag }}
           mkdir -p releases
 
-          # Find the APK (signed or unsigned)
-          APK_PATH=$(find TFMAudioApp/bin/Release -name "*.apk" | head -1)
+          echo "🔍 Searching for APK files..."
+          find . -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
+
+          # Find the signed APK (prefer -Signed.apk)
+          APK_PATH=$(find . -name "*-Signed.apk" -type f | head -1)
+
+          # If no signed APK, look for any APK
+          if [ -z "$APK_PATH" ]; then
+            APK_PATH=$(find . -name "*.apk" -type f | head -1)
+          fi
 
           if [ -n "$APK_PATH" ]; then
+            echo "📦 Found APK: $APK_PATH"
+            echo "📊 APK size: $(ls -lh "$APK_PATH" | awk '{print $5}')"
+
+            # Verify APK is a valid zip file (APKs are zip archives)
+            if unzip -t "$APK_PATH" > /dev/null 2>&1; then
+              echo "✅ APK is a valid archive"
+            else
+              echo "⚠️ APK may be corrupted (not a valid zip)"
+            fi
+
+            # Check if APK is signed
+            if command -v apksigner &> /dev/null; then
+              apksigner verify "$APK_PATH" && echo "✅ APK signature valid" || echo "⚠️ APK signature verification failed"
+            elif command -v jarsigner &> /dev/null; then
+              jarsigner -verify "$APK_PATH" && echo "✅ APK signature valid" || echo "⚠️ APK signature verification failed"
+            fi
+
             cp "$APK_PATH" "releases/TFMAudioApp-${TAG}.apk"
             echo "✅ APK prepared: releases/TFMAudioApp-${TAG}.apk"
             ls -la releases/
           else
             echo "❌ No APK found!"
+            find . -type f -name "*.a*" | head -20
             exit 1
           fi
 
@@ -195,6 +315,10 @@ jobs:
   build-windows:
     name: Build Windows App
     runs-on: windows-2022
+    # Run if: manual with build_windows OR release with app-v* or v* (but not server-v*)
+    if: |
+      (github.event_name == 'workflow_dispatch' && inputs.build_windows) ||
+      (github.event_name == 'release' && (startsWith(github.event.release.tag_name, 'app-v') || (startsWith(github.event.release.tag_name, 'v') && !startsWith(github.event.release.tag_name, 'server-v'))))
     steps:
       - name: '📄 Checkout'
         uses: actions/checkout@v4
@@ -220,8 +344,15 @@ jobs:
         id: version
         shell: bash
         run: |
-          TAG=${{ github.event.release.tag_name }}
-          VERSION=${TAG#v}
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+            TAG="v${VERSION}"
+          else
+            TAG=${{ github.event.release.tag_name }}
+            # Remove app-v or v prefix
+            VERSION=${TAG#app-v}
+            VERSION=${VERSION#v}
+          fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
@@ -244,9 +375,10 @@ jobs:
           WINDOWS_CERT_BASE64: ${{ secrets.WINDOWS_CERT_BASE64 }}
           WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
         run: |
-          # Check if certificate is configured
-          if ([string]::IsNullOrEmpty($env:WINDOWS_CERT_BASE64)) {
-            Write-Host "⚠️ No Windows certificate configured, skipping signing"
+          # Check if certificate AND password are configured
+          if ([string]::IsNullOrEmpty($env:WINDOWS_CERT_BASE64) -or [string]::IsNullOrEmpty($env:WINDOWS_CERT_PASSWORD)) {
+            Write-Host "⚠️ Windows certificate or password not configured, skipping signing"
+            Write-Host "   To enable signing, configure WINDOWS_CERT_BASE64 and WINDOWS_CERT_PASSWORD secrets"
             exit 0
           }
 
@@ -260,20 +392,35 @@ jobs:
                       Where-Object { $_.FullName -match "x64" } |
                       Select-Object -First 1 -ExpandProperty FullName
 
-          if ($signTool) {
-            # Sign all EXE and DLL files
-            Get-ChildItem -Path "bin\windows-app" -Include "*.exe","*.dll" -Recurse | ForEach-Object {
-              & $signTool sign /f $certPath /p $env:WINDOWS_CERT_PASSWORD /t http://timestamp.digicert.com /fd SHA256 $_.FullName
-            }
-            Write-Host "✅ Windows app signed successfully"
-          } else {
+          if (-not $signTool) {
             Write-Host "⚠️ SignTool not found, skipping signing"
+            exit 0
+          }
+
+          # Test signing with one file first to validate password
+          $testFile = Get-ChildItem -Path "bin\windows-app" -Filter "*.exe" -Recurse | Select-Object -First 1
+          if ($testFile) {
+            Write-Host "🔐 Testing certificate password..."
+            $result = & $signTool sign /f $certPath /p $env:WINDOWS_CERT_PASSWORD /fd SHA256 $testFile.FullName 2>&1
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "⚠️ Certificate password appears to be incorrect, skipping signing"
+              Write-Host "   Please verify WINDOWS_CERT_PASSWORD secret is correct"
+              Remove-Item $certPath -Force -ErrorAction SilentlyContinue
+              exit 0
+            }
+            Write-Host "✅ Certificate validated, signing remaining files..."
+
+            # Sign remaining EXE and DLL files
+            Get-ChildItem -Path "bin\windows-app" -Include "*.exe","*.dll" -Recurse |
+              Where-Object { $_.FullName -ne $testFile.FullName } |
+              ForEach-Object {
+                & $signTool sign /f $certPath /p $env:WINDOWS_CERT_PASSWORD /t http://timestamp.digicert.com /fd SHA256 $_.FullName | Out-Null
+              }
+            Write-Host "✅ Windows app signed successfully"
           }
 
           # Clean up certificate
-          if (Test-Path $certPath) {
-            Remove-Item $certPath -Force
-          }
+          Remove-Item $certPath -Force -ErrorAction SilentlyContinue
 
       - name: '📦 Create Windows ZIP'
         shell: bash
@@ -299,37 +446,72 @@ jobs:
   # ==========================================
   build-macos:
     name: Build macOS App
-    runs-on: macos-14
+    runs-on: macos-15
+    # Run if: manual with build_macos OR release with app-v* or v* (but not server-v*)
+    if: |
+      (github.event_name == 'workflow_dispatch' && inputs.build_macos) ||
+      (github.event_name == 'release' && (startsWith(github.event.release.tag_name, 'app-v') || (startsWith(github.event.release.tag_name, 'v') && !startsWith(github.event.release.tag_name, 'server-v'))))
     steps:
       - name: '📄 Checkout'
         uses: actions/checkout@v4
 
-      - name: '🔧 Setup .NET'
+      - name: '🔧 Setup .NET 9.0.100'
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          dotnet-version: '9.0.100'
 
       - name: '🔍 Verify SDK version'
         run: |
           dotnet --version
           dotnet --list-sdks
-          dotnet workload list
 
-      - name: '🧹 Clean existing workloads'
+      - name: '🔧 Select Xcode version'
         run: |
-          # Remove any pre-installed workloads to avoid version conflicts
-          dotnet workload clean --all || true
+          # List available Xcode versions
+          echo "Available Xcode versions:"
+          ls -d /Applications/Xcode*.app 2>/dev/null || echo "No Xcode apps found"
 
-      - name: '🍎 Install MAUI workload'
+          # Use the latest stable Xcode
+          sudo xcode-select -s /Applications/Xcode_16.2.app/Contents/Developer || \
+          sudo xcode-select -s /Applications/Xcode_16.1.app/Contents/Developer || \
+          sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+
+          echo "Selected Xcode:"
+          xcodebuild -version
+
+      - name: '🍎 Install MAUI workload with version pinning'
         run: |
-          dotnet workload install maui-maccatalyst --skip-sign-check
+          # Create rollback file to pin workload versions compatible with .NET 9.0.100 and Xcode 16.x
+          cat > rollback.json << 'EOF'
+          {
+            "microsoft.net.sdk.maui": "9.0.0/9.0.100",
+            "microsoft.net.sdk.maccatalyst": "18.0.9600/9.0.100"
+          }
+          EOF
+
+          echo "Rollback file contents:"
+          cat rollback.json
+
+          # Install with rollback file to pin versions
+          dotnet workload install maui-maccatalyst --skip-sign-check --from-rollback-file rollback.json
+
+          # List installed workloads and SDKs
           dotnet workload list
+          echo "Installed packs:"
+          ls ~/.dotnet/packs/ | grep -i catalyst || true
 
       - name: '📦 Extract version'
         id: version
         run: |
-          TAG=${{ github.event.release.tag_name }}
-          VERSION=${TAG#v}
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+            TAG="v${VERSION}"
+          else
+            TAG=${{ github.event.release.tag_name }}
+            # Remove app-v or v prefix
+            VERSION=${TAG#app-v}
+            VERSION=${VERSION#v}
+          fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
@@ -359,29 +541,34 @@ jobs:
             -p:CreatePackage=true \
             -o bin/macos-arm64
 
-      - name: '📦 Create macOS ZIPs'
+      - name: '📦 Prepare macOS packages for release'
         run: |
           TAG=${{ steps.version.outputs.tag }}
           mkdir -p releases
 
-          # Package Intel (x64) version
-          APP_X64=$(find bin/macos-x64 -name "*.app" -type d | head -1)
-          if [ -n "$APP_X64" ]; then
-            cd "$(dirname "$APP_X64")"
-            zip -r "${GITHUB_WORKSPACE}/releases/TFMAudioApp-macOS-Intel-${TAG}.zip" "$(basename "$APP_X64")"
-            cd "${GITHUB_WORKSPACE}"
-            echo "✅ macOS Intel app packaged"
+          echo "🔍 Looking for .pkg files..."
+          find bin -name "*.pkg" -type f 2>/dev/null || echo "No .pkg files found"
+
+          # Copy Intel (x64) .pkg
+          PKG_X64=$(find bin/macos-x64 -name "*.pkg" -type f | head -1)
+          if [ -n "$PKG_X64" ]; then
+            cp "$PKG_X64" "releases/TFMAudioApp-macOS-Intel-${TAG}.pkg"
+            echo "✅ macOS Intel package ready"
+          else
+            echo "⚠️ No Intel .pkg found"
           fi
 
-          # Package Apple Silicon (arm64) version
-          APP_ARM64=$(find bin/macos-arm64 -name "*.app" -type d | head -1)
-          if [ -n "$APP_ARM64" ]; then
-            cd "$(dirname "$APP_ARM64")"
-            zip -r "${GITHUB_WORKSPACE}/releases/TFMAudioApp-macOS-AppleSilicon-${TAG}.zip" "$(basename "$APP_ARM64")"
-            cd "${GITHUB_WORKSPACE}"
-            echo "✅ macOS Apple Silicon app packaged"
+          # Copy Apple Silicon (arm64) .pkg
+          PKG_ARM64=$(find bin/macos-arm64 -name "*.pkg" -type f | head -1)
+          if [ -n "$PKG_ARM64" ]; then
+            cp "$PKG_ARM64" "releases/TFMAudioApp-macOS-AppleSilicon-${TAG}.pkg"
+            echo "✅ macOS Apple Silicon package ready"
+          else
+            echo "⚠️ No Apple Silicon .pkg found"
           fi
 
+          echo ""
+          echo "📦 Release files:"
           ls -la releases/
 
       - name: '📤 Upload macOS artifact'
@@ -397,8 +584,21 @@ jobs:
   upload-release:
     name: Upload to Release
     needs: [build-server, build-android, build-windows, build-macos]
+    # Run if release event AND at least one build succeeded (not skipped)
+    if: |
+      always() &&
+      github.event_name == 'release' &&
+      (needs.build-server.result == 'success' || needs.build-android.result == 'success' || needs.build-windows.result == 'success' || needs.build-macos.result == 'success')
     runs-on: ubuntu-latest
     steps:
+      - name: '📊 Build Status Summary'
+        run: |
+          echo "Build Results:"
+          echo "  Server:  ${{ needs.build-server.result }}"
+          echo "  Android: ${{ needs.build-android.result }}"
+          echo "  Windows: ${{ needs.build-windows.result }}"
+          echo "  macOS:   ${{ needs.build-macos.result }}"
+
       - name: '📥 Download all artifacts'
         uses: actions/download-artifact@v4
         with:
@@ -407,7 +607,7 @@ jobs:
       - name: '📋 List artifacts'
         run: |
           echo "Downloaded artifacts:"
-          find artifacts -type f -name "*.*" | head -50
+          find artifacts -type f -name "*.*" 2>/dev/null | head -50 || echo "No artifacts found"
 
       - name: '🚀 Upload to GitHub Release'
         env:
