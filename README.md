@@ -2,11 +2,17 @@
 With telegramFileManager you can have your own unlimited cloud and manage it through a file system in a simple way.
 You will be able to store files of unlimited size.
 
-![image](https://github.com/user-attachments/assets/d0853d9b-f6e1-4fbb-aa35-b71c81a1c17a)
-![image](https://github.com/user-attachments/assets/6f825a2e-f134-40c1-a708-3a6cc754372b)
+<img width="2499" height="890" alt="TFM Home" src="https://github.com/user-attachments/assets/98f28256-f1cf-4a67-9bfe-e23951525bbb" />
 
 ## Getting started
 [Wiki](https://github.com/mateof/TelegramFileManager/wiki)
+
+<img width="2190" height="890" alt="TFM File Manager" src="https://github.com/user-attachments/assets/742c6e61-b49e-4c5e-be63-dc9cb65f8689" />
+
+<img width="1318" height="861" alt="TFM Audio Player FM" src="https://github.com/user-attachments/assets/d6d818cd-f8c8-4059-9d90-35f1b12096b3" />
+
+<img width="1480" height="852" alt="TFM Video player FM" src="https://github.com/user-attachments/assets/1d2c97ce-2b6a-4238-97bd-efc863918d3a" />
+
 
 ## Installation
 ### Previous steps
