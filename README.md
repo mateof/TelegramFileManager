@@ -99,6 +99,17 @@ services:
 - When the upload tasks are finished, you will be able to see the uploaded files in the file manager, in the `Remote` tab.
 - When you want, you can download the files again to a location on your local computer, selecting the files or folders and clicking the `Download to Local` button.
 
+
+## Music player
+
+<img width="598" height="889" alt="Music player" src="https://github.com/user-attachments/assets/c4842c34-ea8f-4664-b22c-93b43a9aaf02" />
+
+You can use this PWA to connect it to your TelegramFileManager server
+
+[Repository](https://github.com/mateof/TFMPlayer)
+
+[Music player PWA for TelegramFileManager](https://mateof.github.io/TFMPlayer/)
+
 ## Mentions
 
 - [Syncfusion](https://www.syncfusion.com/blazor-components)
