@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
 	<Version>3.4.0.0</Version>
@@ -34,10 +34,7 @@
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.22.1" />
     <PackageReference Include="Syncfusion.EJ2.AspNet.Core" Version="29.2.11" />
     <PackageReference Include="System.IO.Hashing" Version="10.0.1" />
-    <!-- WTelegramClient personalizado con optimizaciones de transferencia (submodule) -->
-    <ProjectReference Include="..\libs\WTelegramClient\src\WTelegramClient.csproj" />
-    <!-- Para volver a NuGet oficial, comenta la línea anterior y descomenta esta: -->
-    <!-- <PackageReference Include="WTelegramClient" Version="4.3.14" /> -->
+    <PackageReference Include="WTelegramClient" Version="4.3.14" />
   </ItemGroup>
 
   <ItemGroup>

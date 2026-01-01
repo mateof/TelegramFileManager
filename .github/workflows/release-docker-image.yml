@@ -19,8 +19,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-      with:
-        submodules: recursive
 
     - name: Extract version from tag
       id: version
@@ -44,7 +42,7 @@ jobs:
       run: |
         VERSION=${{ steps.version.outputs.version }}
         echo "Building full image with FFmpeg support..."
-        docker build . -f ./TelegramDownloader/Dockerfile \
+        docker build ./TelegramDownloader -f ./TelegramDownloader/Dockerfile \
           --build-arg VERSION=$VERSION \
           --build-arg INCLUDE_FFMPEG=true \
           --tag ghcr.io/mateof/telegramfilemanager:${{github.ref_name}} \
@@ -56,7 +54,7 @@ jobs:
       run: |
         VERSION=${{ steps.version.outputs.version }}
         echo "Building lite image without FFmpeg..."
-        docker build . -f ./TelegramDownloader/Dockerfile \
+        docker build ./TelegramDownloader -f ./TelegramDownloader/Dockerfile \
           --build-arg VERSION=$VERSION \
           --build-arg INCLUDE_FFMPEG=false \
           --tag ghcr.io/mateof/telegramfilemanager:${{github.ref_name}}-lite \

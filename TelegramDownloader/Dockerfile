@@ -22,28 +22,15 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
 ARG BUILD_CONFIGURATION=Release
 ARG VERSION=0.0.0.0
 WORKDIR /src
-
-# Copy submodule (WTelegramClient) first
-COPY ["libs/WTelegramClient/src/WTelegramClient.csproj", "libs/WTelegramClient/src/"]
-COPY ["libs/WTelegramClient/generator/MTProtoGenerator.csproj", "libs/WTelegramClient/generator/"]
-
-# Copy main project
-COPY ["TelegramDownloader/TelegramDownloader.csproj", "TelegramDownloader/"]
-
-# Restore all projects
-RUN dotnet restore "TelegramDownloader/TelegramDownloader.csproj"
-
-# Copy all source files
-COPY libs/WTelegramClient/ libs/WTelegramClient/
-COPY TelegramDownloader/ TelegramDownloader/
-
-WORKDIR "/src/TelegramDownloader"
+COPY ["TelegramDownloader.csproj", "."]
+RUN dotnet restore "TelegramDownloader.csproj"
+COPY . .
+WORKDIR "/src/."
 RUN dotnet build "./TelegramDownloader.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
 ARG VERSION=0.0.0.0
-WORKDIR "/src/TelegramDownloader"
 RUN dotnet publish "./TelegramDownloader.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false,InformationalVersion=$VERSION
 
 FROM base AS final
@@ -53,7 +40,7 @@ WORKDIR /app
 RUN apk add --no-cache python3 py3-pip && \
     ln -sf /usr/bin/python3 /usr/bin/python
 
-COPY TelegramDownloader/WebDav /app/WebDav
+COPY ./WebDav /app/WebDav
 
 # Create venv and install dependencies in single layer
 RUN python3 -m venv /app/venv && \
