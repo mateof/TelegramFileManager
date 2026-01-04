@@ -258,8 +258,11 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+          token: ${{ secrets.TOKENBuild }}
 
       - name: '🏷️ Create and push tag'
+        env:
+          GH_TOKEN: ${{ secrets.TOKENBuild }}
         run: |
           TAG="${{ steps.version.outputs.version_tag }}"
 
