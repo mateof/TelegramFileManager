@@ -174,7 +174,8 @@ jobs:
           > ⚠️ **After merging**, the release workflow will automatically:
           > 1. Create tag \`$VERSION_TAG\`
           > 2. Create GitHub Release
-          > 3. Build and upload binaries")
+          > 3. Build and upload binaries
+          > 4. Sync \`develop\` branch with \`main\`")
 
           echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
           echo "✅ PR created: $PR_URL"
@@ -282,3 +283,21 @@ jobs:
           BRANCH="${{ github.event.pull_request.head.ref }}"
           gh api -X DELETE "repos/${{ github.repository }}/git/refs/heads/$BRANCH" || true
           echo "✅ Branch '$BRANCH' deleted"
+
+      - name: '🔄 Sync develop with main'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Fetch all branches
+          git fetch origin develop:develop || true
+
+          # Check if develop branch exists
+          if git show-ref --verify --quiet refs/heads/develop; then
+            git checkout develop
+            git merge main -m "Sync develop with main after release ${{ steps.version.outputs.version_tag }}"
+            git push origin develop
+            echo "✅ develop branch synced with main"
+          else
+            echo "ℹ️ develop branch does not exist, skipping sync"
+          fi
