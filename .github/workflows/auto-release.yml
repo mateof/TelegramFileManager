@@ -258,8 +258,11 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+          token: ${{ secrets.TOKENBuild }}
 
       - name: '🏷️ Create and push tag'
+        env:
+          GH_TOKEN: ${{ secrets.TOKENBuild }}
         run: |
           TAG="${{ steps.version.outputs.version_tag }}"
 
@@ -273,7 +276,7 @@ jobs:
 
       - name: '🚀 Create GitHub Release'
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.TOKENBuild }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           TAG="${{ steps.version.outputs.version_tag }}"
