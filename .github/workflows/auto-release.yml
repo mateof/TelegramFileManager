@@ -274,13 +274,16 @@ jobs:
       - name: '🚀 Create GitHub Release'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           TAG="${{ steps.version.outputs.version_tag }}"
-          PR_BODY="${{ github.event.pull_request.body }}"
+
+          # Write PR body to file to avoid shell interpretation issues
+          echo "$PR_BODY" > release_notes.md
 
           gh release create "$TAG" \
             --title "Release $TAG" \
-            --notes "$PR_BODY" \
+            --notes-file release_notes.md \
             --target main
 
           echo "✅ GitHub Release created"
