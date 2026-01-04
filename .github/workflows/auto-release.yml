@@ -98,8 +98,17 @@ jobs:
           echo "✅ Tag '$TAG' does not exist"
 
       - name: '🌿 Create release branch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           BRANCH="${{ steps.version.outputs.branch_name }}"
+
+          # Delete existing release branch if it exists (from a previous failed run)
+          if git ls-remote --heads origin "$BRANCH" | grep -q "$BRANCH"; then
+            echo "ℹ️ Branch '$BRANCH' already exists, deleting it..."
+            gh api -X DELETE "repos/${{ github.repository }}/git/refs/heads/$BRANCH" || true
+          fi
+
           git checkout -b "$BRANCH"
 
       - name: '📝 Update version in TelegramDownloader.csproj'
