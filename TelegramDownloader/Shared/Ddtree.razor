@@ -86,7 +86,8 @@
             }
         }
 
-        return Task.FromResult(result);
+        // Sort alphabetically ascending
+        return Task.FromResult(result.OrderBy(x => x.Name).ToList());
     }
 
     private async Task<List<TreeNodeModel>> LoadTelegramFolders(string dbName, string parentId)
@@ -115,7 +116,8 @@
                 HasChildren = f.HasChild
             });
         }
-        return result;
+        // Sort alphabetically ascending
+        return result.OrderBy(x => x.Name).ToList();
     }
 
     private async Task OnFolderSelected(string value)

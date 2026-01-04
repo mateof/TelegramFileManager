@@ -1,0 +1,223 @@
+name: Auto Release from Issue
+
+# Trigger when an issue is opened or labeled with 'release'
+on:
+  issues:
+    types: [opened, labeled]
+
+permissions:
+  contents: write
+  issues: write
+
+env:
+  # Only these users can trigger releases (comma-separated GitHub usernames)
+  ALLOWED_USERS: "mateof"
+
+jobs:
+  create-release:
+    name: Create Release from Issue
+    runs-on: ubuntu-latest
+
+    # Only run if issue has 'release' label
+    if: contains(github.event.issue.labels.*.name, 'release')
+
+    steps:
+      - name: '🔐 Verify user authorization'
+        env:
+          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+        run: |
+          echo "Issue author: $ISSUE_AUTHOR"
+          echo "Allowed users: $ALLOWED_USERS"
+
+          # Check if author is in allowed list
+          if [[ ! ",$ALLOWED_USERS," == *",$ISSUE_AUTHOR,"* ]]; then
+            echo "❌ User '$ISSUE_AUTHOR' is not authorized to create releases"
+            echo "   Only these users can create releases: $ALLOWED_USERS"
+            exit 1
+          fi
+
+          echo "✅ User '$ISSUE_AUTHOR' is authorized"
+
+      - name: '📋 Extract version from issue title'
+        id: version
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+        run: |
+          echo "Issue title: $ISSUE_TITLE"
+
+          # Extract version from title (supports: v3.5.0, 3.5.0, v3.5.0.0, 3.5.0.0)
+          VERSION=$(echo "$ISSUE_TITLE" | grep -oE '[vV]?[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
+
+          if [ -z "$VERSION" ]; then
+            echo "❌ No version found in issue title"
+            echo "   Title should contain a version like: v3.5.0 or 3.5.0"
+            exit 1
+          fi
+
+          # Remove 'v' prefix if present
+          VERSION=${VERSION#v}
+          VERSION=${VERSION#V}
+
+          # Ensure 4-part version for csproj (3.5.0 -> 3.5.0.0)
+          PARTS=$(echo "$VERSION" | tr '.' '\n' | wc -l)
+          if [ "$PARTS" -eq 3 ]; then
+            VERSION_CSPROJ="${VERSION}.0"
+          else
+            VERSION_CSPROJ="$VERSION"
+          fi
+
+          # Tag version (without trailing .0 if it's 0)
+          VERSION_TAG="v${VERSION}"
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version_csproj=$VERSION_CSPROJ" >> $GITHUB_OUTPUT
+          echo "version_tag=$VERSION_TAG" >> $GITHUB_OUTPUT
+
+          echo "✅ Extracted versions:"
+          echo "   Version: $VERSION"
+          echo "   CSPROJ:  $VERSION_CSPROJ"
+          echo "   Tag:     $VERSION_TAG"
+
+      - name: '📄 Checkout main branch'
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: '🔍 Check if tag already exists'
+        id: check_tag
+        run: |
+          TAG="${{ steps.version.outputs.version_tag }}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "❌ Tag '$TAG' already exists!"
+            echo "exists=true" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+          echo "✅ Tag '$TAG' does not exist yet"
+          echo "exists=false" >> $GITHUB_OUTPUT
+
+      - name: '📝 Update version in TelegramDownloader.csproj'
+        run: |
+          VERSION_CSPROJ="${{ steps.version.outputs.version_csproj }}"
+          CSPROJ_FILE="TelegramDownloader/TelegramDownloader.csproj"
+
+          echo "Updating version in $CSPROJ_FILE to $VERSION_CSPROJ"
+
+          # Update <Version> tag
+          sed -i "s|<Version>[^<]*</Version>|<Version>$VERSION_CSPROJ</Version>|g" "$CSPROJ_FILE"
+
+          # Verify the change
+          echo "Updated content:"
+          grep -n "Version" "$CSPROJ_FILE" | head -5
+
+          echo "✅ Version updated to $VERSION_CSPROJ"
+
+      - name: '📝 Update version in TFMAudioApp.csproj (if exists)'
+        run: |
+          VERSION_CSPROJ="${{ steps.version.outputs.version_csproj }}"
+          CSPROJ_FILE="TFMAudioApp/TFMAudioApp.csproj"
+
+          if [ -f "$CSPROJ_FILE" ]; then
+            echo "Updating version in $CSPROJ_FILE to $VERSION_CSPROJ"
+
+            # Update <ApplicationDisplayVersion> if exists
+            if grep -q "ApplicationDisplayVersion" "$CSPROJ_FILE"; then
+              sed -i "s|<ApplicationDisplayVersion>[^<]*</ApplicationDisplayVersion>|<ApplicationDisplayVersion>${{ steps.version.outputs.version }}</ApplicationDisplayVersion>|g" "$CSPROJ_FILE"
+            fi
+
+            # Update <Version> if exists
+            if grep -q "<Version>" "$CSPROJ_FILE"; then
+              sed -i "s|<Version>[^<]*</Version>|<Version>$VERSION_CSPROJ</Version>|g" "$CSPROJ_FILE"
+            fi
+
+            echo "✅ TFMAudioApp version updated"
+          else
+            echo "ℹ️ TFMAudioApp.csproj not found, skipping"
+          fi
+
+      - name: '💾 Commit version changes'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add -A
+
+          # Check if there are changes to commit
+          if git diff --staged --quiet; then
+            echo "ℹ️ No version changes to commit (version may already be set)"
+          else
+            git commit -m "Bump version to $VERSION"
+            git push origin main
+            echo "✅ Version changes committed and pushed"
+          fi
+
+      - name: '🏷️ Create and push tag'
+        run: |
+          TAG="${{ steps.version.outputs.version_tag }}"
+
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+
+          echo "✅ Tag '$TAG' created and pushed"
+
+      - name: '🚀 Create GitHub Release'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.version_tag }}"
+          VERSION="${{ steps.version.outputs.version }}"
+          ISSUE_BODY="${{ github.event.issue.body }}"
+
+          # Create release with issue body as release notes
+          gh release create "$TAG" \
+            --title "Release $TAG" \
+            --notes "## What's Changed
+
+          $ISSUE_BODY
+
+          ---
+          *Release created automatically from issue #${{ github.event.issue.number }}*" \
+            --target main
+
+          echo "✅ GitHub Release created"
+
+      - name: '✅ Close issue with success comment'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.version.outputs.version_tag }}"
+
+          gh issue comment ${{ github.event.issue.number }} --body "## ✅ Release Created Successfully!
+
+          - **Version:** $TAG
+          - **CSPROJ Version:** ${{ steps.version.outputs.version_csproj }}
+          - **Release:** https://github.com/${{ github.repository }}/releases/tag/$TAG
+
+          The build workflow has been triggered and will upload the binaries shortly.
+
+          ---
+          *This issue was automatically processed by the release workflow.*"
+
+          gh issue close ${{ github.event.issue.number }} --reason completed
+
+          echo "✅ Issue closed"
+
+      - name: '❌ Comment on failure'
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment ${{ github.event.issue.number }} --body "## ❌ Release Failed
+
+          The release process encountered an error. Please check the [workflow logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details.
+
+          Common issues:
+          - Version format incorrect (use: v3.5.0 or 3.5.0)
+          - Tag already exists
+          - User not authorized
+
+          ---
+          *This comment was automatically generated.*"
