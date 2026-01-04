@@ -34,7 +34,7 @@
 		<ApplicationId>com.tfm.audioapp</ApplicationId>
 
 		<!-- Versions - Updated during CI/CD -->
-		<ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
+		<ApplicationDisplayVersion>3.5.0</ApplicationDisplayVersion>
 		<ApplicationVersion>1</ApplicationVersion>
 
 		<!-- Windows unpackaged for development -->
