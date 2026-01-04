@@ -1,9 +1,9 @@
 name: Auto Release from Issue
 
-# Trigger when an issue is opened or labeled with 'release'
+# Trigger when an issue is labeled with 'release'
 on:
   issues:
-    types: [opened, labeled]
+    types: [labeled]
   # Also trigger when PR is merged (to create tag after merge)
   pull_request:
     types: [closed]
