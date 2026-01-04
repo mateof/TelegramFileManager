@@ -1,9 +1,9 @@
 name: Auto Release from Issue
 
-# Trigger when an issue is opened or labeled with 'release'
+# Trigger when an issue is labeled with 'release'
 on:
   issues:
-    types: [opened, labeled]
+    types: [labeled]
   # Also trigger when PR is merged (to create tag after merge)
   pull_request:
     types: [closed]
@@ -296,20 +296,36 @@ jobs:
           gh api -X DELETE "repos/${{ github.repository }}/git/refs/heads/$BRANCH" || true
           echo "✅ Branch '$BRANCH' deleted"
 
-      - name: '🔄 Sync develop with main'
+      - name: '🔄 Create PR to sync develop with main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          VERSION_TAG="${{ steps.version.outputs.version_tag }}"
+          SYNC_BRANCH="sync/main-to-develop-${VERSION_TAG}"
+
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Fetch all branches
-          git fetch origin develop:develop || true
-
           # Check if develop branch exists
-          if git show-ref --verify --quiet refs/heads/develop; then
-            git checkout develop
-            git merge main -m "Sync develop with main after release ${{ steps.version.outputs.version_tag }}"
-            git push origin develop
-            echo "✅ develop branch synced with main"
-          else
+          if ! git ls-remote --heads origin develop | grep -q develop; then
             echo "ℹ️ develop branch does not exist, skipping sync"
+            exit 0
           fi
+
+          # Create sync branch from main
+          git checkout -b "$SYNC_BRANCH"
+          git push origin "$SYNC_BRANCH"
+
+          # Create PR to merge into develop
+          PR_URL=$(gh pr create \
+            --base develop \
+            --head "$SYNC_BRANCH" \
+            --title "Sync develop with main after $VERSION_TAG" \
+            --body "## 🔄 Sync develop with main
+
+          This PR syncs the \`develop\` branch with \`main\` after release **$VERSION_TAG**.
+
+          ---
+          *This PR was automatically generated.*")
+
+          echo "✅ Sync PR created: $PR_URL"
