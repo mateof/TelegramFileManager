@@ -475,6 +475,7 @@
 @code {
     private int currentStep = 1;
     private bool isLoading = false;
+    private bool _shouldRedirectHome = false;
 
     private string mongoConnectionString = "";
     private string mongoError = "";
@@ -482,6 +483,14 @@
     private string apiId = "";
     private string apiHash = "";
     private string telegramError = "";
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender && _shouldRedirectHome)
+        {
+            NavigationManager.NavigateTo("/", forceLoad: true);
+        }
+    }
 
     protected override void OnInitialized()
     {
@@ -515,8 +524,8 @@
                 currentStep = 2;
                 break;
             case SetupStep.Complete:
-                // Redirect to home if setup is already complete
-                NavigationManager.NavigateTo("/", forceLoad: true);
+                // Redirect to home if setup is already complete (done in OnAfterRender)
+                _shouldRedirectHome = true;
                 break;
         }
     }

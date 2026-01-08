@@ -50,7 +50,24 @@ namespace TelegramDownloader.Data
             {
                 if (client == null && HasValidCredentials())
                 {
-                    newClient();
+                    try
+                    {
+                        newClient();
+                    }
+                    catch (WTelegram.WTException ex) when (ex.Message.Contains("session file"))
+                    {
+                        // Session file is corrupted - delete it and create a new one
+                        _logger.LogWarning("Session file corrupted during startup, deleting: {Message}", ex.Message);
+                        var sessionPath = UserService.USERDATAFOLDER + "/WTelegram.session";
+                        if (File.Exists(sessionPath))
+                        {
+                            File.Delete(sessionPath);
+                            _logger.LogInformation("Deleted corrupted session file: {Path}", sessionPath);
+                        }
+                        // Create new client with fresh session
+                        newClient();
+                        _logger.LogInformation("Telegram client initialized with new session");
+                    }
                 }
                 else if (!HasValidCredentials())
                 {
@@ -100,8 +117,25 @@ namespace TelegramDownloader.Data
                 if (client == null) // Double-check after acquiring lock
                 {
                     _logger.LogInformation("Initializing Telegram client after setup");
-                    newClient();
-                    _logger.LogInformation("Telegram client initialized successfully");
+                    try
+                    {
+                        newClient();
+                        _logger.LogInformation("Telegram client initialized successfully");
+                    }
+                    catch (WTelegram.WTException ex) when (ex.Message.Contains("session file"))
+                    {
+                        // Session file is corrupted - delete it and create a new one
+                        _logger.LogWarning("Session file corrupted, deleting and creating new session: {Message}", ex.Message);
+                        var sessionPath = UserService.USERDATAFOLDER + "/WTelegram.session";
+                        if (File.Exists(sessionPath))
+                        {
+                            File.Delete(sessionPath);
+                            _logger.LogInformation("Deleted corrupted session file: {Path}", sessionPath);
+                        }
+                        // Create new client with fresh session
+                        newClient();
+                        _logger.LogInformation("Telegram client initialized with new session");
+                    }
                 }
             }
             catch (Exception ex)
@@ -597,6 +631,43 @@ namespace TelegramDownloader.Data
             }
 
             return result;
+        }
+
+        /// <summary>
+        /// Preloads channels and configuration at startup if user is logged in.
+        /// This ensures channels are available for API calls without requiring UI access first.
+        /// </summary>
+        public async Task PreloadChannelsAsync()
+        {
+            if (!checkUserLogin())
+            {
+                _logger.LogInformation("PreloadChannelsAsync: User not logged in, skipping preload");
+                return;
+            }
+
+            try
+            {
+                _logger.LogInformation("PreloadChannelsAsync: Starting channel preload...");
+
+                // Load all channels into cache
+                var channels = await getAllChats();
+                _logger.LogInformation("PreloadChannelsAsync: Loaded {Count} channels", channels.Count);
+
+                // Also preload folders
+                var folders = await getChatsWithFolders();
+                _logger.LogInformation("PreloadChannelsAsync: Loaded {FolderCount} folders with {UngroupedCount} ungrouped chats",
+                    folders.Folders.Count, folders.UngroupedChats.Count);
+
+                // Preload favourites
+                var favourites = await GetFouriteChannels(true);
+                _logger.LogInformation("PreloadChannelsAsync: Loaded {Count} favourite channels", favourites.Count);
+
+                _logger.LogInformation("PreloadChannelsAsync: Channel preload completed successfully");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "PreloadChannelsAsync: Error preloading channels");
+            }
         }
 
         public async Task<Message> uploadFile(string chatId, Stream file, string fileName, string mimeType = null, UploadModel um = null, string caption = null)

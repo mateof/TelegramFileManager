@@ -29,6 +29,7 @@ namespace TelegramDownloader.Data
         Task<List<ChatViewBase>> getAllChats();
         Task<List<ChatViewBase>> getAllSavedChats();
         Task<ChatsWithFolders> getChatsWithFolders();
+        Task PreloadChannelsAsync();
         Task<List<ChatMessages>> getAllMessages(long id, Boolean onlyFiles = false);
         Task<GridDataProviderResult<ChatMessages>> getPaginatedMessages(long id, int page, int size, Boolean onlyFiles = false);
         Task<List<ChatMessages>> getAllMediaMessages(long id, Boolean onlyFiles = false);
