@@ -102,7 +102,9 @@
             OnPathChanged="OnMobilePathChanged"
             OnFilterChanged="OnMobileFilterChanged"
             InitialSearch="@_initialSearch"
-            InitialFilters="@_initialFilters" />
+            InitialFilters="@_initialFilters"
+            InitialSortBy="@_initialSortBy"
+            InitialSortAscending="@_initialSortAscending" />
     </div>
 }
 
@@ -172,17 +174,27 @@
     private bool _firstRenderComplete = false;
     private bool _needsRefresh = false;
 
-    // URL state for filters and search
+    // URL state for filters, search, and sorting
     private string _initialSearch = string.Empty;
     private HashSet<string> _initialFilters = new();
+    private string _initialSortBy = "Name";
+    private bool _initialSortAscending = true;
     private string _currentSearch = string.Empty;
     private HashSet<string> _currentFilters = new();
+    private string _currentSortBy = "Name";
+    private bool _currentSortAscending = true;
 
     protected override async Task OnParametersSetAsync()
     {
         string currentBsiId = bsi?.Id;
         bool idChanged = _previousId != id;
         bool bsiChanged = isShared && _previousBsiId != currentBsiId && currentBsiId != null;
+
+        // Parse URL params early so they're available before first render
+        if (!_firstRenderComplete)
+        {
+            ParseUrlParameters();
+        }
 
         if (idChanged || bsiChanged)
         {
@@ -195,6 +207,51 @@
             {
                 _needsRefresh = true;
             }
+        }
+    }
+
+    private void ParseUrlParameters()
+    {
+        try
+        {
+            var uri = new Uri(MyNavigationManager.Uri);
+            var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
+            var searchFromUrl = query["search"];
+            var filtersFromUrl = query["filters"];
+            var sortByFromUrl = query["sortBy"];
+            var sortAscFromUrl = query["sortAsc"];
+
+            // Parse initial search
+            if (!string.IsNullOrEmpty(searchFromUrl))
+            {
+                _initialSearch = Uri.UnescapeDataString(searchFromUrl);
+                _currentSearch = _initialSearch;
+            }
+
+            // Parse initial filters (comma-separated)
+            if (!string.IsNullOrEmpty(filtersFromUrl))
+            {
+                var filterList = Uri.UnescapeDataString(filtersFromUrl).Split(',', StringSplitOptions.RemoveEmptyEntries);
+                _initialFilters = new HashSet<string>(filterList);
+                _currentFilters = new HashSet<string>(filterList);
+            }
+
+            // Parse initial sort
+            if (!string.IsNullOrEmpty(sortByFromUrl))
+            {
+                _initialSortBy = Uri.UnescapeDataString(sortByFromUrl);
+                _currentSortBy = _initialSortBy;
+            }
+
+            if (!string.IsNullOrEmpty(sortAscFromUrl))
+            {
+                _initialSortAscending = sortAscFromUrl.ToLower() != "false";
+                _currentSortAscending = _initialSortAscending;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error parsing URL parameters");
         }
     }
 
@@ -261,23 +318,6 @@
             var uri = new Uri(MyNavigationManager.Uri);
             var query = System.Web.HttpUtility.ParseQueryString(uri.Query);
             var pathFromUrl = query["path"];
-            var searchFromUrl = query["search"];
-            var filtersFromUrl = query["filters"];
-
-            // Parse initial search
-            if (!string.IsNullOrEmpty(searchFromUrl))
-            {
-                _initialSearch = Uri.UnescapeDataString(searchFromUrl);
-                _currentSearch = _initialSearch;
-            }
-
-            // Parse initial filters (comma-separated)
-            if (!string.IsNullOrEmpty(filtersFromUrl))
-            {
-                var filterList = Uri.UnescapeDataString(filtersFromUrl).Split(',', StringSplitOptions.RemoveEmptyEntries);
-                _initialFilters = new HashSet<string>(filterList);
-                _currentFilters = new HashSet<string>(filterList);
-            }
 
             // Decode the path and ensure it ends with /
             string decodedPath = "/";
@@ -310,7 +350,7 @@
     {
         try
         {
-            UpdateUrlWithState(path, _currentSearch, _currentFilters);
+            UpdateUrlWithState(path, _currentSearch, _currentFilters, _currentSortBy, _currentSortAscending);
         }
         catch (Exception ex)
         {
@@ -324,10 +364,12 @@
         {
             _currentSearch = args.SearchText;
             _currentFilters = args.TypeFilters;
+            _currentSortBy = args.SortBy;
+            _currentSortAscending = args.SortAscending;
 
             // Get current path from mobile file manager
             var currentPath = mobileFileManager?.Path ?? "/";
-            UpdateUrlWithState(currentPath, _currentSearch, _currentFilters);
+            UpdateUrlWithState(currentPath, _currentSearch, _currentFilters, _currentSortBy, _currentSortAscending);
         }
         catch (Exception ex)
         {
@@ -335,7 +377,7 @@
         }
     }
 
-    private void UpdateUrlWithState(string path, string search, HashSet<string> filters)
+    private void UpdateUrlWithState(string path, string search, HashSet<string> filters, string sortBy = "Name", bool sortAscending = true)
     {
         var baseUri = MyNavigationManager.Uri.Split('?')[0];
         var queryParams = new List<string>();
@@ -356,6 +398,18 @@
         if (filters.Count > 0)
         {
             queryParams.Add($"filters={Uri.EscapeDataString(string.Join(",", filters))}");
+        }
+
+        // Add sort if not default
+        if (sortBy != "Name")
+        {
+            queryParams.Add($"sortBy={Uri.EscapeDataString(sortBy)}");
+        }
+
+        // Add sort direction if descending
+        if (!sortAscending)
+        {
+            queryParams.Add("sortAsc=false");
         }
 
         var newUrl = queryParams.Count > 0 ? $"{baseUri}?{string.Join("&", queryParams)}" : baseUri;

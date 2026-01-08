@@ -138,6 +138,12 @@ namespace TelegramDownloader.Shared.MobileFileManager
         [Parameter]
         public HashSet<string> InitialFilters { get; set; } = new();
 
+        [Parameter]
+        public string InitialSortBy { get; set; } = "Name";
+
+        [Parameter]
+        public bool InitialSortAscending { get; set; } = true;
+
         #endregion
 
         #region State
@@ -234,6 +240,13 @@ namespace TelegramDownloader.Shared.MobileFileManager
             {
                 SelectedTypeFilters = new HashSet<string>(InitialFilters);
             }
+
+            // Initialize sort from URL parameters
+            if (!string.IsNullOrEmpty(InitialSortBy))
+            {
+                SortBy = InitialSortBy;
+            }
+            SortAscending = InitialSortAscending;
 
             await LoadFiles();
         }
@@ -1276,7 +1289,7 @@ namespace TelegramDownloader.Shared.MobileFileManager
             await LoadFiles();
         }
 
-        private void SortFiles()
+        private async Task SortFiles()
         {
             SortBy = SortBy switch
             {
@@ -1288,14 +1301,16 @@ namespace TelegramDownloader.Shared.MobileFileManager
             };
             InvalidateDisplayFilesCache();
             ResetPagination();
+            await NotifyFilterChanged();
             StateHasChanged();
         }
 
-        private void ToggleSortDirection()
+        private async Task ToggleSortDirection()
         {
             SortAscending = !SortAscending;
             InvalidateDisplayFilesCache();
             ResetPagination();
+            await NotifyFilterChanged();
             StateHasChanged();
         }
 
@@ -1377,7 +1392,9 @@ namespace TelegramDownloader.Shared.MobileFileManager
             var args = new MfmFilterChangedEventArgs
             {
                 SearchText = SearchText,
-                TypeFilters = new HashSet<string>(SelectedTypeFilters)
+                TypeFilters = new HashSet<string>(SelectedTypeFilters),
+                SortBy = SortBy,
+                SortAscending = SortAscending
             };
             await OnFilterChanged.InvokeAsync(args);
         }
