@@ -54,6 +54,11 @@
                            CanUpload="true"
                            CanUploadToTelegram="@isMyChannel"
                            CanShowUrlMedia="true"
+                           InitialSearch="@_initialSearch"
+                           InitialFilters="@_initialFilters"
+                           InitialSortBy="@_initialSortBy"
+                           InitialSortAscending="@_initialSortAscending"
+                           InitialPage="@_initialPage"
                            OnRead="OnMobileReadAsync"
                            OnItemsDeleting="OnMobileItemsDeletingAsync"
                            OnItemsMoving="OnMobileItemsMovingAsync"
@@ -67,7 +72,8 @@
                            OnUrlMedia="OnMobileUrlMediaAsync"
                            CanAddToPlaylist="true"
                            OnAddToPlaylist="OnMobileAddToPlaylistAsync"
-                           OnPathChanged="OnMobilePathChanged" />
+                           OnPathChanged="OnMobilePathChanged"
+                           OnFilterChanged="OnMobileFilterChanged" />
     </div>
 }
 
@@ -138,8 +144,26 @@
     private bool _firstRenderComplete = false;
     private bool _needsRefresh = false;
 
+    // URL state for filters, search, sorting, and pagination
+    private string _initialSearch = string.Empty;
+    private HashSet<string> _initialFilters = new();
+    private string _initialSortBy = "Name";
+    private bool _initialSortAscending = true;
+    private int _initialPage = 1;
+    private string _currentSearch = string.Empty;
+    private HashSet<string> _currentFilters = new();
+    private string _currentSortBy = "Name";
+    private bool _currentSortAscending = true;
+    private int _currentPage = 1;
+
     protected override async Task OnParametersSetAsync()
     {
+        // Parse URL params early so they're available before first render
+        if (!_firstRenderComplete)
+        {
+            ParseUrlParameters();
+        }
+
         if (_previousId != id)
         {
             _previousId = id;
@@ -150,6 +174,59 @@
             {
                 _needsRefresh = true;
             }
+        }
+    }
+
+    private void ParseUrlParameters()
+    {
+        try
+        {
+            var uri = new Uri(MyNavigationManager.Uri);
+            var query = HttpUtility.ParseQueryString(uri.Query);
+            var searchFromUrl = query["search"];
+            var filtersFromUrl = query["filters"];
+            var sortByFromUrl = query["sortBy"];
+            var sortAscFromUrl = query["sortAsc"];
+            var pageFromUrl = query["page"];
+
+            // Parse initial search
+            if (!string.IsNullOrEmpty(searchFromUrl))
+            {
+                _initialSearch = Uri.UnescapeDataString(searchFromUrl);
+                _currentSearch = _initialSearch;
+            }
+
+            // Parse initial filters (comma-separated)
+            if (!string.IsNullOrEmpty(filtersFromUrl))
+            {
+                var filterList = Uri.UnescapeDataString(filtersFromUrl).Split(',', StringSplitOptions.RemoveEmptyEntries);
+                _initialFilters = new HashSet<string>(filterList);
+                _currentFilters = new HashSet<string>(filterList);
+            }
+
+            // Parse initial sort
+            if (!string.IsNullOrEmpty(sortByFromUrl))
+            {
+                _initialSortBy = Uri.UnescapeDataString(sortByFromUrl);
+                _currentSortBy = _initialSortBy;
+            }
+
+            if (!string.IsNullOrEmpty(sortAscFromUrl))
+            {
+                _initialSortAscending = sortAscFromUrl.ToLower() != "false";
+                _currentSortAscending = _initialSortAscending;
+            }
+
+            // Parse initial page
+            if (!string.IsNullOrEmpty(pageFromUrl) && int.TryParse(pageFromUrl, out int page) && page > 0)
+            {
+                _initialPage = page;
+                _currentPage = page;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error parsing URL parameters");
         }
     }
 
@@ -262,16 +339,75 @@
 
     private void OnMobilePathChanged(string path)
     {
+        // Reset page when navigating to a different folder
+        _currentPage = 1;
+        UpdateUrlWithState(path, _currentSearch, _currentFilters, _currentSortBy, _currentSortAscending, _currentPage);
+    }
+
+    private void OnMobileFilterChanged(MfmFilterChangedEventArgs args)
+    {
+        _currentSearch = args.SearchText;
+        _currentFilters = args.TypeFilters;
+        _currentSortBy = args.SortBy;
+        _currentSortAscending = args.SortAscending;
+        _currentPage = args.CurrentPage;
+
+        var path = mobileFileManager?.Path ?? "/";
+        UpdateUrlWithState(path, _currentSearch, _currentFilters, _currentSortBy, _currentSortAscending, _currentPage);
+    }
+
+    private void UpdateUrlWithState(string path, string search, HashSet<string> filters, string sortBy = "Name", bool sortAscending = true, int page = 1)
+    {
         try
         {
-            // Update URL without triggering navigation
             var baseUri = MyNavigationManager.Uri.Split('?')[0];
-            var newUrl = path == "/" ? baseUri : $"{baseUri}?path={Uri.EscapeDataString(path)}";
+            var queryParams = new List<string>();
+
+            // Add path if not root
+            if (path != "/")
+            {
+                queryParams.Add($"path={Uri.EscapeDataString(path)}");
+            }
+
+            // Add search if not empty
+            if (!string.IsNullOrEmpty(search))
+            {
+                queryParams.Add($"search={Uri.EscapeDataString(search)}");
+            }
+
+            // Add filters if any selected
+            if (filters.Count > 0)
+            {
+                queryParams.Add($"filters={Uri.EscapeDataString(string.Join(",", filters))}");
+            }
+
+            // Add sortBy if not default
+            if (sortBy != "Name")
+            {
+                queryParams.Add($"sortBy={Uri.EscapeDataString(sortBy)}");
+            }
+
+            // Add sortAsc if not default (ascending)
+            if (!sortAscending)
+            {
+                queryParams.Add("sortAsc=false");
+            }
+
+            // Add page if not first page
+            if (page > 1)
+            {
+                queryParams.Add($"page={page}");
+            }
+
+            var newUrl = queryParams.Count > 0
+                ? $"{baseUri}?{string.Join("&", queryParams)}"
+                : baseUri;
+
             MyNavigationManager.NavigateTo(newUrl, forceLoad: false, replace: true);
         }
         catch (Exception ex)
         {
-            Logger.LogError(ex, "Error updating URL with path");
+            Logger.LogError(ex, "Error updating URL with state");
         }
     }
 

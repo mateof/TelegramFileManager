@@ -104,7 +104,8 @@
             InitialSearch="@_initialSearch"
             InitialFilters="@_initialFilters"
             InitialSortBy="@_initialSortBy"
-            InitialSortAscending="@_initialSortAscending" />
+            InitialSortAscending="@_initialSortAscending"
+            InitialPage="@_initialPage" />
     </div>
 }
 
@@ -174,15 +175,17 @@
     private bool _firstRenderComplete = false;
     private bool _needsRefresh = false;
 
-    // URL state for filters, search, and sorting
+    // URL state for filters, search, sorting, and pagination
     private string _initialSearch = string.Empty;
     private HashSet<string> _initialFilters = new();
     private string _initialSortBy = "Name";
     private bool _initialSortAscending = true;
+    private int _initialPage = 1;
     private string _currentSearch = string.Empty;
     private HashSet<string> _currentFilters = new();
     private string _currentSortBy = "Name";
     private bool _currentSortAscending = true;
+    private int _currentPage = 1;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -247,6 +250,14 @@
             {
                 _initialSortAscending = sortAscFromUrl.ToLower() != "false";
                 _currentSortAscending = _initialSortAscending;
+            }
+
+            // Parse initial page
+            var pageFromUrl = query["page"];
+            if (!string.IsNullOrEmpty(pageFromUrl) && int.TryParse(pageFromUrl, out int page) && page > 0)
+            {
+                _initialPage = page;
+                _currentPage = page;
             }
         }
         catch (Exception ex)
@@ -350,7 +361,9 @@
     {
         try
         {
-            UpdateUrlWithState(path, _currentSearch, _currentFilters, _currentSortBy, _currentSortAscending);
+            // Reset page to 1 when navigating to a different folder
+            _currentPage = 1;
+            UpdateUrlWithState(path, _currentSearch, _currentFilters, _currentSortBy, _currentSortAscending, _currentPage);
         }
         catch (Exception ex)
         {
@@ -366,10 +379,11 @@
             _currentFilters = args.TypeFilters;
             _currentSortBy = args.SortBy;
             _currentSortAscending = args.SortAscending;
+            _currentPage = args.CurrentPage;
 
             // Get current path from mobile file manager
             var currentPath = mobileFileManager?.Path ?? "/";
-            UpdateUrlWithState(currentPath, _currentSearch, _currentFilters, _currentSortBy, _currentSortAscending);
+            UpdateUrlWithState(currentPath, _currentSearch, _currentFilters, _currentSortBy, _currentSortAscending, _currentPage);
         }
         catch (Exception ex)
         {
@@ -377,7 +391,7 @@
         }
     }
 
-    private void UpdateUrlWithState(string path, string search, HashSet<string> filters, string sortBy = "Name", bool sortAscending = true)
+    private void UpdateUrlWithState(string path, string search, HashSet<string> filters, string sortBy = "Name", bool sortAscending = true, int page = 1)
     {
         var baseUri = MyNavigationManager.Uri.Split('?')[0];
         var queryParams = new List<string>();
@@ -410,6 +424,12 @@
         if (!sortAscending)
         {
             queryParams.Add("sortAsc=false");
+        }
+
+        // Add page if not first page
+        if (page > 1)
+        {
+            queryParams.Add($"page={page}");
         }
 
         var newUrl = queryParams.Count > 0 ? $"{baseUri}?{string.Join("&", queryParams)}" : baseUri;
