@@ -110,9 +110,21 @@ namespace TelegramDownloader.Services
                 return;
             }
 
-            _logger.LogInformation("Telegram session is ready - proceeding to resume tasks");
+            _logger.LogInformation("Telegram session is ready - proceeding with startup tasks");
             _hasResumedTasks = true;
 
+            // Preload channels first - this ensures they're available for API calls
+            _logger.LogInformation("========== Preloading channels ==========");
+            try
+            {
+                await telegramService.PreloadChannelsAsync();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error preloading channels: {Message}", ex.Message);
+            }
+
+            // Then resume pending tasks
             await ResumeTasksAsync(_cancellationToken);
         }
 

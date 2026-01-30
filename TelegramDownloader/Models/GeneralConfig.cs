@@ -25,9 +25,11 @@ namespace TelegramDownloader.Models
                 gc.MemorySplitSizeGB = gc.SplitSize;
             }
 
-            // Ensure MemorySplitSizeGB is within valid range (1-4 GB)
+            // Ensure MemorySplitSizeGB is within valid range based on Telegram limits
+            // Premium: max 4, Non-premium: max 2 (same as Telegram file size limits)
+            int maxAllowedSize = TelegramService.isPremium ? 4 : 2;
             if (gc.MemorySplitSizeGB < 1) gc.MemorySplitSizeGB = 1;
-            if (gc.MemorySplitSizeGB > 4) gc.MemorySplitSizeGB = 4;
+            if (gc.MemorySplitSizeGB > maxAllowedSize) gc.MemorySplitSizeGB = maxAllowedSize;
 
             await db.SaveConfig(gc);
             config = gc;
@@ -131,8 +133,10 @@ namespace TelegramDownloader.Models
         public bool EnableMemorySplitUpload { get; set; } = false;
 
         /// <summary>
-        /// Size in GB for each memory chunk when uploading large files (1-4 GB).
+        /// Size in GB for each memory chunk when uploading large files.
+        /// Premium accounts: 1-4 GB, Non-premium: 1-2 GB.
         /// Only used when EnableMemorySplitUpload is true.
+        /// Note: Uses Telegram's actual size limits (1GB = 1024*1024*1000 bytes, not 1024^3).
         /// </summary>
         public int MemorySplitSizeGB { get; set; } = 2;
 

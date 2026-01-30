@@ -138,6 +138,15 @@ namespace TelegramDownloader.Shared.MobileFileManager
         [Parameter]
         public HashSet<string> InitialFilters { get; set; } = new();
 
+        [Parameter]
+        public string InitialSortBy { get; set; } = "Name";
+
+        [Parameter]
+        public bool InitialSortAscending { get; set; } = true;
+
+        [Parameter]
+        public int InitialPage { get; set; } = 1;
+
         #endregion
 
         #region State
@@ -233,6 +242,19 @@ namespace TelegramDownloader.Shared.MobileFileManager
             if (InitialFilters.Count > 0)
             {
                 SelectedTypeFilters = new HashSet<string>(InitialFilters);
+            }
+
+            // Initialize sort from URL parameters
+            if (!string.IsNullOrEmpty(InitialSortBy))
+            {
+                SortBy = InitialSortBy;
+            }
+            SortAscending = InitialSortAscending;
+
+            // Initialize page from URL parameters
+            if (InitialPage > 0)
+            {
+                CurrentPage = InitialPage;
             }
 
             await LoadFiles();
@@ -1276,7 +1298,7 @@ namespace TelegramDownloader.Shared.MobileFileManager
             await LoadFiles();
         }
 
-        private void SortFiles()
+        private async Task SortFiles()
         {
             SortBy = SortBy switch
             {
@@ -1288,14 +1310,16 @@ namespace TelegramDownloader.Shared.MobileFileManager
             };
             InvalidateDisplayFilesCache();
             ResetPagination();
+            await NotifyFilterChanged();
             StateHasChanged();
         }
 
-        private void ToggleSortDirection()
+        private async Task ToggleSortDirection()
         {
             SortAscending = !SortAscending;
             InvalidateDisplayFilesCache();
             ResetPagination();
+            await NotifyFilterChanged();
             StateHasChanged();
         }
 
@@ -1377,7 +1401,10 @@ namespace TelegramDownloader.Shared.MobileFileManager
             var args = new MfmFilterChangedEventArgs
             {
                 SearchText = SearchText,
-                TypeFilters = new HashSet<string>(SelectedTypeFilters)
+                TypeFilters = new HashSet<string>(SelectedTypeFilters),
+                SortBy = SortBy,
+                SortAscending = SortAscending,
+                CurrentPage = CurrentPage
             };
             await OnFilterChanged.InvokeAsync(args);
         }
@@ -1405,41 +1432,46 @@ namespace TelegramDownloader.Shared.MobileFileManager
 
         #region Pagination
 
-        private void GoToFirstPage()
+        private async Task GoToFirstPage()
         {
             CurrentPage = 1;
+            await NotifyFilterChanged();
             StateHasChanged();
         }
 
-        private void GoToPreviousPage()
+        private async Task GoToPreviousPage()
         {
             if (CurrentPage > 1)
             {
                 CurrentPage--;
+                await NotifyFilterChanged();
                 StateHasChanged();
             }
         }
 
-        private void GoToNextPage()
+        private async Task GoToNextPage()
         {
             if (CurrentPage < TotalPages)
             {
                 CurrentPage++;
+                await NotifyFilterChanged();
                 StateHasChanged();
             }
         }
 
-        private void GoToLastPage()
+        private async Task GoToLastPage()
         {
             CurrentPage = TotalPages;
+            await NotifyFilterChanged();
             StateHasChanged();
         }
 
-        private void GoToPage(int page)
+        private async Task GoToPage(int page)
         {
             if (page >= 1 && page <= TotalPages)
             {
                 CurrentPage = page;
+                await NotifyFilterChanged();
                 StateHasChanged();
             }
         }

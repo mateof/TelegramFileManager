@@ -129,5 +129,8 @@ namespace TelegramDownloader.Shared.MobileFileManager
     {
         public string SearchText { get; set; } = string.Empty;
         public HashSet<string> TypeFilters { get; set; } = new();
+        public string SortBy { get; set; } = "Name";
+        public bool SortAscending { get; set; } = true;
+        public int CurrentPage { get; set; } = 1;
     }
 }

@@ -1408,7 +1408,8 @@ namespace TelegramDownloader.Data
                             if (GeneralConfigStatic.config.EnableMemorySplitUpload)
                             {
                                 // Memory-based splitting - read chunks directly without creating temp files
-                                long chunkSizeBytes = (long)GeneralConfigStatic.config.MemorySplitSizeGB * 1024L * 1024L * 1024L;
+                                // Use MaxSize (Telegram's actual limit per GB unit) instead of real GB
+                                long chunkSizeBytes = (long)GeneralConfigStatic.config.MemorySplitSizeGB * MaxSize;
                                 int totalChunks = (int)Math.Ceiling((double)fileInfo.Length / chunkSizeBytes);
 
                                 _logger.LogInformation("Using memory-based split for {FileName} - {TotalChunks} chunks of {ChunkSizeGB} GB",

@@ -345,7 +345,15 @@
                                     Memory Chunk Size
                                 </div>
                                 <div class="config-item-description">
-                                    Size of each chunk when splitting in memory (1-4 GB). Must be ≤ Split Size.
+                                    Size of each chunk when splitting in memory. Must be ≤ Split Size.
+                                    @if (TelegramService.isPremium)
+                                    {
+                                        <span class="badge bg-warning text-dark ms-2">Premium: 1-4 GB</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary ms-2">1-2 GB</span>
+                                    }
                                 </div>
                             </div>
                             <div class="config-item-control">
@@ -1156,8 +1164,10 @@
 
     private int GetMaxMemorySplitSize()
     {
-        // MemorySplitSizeGB must be <= SplitSize and <= 4
-        return Math.Min(Model?.SplitSize ?? 4, 4);
+        // MemorySplitSizeGB must be <= SplitSize and <= Telegram's max file size
+        // Premium: max 4, Non-premium: max 2
+        int telegramMaxSize = TelegramService.isPremium ? 4 : 2;
+        return Math.Min(Model?.SplitSize ?? telegramMaxSize, telegramMaxSize);
     }
 
     public void Dispose()
