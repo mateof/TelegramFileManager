@@ -892,28 +892,26 @@ namespace TelegramDownloader.Shared.MobileFileManager
         {
             if (string.IsNullOrWhiteSpace(NewFolderName)) return;
 
-            // Use CurrentFolder which has the correct Id from LoadFiles response
-            FileManagerDirectoryContent parentFolder;
-            if (CurrentFolder != null)
+            // If CurrentFolder is missing or has no Id, refresh from the server first
+            if (CurrentFolder == null || string.IsNullOrEmpty(CurrentFolder.Id))
             {
-                parentFolder = new FileManagerDirectoryContent
-                {
-                    Id = CurrentFolder.Id,
-                    Name = CurrentFolder.Name,
-                    FilterPath = NormalizePath(CurrentFolder.FilterPath ?? ""),
-                    FilterId = CurrentFolder.FilterId,
-                    IsFile = false
-                };
+                await LoadFiles();
             }
-            else
+
+            // After refresh, if we still don't have a valid CurrentFolder with Id, abort
+            if (CurrentFolder == null || string.IsNullOrEmpty(CurrentFolder.Id))
             {
-                // Fallback for root - this shouldn't normally happen as LoadFiles sets CurrentFolder
-                parentFolder = new FileManagerDirectoryContent
-                {
-                    FilterPath = NormalizePath(CurrentPath),
-                    IsFile = false
-                };
+                return;
             }
+
+            var parentFolder = new FileManagerDirectoryContent
+            {
+                Id = CurrentFolder.Id,
+                Name = CurrentFolder.Name,
+                FilterPath = string.IsNullOrEmpty(CurrentFolder.FilterPath) ? "" : NormalizePath(CurrentFolder.FilterPath),
+                FilterId = CurrentFolder.FilterId ?? "",
+                IsFile = false
+            };
 
             var args = new MfmFolderCreateEventArgs
             {
