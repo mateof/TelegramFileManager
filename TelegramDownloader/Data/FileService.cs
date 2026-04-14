@@ -1623,7 +1623,7 @@ namespace TelegramDownloader.Data
                     model.HasChild = false;
                     model.DateCreated = DateTime.Now;
                     model.DateModified = DateTime.Now;
-                    model.FilterPath = (parent.FilterPath == "" || parent.FilterPath == "/")
+                    model.FilterPath = parent.FilterPath == ""
                         ? "/"
                         : string.Concat(parent.FilterPath, parent.Name, "/");
                     model.FilterId = string.Concat(parent.FilterId, parent.Id.ToString(), "/");
@@ -1881,7 +1881,7 @@ namespace TelegramDownloader.Data
                 model.HasChild = false;
                 model.DateCreated = DateTime.Now;
                 model.DateModified = DateTime.Now;
-                model.FilterPath = (parent.FilterPath == "" || parent.FilterPath == "/")
+                model.FilterPath = parent.FilterPath == ""
                     ? "/"
                     : string.Concat(parent.FilterPath, parent.Name, "/");
                 model.FilterId = string.Concat(parent.FilterId, parent.Id.ToString(), "/");
