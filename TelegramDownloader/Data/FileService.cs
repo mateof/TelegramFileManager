@@ -1073,12 +1073,18 @@ namespace TelegramDownloader.Data
 
         public async Task<List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>> createFolder(string dbName, FolderCreateEventArgs<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> args)
         {
-            return (await _db.createEntry(dbName, await _db.toBasonFile(args.Path, args.FolderName, args.ParentFolder))).Select(x => x.toFileManagerContent()).ToList();
+            var result = (await _db.createEntry(dbName, await _db.toBasonFile(args.Path, args.FolderName, args.ParentFolder))).Select(x => x.toFileManagerContent()).ToList();
+            if (!string.IsNullOrEmpty(args.ParentFolder?.Id))
+                await _db.setDirectoryHasChild(dbName, args.ParentFolder.Id);
+            return result;
         }
 
         public async Task<List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>> createFolder(string dbName, string path, string folderName, Syncfusion.Blazor.FileManager.FileManagerDirectoryContent? parentFolder)
         {
-            return (await _db.createEntry(dbName, await _db.toBasonFile(path, folderName, parentFolder))).Select(x => x.toFileManagerContent()).ToList();
+            var result = (await _db.createEntry(dbName, await _db.toBasonFile(path, folderName, parentFolder))).Select(x => x.toFileManagerContent()).ToList();
+            if (!string.IsNullOrEmpty(parentFolder?.Id))
+                await _db.setDirectoryHasChild(dbName, parentFolder.Id);
+            return result;
         }
 
         public async Task CreateDatabase(string id)
@@ -1608,12 +1614,18 @@ namespace TelegramDownloader.Data
                         }
                     }
                     BsonFileManagerModel parent = await _db.getParentDirectoryByPath(dbName, currentPath);
+                    if (parent == null)
+                    {
+                        parent = await _db.getRootFolder(dbName);
+                    }
                     model.Name = file.IsFile ? fileInfo.Name : file.Name;
                     model.IsFile = file.IsFile;
                     model.HasChild = false;
                     model.DateCreated = DateTime.Now;
                     model.DateModified = DateTime.Now;
-                    model.FilterPath = (currentPath == "/" || currentPath == "File/") ? currentPath : string.Concat(parent.FilterPath, parent.Name, "/");
+                    model.FilterPath = parent.FilterPath == ""
+                        ? "/"
+                        : string.Concat(parent.FilterPath, parent.Name, "/");
                     model.FilterId = string.Concat(parent.FilterId, parent.Id.ToString(), "/");
                     model.ParentId = parent.Id;
                     model.FilePath = System.IO.Path.Combine(currentPath, file.IsFile ? fileInfo.Name : file.Name);
@@ -1858,6 +1870,10 @@ namespace TelegramDownloader.Data
                 }
 
                 BsonFileManagerModel parent = await _db.getParentDirectoryByPath(dbName, currentPath);
+                if (parent == null)
+                {
+                    parent = await _db.getRootFolder(dbName);
+                }
                 _logger.LogDebug("Parent directory found - ParentId: {ParentId}, ParentName: {ParentName}", parent?.Id, parent?.Name);
 
                 model.Name = file.File.Name;
@@ -1865,7 +1881,9 @@ namespace TelegramDownloader.Data
                 model.HasChild = false;
                 model.DateCreated = DateTime.Now;
                 model.DateModified = DateTime.Now;
-                model.FilterPath = string.Concat(parent.FilterPath, parent.Name, "/");
+                model.FilterPath = parent.FilterPath == ""
+                    ? "/"
+                    : string.Concat(parent.FilterPath, parent.Name, "/");
                 model.FilterId = string.Concat(parent.FilterId, parent.Id.ToString(), "/");
                 model.ParentId = parent.Id;
                 model.FilePath = System.IO.Path.Combine(currentPath, file.File.Name);
