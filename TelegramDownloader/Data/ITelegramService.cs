@@ -21,6 +21,7 @@ namespace TelegramDownloader.Data
         Task<User> CallQrGenerator(Action<string> func, CancellationToken ct, bool logoutFirst = false);
         Task<string> DownloadFile(ChatMessages message, string fileName = null, string folder = null, DownloadModel model = null, bool shouldAddToList = false);
         Task<Byte[]> DownloadFileStream(Message message, long offset, int limit);
+        IAsyncEnumerable<byte[]> DownloadFileStreamChunks(Message message, long offset, long limit, CancellationToken ct = default);
         Task<Stream> DownloadFileAndReturn(ChatMessages message, Stream ms = null, string fileName = null, string folder = null, DownloadModel model = null);
         Task<Stream> DownloadFileAndReturnWithOffset(ChatMessages message, Stream ms = null, string fileName = null, string folder = null, DownloadModel model = null, long offset = 0);
         Task<List<ChatViewBase>> GetFouriteChannels(bool mustRefresh = true);
