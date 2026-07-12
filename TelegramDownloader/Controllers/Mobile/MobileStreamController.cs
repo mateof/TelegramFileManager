@@ -26,6 +26,13 @@ namespace TelegramDownloader.Controllers.Mobile
         private readonly ILogger<MobileStreamController> _logger;
         private static readonly SemaphoreSlim _downloadSemaphore = new(5); // Allow 5 concurrent downloads for preload
 
+        // Limit concurrent direct range fetches against Telegram (seeks ahead of the cache)
+        private static readonly SemaphoreSlim _telegramRangeSemaphore = new(4);
+
+        // If the requested range starts within this distance of the background download
+        // position, wait for the download instead of opening a duplicate Telegram fetch
+        private const long WAIT_PROXIMITY_BYTES = 4 * 1024 * 1024;
+
         public MobileStreamController(
             ITelegramService ts,
             IDbService db,
@@ -238,28 +245,43 @@ namespace TelegramDownloader.Controllers.Mobile
                     }
                 }
 
-                // Parse range header
+                // Parse range header (RFC 7233: bytes=X-, bytes=X-Y, bytes=-N)
                 var rangeHeader = Request.Headers["Range"].ToString();
+                long totalLength = dbFile.Size;
                 long from = 0;
-                long to = 0;
+                long? to = null;
                 bool hasRange = false;
 
-                if (!string.IsNullOrEmpty(rangeHeader) && rangeHeader.StartsWith("bytes="))
+                if (!string.IsNullOrEmpty(rangeHeader) && rangeHeader.StartsWith("bytes=") && !rangeHeader.Contains(','))
                 {
-                    hasRange = true;
-                    var range = rangeHeader.Replace("bytes=", "").Split('-');
-                    from = long.Parse(range[0]);
-                    if (range.Length > 1 && !string.IsNullOrEmpty(range[1]))
-                        to = long.Parse(range[1]);
+                    var parts = rangeHeader.Substring("bytes=".Length).Split('-');
+                    if (parts.Length == 2)
+                    {
+                        if (string.IsNullOrEmpty(parts[0]))
+                        {
+                            // Suffix range: last N bytes
+                            if (long.TryParse(parts[1], out var suffixLength) && suffixLength > 0)
+                            {
+                                from = Math.Max(0, totalLength - suffixLength);
+                                to = totalLength - 1;
+                                hasRange = true;
+                            }
+                        }
+                        else if (long.TryParse(parts[0], out var parsedFrom) && parsedFrom >= 0)
+                        {
+                            from = parsedFrom;
+                            hasRange = true;
+                            if (!string.IsNullOrEmpty(parts[1]) && long.TryParse(parts[1], out var parsedTo))
+                                to = parsedTo;
+                        }
+                    }
+                    // Malformed ranges fall through as "no range" (initial chunk)
                 }
 
-                long totalLength = dbFile.Size;
-
-                // Check how much is already cached
-                long cachedBytes = 0;
-                if (System.IO.File.Exists(filePath))
+                if (hasRange && (from >= totalLength || (to.HasValue && to.Value < from)))
                 {
-                    cachedBytes = new FileInfo(filePath).Length;
+                    Response.Headers["Content-Range"] = $"bytes */{totalLength}";
+                    return StatusCode(StatusCodes.Status416RangeNotSatisfiable);
                 }
 
                 // For initial request without Range, return first chunk as 206 with full size info
@@ -270,23 +292,59 @@ namespace TelegramDownloader.Controllers.Mobile
                     to = Math.Min(2 * 1024 * 1024, totalLength - 1); // First 2MB
                 }
 
-                // Handle Range request
-                if (to == 0 || to >= totalLength)
+                // Open-ended or oversized ranges: cap the response to ~2.5MB
+                long rangeEnd = (!to.HasValue || to.Value >= totalLength)
+                    ? Math.Min(from + (5 * 524288), totalLength - 1)
+                    : to.Value;
+
+                // Kick off (or attach to) the background download that fills the disk cache,
+                // so every streamed track ends up cached and is downloaded from Telegram once
+                ProgressiveDownloadInfo downloadInfo = null;
+                if (dbFile.MessageId.HasValue)
                 {
-                    // Open-ended range
-                    to = Math.Min(from + (5 * 524288), totalLength - 1); // ~2.5MB chunk
+                    try
+                    {
+                        downloadInfo = await _progressiveDownload.StartOrGetDownloadAsync(cacheFileName, channelId, dbFile, filePath);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Could not start background cache download for {FileName}", name);
+                    }
                 }
 
-                // Check if range is available locally
+                long CachedBytes()
+                {
+                    long onDisk = System.IO.File.Exists(filePath) ? new FileInfo(filePath).Length : 0;
+                    return Math.Max(onDisk, downloadInfo?.DownloadedBytes ?? 0);
+                }
+
+                // If the background download is nearby, wait briefly for it to cover the
+                // range start instead of opening a duplicate Telegram download. This is the
+                // normal sequential-playback path: same latency as a direct fetch (both pull
+                // sequential 512KB chunks), but the bytes get persisted.
+                if (downloadInfo != null && downloadInfo.IsDownloading &&
+                    from - CachedBytes() <= WAIT_PROXIMITY_BYTES)
+                {
+                    var waitTarget = Math.Min(rangeEnd, from + 524288); // at least 512KB past the start
+                    var deadline = DateTime.UtcNow.AddSeconds(12);
+                    while (downloadInfo.IsDownloading &&
+                           downloadInfo.DownloadedBytes <= waitTarget &&
+                           DateTime.UtcNow < deadline)
+                    {
+                        await Task.Delay(150, HttpContext.RequestAborted);
+                    }
+                }
+
+                var cachedBytes = CachedBytes();
+
+                // Serve from the (possibly still growing) cache file
                 if (from < cachedBytes)
                 {
-                    // Part or all of range is in cache
-                    var availableEnd = Math.Min(to, cachedBytes - 1);
+                    var availableEnd = Math.Min(rangeEnd, cachedBytes - 1);
                     var length = availableEnd - from + 1;
 
                     _logger.LogDebug("Serving from cache: bytes {From}-{To} of {Total}", from, availableEnd, totalLength);
 
-                    // Read from cache file
                     using var cacheStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
                     cacheStream.Seek(from, SeekOrigin.Begin);
                     var buffer = new byte[length];
@@ -303,10 +361,10 @@ namespace TelegramDownloader.Controllers.Mobile
                     return new EmptyResult();
                 }
 
-                // Range not in cache - stream from Telegram
-                _logger.LogDebug("Streaming from Telegram: bytes {From}-{To} of {Total}", from, to, totalLength);
+                // Range far ahead of the background download (seek): fetch it directly from
+                // Telegram, streaming each 512KB chunk to the response as it arrives
+                _logger.LogDebug("Streaming from Telegram: bytes {From}-{To} of {Total}", from, rangeEnd, totalLength);
 
-                // Get message from Telegram
                 if (!dbFile.MessageId.HasValue)
                 {
                     return NotFound(ApiResponse<object>.Fail("File has no MessageId"));
@@ -318,34 +376,52 @@ namespace TelegramDownloader.Controllers.Mobile
                     return NotFound(ApiResponse<object>.Fail("Message not found in Telegram"));
                 }
 
-                // Align to 512KB boundaries for Telegram
+                // Align down to 512KB for Telegram; skip the prefix when writing the response
                 var alignedFrom = (from / 524288) * 524288;
-                var alignedTo = ((to + 524288) / 524288) * 524288;
-                if (alignedTo > totalLength) alignedTo = totalLength;
-
-                var downloadLength = alignedTo - alignedFrom;
-
-                // Download the range from Telegram
-                byte[] data = await _ts.DownloadFileStream(message, alignedFrom, (int)downloadLength);
-
-                // Calculate skip bytes to get to the exact requested position
                 var skipBytes = from - alignedFrom;
-                var responseLength = Math.Min(to - from + 1, data.Length - skipBytes);
+                var responseLength = rangeEnd - from + 1;
 
-                if (skipBytes < 0 || skipBytes >= data.Length)
+                await _telegramRangeSemaphore.WaitAsync(HttpContext.RequestAborted);
+                try
                 {
-                    _logger.LogError("Invalid skip calculation: skipBytes={Skip}, dataLength={DataLen}", skipBytes, data.Length);
-                    return StatusCode(500, "Error calculating response range");
+                    Response.StatusCode = StatusCodes.Status206PartialContent;
+                    Response.ContentType = mimeType;
+                    Response.ContentLength = responseLength;
+                    Response.Headers["Content-Range"] = $"bytes {from}-{rangeEnd}/{totalLength}";
+                    Response.Headers["Accept-Ranges"] = "bytes";
+                    Response.Headers["Content-Disposition"] = $"inline; filename=\"{HttpUtility.UrlEncode(name)}\"";
+
+                    long remainingSkip = skipBytes;
+                    long remainingWrite = responseLength;
+
+                    await foreach (var chunk in _ts.DownloadFileStreamChunks(
+                        message, alignedFrom, skipBytes + responseLength, HttpContext.RequestAborted))
+                    {
+                        int start = 0;
+                        int length = chunk.Length;
+
+                        if (remainingSkip > 0)
+                        {
+                            var toSkip = (int)Math.Min(remainingSkip, length);
+                            start += toSkip;
+                            length -= toSkip;
+                            remainingSkip -= toSkip;
+                        }
+
+                        if (length <= 0) continue;
+
+                        var toWrite = (int)Math.Min(length, remainingWrite);
+                        await Response.Body.WriteAsync(chunk, start, toWrite, HttpContext.RequestAborted);
+                        remainingWrite -= toWrite;
+
+                        if (remainingWrite <= 0) break;
+                    }
+                }
+                finally
+                {
+                    _telegramRangeSemaphore.Release();
                 }
 
-                Response.StatusCode = StatusCodes.Status206PartialContent;
-                Response.ContentType = mimeType;
-                Response.ContentLength = responseLength;
-                Response.Headers["Content-Range"] = $"bytes {from}-{from + responseLength - 1}/{totalLength}";
-                Response.Headers["Accept-Ranges"] = "bytes";
-                Response.Headers["Content-Disposition"] = $"inline; filename=\"{HttpUtility.UrlEncode(name)}\"";
-
-                await Response.Body.WriteAsync(data, (int)skipBytes, (int)responseLength);
                 return new EmptyResult();
             }
             catch (OperationCanceledException)

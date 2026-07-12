@@ -8,6 +8,7 @@ using Syncfusion.Blazor.Schedule;
 using Syncfusion.Blazor.Sparkline.Internal;
 using System.Collections.Generic;
 using System.Reflection.Metadata;
+using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 using System.Threading.Tasks;
 using TelegramDownloader.Data.db;
@@ -1124,6 +1125,62 @@ namespace TelegramDownloader.Data
             }
 
             throw new ArgumentException("Invalid message or media type.");
+        }
+
+        /// <summary>
+        /// Streams a byte range from Telegram in 512KB chunks, yielding each chunk as it
+        /// arrives instead of buffering the whole range in memory. Offset must be 4KB-aligned
+        /// (callers align to 512KB). Stops early if Telegram signals end of file.
+        /// </summary>
+        public async IAsyncEnumerable<byte[]> DownloadFileStreamChunks(Message message, long offset, long limit, [EnumeratorCancellation] CancellationToken ct = default)
+        {
+            _logger.LogDebug("DownloadFileStreamChunks - Offset: {Offset}, Limit: {Limit}", offset, limit);
+
+            if (message is not Message msg || msg.media is not MessageMediaDocument doc)
+                throw new ArgumentException("Invalid message or media type.");
+
+            InputDocument inputFile = doc.document;
+            long currentOffset = offset;
+            long remaining = limit;
+
+            while (remaining > 0)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                var location = new InputDocumentFileLocation
+                {
+                    id = inputFile.id,
+                    access_hash = inputFile.access_hash,
+                    file_reference = inputFile.file_reference,
+                    thumb_size = ""
+                };
+
+                Upload_FileBase file;
+                try
+                {
+                    file = await client.Upload_GetFile(location, currentOffset, limit: FILESPLITSIZE);
+                }
+                catch (RpcException ex) when (ex.Code == 303 && ex.Message == "FILE_MIGRATE_X")
+                {
+                    var dcClient = await client.GetClientForDC(-ex.X, true);
+                    file = await dcClient.Upload_GetFile(location, currentOffset, limit: FILESPLITSIZE);
+                }
+
+                if (file is not Upload_File uploadFile)
+                    throw new InvalidOperationException("Unexpected file type returned.");
+
+                if (uploadFile.bytes.Length == 0)
+                    yield break;
+
+                yield return uploadFile.bytes;
+
+                currentOffset += uploadFile.bytes.Length;
+                remaining -= uploadFile.bytes.Length;
+
+                // Telegram returns fewer bytes than requested only at end of file
+                if (uploadFile.bytes.Length < FILESPLITSIZE)
+                    yield break;
+            }
         }
 
         public async Task<Stream> DownloadFileAndReturn(ChatMessages message, Stream ms = null, string fileName = null, string folder = null, DownloadModel model = null)

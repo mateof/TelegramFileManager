@@ -60,6 +60,11 @@ namespace TelegramDownloader.Services
         // Lock for starting downloads
         private readonly ConcurrentDictionary<string, SemaphoreSlim> _downloadLocks = new();
 
+        // Cache directory size cap: oldest files are evicted first (by write time)
+        private const long MAX_CACHE_BYTES = 10L * 1024 * 1024 * 1024; // 10 GB
+        private static DateTime _lastCleanup = DateTime.MinValue;
+        private static readonly object _cleanupLock = new();
+
         public ProgressiveDownloadService(
             ITelegramService ts,
             TransactionInfoService tis,
@@ -89,12 +94,6 @@ namespace TelegramDownloader.Services
         {
             if (!_activeDownloads.TryGetValue(cacheKey, out var info))
             {
-                // Check if file exists and is complete
-                if (File.Exists(info?.FilePath ?? ""))
-                {
-                    var fileInfo = new FileInfo(info!.FilePath);
-                    return end <= fileInfo.Length;
-                }
                 return false;
             }
 
@@ -111,7 +110,12 @@ namespace TelegramDownloader.Services
             // Quick check if already complete
             if (_activeDownloads.TryGetValue(cacheKey, out var existingInfo) && existingInfo.IsComplete)
             {
-                return existingInfo;
+                if (File.Exists(existingInfo.FilePath))
+                {
+                    return existingInfo;
+                }
+                // Cache file was evicted: forget the stale entry and re-download
+                _activeDownloads.TryRemove(cacheKey, out _);
             }
 
             // Check if file already exists and is complete
@@ -143,7 +147,8 @@ namespace TelegramDownloader.Services
                 // Double-check after acquiring lock
                 if (_activeDownloads.TryGetValue(cacheKey, out existingInfo))
                 {
-                    if (existingInfo.IsComplete || existingInfo.IsDownloading)
+                    if (existingInfo.IsDownloading ||
+                        (existingInfo.IsComplete && File.Exists(existingInfo.FilePath)))
                     {
                         return existingInfo;
                     }
@@ -234,7 +239,9 @@ namespace TelegramDownloader.Services
 
                 // Download in chunks
                 const int chunkSize = 512 * 1024; // 512KB chunks
+                const int maxConsecutiveErrors = 5;
                 var chatMessage = new ChatMessages { message = message };
+                var consecutiveErrors = 0;
 
                 while (info.DownloadedBytes < info.TotalSize && !info.CancellationTokenSource!.Token.IsCancellationRequested)
                 {
@@ -255,6 +262,7 @@ namespace TelegramDownloader.Services
 
                         info.DownloadedBytes += chunk.Length;
                         dm._transmitted = info.DownloadedBytes;
+                        consecutiveErrors = 0;
 
                         // Log progress every 10%
                         var progress = (double)info.DownloadedBytes / info.TotalSize * 100;
@@ -266,9 +274,19 @@ namespace TelegramDownloader.Services
                     }
                     catch (Exception ex) when (ex is not OperationCanceledException)
                     {
-                        _logger.LogError(ex, "Error downloading chunk at offset {Offset}", info.DownloadedBytes);
-                        // Wait a bit and retry
-                        await Task.Delay(1000);
+                        consecutiveErrors++;
+                        _logger.LogError(ex, "Error downloading chunk at offset {Offset} (attempt {Attempt}/{Max})",
+                            info.DownloadedBytes, consecutiveErrors, maxConsecutiveErrors);
+
+                        if (consecutiveErrors >= maxConsecutiveErrors)
+                        {
+                            _logger.LogError("Aborting background download after {Max} consecutive failures: {CacheKey}",
+                                maxConsecutiveErrors, info.CacheKey);
+                            break;
+                        }
+
+                        // Back off progressively before retrying
+                        await Task.Delay(1000 * consecutiveErrors);
                     }
                 }
 
@@ -280,6 +298,11 @@ namespace TelegramDownloader.Services
                     Path.GetFileName(info.FilePath),
                     info.DownloadedBytes,
                     info.TotalSize);
+
+                if (info.IsComplete && !string.IsNullOrEmpty(directory))
+                {
+                    _ = Task.Run(() => TrimCacheDirectory(directory));
+                }
             }
             catch (OperationCanceledException)
             {
@@ -290,6 +313,68 @@ namespace TelegramDownloader.Services
             {
                 _logger.LogError(ex, "Error in background download: {CacheKey}", info.CacheKey);
                 info.IsDownloading = false;
+            }
+        }
+
+        /// <summary>
+        /// Keeps the streaming cache directory under MAX_CACHE_BYTES, deleting the
+        /// oldest files first (by write time). Files being downloaded are skipped.
+        /// Throttled to run at most every 30 minutes.
+        /// </summary>
+        private void TrimCacheDirectory(string directory)
+        {
+            lock (_cleanupLock)
+            {
+                if (DateTime.UtcNow - _lastCleanup < TimeSpan.FromMinutes(30)) return;
+                _lastCleanup = DateTime.UtcNow;
+            }
+
+            try
+            {
+                var files = new DirectoryInfo(directory).GetFiles();
+                var totalSize = files.Sum(f => f.Length);
+                if (totalSize <= MAX_CACHE_BYTES) return;
+
+                var activePaths = _activeDownloads.Values
+                    .Where(i => i.IsDownloading)
+                    .Select(i => i.FilePath)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                var removed = 0;
+                foreach (var file in files.OrderBy(f => f.LastWriteTimeUtc))
+                {
+                    if (totalSize <= MAX_CACHE_BYTES) break;
+                    if (activePaths.Contains(file.FullName)) continue;
+
+                    try
+                    {
+                        var size = file.Length;
+                        file.Delete();
+                        totalSize -= size;
+                        removed++;
+
+                        // Drop any stale tracking entry pointing at the deleted file
+                        var stale = _activeDownloads.FirstOrDefault(kv =>
+                            string.Equals(kv.Value.FilePath, file.FullName, StringComparison.OrdinalIgnoreCase));
+                        if (stale.Key != null)
+                        {
+                            _activeDownloads.TryRemove(stale.Key, out _);
+                        }
+                    }
+                    catch (IOException)
+                    {
+                        // File in use (e.g. being served): skip it
+                    }
+                }
+
+                if (removed > 0)
+                {
+                    _logger.LogInformation("Cache trim: removed {Count} files from {Directory}", removed, directory);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Cache trim failed for {Directory}", directory);
             }
         }
     }
