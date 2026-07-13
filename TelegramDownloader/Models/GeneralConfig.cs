@@ -12,6 +12,27 @@ using TelegramDownloader.Services;
 
 namespace TelegramDownloader.Models
 {
+    /// <summary>
+    /// How exported STRM files (Emby/Kodi/etc.) play media from Telegram.
+    /// </summary>
+    public enum StreamingMode
+    {
+        /// <summary>
+        /// Stream chunks directly from Telegram on demand. Playback starts immediately,
+        /// nothing is stored on disk, but every play re-downloads from Telegram.
+        /// </summary>
+        DirectStream = 0,
+        /// <summary>
+        /// Stream immediately while a background download fills the local cache.
+        /// Playback starts from second one and subsequent plays are served from disk.
+        /// </summary>
+        ProgressiveCache = 1,
+        /// <summary>
+        /// Download the whole file to the local cache before playback starts (legacy behavior).
+        /// </summary>
+        Preload = 2
+    }
+
     public class GeneralConfigStatic
     {
         public static GeneralConfig config { get; set; } = new GeneralConfig();
@@ -30,6 +51,10 @@ namespace TelegramDownloader.Models
             int maxAllowedSize = TelegramService.isPremium ? 4 : 2;
             if (gc.MemorySplitSizeGB < 1) gc.MemorySplitSizeGB = 1;
             if (gc.MemorySplitSizeGB > maxAllowedSize) gc.MemorySplitSizeGB = maxAllowedSize;
+
+            // Keep the legacy flag in sync so older builds reading this config behave the same
+            if (gc.StrmStreamingMode.HasValue)
+                gc.PreloadFilesOnStream = gc.StrmStreamingMode.Value == StreamingMode.Preload;
 
             await db.SaveConfig(gc);
             config = gc;
@@ -97,6 +122,19 @@ namespace TelegramDownloader.Models
         public bool ShouldShowCaptionPath { get; set; } = false;
         public bool ShouldShowLogInTerminal { get; set; } = false;
         public bool PreloadFilesOnStream { get; set; } = false;
+        /// <summary>
+        /// Streaming mode used by exported STRM files. Null means "not set yet":
+        /// the effective mode is then derived from the legacy PreloadFilesOnStream flag.
+        /// </summary>
+        [BsonRepresentation(BsonType.String)]
+        public StreamingMode? StrmStreamingMode { get; set; } = null;
+
+        public StreamingMode GetEffectiveStreamingMode()
+        {
+            if (StrmStreamingMode.HasValue)
+                return StrmStreamingMode.Value;
+            return PreloadFilesOnStream ? StreamingMode.Preload : StreamingMode.DirectStream;
+        }
         public bool ShouldShowPaginatedFileChannel { get; set; } = false;
         public bool hasFileManagerVirtualScroll { get; set; } = false;
         public bool UseMobileFileManagerAlways { get; set; } = false;

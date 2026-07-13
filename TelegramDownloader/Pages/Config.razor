@@ -252,14 +252,24 @@
                         <div class="config-item-info">
                             <div class="config-item-label">
                                 <i class="bi bi-lightning"></i>
-                                Preload Files on Stream
+                                Streaming Mode (STRM / Emby / Kodi)
                             </div>
                             <div class="config-item-description">
-                                Automatically preload files to cache when streaming
+                                How exported .strm files play media from Telegram:
+                                <ul class="mb-0 mt-1" style="padding-left: 1.1rem;">
+                                    <li><strong>Direct streaming:</strong> plays instantly, chunks are fetched from Telegram on demand, nothing is stored on disk. Each play re-downloads from Telegram.</li>
+                                    <li><strong>Progressive cache:</strong> plays instantly while the file is downloaded to the local cache in the background. Next plays are served from disk. <span class="badge bg-success">Recommended</span></li>
+                                    <li><strong>Full preload:</strong> downloads the whole file before playback starts (legacy behavior).</li>
+                                </ul>
+                                <span class="text-muted d-block mt-1">Applies to newly exported STRM files and to playback through the streaming endpoints. Files smaller than "Max. Preload File Size" are always fully preloaded.</span>
                             </div>
                         </div>
                         <div class="config-item-control">
-                            <InputCheckbox @bind-Value="Model!.PreloadFilesOnStream" class="form-check-input config-switch" />
+                            <InputSelect @bind-Value="StreamingModeSetting" class="form-select" style="min-width: 190px;">
+                                <option value="@StreamingMode.DirectStream">Direct streaming</option>
+                                <option value="@StreamingMode.ProgressiveCache">Progressive cache</option>
+                                <option value="@StreamingMode.Preload">Full preload</option>
+                            </InputSelect>
                         </div>
                     </div>
                 </div>
@@ -913,6 +923,23 @@
 
 @code {
     public GeneralConfig Model { get; set; }
+
+    /// <summary>
+    /// Proxy for the STRM streaming mode: reads the effective mode (falling back to the
+    /// legacy PreloadFilesOnStream flag) and keeps that flag in sync when changed.
+    /// </summary>
+    private StreamingMode StreamingModeSetting
+    {
+        get => Model?.GetEffectiveStreamingMode() ?? StreamingMode.DirectStream;
+        set
+        {
+            if (Model != null)
+            {
+                Model.StrmStreamingMode = value;
+                Model.PreloadFilesOnStream = value == StreamingMode.Preload;
+            }
+        }
+    }
     private bool _disposed = false;
     private bool isRestarting = false;
 
