@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using TelegramDownloader.Data;
 using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
+using TL;
 
 namespace TelegramDownloader.Services
 {
@@ -197,18 +198,12 @@ namespace TelegramDownloader.Services
                     Directory.CreateDirectory(directory);
                 }
 
-                // Get message from Telegram
-                if (!dbFile.MessageId.HasValue)
+                // Ordered list of Telegram messages that make up this file
+                // (split files span several messages, one document per part)
+                var messageIds = GetMessageIds(dbFile);
+                if (messageIds == null || messageIds.Count == 0)
                 {
                     _logger.LogError("File has no MessageId: {CacheKey}", info.CacheKey);
-                    info.IsDownloading = false;
-                    return;
-                }
-
-                var message = await _ts.getMessageFile(channelId, dbFile.MessageId.Value);
-                if (message == null)
-                {
-                    _logger.LogError("Message not found in Telegram: {CacheKey}", info.CacheKey);
                     info.IsDownloading = false;
                     return;
                 }
@@ -220,9 +215,10 @@ namespace TelegramDownloader.Services
                     FileAccess.Write,
                     FileShare.Read);
 
-                // Resume from where we left off if file partially exists
-                var startOffset = fileStream.Length;
-                fileStream.Seek(0, SeekOrigin.End);
+                // Resume from where we left off if file partially exists.
+                // Align down to 512KB so per-part offsets stay Telegram-aligned.
+                var startOffset = (fileStream.Length / 524288) * 524288;
+                fileStream.Seek(startOffset, SeekOrigin.Begin);
                 info.DownloadedBytes = startOffset;
 
                 // Create download model for progress tracking
@@ -237,57 +233,87 @@ namespace TelegramDownloader.Services
                 };
                 _tis.addToDownloadList(dm);
 
-                // Download in chunks
+                // Download in chunks, part by part (a single-message file is just one part)
                 const int chunkSize = 512 * 1024; // 512KB chunks
                 const int maxConsecutiveErrors = 5;
-                var chatMessage = new ChatMessages { message = message };
                 var consecutiveErrors = 0;
+                var aborted = false;
+                long partStartGlobal = 0;
+                var ct = info.CancellationTokenSource!.Token;
 
-                while (info.DownloadedBytes < info.TotalSize && !info.CancellationTokenSource!.Token.IsCancellationRequested)
+                foreach (var msgId in messageIds)
                 {
-                    var remaining = info.TotalSize - info.DownloadedBytes;
-                    var toDownload = (int)Math.Min(chunkSize, remaining);
+                    if (aborted || ct.IsCancellationRequested)
+                        break;
 
-                    try
+                    var message = await _ts.getMessageFile(channelId, msgId);
+                    var partSize = GetDocumentSize(message);
+                    if (message == null || partSize <= 0)
                     {
-                        var chunk = await _ts.DownloadFileStream(message, info.DownloadedBytes, toDownload);
-                        if (chunk.Length == 0)
+                        _logger.LogError("Message {MessageId} not found in Telegram or has no document: {CacheKey}", msgId, info.CacheKey);
+                        aborted = true;
+                        break;
+                    }
+
+                    // Part already fully cached (resume): skip it
+                    if (info.DownloadedBytes >= partStartGlobal + partSize)
+                    {
+                        partStartGlobal += partSize;
+                        continue;
+                    }
+
+                    var localOffset = info.DownloadedBytes - partStartGlobal;
+
+                    while (localOffset < partSize && !ct.IsCancellationRequested)
+                    {
+                        var toDownload = (int)Math.Min(chunkSize, partSize - localOffset);
+
+                        try
                         {
-                            _logger.LogWarning("Received empty chunk at offset {Offset}", info.DownloadedBytes);
-                            break;
+                            var chunk = await _ts.DownloadFileStream(message, localOffset, toDownload);
+                            if (chunk.Length == 0)
+                            {
+                                _logger.LogWarning("Received empty chunk at offset {Offset} of message {MessageId}", localOffset, msgId);
+                                aborted = true;
+                                break;
+                            }
+
+                            await fileStream.WriteAsync(chunk, 0, chunk.Length, ct);
+                            await fileStream.FlushAsync(ct);
+
+                            localOffset += chunk.Length;
+                            info.DownloadedBytes = partStartGlobal + localOffset;
+                            dm._transmitted = info.DownloadedBytes;
+                            consecutiveErrors = 0;
+
+                            // Log progress every 10%
+                            var progress = (double)info.DownloadedBytes / info.TotalSize * 100;
+                            if ((int)progress % 10 == 0)
+                            {
+                                _logger.LogDebug("Download progress: {FileName} - {Progress:F1}%",
+                                    Path.GetFileName(info.FilePath), progress);
+                            }
                         }
-
-                        await fileStream.WriteAsync(chunk, 0, chunk.Length, info.CancellationTokenSource.Token);
-                        await fileStream.FlushAsync(info.CancellationTokenSource.Token);
-
-                        info.DownloadedBytes += chunk.Length;
-                        dm._transmitted = info.DownloadedBytes;
-                        consecutiveErrors = 0;
-
-                        // Log progress every 10%
-                        var progress = (double)info.DownloadedBytes / info.TotalSize * 100;
-                        if ((int)progress % 10 == 0)
+                        catch (Exception ex) when (ex is not OperationCanceledException)
                         {
-                            _logger.LogDebug("Download progress: {FileName} - {Progress:F1}%",
-                                Path.GetFileName(info.FilePath), progress);
+                            consecutiveErrors++;
+                            _logger.LogError(ex, "Error downloading chunk at offset {Offset} of message {MessageId} (attempt {Attempt}/{Max})",
+                                localOffset, msgId, consecutiveErrors, maxConsecutiveErrors);
+
+                            if (consecutiveErrors >= maxConsecutiveErrors)
+                            {
+                                _logger.LogError("Aborting background download after {Max} consecutive failures: {CacheKey}",
+                                    maxConsecutiveErrors, info.CacheKey);
+                                aborted = true;
+                                break;
+                            }
+
+                            // Back off progressively before retrying
+                            await Task.Delay(1000 * consecutiveErrors);
                         }
                     }
-                    catch (Exception ex) when (ex is not OperationCanceledException)
-                    {
-                        consecutiveErrors++;
-                        _logger.LogError(ex, "Error downloading chunk at offset {Offset} (attempt {Attempt}/{Max})",
-                            info.DownloadedBytes, consecutiveErrors, maxConsecutiveErrors);
 
-                        if (consecutiveErrors >= maxConsecutiveErrors)
-                        {
-                            _logger.LogError("Aborting background download after {Max} consecutive failures: {CacheKey}",
-                                maxConsecutiveErrors, info.CacheKey);
-                            break;
-                        }
-
-                        // Back off progressively before retrying
-                        await Task.Delay(1000 * consecutiveErrors);
-                    }
+                    partStartGlobal += partSize;
                 }
 
                 info.IsComplete = info.DownloadedBytes >= info.TotalSize;
@@ -314,6 +340,22 @@ namespace TelegramDownloader.Services
                 _logger.LogError(ex, "Error in background download: {CacheKey}", info.CacheKey);
                 info.IsDownloading = false;
             }
+        }
+
+        /// <summary>
+        /// Ordered list of Telegram message IDs that make up a file: a single message for
+        /// regular files, several (one per part) for split files.
+        /// </summary>
+        internal static List<int>? GetMessageIds(BsonFileManagerModel dbFile)
+        {
+            if (dbFile.MessageId.HasValue && (dbFile.ListMessageId == null || dbFile.ListMessageId.Count <= 1))
+                return new List<int> { dbFile.MessageId.Value };
+            return dbFile.ListMessageId;
+        }
+
+        internal static long GetDocumentSize(Message? message)
+        {
+            return message?.media is MessageMediaDocument { document: Document doc } ? doc.size : 0;
         }
 
         /// <summary>

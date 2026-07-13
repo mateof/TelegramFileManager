@@ -1252,6 +1252,21 @@ namespace TelegramDownloader.Data
             _tis.CheckPendingUploadInfoTasks();
         }
 
+        /// <summary>
+        /// Builds the URL written inside a .strm file according to the configured streaming mode.
+        /// Files smaller than MaxPreloadFileSizeInMb are always fully preloaded.
+        /// </summary>
+        private static string BuildStrmUrl(string host, string dbName, BsonFileManagerModel file)
+        {
+            StreamingMode mode = GeneralConfigStatic.config.GetEffectiveStreamingMode();
+            if (mode == StreamingMode.Preload || HelperService.bytesToMegaBytes(file.Size) < GeneralConfigStatic.config.MaxPreloadFileSizeInMb)
+            {
+                return Path.Combine(host, "api/file/GetFileByTfmId", Uri.EscapeDataString(file.Name)).Replace("\\", "/") + $"?idChannel={dbName}&idFile={file.Id}";
+            }
+            string endpoint = mode == StreamingMode.ProgressiveCache ? "GetFileStreamCached" : "GetFileStream";
+            return Path.Combine(host, "api/file", endpoint, dbName, file.Id, "file" + file.Type).Replace("\\", "/");
+        }
+
         public async Task<String> CreateStrmFiles(string path, string dbName, string host)
         {
             String folderPathName = Path.GetFileName(path.TrimEnd('/'));
@@ -1300,11 +1315,7 @@ namespace TelegramDownloader.Data
                 {
                     if (FileExtensionTypeTest.isVideoExtension(file.Type) || FileExtensionTypeTest.isAudioExtension(file.Type))
                     {
-                        string contenido = Path.Combine(host, "api/file/GetFileStream", dbName, file.Id, "file" + file.Type).Replace("\\", "/");
-                        if (GeneralConfigStatic.config.PreloadFilesOnStream || HelperService.bytesToMegaBytes(file.Size) < GeneralConfigStatic.config.MaxPreloadFileSizeInMb)
-                        {
-                            contenido = Path.Combine(host, "api/file/GetFileByTfmId", Uri.EscapeDataString(file.Name)).Replace("\\", "/") + $"?idChannel={dbName}&idFile={file.Id}";
-                        }
+                        string contenido = BuildStrmUrl(host, dbName, file);
                         string pattern = $@"\.({file.Type.Replace(".", "")})$";
                         File.WriteAllText(Regex.Replace(filePath, pattern, ".strm"), contenido);
                     }
@@ -1338,11 +1349,7 @@ namespace TelegramDownloader.Data
                 {
                     if (FileExtensionTypeTest.isVideoExtension(file.Type) || FileExtensionTypeTest.isAudioExtension(file.Type))
                     {
-                        string contenido = Path.Combine(host, "api/file/GetFileStream", dbName, file.Id, "file" + file.Type).Replace("\\", "/");
-                        if (GeneralConfigStatic.config.PreloadFilesOnStream || HelperService.bytesToMegaBytes(file.Size) < GeneralConfigStatic.config.MaxPreloadFileSizeInMb)
-                        {
-                            contenido = Path.Combine(host, "api/file/GetFileByTfmId", Uri.EscapeDataString(file.Name)).Replace("\\", "/") + $"?idChannel={dbName}&idFile={file.Id}";
-                        }
+                        string contenido = BuildStrmUrl(host, dbName, file);
                         string pattern = $@"\.({file.Type.Replace(".", "")})$";
                         // Ensure parent directory exists
                         var parentDir = Path.GetDirectoryName(Regex.Replace(filePath, pattern, ".strm"));
