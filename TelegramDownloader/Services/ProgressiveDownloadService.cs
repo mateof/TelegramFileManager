@@ -47,6 +47,13 @@ namespace TelegramDownloader.Services
         public bool IsDownloading { get; set; }
         public DateTime StartTime { get; set; }
         public CancellationTokenSource? CancellationTokenSource { get; set; }
+        /// <summary>
+        /// Set when the user cancelled the background download from the downloads list.
+        /// While set (and not expired), new range requests won't restart the cache download;
+        /// playback keeps working through direct Telegram fetches.
+        /// </summary>
+        public bool CancelledByUser { get; set; }
+        public DateTime CancelledAtUtc { get; set; }
     }
 
     public class ProgressiveDownloadService : IProgressiveDownloadService
@@ -109,14 +116,23 @@ namespace TelegramDownloader.Services
             string filePath)
         {
             // Quick check if already complete
-            if (_activeDownloads.TryGetValue(cacheKey, out var existingInfo) && existingInfo.IsComplete)
+            if (_activeDownloads.TryGetValue(cacheKey, out var existingInfo))
             {
-                if (File.Exists(existingInfo.FilePath))
+                if (existingInfo.IsComplete)
                 {
+                    if (File.Exists(existingInfo.FilePath))
+                    {
+                        return existingInfo;
+                    }
+                    // Cache file was evicted: forget the stale entry and re-download
+                    _activeDownloads.TryRemove(cacheKey, out _);
+                }
+                else if (IsUserCancelActive(existingInfo))
+                {
+                    // User stopped this cache download: don't restart it on every range
+                    // request; playback is served through direct Telegram fetches instead
                     return existingInfo;
                 }
-                // Cache file was evicted: forget the stale entry and re-download
-                _activeDownloads.TryRemove(cacheKey, out _);
             }
 
             // Check if file already exists and is complete
@@ -149,6 +165,7 @@ namespace TelegramDownloader.Services
                 if (_activeDownloads.TryGetValue(cacheKey, out existingInfo))
                 {
                     if (existingInfo.IsDownloading ||
+                        IsUserCancelActive(existingInfo) ||
                         (existingInfo.IsComplete && File.Exists(existingInfo.FilePath)))
                     {
                         return existingInfo;
@@ -229,6 +246,9 @@ namespace TelegramDownloader.Services
                     path = info.FilePath,
                     name = Path.GetFileName(info.FilePath),
                     _size = info.TotalSize,
+                    // Start the counter at the resume offset so progress and global
+                    // speed stats only account for newly downloaded bytes
+                    _transmitted = startOffset,
                     channelName = _ts.getChatName(Convert.ToInt64(channelId))
                 };
                 _tis.addToDownloadList(dm);
@@ -266,6 +286,16 @@ namespace TelegramDownloader.Services
 
                     while (localOffset < partSize && !ct.IsCancellationRequested)
                     {
+                        // React to Cancel/Pause pressed in the downloads list
+                        if (dm.state == StateTask.Canceled || dm.state == StateTask.Paused)
+                        {
+                            _logger.LogInformation("Background download stopped by user: {CacheKey}", info.CacheKey);
+                            info.CancelledByUser = true;
+                            info.CancelledAtUtc = DateTime.UtcNow;
+                            aborted = true;
+                            break;
+                        }
+
                         var toDownload = (int)Math.Min(chunkSize, partSize - localOffset);
 
                         try
@@ -283,15 +313,22 @@ namespace TelegramDownloader.Services
 
                             localOffset += chunk.Length;
                             info.DownloadedBytes = partStartGlobal + localOffset;
-                            dm._transmitted = info.DownloadedBytes;
                             consecutiveErrors = 0;
 
-                            // Log progress every 10%
-                            var progress = (double)info.DownloadedBytes / info.TotalSize * 100;
-                            if ((int)progress % 10 == 0)
+                            try
                             {
-                                _logger.LogDebug("Download progress: {FileName} - {Progress:F1}%",
-                                    Path.GetFileName(info.FilePath), progress);
+                                // Updates progress/speed and notifies the downloads UI;
+                                // marks the task completed when the last byte is written
+                                dm.ProgressCallback(info.DownloadedBytes, info.TotalSize);
+                            }
+                            catch
+                            {
+                                // ProgressCallback throws when Cancel/Pause was pressed
+                                _logger.LogInformation("Background download stopped by user: {CacheKey}", info.CacheKey);
+                                info.CancelledByUser = true;
+                                info.CancelledAtUtc = DateTime.UtcNow;
+                                aborted = true;
+                                break;
                             }
                         }
                         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -319,6 +356,12 @@ namespace TelegramDownloader.Services
                 info.IsComplete = info.DownloadedBytes >= info.TotalSize;
                 info.IsDownloading = false;
 
+                // Don't leave an incomplete task hanging as "Working" in the downloads list
+                if (!info.IsComplete && dm.state == StateTask.Working)
+                {
+                    dm.Cancel();
+                }
+
                 _logger.LogInformation("Background download {Status}: {FileName} ({Downloaded}/{Total} bytes)",
                     info.IsComplete ? "complete" : "incomplete",
                     Path.GetFileName(info.FilePath),
@@ -340,6 +383,15 @@ namespace TelegramDownloader.Services
                 _logger.LogError(ex, "Error in background download: {CacheKey}", info.CacheKey);
                 info.IsDownloading = false;
             }
+        }
+
+        // A user cancel blocks automatic restarts for this long; afterwards a new
+        // playback of the file starts caching again
+        private static readonly TimeSpan USER_CANCEL_TTL = TimeSpan.FromHours(1);
+
+        private static bool IsUserCancelActive(ProgressiveDownloadInfo info)
+        {
+            return info.CancelledByUser && DateTime.UtcNow - info.CancelledAtUtc < USER_CANCEL_TTL;
         }
 
         /// <summary>
