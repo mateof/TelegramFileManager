@@ -350,8 +350,21 @@ namespace TelegramDownloader.Data
                         // With the UserId recorded, WTelegram's GetClientForDC
                         // handles the per-file-DC authorization automatically.
                         Auth_ExportedAuthorization exported = await client.Auth_ExportAuthorization(dc.id);
-                        Auth_AuthorizationBase auth = await pc.Auth_ImportAuthorization(exported.id, exported.bytes);
-                        pc.LoginAlreadyDone(auth);
+                        Auth_AuthorizationBase auth = null;
+                        try
+                        {
+                            auth = await pc.Auth_ImportAuthorization(exported.id, exported.bytes);
+                        }
+                        catch (RpcException rex) when (rex.Message == "AUTH_BYTES_INVALID")
+                        {
+                            // Session persisted by an earlier run whose import
+                            // succeeded but whose login was never finalized: the
+                            // key already holds the account authorization and
+                            // re-importing onto it is rejected. Record the login
+                            // client-side and let the workers verify by use.
+                            _logger.LogInformation("Download pool client {Index}: key already authorized on a previous run", index);
+                        }
+                        pc.LoginAlreadyDone(auth ?? new Auth_Authorization { user = new User { id = exported.id } });
                     }
                     _logger.LogInformation("Download pool client {Index} ready (homed on DC {Dc})", index, dc.id);
                     return pc;
