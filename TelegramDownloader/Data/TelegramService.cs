@@ -337,22 +337,21 @@ namespace TelegramDownloader.Data
                 try
                 {
                     await pc.ConnectAsync();
-                    bool authorized = false;
-                    try
+                    if (pc.UserId == 0)
                     {
-                        await pc.Users_GetUsers(InputUser.Self);
-                        authorized = true;
-                    }
-                    catch (RpcException)
-                    {
-                        // Fresh session, or a previously created one revoked from
-                        // the account's device list: (re)import the authorization.
-                    }
-                    if (!authorized)
-                    {
+                        // Fresh session: import the account authorization exported
+                        // by the main client (cross-DC, so it is accepted), then
+                        // finalize the login client-side with LoginAlreadyDone so
+                        // the session records the UserId. An imported session is
+                        // not a fully "logged" one - probe RPCs like
+                        // users.getUsers can answer AUTH_KEY_UNREGISTERED even
+                        // though file requests work - so no verification call is
+                        // made here: workers verify by use and fall back on error.
+                        // With the UserId recorded, WTelegram's GetClientForDC
+                        // handles the per-file-DC authorization automatically.
                         Auth_ExportedAuthorization exported = await client.Auth_ExportAuthorization(dc.id);
-                        await pc.Auth_ImportAuthorization(exported.id, exported.bytes);
-                        await pc.Users_GetUsers(InputUser.Self);
+                        Auth_AuthorizationBase auth = await pc.Auth_ImportAuthorization(exported.id, exported.bytes);
+                        pc.LoginAlreadyDone(auth);
                     }
                     _logger.LogInformation("Download pool client {Index} ready (homed on DC {Dc})", index, dc.id);
                     return pc;
@@ -371,33 +370,16 @@ namespace TelegramDownloader.Data
         }
 
         /// <summary>
-        /// Returns a client of <paramref name="owner"/> connected to the given DC,
-        /// importing an authorization for it on first use. Both the pool client's
-        /// home and the file DC are covered: when they match, the owner itself is
-        /// returned; otherwise the export is cross-DC (owner's home is never the
-        /// account's home DC by construction) and therefore accepted.
+        /// Returns a client of <paramref name="owner"/> connected to the given DC.
+        /// Because the pool client's session records a UserId (LoginAlreadyDone),
+        /// WTelegram's GetClientForDC exports/imports the authorization towards
+        /// the file DC automatically when needed; the export is cross-DC (the
+        /// owner's home is never the account's home DC by construction), so it is
+        /// accepted even when the file lives on the account's home DC.
         /// </summary>
         private async Task<WTelegram.Client> GetAuthorizedTransferClientAsync(WTelegram.Client owner, int dcId)
         {
-            WTelegram.Client transfer = await owner.GetClientForDC(dcId, true);
-            if (transfer != owner)
-            {
-                bool authorized = false;
-                try
-                {
-                    await transfer.Users_GetUsers(InputUser.Self);
-                    authorized = true;
-                }
-                catch (RpcException)
-                {
-                }
-                if (!authorized)
-                {
-                    Auth_ExportedAuthorization exported = await owner.Auth_ExportAuthorization(dcId);
-                    await transfer.Auth_ImportAuthorization(exported.id, exported.bytes);
-                }
-            }
-            return transfer;
+            return await owner.GetClientForDC(dcId, true);
         }
 
         /// <summary>
