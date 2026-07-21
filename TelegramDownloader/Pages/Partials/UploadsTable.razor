@@ -104,7 +104,7 @@
     [Parameter]
     public EventCallback OnUploadModalClose { get; set; }
 
-    public static List<UploadModel> lum = new List<UploadModel>();
+    private List<UploadModel> lum = new List<UploadModel>();
     BlazorBootstrap.Grid<UploadModel> grid = default!;
     UploadFileInfoModal infoModal { get; set; }
     private bool _disposed = false;
@@ -199,10 +199,9 @@
         }
     }
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        checkNewEventsHandler();
-        tis.EventChanged += eventChangedNew;
+        tis.TransactionsChanged += OnTransactionsChanged;
     }
 
     private async Task cancel(UploadModel um)
@@ -231,54 +230,24 @@
 
     private async Task<GridDataProviderResult<UploadModel>> UploadsDataProvider(GridDataProviderRequest<UploadModel> request)
     {
-        await getUploadModels(request.PageNumber - 1, request.PageSize, lum.Count() == 0);
+        lum = tis.GetUploadModels(request.PageNumber - 1, request.PageSize, isPending);
         int totalUploads = tis.getTotalUploads(isPending);
         return await Task.FromResult(new GridDataProviderResult<UploadModel> { Data = lum ?? new List<UploadModel>(), TotalCount = totalUploads });
     }
 
-    private async Task getUploadModels(int pageNumber, int pageSize, bool mustCallEnventHandler = false)
+    private async void OnTransactionsChanged(object sender, System.EventArgs e)
     {
-        lum = tis.GetUploadModels(pageNumber, pageSize, isPending);
-        if (mustCallEnventHandler)
-            checkNewEventsHandler();
-    }
-
-    private void checkNewEventsHandler()
-    {
-        if (lum != null)
-            foreach (UploadModel um in lum)
-            {
-                if (um.progress != 100)
-                    um.EventChanged += eventChangedUpload;
-                else
-                    um.EventChanged -= eventChangedUpload;
-            }
-
-    }
-
-    void eventChangedUpload(object sender, UploadEventArgs e)
-    {
-        if (_disposed) return;
-        grid.RefreshDataAsync();
-    }
-
-    void eventChangedNew(object sender, System.EventArgs e)
-    {
-        if (_disposed) return;
-        checkNewEventsHandler();
-        grid.RefreshDataAsync();
+        if (_disposed || grid is null) return;
+        try
+        {
+            await InvokeAsync(() => grid.RefreshDataAsync());
+        }
+        catch { }
     }
 
     public void Dispose()
     {
         _disposed = true;
-        tis.EventChanged -= eventChangedNew;
-        if (lum != null)
-        {
-            foreach (UploadModel um in lum)
-            {
-                um.EventChanged -= eventChangedUpload;
-            }
-        }
+        tis.TransactionsChanged -= OnTransactionsChanged;
     }
 }

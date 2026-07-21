@@ -94,7 +94,7 @@
 @code {
     [Parameter]
     public bool isPending { get; set; } = false;
-    public static List<DownloadModel> ldm = new List<DownloadModel>();
+    private List<DownloadModel> ldm = new List<DownloadModel>();
     BlazorBootstrap.Grid<DownloadModel> grid = default!;
     DownloadFileInfoModal infoModal { get; set; }
     private bool _disposed = false;
@@ -163,17 +163,16 @@
         };
     }
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        checkNewEventsHandler();
-        tis.EventChanged += eventChangedNew;
+        tis.TransactionsChanged += OnTransactionsChanged;
     }
 
     private async Task<GridDataProviderResult<DownloadModel>> DownloadsDataProvider(GridDataProviderRequest<DownloadModel> request)
     {
-        await getDownloadModels(request.PageNumber - 1, request.PageSize, ldm.Count() == 0);
-        int totalUploads = tis.getTotalDownloads(isPending);
-        return await Task.FromResult(new GridDataProviderResult<DownloadModel> { Data = ldm ?? new List<DownloadModel>(), TotalCount = totalUploads });//request.ApplyTo(uploads));
+        ldm = tis.GetDownloadModels(request.PageNumber - 1, request.PageSize, isPending);
+        int totalDownloads = tis.getTotalDownloads(isPending);
+        return await Task.FromResult(new GridDataProviderResult<DownloadModel> { Data = ldm ?? new List<DownloadModel>(), TotalCount = totalDownloads });
     }
 
     private async Task cancel(DownloadModel dm)
@@ -200,45 +199,19 @@
     }
 
 
-    private void checkNewEventsHandler()
+    private async void OnTransactionsChanged(object sender, System.EventArgs e)
     {
-        foreach (DownloadModel dm in ldm)
+        if (_disposed || grid is null) return;
+        try
         {
-            if (dm.progress != 100)
-                dm.EventChanged += eventChanged;
-            else
-                dm.EventChanged -= eventChanged;
+            await InvokeAsync(() => grid.RefreshDataAsync());
         }
-
-    }
-
-    private async Task getDownloadModels(int pageNumber, int pageSize, bool mustCallEnventHandler = false)
-    {
-        ldm = tis.GetDownloadModels(pageNumber, pageSize, isPending);
-        if (mustCallEnventHandler)
-            checkNewEventsHandler();
-    }
-
-    void eventChanged(object sender, DownloadEventArgs e)
-    {
-        if (_disposed) return;
-        grid.RefreshDataAsync();
-    }
-
-    void eventChangedNew(object sender, System.EventArgs e)
-    {
-        if (_disposed) return;
-        checkNewEventsHandler();
-        grid.RefreshDataAsync();
+        catch { }
     }
 
     public void Dispose()
     {
         _disposed = true;
-        tis.EventChanged -= eventChangedNew;
-        foreach (DownloadModel dm in ldm)
-        {
-            dm.EventChanged -= eventChanged;
-        }
+        tis.TransactionsChanged -= OnTransactionsChanged;
     }
 }

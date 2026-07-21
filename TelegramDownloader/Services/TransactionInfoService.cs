@@ -14,6 +14,13 @@ namespace TelegramDownloader.Services
 
         public bool isPauseDownloads = false;
         public event EventHandler<EventArgs> EventChanged;
+        /// <summary>
+        /// Aggregated, throttled event raised whenever any transaction changes:
+        /// list membership (add/remove/clear) or per-model progress/state.
+        /// UI components should subscribe to this single event instead of
+        /// subscribing to each model individually.
+        /// </summary>
+        public event EventHandler TransactionsChanged;
         public event EventHandler TaskEventChanged;
         public event EventHandler HistorykEventChanged;
         public event EventHandler<SpeedHistoryEventArgs> NewSpeedHistoryPoint;
@@ -43,10 +50,111 @@ namespace TelegramDownloader.Services
         private Timer aTimer;
         private readonly ILogger<IFileService> _logger;
 
+        // Throttling for TransactionsChanged: progress callbacks fire per network
+        // chunk, so raise at most once per interval with a guaranteed trailing raise.
+        private static readonly TimeSpan NotifyThrottle = TimeSpan.FromMilliseconds(250);
+        private readonly object _notifyLock = new object();
+        private DateTime _lastNotifyUtc = DateTime.MinValue;
+        private bool _trailingNotifyScheduled = false;
+        private System.Threading.Timer _trailingNotifyTimer;
+
         public TransactionInfoService(ILogger<IFileService> logger)
         {
             _logger = logger;
         }
+
+        /// <summary>
+        /// Raises <see cref="TransactionsChanged"/>, coalescing bursts so
+        /// subscribers refresh at most once per <see cref="NotifyThrottle"/>.
+        /// The last change in a burst is always delivered (trailing raise).
+        /// </summary>
+        public void NotifyTransactionsChanged()
+        {
+            bool raiseNow = false;
+            lock (_notifyLock)
+            {
+                DateTime now = DateTime.UtcNow;
+                if (now - _lastNotifyUtc >= NotifyThrottle)
+                {
+                    _lastNotifyUtc = now;
+                    raiseNow = true;
+                }
+                else if (!_trailingNotifyScheduled)
+                {
+                    _trailingNotifyScheduled = true;
+                    TimeSpan delay = NotifyThrottle - (now - _lastNotifyUtc);
+                    if (delay < TimeSpan.Zero)
+                        delay = TimeSpan.Zero;
+                    if (_trailingNotifyTimer == null)
+                        _trailingNotifyTimer = new System.Threading.Timer(_ => RaiseTrailingNotify(), null, delay, Timeout.InfiniteTimeSpan);
+                    else
+                        _trailingNotifyTimer.Change(delay, Timeout.InfiniteTimeSpan);
+                }
+            }
+            if (raiseNow)
+                SafeRaiseTransactionsChanged();
+        }
+
+        private void RaiseTrailingNotify()
+        {
+            lock (_notifyLock)
+            {
+                _trailingNotifyScheduled = false;
+                _lastNotifyUtc = DateTime.UtcNow;
+            }
+            SafeRaiseTransactionsChanged();
+        }
+
+        private void SafeRaiseTransactionsChanged()
+        {
+            try
+            {
+                TransactionsChanged?.Invoke(this, EventArgs.Empty);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error notifying TransactionsChanged subscribers");
+            }
+        }
+
+        // The service owns the per-model subscriptions so UI components do not
+        // have to track which models are wired. Hooking is idempotent.
+        private void hookModel(DownloadModel dm)
+        {
+            dm.EventChanged -= onDownloadModelChanged;
+            dm.EventChanged += onDownloadModelChanged;
+        }
+
+        private void unhookModel(DownloadModel dm)
+        {
+            dm.EventChanged -= onDownloadModelChanged;
+        }
+
+        private void hookModel(UploadModel um)
+        {
+            um.EventChanged -= onUploadModelChanged;
+            um.EventChanged += onUploadModelChanged;
+        }
+
+        private void unhookModel(UploadModel um)
+        {
+            um.EventChanged -= onUploadModelChanged;
+        }
+
+        private void hookModel(InfoDownloadTaksModel idt)
+        {
+            idt.EventChanged -= onInfoTaskModelChanged;
+            idt.EventChanged += onInfoTaskModelChanged;
+        }
+
+        private void unhookModel(InfoDownloadTaksModel idt)
+        {
+            idt.EventChanged -= onInfoTaskModelChanged;
+        }
+
+        private void onDownloadModelChanged(object sender, DownloadEventArgs e) => NotifyTransactionsChanged();
+        private void onUploadModelChanged(object sender, UploadEventArgs e) => NotifyTransactionsChanged();
+        private void onInfoTaskModelChanged(object sender, InfoTaskEventArgs e) => NotifyTransactionsChanged();
         public bool isWorking()
         {
             if (!(isDownloading() || isUploading()))
@@ -250,8 +358,10 @@ namespace TelegramDownloader.Services
                 downloadModel.name, downloadModel._size / (1024.0 * 1024.0));
             downloadModels.Insert(0, downloadModel);
             PendingDownloadMutex.ReleaseMutex();
+            hookModel(downloadModel);
             EventChanged?.Invoke(this, new EventArgs());
             TaskEventChanged?.Invoke(null, EventArgs.Empty);
+            NotifyTransactionsChanged();
         }
 
         public void addToPendingDownloadList(DownloadModel downloadModel, bool atFirst = false, bool chekDownloads = true)
@@ -275,6 +385,8 @@ namespace TelegramDownloader.Services
             else
                 pendingDownloadModels.Add(downloadModel);
             PendingDownloadMutex.ReleaseMutex();
+            hookModel(downloadModel);
+            NotifyTransactionsChanged();
             if (chekDownloads)
                 CheckPendingDownloads();
         }
@@ -291,6 +403,7 @@ namespace TelegramDownloader.Services
             }
             PendingDownloadMutex.ReleaseMutex();
             TaskEventChanged?.Invoke(null, EventArgs.Empty);
+            NotifyTransactionsChanged();
         }
 
         public void PlayDownloads()
@@ -315,6 +428,7 @@ namespace TelegramDownloader.Services
             pendingDownloadModels.Clear();
             PendingDownloadMutex.ReleaseMutex();
             TaskEventChanged?.Invoke(null, EventArgs.Empty);
+            NotifyTransactionsChanged();
         }
 
         public async Task CheckPendingDownloads()
@@ -328,12 +442,14 @@ namespace TelegramDownloader.Services
                 DownloadModel dm = pendingDownloadModels.FirstOrDefault();
                 downloadModels.Insert(0, dm);
                 pendingDownloadModels.Remove(dm);
+                hookModel(dm);
                 startTimer();
                 dm.RetryCallback();
             }
             PendingDownloadMutex.ReleaseMutex();
             EventChanged?.Invoke(this, new EventArgs());
             TaskEventChanged?.Invoke(null, EventArgs.Empty);
+            NotifyTransactionsChanged();
         }
 
         public async Task CheckPendingUploadInfoTasks()
@@ -344,12 +460,14 @@ namespace TelegramDownloader.Services
             {
                 InfoDownloadTaksModel idt = infoDownloadTaksModel.Where(x => x.state == StateTask.Pending).OrderBy(x => x.creationDate).FirstOrDefault();
                 idt.state = StateTask.Working;
+                hookModel(idt);
                 startTimer();
                 idt.RetryCallback();
             }
             PendingUploadInfoTaskMutex.ReleaseMutex();
             EventChanged?.Invoke(this, new EventArgs());
             TaskEventChanged?.Invoke(null, EventArgs.Empty);
+            NotifyTransactionsChanged();
         }
 
         public void addToUploadList(UploadModel uploadModel)
@@ -365,15 +483,19 @@ namespace TelegramDownloader.Services
             _logger.LogInformation("Adding to upload list - Name: {Name}, Size: {SizeMB:F2}MB",
                 uploadModel.name, uploadModel._size / (1024.0 * 1024.0));
             uploadModels.Insert(0, uploadModel);
+            hookModel(uploadModel);
             EventChanged?.Invoke(this, new EventArgs());
             TaskEventChanged?.Invoke(null, EventArgs.Empty);
+            NotifyTransactionsChanged();
         }
 
         public void deleteUploadInList(UploadModel uploadModel)
         {
             uploadModels.Remove(uploadModel);
+            unhookModel(uploadModel);
             EventChanged?.Invoke(this, new EventArgs());
             TaskEventChanged?.Invoke(null, EventArgs.Empty);
+            NotifyTransactionsChanged();
         }
 
         public void addToInfoDownloadTaskList(InfoDownloadTaksModel infoDownloadModel)
@@ -381,6 +503,8 @@ namespace TelegramDownloader.Services
             PendingUploadInfoTaskMutex.WaitOne();
             infoDownloadTaksModel.Add(infoDownloadModel);
             PendingUploadInfoTaskMutex.ReleaseMutex();
+            hookModel(infoDownloadModel);
+            NotifyTransactionsChanged();
             CheckPendingUploadInfoTasks();
         }
 
@@ -430,8 +554,10 @@ namespace TelegramDownloader.Services
 
             pendingUploadModels.Add(uploadModel);
             PendingUploadMutex.ReleaseMutex();
+            hookModel(uploadModel);
             EventChanged?.Invoke(this, new EventArgs());
             TaskEventChanged?.Invoke(null, EventArgs.Empty);
+            NotifyTransactionsChanged();
         }
 
         public void deletePendingUploadInList(UploadModel uploadModel)
@@ -439,8 +565,11 @@ namespace TelegramDownloader.Services
             PendingUploadMutex.WaitOne();
             pendingUploadModels.Remove(uploadModel);
             PendingUploadMutex.ReleaseMutex();
+            if (!uploadModels.Contains(uploadModel))
+                unhookModel(uploadModel);
             EventChanged?.Invoke(this, new EventArgs());
             TaskEventChanged?.Invoke(null, EventArgs.Empty);
+            NotifyTransactionsChanged();
         }
 
         public void deleteDownloadInList(DownloadModel downloadModel)
@@ -448,8 +577,13 @@ namespace TelegramDownloader.Services
             PendingDownloadMutex.WaitOne();
             downloadModels.Remove(downloadModel);
             PendingDownloadMutex.ReleaseMutex();
+            // A paused download is removed from the active list but stays in the
+            // pending list, so keep it hooked in that case.
+            if (!pendingDownloadModels.Contains(downloadModel))
+                unhookModel(downloadModel);
             EventChanged?.Invoke(this, new EventArgs());
             TaskEventChanged?.Invoke(null, EventArgs.Empty);
+            NotifyTransactionsChanged();
         }
 
         public void deletePendingDownloadInList(DownloadModel downloadModel)
@@ -457,28 +591,39 @@ namespace TelegramDownloader.Services
             PendingDownloadMutex.WaitOne();
             pendingDownloadModels.Remove(downloadModel);
             PendingDownloadMutex.ReleaseMutex();
+            if (!downloadModels.Contains(downloadModel))
+                unhookModel(downloadModel);
             EventChanged?.Invoke(this, new EventArgs());
             TaskEventChanged?.Invoke(null, EventArgs.Empty);
+            NotifyTransactionsChanged();
         }
 
         public void ClearPendingDownloads()
         {
             _logger.LogInformation("Clearing all pending downloads - Count: {Count}", pendingDownloadModels.Count);
             PendingDownloadMutex.WaitOne();
+            List<DownloadModel> removed = pendingDownloadModels.ToList();
             pendingDownloadModels.Clear();
             PendingDownloadMutex.ReleaseMutex();
+            foreach (DownloadModel dm in removed.Where(x => !downloadModels.Contains(x)))
+                unhookModel(dm);
             EventChanged?.Invoke(this, new EventArgs());
             TaskEventChanged?.Invoke(null, EventArgs.Empty);
+            NotifyTransactionsChanged();
         }
 
         public void ClearPendingUploads()
         {
             _logger.LogInformation("Clearing all pending uploads - Count: {Count}", pendingUploadModels.Count);
             PendingUploadMutex.WaitOne();
+            List<UploadModel> removed = pendingUploadModels.ToList();
             pendingUploadModels.Clear();
             PendingUploadMutex.ReleaseMutex();
+            foreach (UploadModel um in removed.Where(x => !uploadModels.Contains(x)))
+                unhookModel(um);
             EventChanged?.Invoke(this, new EventArgs());
             TaskEventChanged?.Invoke(null, EventArgs.Empty);
+            NotifyTransactionsChanged();
         }
 
         public void deleteInfoDownloadTaskFromList(InfoDownloadTaksModel idt)
@@ -486,8 +631,10 @@ namespace TelegramDownloader.Services
             PendingUploadInfoTaskMutex.WaitOne();
             infoDownloadTaksModel.Remove(idt);
             PendingUploadInfoTaskMutex.ReleaseMutex();
+            unhookModel(idt);
             EventChanged?.Invoke(this, new EventArgs());
             TaskEventChanged?.Invoke(null, EventArgs.Empty);
+            NotifyTransactionsChanged();
         }
 
         public List<InfoDownloadTaksModel> getInfoDownloadTaksModel(int pageNumber, int pageSize)
@@ -504,22 +651,34 @@ namespace TelegramDownloader.Services
 
         public void clearUploadCompleted()
         {
+            List<UploadModel> removed = uploadModels.Where(x => x.state != StateTask.Working).ToList();
             uploadModels.RemoveAll(x => x.state != StateTask.Working);
+            foreach (UploadModel um in removed)
+                unhookModel(um);
             EventChanged?.Invoke(this, new EventArgs());
+            NotifyTransactionsChanged();
         }
 
         public void clearDownloadCompleted()
         {
             PendingDownloadMutex.WaitOne();
+            List<DownloadModel> removed = downloadModels.Where(x => x.state != StateTask.Working).ToList();
             downloadModels.RemoveAll(x => x.state != StateTask.Working);
             PendingDownloadMutex.ReleaseMutex();
+            foreach (DownloadModel dm in removed.Where(x => !pendingDownloadModels.Contains(x)))
+                unhookModel(dm);
             EventChanged?.Invoke(this, new EventArgs());
+            NotifyTransactionsChanged();
         }
 
         public void clearTasksCompleted()
         {
+            List<InfoDownloadTaksModel> removed = infoDownloadTaksModel.Where(x => x.state != StateTask.Working).ToList();
             infoDownloadTaksModel.RemoveAll(x => x.state != StateTask.Working);
+            foreach (InfoDownloadTaksModel idt in removed)
+                unhookModel(idt);
             EventChanged?.Invoke(this, new EventArgs());
+            NotifyTransactionsChanged();
         }
 
 

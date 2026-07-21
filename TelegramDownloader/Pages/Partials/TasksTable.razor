@@ -97,7 +97,7 @@
 @code {
 
     BlazorBootstrap.Grid<InfoDownloadTaksModel> grid = default!;
-    public static List<InfoDownloadTaksModel> lpt = new List<InfoDownloadTaksModel>();
+    private List<InfoDownloadTaksModel> lpt = new List<InfoDownloadTaksModel>();
     TaskInfoModal infoModal { get; set; }
     private bool _disposed = false;
 
@@ -157,46 +157,26 @@
         };
     }
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        checkNewEventsHandler();
-        tis.EventChanged += eventChangedNew;
+        tis.TransactionsChanged += OnTransactionsChanged;
     }
 
     private async Task<GridDataProviderResult<InfoDownloadTaksModel>> TasksDataProvider(GridDataProviderRequest<InfoDownloadTaksModel> request)
     {
-        await getPendingTasksModels(request.PageNumber - 1, request.PageSize, lpt.Count() == 0);
-        int totalUploads = tis.getTotalTasks();
-        return await Task.FromResult(new GridDataProviderResult<InfoDownloadTaksModel> { Data = lpt ?? new List<InfoDownloadTaksModel>(), TotalCount = totalUploads });//request.ApplyTo(uploads));
+        lpt = tis.getInfoDownloadTaksModel(request.PageNumber - 1, request.PageSize);
+        int totalTasks = tis.getTotalTasks();
+        return await Task.FromResult(new GridDataProviderResult<InfoDownloadTaksModel> { Data = lpt ?? new List<InfoDownloadTaksModel>(), TotalCount = totalTasks });
     }
 
-    private async Task getPendingTasksModels(int pageNumber, int pageSize, bool mustCallEnventHandler = false)
+    private async void OnTransactionsChanged(object sender, System.EventArgs e)
     {
-        lpt = tis.getInfoDownloadTaksModel(pageNumber, pageSize);
-        if (mustCallEnventHandler)
-            checkNewEventsHandler();
-    }
-
-    private void checkNewEventsHandler()
-    {
-        foreach (InfoDownloadTaksModel pt in lpt)
+        if (_disposed || grid is null) return;
+        try
         {
-            pt.EventChanged -= eventChangedPendingTask;
-            pt.EventChanged += eventChangedPendingTask;
+            await InvokeAsync(() => grid.RefreshDataAsync());
         }
-    }
-
-    void eventChangedPendingTask(object sender, InfoTaskEventArgs e)
-    {
-        if (_disposed) return;
-        grid.RefreshDataAsync();
-    }
-
-    void eventChangedNew(object sender, System.EventArgs e)
-    {
-        if (_disposed) return;
-        checkNewEventsHandler();
-        grid.RefreshDataAsync();
+        catch { }
     }
 
     private async Task cancel(InfoDownloadTaksModel idt)
@@ -221,10 +201,6 @@
     public void Dispose()
     {
         _disposed = true;
-        tis.EventChanged -= eventChangedNew;
-        foreach (InfoDownloadTaksModel pt in lpt)
-        {
-            pt.EventChanged -= eventChangedPendingTask;
-        }
+        tis.TransactionsChanged -= OnTransactionsChanged;
     }
 }
