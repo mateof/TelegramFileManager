@@ -161,6 +161,7 @@ namespace TelegramDownloader.Data
         private void newClient()
         {
             client = new WTelegram.Client(Convert.ToInt32(GeneralConfigStatic.tlconfig?.api_id ?? Environment.GetEnvironmentVariable("api_id")), GeneralConfigStatic.tlconfig?.hash_id ?? Environment.GetEnvironmentVariable("hash_id"), UserService.USERDATAFOLDER + "/WTelegram.session");
+            ApplyConfiguredParallelTransfers(client);
             if (GeneralConfigStatic.config.ShouldShowLogInTerminal)
             {
                 // WTelegram.Helpers.Log = (lvl, str) => Console.WriteLine($"{DateTime.Now:yyyy-MM-dd HH:mm:ss} [{"TDIWE!"[lvl]}] {str}");
@@ -169,6 +170,67 @@ namespace TelegramDownloader.Data
                 WTelegram.Helpers.Log = (lvl, str) => { };
             }
 
+        }
+
+        // WTelegramClient requests file parts through a per-client semaphore that
+        // defaults to 2 parts in flight, capping transfers at ~1MB per round-trip.
+        // Tracks the value applied to each client instance (main client and the
+        // media-DC clients WTelegram creates internally, which do NOT inherit the
+        // main client's ParallelTransfers).
+        private static readonly ConditionalWeakTable<WTelegram.Client, StrongBox<int>> appliedParallelTransfers = new();
+        private const int WTELEGRAM_DEFAULT_PARALLEL_TRANSFERS = 2;
+
+        public static int GetConfiguredParallelTransfers()
+        {
+            return Math.Clamp(GeneralConfigStatic.config?.ParallelTransfers ?? 4, 1, 16);
+        }
+
+        private static void ApplyConfiguredParallelTransfers(WTelegram.Client c)
+        {
+            if (c == null)
+                return;
+            int desired = GetConfiguredParallelTransfers();
+            int delta;
+            lock (appliedParallelTransfers)
+            {
+                StrongBox<int> applied = appliedParallelTransfers.GetOrCreateValue(c);
+                if (applied.Value == 0)
+                    applied.Value = WTELEGRAM_DEFAULT_PARALLEL_TRANSFERS;
+                delta = desired - applied.Value;
+                if (delta == 0)
+                    return;
+                applied.Value = desired;
+            }
+            try
+            {
+                // The ParallelTransfers setter adjusts the semaphore relative to its
+                // CURRENT count, which is lower while parts are in flight. Applying
+                // our delta on top of the current value keeps the configured maximum
+                // correct even if a transfer is running on this client.
+                c.ParallelTransfers = c.ParallelTransfers + delta;
+            }
+            catch (Exception)
+            {
+                // Never let a tuning failure break a transfer.
+            }
+        }
+
+        /// <summary>
+        /// Resolves the client instance that WTelegram's DownloadFileAsync will use
+        /// for the given file DC (dc_id == 0 means the main client) and applies the
+        /// configured chunk parallelism to it before the transfer starts.
+        /// </summary>
+        private async Task PrepareTransferClientAsync(int dcId)
+        {
+            try
+            {
+                WTelegram.Client c = dcId == 0 ? client : await client.GetClientForDC(-dcId, true);
+                ApplyConfiguredParallelTransfers(c);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Could not prepare transfer client for DC {DcId}", dcId);
+            }
         }
 
         public async Task<User> CallQrGenerator(Action<string> func, CancellationToken ct, bool logoutFirst = false)
@@ -701,6 +763,7 @@ namespace TelegramDownloader.Data
 
             try
             {
+                ApplyConfiguredParallelTransfers(client);
                 var inputFile = await client.UploadFileAsync(file, fileName, um.ProgressCallback);
                 var result = await client.SendMediaAsync(peer, caption ?? fileName, inputFile, mimeType);
                 _logger.LogInformation("File upload completed - FileName: {FileName}, MessageId: {MessageId}", fileName, result.id);
@@ -1205,6 +1268,7 @@ namespace TelegramDownloader.Data
                     model.name = filename;
                 _logger.LogInformation("Starting document download - FileName: {FileName}, Size: {SizeMB:F2}MB", filename, document.size / (1024.0 * 1024.0));
                 MemoryStream dest = new MemoryStream();
+                await PrepareTransferClientAsync(document.dc_id);
                 await client.DownloadFileAsync(document, ms ?? dest, (PhotoSizeBase)null, model.ProgressCallback);
                 _logger.LogInformation("Document download completed - FileName: {FileName}", filename);
                 return ms ?? dest;
@@ -1253,6 +1317,7 @@ namespace TelegramDownloader.Data
                 if (offset == 0)
                 {
                     MemoryStream dest = new MemoryStream();
+                    await PrepareTransferClientAsync(document.dc_id);
                     await client.DownloadFileAsync(document, ms ?? dest, (PhotoSizeBase)null, model.ProgressCallback);
                     _logger.LogInformation("Document download completed - FileName: {FileName}", filename);
                     return ms ?? dest;
@@ -1365,6 +1430,7 @@ namespace TelegramDownloader.Data
                     _tis.addToDownloadList(model);
                 _logger.LogInformation("Starting file download to disk - FileName: {FileName}, Size: {SizeMB:F2}MB", filename, document.size / (1024.0 * 1024.0));
                 using var dest = new FileStream($"{Path.Combine(folder != null ? folder : Path.Combine(Environment.CurrentDirectory, "local", "temp"), filename)}", FileMode.Create, FileAccess.Write);
+                await PrepareTransferClientAsync(document.dc_id);
                 await client.DownloadFileAsync(document, dest, (PhotoSizeBase)null, model.ProgressCallback);
                 _logger.LogInformation("File download to disk completed - FileName: {FileName}", filename);
             }

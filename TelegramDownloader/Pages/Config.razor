@@ -233,6 +233,21 @@
                     <div class="config-item">
                         <div class="config-item-info">
                             <div class="config-item-label">
+                                <i class="bi bi-lightning-charge"></i>
+                                Parallel Chunk Transfers
+                            </div>
+                            <div class="config-item-description">
+                                Number of 512KB chunks requested in parallel per transfer (1-16). Higher values improve download/upload speed by removing the latency bottleneck; Premium accounts benefit the most. Applied on the next transfer.
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <NumberInput TValue="int" @bind-Value="Model!.ParallelTransfers" Min="1" Max="16" EnableMinMax="true" class="form-control" style="width: 80px;" />
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
                                 <i class="bi bi-file-earmark-arrow-down"></i>
                                 Max. Preload File Size
                             </div>
