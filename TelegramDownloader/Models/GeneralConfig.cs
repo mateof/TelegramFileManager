@@ -178,6 +178,17 @@ namespace TelegramDownloader.Models
         /// </summary>
         public int MemorySplitSizeGB { get; set; } = 2;
 
+        // Transfer Speed Settings
+        /// <summary>
+        /// Number of 512KB file chunks requested in parallel per transfer (1-16).
+        /// WTelegramClient's default of 2 caps throughput at roughly 1MB per
+        /// round-trip to Telegram's data center (~5-7 MB/s on typical latency).
+        /// Higher values remove that latency bottleneck; the server-side speed
+        /// limit for non-Premium accounts still applies. Takes effect on the
+        /// next transfer, no restart needed.
+        /// </summary>
+        public int ParallelTransfers { get; set; } = 4;
+
     }
 
     public class TLConfig
