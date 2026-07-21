@@ -214,6 +214,46 @@ namespace TelegramDownloader.Models
             mutex.ReleaseMutex();
         }
 
+        /// <summary>
+        /// Progress reporting for multi-connection downloads, where parts arrive
+        /// out of order. <paramref name="confirmedPrefix"/> is the contiguous
+        /// number of bytes completed from the start of the file (the only safe
+        /// resume offset for persistence), while <paramref name="chunkBytes"/> is
+        /// the size of the part just received, used for live speed accounting.
+        /// Throws like ProgressCallback when the task is canceled or paused.
+        /// </summary>
+        public void ReportParallelProgress(long confirmedPrefix, int chunkBytes, long totalSize)
+        {
+            if (state == StateTask.Canceled)
+                throw new Exception($"Canceled {name}");
+            if (state == StateTask.Paused)
+            {
+                state = StateTask.Working;
+                tis.deleteDownloadInList(this);
+                throw new Exception($"Paused {name}");
+            }
+            tis.addDownloadBytes(chunkBytes);
+            mutex.WaitOne();
+            _transmitted = confirmedPrefix;
+            _sizeString = HelperService.SizeSuffix(totalSize);
+            _transmittedString = HelperService.SizeSuffix(confirmedPrefix);
+            progress = Convert.ToInt32(confirmedPrefix * 100 / totalSize);
+            EventChanged?.Invoke(this, new DownloadEventArgs());
+
+            OnProgressPersist?.Invoke(_transmitted, progress, state);
+
+            if (confirmedPrefix == totalSize)
+            {
+                endnDate = DateTime.Now;
+                state = StateTask.Completed;
+                EventStatechanged?.Invoke(this, EventArgs.Empty);
+                NotificationModel nm = new NotificationModel();
+                nm.sendEvent(new Notification($"Download {name} completed", "Download Completed", NotificationTypes.Success));
+                tis.CheckPendingDownloads();
+            }
+            mutex.ReleaseMutex();
+        }
+
         public void Cancel()
         {
             mutex.WaitOne();

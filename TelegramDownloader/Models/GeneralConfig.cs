@@ -189,6 +189,25 @@ namespace TelegramDownloader.Models
         /// </summary>
         public int ParallelTransfers { get; set; } = 4;
 
+        // Multi-connection download settings
+        /// <summary>
+        /// EXPERIMENTAL: download large files using several parallel MTProto
+        /// connections, the same technique Telegram Desktop uses to reach high
+        /// speeds. Telegram limits throughput per connection (~5-6 MB/s), so a
+        /// single connection cannot go faster no matter how many chunks are in
+        /// flight; multiple connections each get their own allowance. Enabling
+        /// this creates up to DownloadConnections extra sessions on the account
+        /// (visible in Telegram's device list); they are created once, stored
+        /// next to the main session file and reused across restarts.
+        /// </summary>
+        public bool EnableMultiConnectionDownloads { get; set; } = false;
+
+        /// <summary>
+        /// Number of parallel connections used per file download (2-8).
+        /// Only used when EnableMultiConnectionDownloads is true.
+        /// </summary>
+        public int DownloadConnections { get; set; } = 4;
+
     }
 
     public class TLConfig
