@@ -238,18 +238,23 @@ namespace TelegramDownloader.Data
         // Telegram enforces its throughput limit PER CONNECTION (~5-6 MB/s), so a
         // single MTProto connection cannot go faster regardless of how many chunks
         // are pipelined. Official clients reach high speeds by opening several
-        // sessions to the file's DC and splitting the file between them. This pool
-        // holds extra authorized clients per DC (bootstrapped once from the main
-        // client via auth.exportAuthorization/importAuthorization, persisted as
-        // session files and reused across restarts).
-        private class DcDownloadPool
+        // sessions to the file's DC and splitting the file between them.
+        //
+        // This pool holds extra authorized account sessions (persisted as session
+        // files and reused across restarts). The server rejects
+        // auth.exportAuthorization towards the DC the caller is already on
+        // (DC_ID_INVALID), so pool clients are homed on a NEIGHBOR DC different
+        // from the account's home DC: main -> neighbor is always a cross-DC
+        // export, and from the neighbor the pool client can then export towards
+        // any file DC (including the account's home DC) - both hops cross-DC.
+        private class DownloadPool
         {
             public readonly SemaphoreSlim initLock = new SemaphoreSlim(1, 1);
             public readonly List<WTelegram.Client> clients = new List<WTelegram.Client>();
             public bool bootstrapFailed = false;
         }
 
-        private static readonly Dictionary<int, DcDownloadPool> downloadPools = new Dictionary<int, DcDownloadPool>();
+        private static readonly DownloadPool downloadPool = new DownloadPool();
         private const int MULTICONN_PART_SIZE = 1024 * 1024;        // upload.getFile max limit per request
         private const int MULTICONN_BLOCK_SIZE = 4 * 1024 * 1024;   // work unit assigned to a connection
         private const long MULTICONN_MIN_FILE_SIZE = 32L * 1024 * 1024;
@@ -265,59 +270,57 @@ namespace TelegramDownloader.Data
             return cfg != null && cfg.EnableMultiConnectionDownloads && document.size >= MULTICONN_MIN_FILE_SIZE;
         }
 
-        private async Task<List<WTelegram.Client>> GetDownloadPoolAsync(int dcId, int count)
+        private async Task<List<WTelegram.Client>> GetDownloadPoolAsync(int count)
         {
-            DcDownloadPool pool;
-            lock (downloadPools)
-            {
-                if (!downloadPools.TryGetValue(dcId, out pool))
-                    downloadPools[dcId] = pool = new DcDownloadPool();
-            }
-            if (pool.bootstrapFailed)
+            if (downloadPool.bootstrapFailed)
                 return new List<WTelegram.Client>();
-            await pool.initLock.WaitAsync();
+            await downloadPool.initLock.WaitAsync();
             try
             {
-                pool.clients.RemoveAll(c =>
+                downloadPool.clients.RemoveAll(c =>
                 {
                     if (!c.Disconnected) return false;
                     try { c.Dispose(); } catch { }
                     return true;
                 });
-                while (pool.clients.Count < count)
+                while (downloadPool.clients.Count < count)
                 {
-                    WTelegram.Client pc = await CreateDownloadPoolClientAsync(dcId, pool.clients.Count);
+                    WTelegram.Client pc = await CreateDownloadPoolClientAsync(downloadPool.clients.Count);
                     if (pc == null)
                     {
-                        // Do not retry the bootstrap on every download if the DC
-                        // refuses it (e.g. exportAuthorization not allowed).
-                        if (pool.clients.Count == 0)
-                            pool.bootstrapFailed = true;
+                        // Do not retry the bootstrap on every download if the
+                        // server refuses it.
+                        if (downloadPool.clients.Count == 0)
+                            downloadPool.bootstrapFailed = true;
                         break;
                     }
-                    pool.clients.Add(pc);
+                    downloadPool.clients.Add(pc);
                 }
-                return pool.clients.Take(count).ToList();
+                return downloadPool.clients.Take(count).ToList();
             }
             finally
             {
-                pool.initLock.Release();
+                downloadPool.initLock.Release();
             }
         }
 
-        private async Task<WTelegram.Client> CreateDownloadPoolClientAsync(int dcId, int index)
+        private async Task<WTelegram.Client> CreateDownloadPoolClientAsync(int index)
         {
-            string sessionPath = Path.Combine(UserService.USERDATAFOLDER, $"WTelegram_dl_dc{dcId}_{index}.session");
+            string sessionPath = Path.Combine(UserService.USERDATAFOLDER, $"WTelegram_dl_{index}.session");
             try
             {
+                // Home the pool client on a DC different from the account's home
+                // DC, because exporting an authorization towards the caller's own
+                // DC is rejected with DC_ID_INVALID.
                 TL.Config tlConfig = await client.Help_GetConfig();
+                int mainHomeDc = tlConfig.this_dc;
                 DcOption dc = tlConfig.dc_options
-                    .Where(x => x.id == dcId && (x.flags & (DcOption.Flags.ipv6 | DcOption.Flags.cdn | DcOption.Flags.tcpo_only)) == 0)
-                    .OrderBy(x => (x.flags & DcOption.Flags.media_only) == 0 ? 0 : 1)
+                    .Where(x => x.id != mainHomeDc && (x.flags & (DcOption.Flags.ipv6 | DcOption.Flags.cdn | DcOption.Flags.tcpo_only | DcOption.Flags.media_only)) == 0)
+                    .OrderBy(x => x.id)
                     .FirstOrDefault();
                 if (dc == null)
                 {
-                    _logger.LogWarning("No suitable address found for DC {Dc} - multi-connection download unavailable", dcId);
+                    _logger.LogWarning("No suitable neighbor DC found (home DC {Dc}) - multi-connection download unavailable", mainHomeDc);
                     return null;
                 }
                 string apiId = GeneralConfigStatic.tlconfig?.api_id ?? Environment.GetEnvironmentVariable("api_id");
@@ -347,12 +350,11 @@ namespace TelegramDownloader.Data
                     }
                     if (!authorized)
                     {
-                        Auth_ExportedAuthorization exported = await client.Auth_ExportAuthorization(dcId);
+                        Auth_ExportedAuthorization exported = await client.Auth_ExportAuthorization(dc.id);
                         await pc.Auth_ImportAuthorization(exported.id, exported.bytes);
                         await pc.Users_GetUsers(InputUser.Self);
                     }
-                    ApplyConfiguredParallelTransfers(pc);
-                    _logger.LogInformation("Download pool client {Index} ready for DC {Dc}", index, dcId);
+                    _logger.LogInformation("Download pool client {Index} ready (homed on DC {Dc})", index, dc.id);
                     return pc;
                 }
                 catch
@@ -363,9 +365,39 @@ namespace TelegramDownloader.Data
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Could not create download pool client {Index} for DC {Dc} - falling back to single-connection downloads", index, dcId);
+                _logger.LogWarning(ex, "Could not create download pool client {Index}: {Error} - falling back to single-connection downloads", index, ex.Message);
                 return null;
             }
+        }
+
+        /// <summary>
+        /// Returns a client of <paramref name="owner"/> connected to the given DC,
+        /// importing an authorization for it on first use. Both the pool client's
+        /// home and the file DC are covered: when they match, the owner itself is
+        /// returned; otherwise the export is cross-DC (owner's home is never the
+        /// account's home DC by construction) and therefore accepted.
+        /// </summary>
+        private async Task<WTelegram.Client> GetAuthorizedTransferClientAsync(WTelegram.Client owner, int dcId)
+        {
+            WTelegram.Client transfer = await owner.GetClientForDC(dcId, true);
+            if (transfer != owner)
+            {
+                bool authorized = false;
+                try
+                {
+                    await transfer.Users_GetUsers(InputUser.Self);
+                    authorized = true;
+                }
+                catch (RpcException)
+                {
+                }
+                if (!authorized)
+                {
+                    Auth_ExportedAuthorization exported = await owner.Auth_ExportAuthorization(dcId);
+                    await transfer.Auth_ImportAuthorization(exported.id, exported.bytes);
+                }
+            }
+            return transfer;
         }
 
         /// <summary>
@@ -378,17 +410,28 @@ namespace TelegramDownloader.Data
         private async Task<bool> TryMultiConnectionDownloadAsync(TL.Document document, FileStream dest, DownloadModel model)
         {
             long size = document.size;
-            List<WTelegram.Client> pool;
+            List<WTelegram.Client> transfers = new List<WTelegram.Client>();
             try
             {
-                pool = await GetDownloadPoolAsync(document.dc_id, GetConfiguredDownloadConnections());
+                List<WTelegram.Client> pool = await GetDownloadPoolAsync(GetConfiguredDownloadConnections());
+                foreach (WTelegram.Client owner in pool)
+                {
+                    try
+                    {
+                        transfers.Add(await GetAuthorizedTransferClientAsync(owner, document.dc_id));
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Pool connection unavailable for DC {Dc}: {Error}", document.dc_id, ex.Message);
+                    }
+                }
             }
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Download pool unavailable for DC {Dc}", document.dc_id);
                 return false;
             }
-            if (pool.Count < 2)
+            if (transfers.Count < 2)
                 return false;
 
             var location = new InputDocumentFileLocation
@@ -400,7 +443,7 @@ namespace TelegramDownloader.Data
             };
 
             _logger.LogInformation("Multi-connection download - FileName: {Name}, Size: {SizeMB:F2}MB, Connections: {Connections}",
-                model.name, size / (1024.0 * 1024.0), pool.Count);
+                model.name, size / (1024.0 * 1024.0), transfers.Count);
 
             long blockCount = (size + MULTICONN_BLOCK_SIZE - 1) / MULTICONN_BLOCK_SIZE;
             bool[] blockDone = new bool[blockCount];
@@ -472,7 +515,7 @@ namespace TelegramDownloader.Data
 
             try
             {
-                await Task.WhenAll(pool.Select(pc => Task.Run(() => GuardedWorker(pc))));
+                await Task.WhenAll(transfers.Select(pc => Task.Run(() => GuardedWorker(pc))));
                 await dest.FlushAsync();
                 return true;
             }
