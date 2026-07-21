@@ -233,6 +233,263 @@ namespace TelegramDownloader.Data
             }
         }
 
+        #region Multi-connection downloads
+
+        // Telegram enforces its throughput limit PER CONNECTION (~5-6 MB/s), so a
+        // single MTProto connection cannot go faster regardless of how many chunks
+        // are pipelined. Official clients reach high speeds by opening several
+        // sessions to the file's DC and splitting the file between them. This pool
+        // holds extra authorized clients per DC (bootstrapped once from the main
+        // client via auth.exportAuthorization/importAuthorization, persisted as
+        // session files and reused across restarts).
+        private class DcDownloadPool
+        {
+            public readonly SemaphoreSlim initLock = new SemaphoreSlim(1, 1);
+            public readonly List<WTelegram.Client> clients = new List<WTelegram.Client>();
+            public bool bootstrapFailed = false;
+        }
+
+        private static readonly Dictionary<int, DcDownloadPool> downloadPools = new Dictionary<int, DcDownloadPool>();
+        private const int MULTICONN_PART_SIZE = 1024 * 1024;        // upload.getFile max limit per request
+        private const int MULTICONN_BLOCK_SIZE = 4 * 1024 * 1024;   // work unit assigned to a connection
+        private const long MULTICONN_MIN_FILE_SIZE = 32L * 1024 * 1024;
+
+        public static int GetConfiguredDownloadConnections()
+        {
+            return Math.Clamp(GeneralConfigStatic.config?.DownloadConnections ?? 4, 2, 8);
+        }
+
+        private static bool ShouldUseMultiConnection(TL.Document document)
+        {
+            GeneralConfig cfg = GeneralConfigStatic.config;
+            return cfg != null && cfg.EnableMultiConnectionDownloads && document.size >= MULTICONN_MIN_FILE_SIZE;
+        }
+
+        private async Task<List<WTelegram.Client>> GetDownloadPoolAsync(int dcId, int count)
+        {
+            DcDownloadPool pool;
+            lock (downloadPools)
+            {
+                if (!downloadPools.TryGetValue(dcId, out pool))
+                    downloadPools[dcId] = pool = new DcDownloadPool();
+            }
+            if (pool.bootstrapFailed)
+                return new List<WTelegram.Client>();
+            await pool.initLock.WaitAsync();
+            try
+            {
+                pool.clients.RemoveAll(c =>
+                {
+                    if (!c.Disconnected) return false;
+                    try { c.Dispose(); } catch { }
+                    return true;
+                });
+                while (pool.clients.Count < count)
+                {
+                    WTelegram.Client pc = await CreateDownloadPoolClientAsync(dcId, pool.clients.Count);
+                    if (pc == null)
+                    {
+                        // Do not retry the bootstrap on every download if the DC
+                        // refuses it (e.g. exportAuthorization not allowed).
+                        if (pool.clients.Count == 0)
+                            pool.bootstrapFailed = true;
+                        break;
+                    }
+                    pool.clients.Add(pc);
+                }
+                return pool.clients.Take(count).ToList();
+            }
+            finally
+            {
+                pool.initLock.Release();
+            }
+        }
+
+        private async Task<WTelegram.Client> CreateDownloadPoolClientAsync(int dcId, int index)
+        {
+            string sessionPath = Path.Combine(UserService.USERDATAFOLDER, $"WTelegram_dl_dc{dcId}_{index}.session");
+            try
+            {
+                TL.Config tlConfig = await client.Help_GetConfig();
+                DcOption dc = tlConfig.dc_options
+                    .Where(x => x.id == dcId && (x.flags & (DcOption.Flags.ipv6 | DcOption.Flags.cdn | DcOption.Flags.tcpo_only)) == 0)
+                    .OrderBy(x => (x.flags & DcOption.Flags.media_only) == 0 ? 0 : 1)
+                    .FirstOrDefault();
+                if (dc == null)
+                {
+                    _logger.LogWarning("No suitable address found for DC {Dc} - multi-connection download unavailable", dcId);
+                    return null;
+                }
+                string apiId = GeneralConfigStatic.tlconfig?.api_id ?? Environment.GetEnvironmentVariable("api_id");
+                string apiHash = GeneralConfigStatic.tlconfig?.hash_id ?? Environment.GetEnvironmentVariable("hash_id");
+                WTelegram.Client pc = new WTelegram.Client(what => what switch
+                {
+                    "api_id" => apiId,
+                    "api_hash" => apiHash,
+                    "session_pathname" => sessionPath,
+                    "server_address" => $"{dc.ip_address}:{dc.port}",
+                    "device_model" => "TFM parallel download",
+                    _ => null
+                });
+                try
+                {
+                    await pc.ConnectAsync();
+                    bool authorized = false;
+                    try
+                    {
+                        await pc.Users_GetUsers(InputUser.Self);
+                        authorized = true;
+                    }
+                    catch (RpcException)
+                    {
+                        // Fresh session, or a previously created one revoked from
+                        // the account's device list: (re)import the authorization.
+                    }
+                    if (!authorized)
+                    {
+                        Auth_ExportedAuthorization exported = await client.Auth_ExportAuthorization(dcId);
+                        await pc.Auth_ImportAuthorization(exported.id, exported.bytes);
+                        await pc.Users_GetUsers(InputUser.Self);
+                    }
+                    ApplyConfiguredParallelTransfers(pc);
+                    _logger.LogInformation("Download pool client {Index} ready for DC {Dc}", index, dcId);
+                    return pc;
+                }
+                catch
+                {
+                    try { pc.Dispose(); } catch { }
+                    throw;
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not create download pool client {Index} for DC {Dc} - falling back to single-connection downloads", index, dcId);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Downloads a document by splitting it in blocks served concurrently by
+        /// several pool connections, writing each part at its absolute offset.
+        /// Returns false (leaving the destination empty) when the pool is not
+        /// available or the transfer failed in a recoverable way, so the caller
+        /// can fall back to the standard sequential download.
+        /// </summary>
+        private async Task<bool> TryMultiConnectionDownloadAsync(TL.Document document, FileStream dest, DownloadModel model)
+        {
+            long size = document.size;
+            List<WTelegram.Client> pool;
+            try
+            {
+                pool = await GetDownloadPoolAsync(document.dc_id, GetConfiguredDownloadConnections());
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Download pool unavailable for DC {Dc}", document.dc_id);
+                return false;
+            }
+            if (pool.Count < 2)
+                return false;
+
+            var location = new InputDocumentFileLocation
+            {
+                id = document.id,
+                access_hash = document.access_hash,
+                file_reference = document.file_reference,
+                thumb_size = ""
+            };
+
+            _logger.LogInformation("Multi-connection download - FileName: {Name}, Size: {SizeMB:F2}MB, Connections: {Connections}",
+                model.name, size / (1024.0 * 1024.0), pool.Count);
+
+            long blockCount = (size + MULTICONN_BLOCK_SIZE - 1) / MULTICONN_BLOCK_SIZE;
+            bool[] blockDone = new bool[blockCount];
+            long confirmedBlocks = 0;
+            long nextBlock = -1;
+            object progressLock = new object();
+            using CancellationTokenSource cts = new CancellationTokenSource();
+            dest.SetLength(size);
+            var handle = dest.SafeFileHandle;
+
+            void ReportPart(long block, int received, bool blockCompleted)
+            {
+                long confirmed;
+                lock (progressLock)
+                {
+                    if (blockCompleted)
+                    {
+                        blockDone[block] = true;
+                        while (confirmedBlocks < blockCount && blockDone[confirmedBlocks])
+                            confirmedBlocks++;
+                    }
+                    confirmed = Math.Min(size, confirmedBlocks * (long)MULTICONN_BLOCK_SIZE);
+                }
+                // Throws when the task gets canceled or paused, stopping the workers.
+                model.ReportParallelProgress(confirmed, received, size);
+            }
+
+            async Task Worker(WTelegram.Client pc)
+            {
+                while (!cts.IsCancellationRequested)
+                {
+                    long block = Interlocked.Increment(ref nextBlock);
+                    if (block >= blockCount)
+                        return;
+                    long offset = block * (long)MULTICONN_BLOCK_SIZE;
+                    long end = Math.Min(size, offset + MULTICONN_BLOCK_SIZE);
+                    while (offset < end)
+                    {
+                        cts.Token.ThrowIfCancellationRequested();
+                        Upload_FileBase resp = null;
+                        for (int attempt = 1; ; attempt++)
+                        {
+                            try
+                            {
+                                resp = await pc.Upload_GetFile(location, offset, limit: MULTICONN_PART_SIZE);
+                                break;
+                            }
+                            catch (Exception) when (attempt < 3 && !cts.IsCancellationRequested)
+                            {
+                                await Task.Delay(1000 * attempt);
+                            }
+                        }
+                        if (resp is not Upload_File part)
+                            throw new InvalidOperationException($"Unexpected {resp?.GetType().Name} from Upload_GetFile (CDN-served files are not supported)");
+                        if (part.bytes.Length == 0)
+                            throw new InvalidOperationException($"Empty chunk at offset {offset}");
+                        RandomAccess.Write(handle, part.bytes, offset);
+                        offset += part.bytes.Length;
+                        ReportPart(block, part.bytes.Length, offset >= end);
+                    }
+                }
+            }
+
+            async Task GuardedWorker(WTelegram.Client pc)
+            {
+                try { await Worker(pc); }
+                catch { cts.Cancel(); throw; }
+            }
+
+            try
+            {
+                await Task.WhenAll(pool.Select(pc => Task.Run(() => GuardedWorker(pc))));
+                await dest.FlushAsync();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                if (model.state == StateTask.Canceled || model.state == StateTask.Paused)
+                    throw;
+                _logger.LogWarning(ex, "Multi-connection download failed, falling back to sequential - FileName: {Name}", model.name);
+                dest.SetLength(0);
+                dest.Position = 0;
+                model._transmitted = 0;
+                return false;
+            }
+        }
+
+        #endregion
+
         public async Task<User> CallQrGenerator(Action<string> func, CancellationToken ct, bool logoutFirst = false)
         {
             return await client.LoginWithQRCode(func, logoutFirst: logoutFirst, ct: ct);
@@ -1430,8 +1687,14 @@ namespace TelegramDownloader.Data
                     _tis.addToDownloadList(model);
                 _logger.LogInformation("Starting file download to disk - FileName: {FileName}, Size: {SizeMB:F2}MB", filename, document.size / (1024.0 * 1024.0));
                 using var dest = new FileStream($"{Path.Combine(folder != null ? folder : Path.Combine(Environment.CurrentDirectory, "local", "temp"), filename)}", FileMode.Create, FileAccess.Write);
-                await PrepareTransferClientAsync(document.dc_id);
-                await client.DownloadFileAsync(document, dest, (PhotoSizeBase)null, model.ProgressCallback);
+                bool multiConnDone = false;
+                if (ShouldUseMultiConnection(document))
+                    multiConnDone = await TryMultiConnectionDownloadAsync(document, dest, model);
+                if (!multiConnDone)
+                {
+                    await PrepareTransferClientAsync(document.dc_id);
+                    await client.DownloadFileAsync(document, dest, (PhotoSizeBase)null, model.ProgressCallback);
+                }
                 _logger.LogInformation("File download to disk completed - FileName: {FileName}", filename);
             }
             else if (message.message.media is MessageMediaPhoto { photo: Photo photo })
