@@ -6,6 +6,8 @@
 @using TelegramDownloader.Services
 @using Microsoft.AspNetCore.WebUtilities
 
+@implements IDisposable
+
 @inject TransactionInfoService tis
 @inject NavigationManager NavigationManager
 @inject ITaskPersistenceService taskPersistence
@@ -182,7 +184,22 @@
 
     protected override async Task OnInitializedAsync()
     {
+        tis.TransactionsChanged += OnTransactionsChanged;
         await LoadPersistedTasksCount();
+    }
+
+    private async void OnTransactionsChanged(object sender, System.EventArgs e)
+    {
+        try
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
+    }
+
+    public void Dispose()
+    {
+        tis.TransactionsChanged -= OnTransactionsChanged;
     }
 
     private async Task LoadPersistedTasksCount()
