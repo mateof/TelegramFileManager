@@ -1525,8 +1525,16 @@ namespace TelegramDownloader.Data
                     model.name = filename;
                 _logger.LogInformation("Starting document download - FileName: {FileName}, Size: {SizeMB:F2}MB", filename, document.size / (1024.0 * 1024.0));
                 MemoryStream dest = new MemoryStream();
-                await PrepareTransferClientAsync(document.dc_id);
-                await client.DownloadFileAsync(document, ms ?? dest, (PhotoSizeBase)null, model.ProgressCallback);
+                // File-manager download tasks land here with a FileStream target,
+                // which supports positional writes for multi-connection mode.
+                bool multiConnDone = false;
+                if (ms is FileStream fileDest && ShouldUseMultiConnection(document))
+                    multiConnDone = await TryMultiConnectionDownloadAsync(document, fileDest, model);
+                if (!multiConnDone)
+                {
+                    await PrepareTransferClientAsync(document.dc_id);
+                    await client.DownloadFileAsync(document, ms ?? dest, (PhotoSizeBase)null, model.ProgressCallback);
+                }
                 _logger.LogInformation("Document download completed - FileName: {FileName}", filename);
                 return ms ?? dest;
             }
@@ -1574,8 +1582,14 @@ namespace TelegramDownloader.Data
                 if (offset == 0)
                 {
                     MemoryStream dest = new MemoryStream();
-                    await PrepareTransferClientAsync(document.dc_id);
-                    await client.DownloadFileAsync(document, ms ?? dest, (PhotoSizeBase)null, model.ProgressCallback);
+                    bool multiConnDone = false;
+                    if (ms is FileStream fileDest && ShouldUseMultiConnection(document))
+                        multiConnDone = await TryMultiConnectionDownloadAsync(document, fileDest, model);
+                    if (!multiConnDone)
+                    {
+                        await PrepareTransferClientAsync(document.dc_id);
+                        await client.DownloadFileAsync(document, ms ?? dest, (PhotoSizeBase)null, model.ProgressCallback);
+                    }
                     _logger.LogInformation("Document download completed - FileName: {FileName}", filename);
                     return ms ?? dest;
                 }
