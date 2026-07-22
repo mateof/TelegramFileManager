@@ -160,6 +160,19 @@ namespace TelegramDownloader.Data
 
         private void newClient()
         {
+            // Snapshot the session file BEFORE the client opens (and locks) it,
+            // so the multi-connection download pool can clone the session even
+            // while the live file is held exclusively by this client.
+            try
+            {
+                string mainSession = UserService.USERDATAFOLDER + "/WTelegram.session";
+                if (File.Exists(mainSession))
+                    File.Copy(mainSession, mainSession + ".snapshot", overwrite: true);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "Could not snapshot the session file");
+            }
             client = new WTelegram.Client(Convert.ToInt32(GeneralConfigStatic.tlconfig?.api_id ?? Environment.GetEnvironmentVariable("api_id")), GeneralConfigStatic.tlconfig?.hash_id ?? Environment.GetEnvironmentVariable("hash_id"), UserService.USERDATAFOLDER + "/WTelegram.session");
             ApplyConfiguredParallelTransfers(client);
             if (GeneralConfigStatic.config.ShouldShowLogInTerminal)
@@ -351,20 +364,34 @@ namespace TelegramDownloader.Data
 
         private static void CopySessionWithRetry(string source, string destination)
         {
-            // The main client rewrites its session file on saves; retry briefly in
-            // case the copy races with a write.
-            for (int attempt = 1; ; attempt++)
+            // The main client keeps its session file open (often exclusively), so
+            // File.Copy cannot read it. Try a share-friendly stream copy of the
+            // live file first, then fall back to the snapshot taken at startup
+            // before the client opened the file. Session state staleness is fine:
+            // the auth key never changes and salts are renegotiated automatically.
+            IOException lastError = null;
+            for (int attempt = 1; attempt <= 3; attempt++)
             {
                 try
                 {
-                    File.Copy(source, destination, overwrite: true);
+                    using (FileStream src = new FileStream(source, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                    using (FileStream dst = new FileStream(destination, FileMode.Create, FileAccess.Write))
+                        src.CopyTo(dst);
                     return;
                 }
-                catch (IOException) when (attempt < 3)
+                catch (IOException ex)
                 {
-                    Thread.Sleep(200 * attempt);
+                    lastError = ex;
+                    Thread.Sleep(150 * attempt);
                 }
             }
+            string snapshot = source + ".snapshot";
+            if (File.Exists(snapshot))
+            {
+                File.Copy(snapshot, destination, overwrite: true);
+                return;
+            }
+            throw lastError;
         }
 
         /// <summary>
