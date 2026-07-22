@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using TelegramDownloader.Data;
 using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
+using TL;
 
 namespace TelegramDownloader.Services
 {
@@ -46,6 +47,13 @@ namespace TelegramDownloader.Services
         public bool IsDownloading { get; set; }
         public DateTime StartTime { get; set; }
         public CancellationTokenSource? CancellationTokenSource { get; set; }
+        /// <summary>
+        /// Set when the user cancelled the background download from the downloads list.
+        /// While set (and not expired), new range requests won't restart the cache download;
+        /// playback keeps working through direct Telegram fetches.
+        /// </summary>
+        public bool CancelledByUser { get; set; }
+        public DateTime CancelledAtUtc { get; set; }
     }
 
     public class ProgressiveDownloadService : IProgressiveDownloadService
@@ -59,6 +67,11 @@ namespace TelegramDownloader.Services
 
         // Lock for starting downloads
         private readonly ConcurrentDictionary<string, SemaphoreSlim> _downloadLocks = new();
+
+        // Cache directory size cap: oldest files are evicted first (by write time)
+        private const long MAX_CACHE_BYTES = 10L * 1024 * 1024 * 1024; // 10 GB
+        private static DateTime _lastCleanup = DateTime.MinValue;
+        private static readonly object _cleanupLock = new();
 
         public ProgressiveDownloadService(
             ITelegramService ts,
@@ -89,12 +102,6 @@ namespace TelegramDownloader.Services
         {
             if (!_activeDownloads.TryGetValue(cacheKey, out var info))
             {
-                // Check if file exists and is complete
-                if (File.Exists(info?.FilePath ?? ""))
-                {
-                    var fileInfo = new FileInfo(info!.FilePath);
-                    return end <= fileInfo.Length;
-                }
                 return false;
             }
 
@@ -109,9 +116,23 @@ namespace TelegramDownloader.Services
             string filePath)
         {
             // Quick check if already complete
-            if (_activeDownloads.TryGetValue(cacheKey, out var existingInfo) && existingInfo.IsComplete)
+            if (_activeDownloads.TryGetValue(cacheKey, out var existingInfo))
             {
-                return existingInfo;
+                if (existingInfo.IsComplete)
+                {
+                    if (File.Exists(existingInfo.FilePath))
+                    {
+                        return existingInfo;
+                    }
+                    // Cache file was evicted: forget the stale entry and re-download
+                    _activeDownloads.TryRemove(cacheKey, out _);
+                }
+                else if (IsUserCancelActive(existingInfo))
+                {
+                    // User stopped this cache download: don't restart it on every range
+                    // request; playback is served through direct Telegram fetches instead
+                    return existingInfo;
+                }
             }
 
             // Check if file already exists and is complete
@@ -143,7 +164,9 @@ namespace TelegramDownloader.Services
                 // Double-check after acquiring lock
                 if (_activeDownloads.TryGetValue(cacheKey, out existingInfo))
                 {
-                    if (existingInfo.IsComplete || existingInfo.IsDownloading)
+                    if (existingInfo.IsDownloading ||
+                        IsUserCancelActive(existingInfo) ||
+                        (existingInfo.IsComplete && File.Exists(existingInfo.FilePath)))
                     {
                         return existingInfo;
                     }
@@ -192,18 +215,12 @@ namespace TelegramDownloader.Services
                     Directory.CreateDirectory(directory);
                 }
 
-                // Get message from Telegram
-                if (!dbFile.MessageId.HasValue)
+                // Ordered list of Telegram messages that make up this file
+                // (split files span several messages, one document per part)
+                var messageIds = GetMessageIds(dbFile);
+                if (messageIds == null || messageIds.Count == 0)
                 {
                     _logger.LogError("File has no MessageId: {CacheKey}", info.CacheKey);
-                    info.IsDownloading = false;
-                    return;
-                }
-
-                var message = await _ts.getMessageFile(channelId, dbFile.MessageId.Value);
-                if (message == null)
-                {
-                    _logger.LogError("Message not found in Telegram: {CacheKey}", info.CacheKey);
                     info.IsDownloading = false;
                     return;
                 }
@@ -215,9 +232,10 @@ namespace TelegramDownloader.Services
                     FileAccess.Write,
                     FileShare.Read);
 
-                // Resume from where we left off if file partially exists
-                var startOffset = fileStream.Length;
-                fileStream.Seek(0, SeekOrigin.End);
+                // Resume from where we left off if file partially exists.
+                // Align down to 512KB so per-part offsets stay Telegram-aligned.
+                var startOffset = (fileStream.Length / 524288) * 524288;
+                fileStream.Seek(startOffset, SeekOrigin.Begin);
                 info.DownloadedBytes = startOffset;
 
                 // Create download model for progress tracking
@@ -228,58 +246,132 @@ namespace TelegramDownloader.Services
                     path = info.FilePath,
                     name = Path.GetFileName(info.FilePath),
                     _size = info.TotalSize,
+                    // Start the counter at the resume offset so progress and global
+                    // speed stats only account for newly downloaded bytes
+                    _transmitted = startOffset,
                     channelName = _ts.getChatName(Convert.ToInt64(channelId))
                 };
                 _tis.addToDownloadList(dm);
 
-                // Download in chunks
+                // Download in chunks, part by part (a single-message file is just one part)
                 const int chunkSize = 512 * 1024; // 512KB chunks
-                var chatMessage = new ChatMessages { message = message };
+                const int maxConsecutiveErrors = 5;
+                var consecutiveErrors = 0;
+                var aborted = false;
+                long partStartGlobal = 0;
+                var ct = info.CancellationTokenSource!.Token;
 
-                while (info.DownloadedBytes < info.TotalSize && !info.CancellationTokenSource!.Token.IsCancellationRequested)
+                foreach (var msgId in messageIds)
                 {
-                    var remaining = info.TotalSize - info.DownloadedBytes;
-                    var toDownload = (int)Math.Min(chunkSize, remaining);
+                    if (aborted || ct.IsCancellationRequested)
+                        break;
 
-                    try
+                    var message = await _ts.getMessageFile(channelId, msgId);
+                    var partSize = GetDocumentSize(message);
+                    if (message == null || partSize <= 0)
                     {
-                        var chunk = await _ts.DownloadFileStream(message, info.DownloadedBytes, toDownload);
-                        if (chunk.Length == 0)
+                        _logger.LogError("Message {MessageId} not found in Telegram or has no document: {CacheKey}", msgId, info.CacheKey);
+                        aborted = true;
+                        break;
+                    }
+
+                    // Part already fully cached (resume): skip it
+                    if (info.DownloadedBytes >= partStartGlobal + partSize)
+                    {
+                        partStartGlobal += partSize;
+                        continue;
+                    }
+
+                    var localOffset = info.DownloadedBytes - partStartGlobal;
+
+                    while (localOffset < partSize && !ct.IsCancellationRequested)
+                    {
+                        // React to Cancel/Pause pressed in the downloads list
+                        if (dm.state == StateTask.Canceled || dm.state == StateTask.Paused)
                         {
-                            _logger.LogWarning("Received empty chunk at offset {Offset}", info.DownloadedBytes);
+                            _logger.LogInformation("Background download stopped by user: {CacheKey}", info.CacheKey);
+                            info.CancelledByUser = true;
+                            info.CancelledAtUtc = DateTime.UtcNow;
+                            aborted = true;
                             break;
                         }
 
-                        await fileStream.WriteAsync(chunk, 0, chunk.Length, info.CancellationTokenSource.Token);
-                        await fileStream.FlushAsync(info.CancellationTokenSource.Token);
+                        var toDownload = (int)Math.Min(chunkSize, partSize - localOffset);
 
-                        info.DownloadedBytes += chunk.Length;
-                        dm._transmitted = info.DownloadedBytes;
-
-                        // Log progress every 10%
-                        var progress = (double)info.DownloadedBytes / info.TotalSize * 100;
-                        if ((int)progress % 10 == 0)
+                        try
                         {
-                            _logger.LogDebug("Download progress: {FileName} - {Progress:F1}%",
-                                Path.GetFileName(info.FilePath), progress);
+                            var chunk = await _ts.DownloadFileStream(message, localOffset, toDownload);
+                            if (chunk.Length == 0)
+                            {
+                                _logger.LogWarning("Received empty chunk at offset {Offset} of message {MessageId}", localOffset, msgId);
+                                aborted = true;
+                                break;
+                            }
+
+                            await fileStream.WriteAsync(chunk, 0, chunk.Length, ct);
+                            await fileStream.FlushAsync(ct);
+
+                            localOffset += chunk.Length;
+                            info.DownloadedBytes = partStartGlobal + localOffset;
+                            consecutiveErrors = 0;
+
+                            try
+                            {
+                                // Updates progress/speed and notifies the downloads UI;
+                                // marks the task completed when the last byte is written
+                                dm.ProgressCallback(info.DownloadedBytes, info.TotalSize);
+                            }
+                            catch
+                            {
+                                // ProgressCallback throws when Cancel/Pause was pressed
+                                _logger.LogInformation("Background download stopped by user: {CacheKey}", info.CacheKey);
+                                info.CancelledByUser = true;
+                                info.CancelledAtUtc = DateTime.UtcNow;
+                                aborted = true;
+                                break;
+                            }
+                        }
+                        catch (Exception ex) when (ex is not OperationCanceledException)
+                        {
+                            consecutiveErrors++;
+                            _logger.LogError(ex, "Error downloading chunk at offset {Offset} of message {MessageId} (attempt {Attempt}/{Max})",
+                                localOffset, msgId, consecutiveErrors, maxConsecutiveErrors);
+
+                            if (consecutiveErrors >= maxConsecutiveErrors)
+                            {
+                                _logger.LogError("Aborting background download after {Max} consecutive failures: {CacheKey}",
+                                    maxConsecutiveErrors, info.CacheKey);
+                                aborted = true;
+                                break;
+                            }
+
+                            // Back off progressively before retrying
+                            await Task.Delay(1000 * consecutiveErrors);
                         }
                     }
-                    catch (Exception ex) when (ex is not OperationCanceledException)
-                    {
-                        _logger.LogError(ex, "Error downloading chunk at offset {Offset}", info.DownloadedBytes);
-                        // Wait a bit and retry
-                        await Task.Delay(1000);
-                    }
+
+                    partStartGlobal += partSize;
                 }
 
                 info.IsComplete = info.DownloadedBytes >= info.TotalSize;
                 info.IsDownloading = false;
+
+                // Don't leave an incomplete task hanging as "Working" in the downloads list
+                if (!info.IsComplete && dm.state == StateTask.Working)
+                {
+                    dm.Cancel();
+                }
 
                 _logger.LogInformation("Background download {Status}: {FileName} ({Downloaded}/{Total} bytes)",
                     info.IsComplete ? "complete" : "incomplete",
                     Path.GetFileName(info.FilePath),
                     info.DownloadedBytes,
                     info.TotalSize);
+
+                if (info.IsComplete && !string.IsNullOrEmpty(directory))
+                {
+                    _ = Task.Run(() => TrimCacheDirectory(directory));
+                }
             }
             catch (OperationCanceledException)
             {
@@ -290,6 +382,93 @@ namespace TelegramDownloader.Services
             {
                 _logger.LogError(ex, "Error in background download: {CacheKey}", info.CacheKey);
                 info.IsDownloading = false;
+            }
+        }
+
+        // A user cancel blocks automatic restarts for this long; afterwards a new
+        // playback of the file starts caching again
+        private static readonly TimeSpan USER_CANCEL_TTL = TimeSpan.FromHours(1);
+
+        private static bool IsUserCancelActive(ProgressiveDownloadInfo info)
+        {
+            return info.CancelledByUser && DateTime.UtcNow - info.CancelledAtUtc < USER_CANCEL_TTL;
+        }
+
+        /// <summary>
+        /// Ordered list of Telegram message IDs that make up a file: a single message for
+        /// regular files, several (one per part) for split files.
+        /// </summary>
+        internal static List<int>? GetMessageIds(BsonFileManagerModel dbFile)
+        {
+            if (dbFile.MessageId.HasValue && (dbFile.ListMessageId == null || dbFile.ListMessageId.Count <= 1))
+                return new List<int> { dbFile.MessageId.Value };
+            return dbFile.ListMessageId;
+        }
+
+        internal static long GetDocumentSize(Message? message)
+        {
+            return message?.media is MessageMediaDocument { document: Document doc } ? doc.size : 0;
+        }
+
+        /// <summary>
+        /// Keeps the streaming cache directory under MAX_CACHE_BYTES, deleting the
+        /// oldest files first (by write time). Files being downloaded are skipped.
+        /// Throttled to run at most every 30 minutes.
+        /// </summary>
+        private void TrimCacheDirectory(string directory)
+        {
+            lock (_cleanupLock)
+            {
+                if (DateTime.UtcNow - _lastCleanup < TimeSpan.FromMinutes(30)) return;
+                _lastCleanup = DateTime.UtcNow;
+            }
+
+            try
+            {
+                var files = new DirectoryInfo(directory).GetFiles();
+                var totalSize = files.Sum(f => f.Length);
+                if (totalSize <= MAX_CACHE_BYTES) return;
+
+                var activePaths = _activeDownloads.Values
+                    .Where(i => i.IsDownloading)
+                    .Select(i => i.FilePath)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                var removed = 0;
+                foreach (var file in files.OrderBy(f => f.LastWriteTimeUtc))
+                {
+                    if (totalSize <= MAX_CACHE_BYTES) break;
+                    if (activePaths.Contains(file.FullName)) continue;
+
+                    try
+                    {
+                        var size = file.Length;
+                        file.Delete();
+                        totalSize -= size;
+                        removed++;
+
+                        // Drop any stale tracking entry pointing at the deleted file
+                        var stale = _activeDownloads.FirstOrDefault(kv =>
+                            string.Equals(kv.Value.FilePath, file.FullName, StringComparison.OrdinalIgnoreCase));
+                        if (stale.Key != null)
+                        {
+                            _activeDownloads.TryRemove(stale.Key, out _);
+                        }
+                    }
+                    catch (IOException)
+                    {
+                        // File in use (e.g. being served): skip it
+                    }
+                }
+
+                if (removed > 0)
+                {
+                    _logger.LogInformation("Cache trim: removed {Count} files from {Directory}", removed, directory);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Cache trim failed for {Directory}", directory);
             }
         }
     }

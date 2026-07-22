@@ -76,7 +76,8 @@ button.btn.water-fill-button.download:hover {
     box-shadow: 0 4px 12px rgba(23, 162, 184, 0.2) !important;
 }
 
-/* Water fill background layer */
+/* Water fill background layer: deeper color at the bottom, lighter towards
+   the surface, so the liquid reads as translucent */
 button.btn.water-fill-button > .water-fill {
     position: absolute !important;
     bottom: 0 !important;
@@ -84,7 +85,9 @@ button.btn.water-fill-button > .water-fill {
     right: 0 !important;
     top: auto !important;
     width: 100% !important;
-    background: rgba(0, 123, 255, 0.7) !important;
+    background: linear-gradient(180deg,
+        rgba(0, 123, 255, 0.55) 0%,
+        rgba(0, 123, 255, 0.85) 100%) !important;
     transition: height 0.4s ease-out !important;
     pointer-events: none !important;
     z-index: 0 !important;
@@ -92,14 +95,22 @@ button.btn.water-fill-button > .water-fill {
 }
 
 button.btn.water-fill-button.upload > .water-fill {
-    background: rgba(40, 167, 69, 0.7) !important;
+    background: linear-gradient(180deg,
+        rgba(40, 167, 69, 0.55) 0%,
+        rgba(40, 167, 69, 0.85) 100%) !important;
 }
 
 button.btn.water-fill-button.download > .water-fill {
-    background: rgba(23, 162, 184, 0.7) !important;
+    background: linear-gradient(180deg,
+        rgba(23, 162, 184, 0.55) 0%,
+        rgba(23, 162, 184, 0.85) 100%) !important;
 }
 
-/* Wave effect on top of water */
+/* Waterline waves: the .water-wave element is an invisible box whose top edge
+   sits exactly at the fill level (inline height = progress). Two repeating
+   SVG wave strips ride on that edge, drifting horizontally at different
+   speeds and in opposite directions, which is what creates the sea-wave
+   motion; they overlap the fill by 1px so no seam shows */
 button.btn.water-fill-button > .water-wave {
     position: absolute !important;
     bottom: 0 !important;
@@ -107,23 +118,70 @@ button.btn.water-fill-button > .water-wave {
     right: 0 !important;
     top: auto !important;
     width: 100% !important;
-    background: linear-gradient(90deg,
-        transparent 0%,
-        rgba(255,255,255,0.4) 50%,
-        transparent 100%) !important;
-    background-size: 50% 100% !important;
-    animation: waveShine 1.5s ease-in-out infinite !important;
+    background: none !important;
+    animation: none !important;
+    transition: height 0.4s ease-out !important;
     pointer-events: none !important;
     z-index: 1 !important;
     display: block !important;
+    overflow: visible !important;
 }
 
-@keyframes waveShine {
-    0% {
-        background-position: -100% 0;
+button.btn.water-fill-button > .water-wave::before,
+button.btn.water-fill-button > .water-wave::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 8px;
+    background-repeat: repeat-x;
+    background-size: 80px 8px;
+    will-change: background-position-x;
+}
+
+button.btn.water-fill-button > .water-wave::before {
+    top: -7px;
+    animation: waterWaveDrift 2.2s linear infinite;
+}
+
+button.btn.water-fill-button > .water-wave::after {
+    top: -5px;
+    opacity: 0.5;
+    animation: waterWaveDrift 3.6s linear infinite reverse;
+}
+
+/* Default (blue) wave crests */
+button.btn.water-fill-button > .water-wave::before,
+button.btn.water-fill-button > .water-wave::after {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 8' preserveAspectRatio='none'%3E%3Cpath d='M0 4 Q10 0.5 20 4 T40 4 T60 4 T80 4 V8 H0 Z' fill='%23007bff' fill-opacity='0.75'/%3E%3C/svg%3E");
+}
+
+/* Upload (green) wave crests */
+button.btn.water-fill-button.upload > .water-wave::before,
+button.btn.water-fill-button.upload > .water-wave::after {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 8' preserveAspectRatio='none'%3E%3Cpath d='M0 4 Q10 0.5 20 4 T40 4 T60 4 T80 4 V8 H0 Z' fill='%2328a745' fill-opacity='0.75'/%3E%3C/svg%3E");
+}
+
+/* Download (cyan) wave crests */
+button.btn.water-fill-button.download > .water-wave::before,
+button.btn.water-fill-button.download > .water-wave::after {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 80 8' preserveAspectRatio='none'%3E%3Cpath d='M0 4 Q10 0.5 20 4 T40 4 T60 4 T80 4 V8 H0 Z' fill='%2317a2b8' fill-opacity='0.75'/%3E%3C/svg%3E");
+}
+
+@keyframes waterWaveDrift {
+    from {
+        background-position-x: 0;
     }
-    100% {
-        background-position: 200% 0;
+    to {
+        background-position-x: 80px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    button.btn.water-fill-button > .water-wave::before,
+    button.btn.water-fill-button > .water-wave::after,
+    button.btn.water-fill-button .arrow {
+        animation: none !important;
     }
 }
 

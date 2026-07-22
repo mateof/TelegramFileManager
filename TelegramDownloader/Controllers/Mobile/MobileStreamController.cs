@@ -4,6 +4,8 @@ using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
 using TelegramDownloader.Models.Mobile;
 using TelegramDownloader.Services;
+using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Web;
 
 namespace TelegramDownloader.Controllers.Mobile
@@ -25,6 +27,13 @@ namespace TelegramDownloader.Controllers.Mobile
         private readonly IProgressiveDownloadService _progressiveDownload;
         private readonly ILogger<MobileStreamController> _logger;
         private static readonly SemaphoreSlim _downloadSemaphore = new(5); // Allow 5 concurrent downloads for preload
+
+        // Limit concurrent direct range fetches against Telegram (seeks ahead of the cache)
+        private static readonly SemaphoreSlim _telegramRangeSemaphore = new(4);
+
+        // If the requested range starts within this distance of the background download
+        // position, wait for the download instead of opening a duplicate Telegram fetch
+        private const long WAIT_PROXIMITY_BYTES = 4 * 1024 * 1024;
 
         public MobileStreamController(
             ITelegramService ts,
@@ -238,28 +247,43 @@ namespace TelegramDownloader.Controllers.Mobile
                     }
                 }
 
-                // Parse range header
+                // Parse range header (RFC 7233: bytes=X-, bytes=X-Y, bytes=-N)
                 var rangeHeader = Request.Headers["Range"].ToString();
+                long totalLength = dbFile.Size;
                 long from = 0;
-                long to = 0;
+                long? to = null;
                 bool hasRange = false;
 
-                if (!string.IsNullOrEmpty(rangeHeader) && rangeHeader.StartsWith("bytes="))
+                if (!string.IsNullOrEmpty(rangeHeader) && rangeHeader.StartsWith("bytes=") && !rangeHeader.Contains(','))
                 {
-                    hasRange = true;
-                    var range = rangeHeader.Replace("bytes=", "").Split('-');
-                    from = long.Parse(range[0]);
-                    if (range.Length > 1 && !string.IsNullOrEmpty(range[1]))
-                        to = long.Parse(range[1]);
+                    var parts = rangeHeader.Substring("bytes=".Length).Split('-');
+                    if (parts.Length == 2)
+                    {
+                        if (string.IsNullOrEmpty(parts[0]))
+                        {
+                            // Suffix range: last N bytes
+                            if (long.TryParse(parts[1], out var suffixLength) && suffixLength > 0)
+                            {
+                                from = Math.Max(0, totalLength - suffixLength);
+                                to = totalLength - 1;
+                                hasRange = true;
+                            }
+                        }
+                        else if (long.TryParse(parts[0], out var parsedFrom) && parsedFrom >= 0)
+                        {
+                            from = parsedFrom;
+                            hasRange = true;
+                            if (!string.IsNullOrEmpty(parts[1]) && long.TryParse(parts[1], out var parsedTo))
+                                to = parsedTo;
+                        }
+                    }
+                    // Malformed ranges fall through as "no range" (initial chunk)
                 }
 
-                long totalLength = dbFile.Size;
-
-                // Check how much is already cached
-                long cachedBytes = 0;
-                if (System.IO.File.Exists(filePath))
+                if (hasRange && (from >= totalLength || (to.HasValue && to.Value < from)))
                 {
-                    cachedBytes = new FileInfo(filePath).Length;
+                    Response.Headers["Content-Range"] = $"bytes */{totalLength}";
+                    return StatusCode(StatusCodes.Status416RangeNotSatisfiable);
                 }
 
                 // For initial request without Range, return first chunk as 206 with full size info
@@ -270,23 +294,59 @@ namespace TelegramDownloader.Controllers.Mobile
                     to = Math.Min(2 * 1024 * 1024, totalLength - 1); // First 2MB
                 }
 
-                // Handle Range request
-                if (to == 0 || to >= totalLength)
+                // Open-ended or oversized ranges: cap the response to ~2.5MB
+                long rangeEnd = (!to.HasValue || to.Value >= totalLength)
+                    ? Math.Min(from + (5 * 524288), totalLength - 1)
+                    : to.Value;
+
+                // Kick off (or attach to) the background download that fills the disk cache,
+                // so every streamed track ends up cached and is downloaded from Telegram once
+                ProgressiveDownloadInfo downloadInfo = null;
+                if (dbFile.MessageId.HasValue)
                 {
-                    // Open-ended range
-                    to = Math.Min(from + (5 * 524288), totalLength - 1); // ~2.5MB chunk
+                    try
+                    {
+                        downloadInfo = await _progressiveDownload.StartOrGetDownloadAsync(cacheFileName, channelId, dbFile, filePath);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Could not start background cache download for {FileName}", name);
+                    }
                 }
 
-                // Check if range is available locally
+                long CachedBytes()
+                {
+                    long onDisk = System.IO.File.Exists(filePath) ? new FileInfo(filePath).Length : 0;
+                    return Math.Max(onDisk, downloadInfo?.DownloadedBytes ?? 0);
+                }
+
+                // If the background download is nearby, wait briefly for it to cover the
+                // range start instead of opening a duplicate Telegram download. This is the
+                // normal sequential-playback path: same latency as a direct fetch (both pull
+                // sequential 512KB chunks), but the bytes get persisted.
+                if (downloadInfo != null && downloadInfo.IsDownloading &&
+                    from - CachedBytes() <= WAIT_PROXIMITY_BYTES)
+                {
+                    var waitTarget = Math.Min(rangeEnd, from + 524288); // at least 512KB past the start
+                    var deadline = DateTime.UtcNow.AddSeconds(12);
+                    while (downloadInfo.IsDownloading &&
+                           downloadInfo.DownloadedBytes <= waitTarget &&
+                           DateTime.UtcNow < deadline)
+                    {
+                        await Task.Delay(150, HttpContext.RequestAborted);
+                    }
+                }
+
+                var cachedBytes = CachedBytes();
+
+                // Serve from the (possibly still growing) cache file
                 if (from < cachedBytes)
                 {
-                    // Part or all of range is in cache
-                    var availableEnd = Math.Min(to, cachedBytes - 1);
+                    var availableEnd = Math.Min(rangeEnd, cachedBytes - 1);
                     var length = availableEnd - from + 1;
 
                     _logger.LogDebug("Serving from cache: bytes {From}-{To} of {Total}", from, availableEnd, totalLength);
 
-                    // Read from cache file
                     using var cacheStream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
                     cacheStream.Seek(from, SeekOrigin.Begin);
                     var buffer = new byte[length];
@@ -303,10 +363,10 @@ namespace TelegramDownloader.Controllers.Mobile
                     return new EmptyResult();
                 }
 
-                // Range not in cache - stream from Telegram
-                _logger.LogDebug("Streaming from Telegram: bytes {From}-{To} of {Total}", from, to, totalLength);
+                // Range far ahead of the background download (seek): fetch it directly from
+                // Telegram, streaming each 512KB chunk to the response as it arrives
+                _logger.LogDebug("Streaming from Telegram: bytes {From}-{To} of {Total}", from, rangeEnd, totalLength);
 
-                // Get message from Telegram
                 if (!dbFile.MessageId.HasValue)
                 {
                     return NotFound(ApiResponse<object>.Fail("File has no MessageId"));
@@ -318,34 +378,52 @@ namespace TelegramDownloader.Controllers.Mobile
                     return NotFound(ApiResponse<object>.Fail("Message not found in Telegram"));
                 }
 
-                // Align to 512KB boundaries for Telegram
+                // Align down to 512KB for Telegram; skip the prefix when writing the response
                 var alignedFrom = (from / 524288) * 524288;
-                var alignedTo = ((to + 524288) / 524288) * 524288;
-                if (alignedTo > totalLength) alignedTo = totalLength;
-
-                var downloadLength = alignedTo - alignedFrom;
-
-                // Download the range from Telegram
-                byte[] data = await _ts.DownloadFileStream(message, alignedFrom, (int)downloadLength);
-
-                // Calculate skip bytes to get to the exact requested position
                 var skipBytes = from - alignedFrom;
-                var responseLength = Math.Min(to - from + 1, data.Length - skipBytes);
+                var responseLength = rangeEnd - from + 1;
 
-                if (skipBytes < 0 || skipBytes >= data.Length)
+                await _telegramRangeSemaphore.WaitAsync(HttpContext.RequestAborted);
+                try
                 {
-                    _logger.LogError("Invalid skip calculation: skipBytes={Skip}, dataLength={DataLen}", skipBytes, data.Length);
-                    return StatusCode(500, "Error calculating response range");
+                    Response.StatusCode = StatusCodes.Status206PartialContent;
+                    Response.ContentType = mimeType;
+                    Response.ContentLength = responseLength;
+                    Response.Headers["Content-Range"] = $"bytes {from}-{rangeEnd}/{totalLength}";
+                    Response.Headers["Accept-Ranges"] = "bytes";
+                    Response.Headers["Content-Disposition"] = $"inline; filename=\"{HttpUtility.UrlEncode(name)}\"";
+
+                    long remainingSkip = skipBytes;
+                    long remainingWrite = responseLength;
+
+                    await foreach (var chunk in _ts.DownloadFileStreamChunks(
+                        message, alignedFrom, skipBytes + responseLength, HttpContext.RequestAborted))
+                    {
+                        int start = 0;
+                        int length = chunk.Length;
+
+                        if (remainingSkip > 0)
+                        {
+                            var toSkip = (int)Math.Min(remainingSkip, length);
+                            start += toSkip;
+                            length -= toSkip;
+                            remainingSkip -= toSkip;
+                        }
+
+                        if (length <= 0) continue;
+
+                        var toWrite = (int)Math.Min(length, remainingWrite);
+                        await Response.Body.WriteAsync(chunk, start, toWrite, HttpContext.RequestAborted);
+                        remainingWrite -= toWrite;
+
+                        if (remainingWrite <= 0) break;
+                    }
+                }
+                finally
+                {
+                    _telegramRangeSemaphore.Release();
                 }
 
-                Response.StatusCode = StatusCodes.Status206PartialContent;
-                Response.ContentType = mimeType;
-                Response.ContentLength = responseLength;
-                Response.Headers["Content-Range"] = $"bytes {from}-{from + responseLength - 1}/{totalLength}";
-                Response.Headers["Accept-Ranges"] = "bytes";
-                Response.Headers["Content-Disposition"] = $"inline; filename=\"{HttpUtility.UrlEncode(name)}\"";
-
-                await Response.Body.WriteAsync(data, (int)skipBytes, (int)responseLength);
                 return new EmptyResult();
             }
             catch (OperationCanceledException)
@@ -780,6 +858,260 @@ namespace TelegramDownloader.Controllers.Mobile
                 ".opus" => "audio/opus",
                 _ => "application/octet-stream"
             };
+        }
+
+        // ============ Audio transcoding (offline downloads in MP3/AAC) ============
+
+        private static bool? _ffmpegAvailable;
+        private static readonly SemaphoreSlim _transcodeSemaphore = new(2); // Max 2 concurrent FFmpeg processes
+        private static readonly ConcurrentDictionary<string, SemaphoreSlim> _transcodeLocks = new();
+
+        private static bool IsFFmpegAvailable()
+        {
+            if (_ffmpegAvailable.HasValue) return _ffmpegAvailable.Value;
+            try
+            {
+                using var process = new Process
+                {
+                    StartInfo = new ProcessStartInfo
+                    {
+                        FileName = "ffmpeg",
+                        Arguments = "-version",
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    }
+                };
+                process.Start();
+                process.WaitForExit(5000);
+                _ffmpegAvailable = process.ExitCode == 0;
+            }
+            catch
+            {
+                _ffmpegAvailable = false;
+            }
+            return _ffmpegAvailable.Value;
+        }
+
+        /// <summary>
+        /// Capacidades de transcodificación del servidor
+        /// </summary>
+        /// <remarks>
+        /// Permite al cliente comprobar si el servidor tiene FFmpeg disponible antes de
+        /// ofrecer descargas transcodificadas. Si no lo está, el cliente debe avisar al
+        /// usuario y descargar en formato original.
+        /// </remarks>
+        [HttpGet("transcode/info")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        public IActionResult GetTranscodeInfo()
+        {
+            var available = IsFFmpegAvailable();
+            return Ok(ApiResponse<object>.Ok(new
+            {
+                ffmpegAvailable = available,
+                formats = available ? new[] { "mp3", "aac" } : Array.Empty<string>()
+            }));
+        }
+
+        /// <summary>
+        /// Descargar audio transcodificado a MP3 o AAC (para descargas offline)
+        /// </summary>
+        /// <remarks>
+        /// Transcodifica el archivo original (p.ej. FLAC) al formato y bitrate indicados
+        /// usando FFmpeg y lo sirve con soporte Range. El resultado se cachea en disco,
+        /// por lo que peticiones posteriores son inmediatas.
+        ///
+        /// Requiere FFmpeg instalado en el servidor: si no está disponible responde
+        /// **501 Not Implemented** y el cliente debe descargar el original.
+        ///
+        /// La primera petición puede tardar: descarga el original de Telegram (si no está
+        /// cacheado) y ejecuta la transcodificación antes de responder.
+        /// </remarks>
+        /// <param name="channelId">ID del canal de Telegram</param>
+        /// <param name="tfmId">ID del archivo en la base de datos TFM</param>
+        /// <param name="format">Formato destino: mp3 | aac</param>
+        /// <param name="bitrate">Bitrate en kbps (64-320)</param>
+        /// <param name="fileName">Nombre del archivo original (opcional)</param>
+        [HttpGet("tfm/{channelId}/{tfmId}/transcoded")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status206PartialContent)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status501NotImplemented)]
+        public async Task<IActionResult> StreamTranscodedAudio(
+            string channelId,
+            string tfmId,
+            [FromQuery] string format = "mp3",
+            [FromQuery] int bitrate = 192,
+            [FromQuery] string? fileName = null)
+        {
+            try
+            {
+                format = format.ToLowerInvariant();
+                if (format != "mp3" && format != "aac")
+                {
+                    return BadRequest(ApiResponse<object>.Fail("Unsupported format. Use mp3 or aac."));
+                }
+                bitrate = Math.Clamp(bitrate, 64, 320);
+
+                if (!IsFFmpegAvailable())
+                {
+                    return StatusCode(StatusCodes.Status501NotImplemented,
+                        ApiResponse<object>.Fail("FFmpeg is not available on the server"));
+                }
+
+                var dbFile = await _fs.getItemById(channelId, tfmId);
+                if (dbFile == null)
+                {
+                    return NotFound(ApiResponse<object>.Fail("File not found in database"));
+                }
+
+                var name = fileName ?? dbFile.Name;
+                var cacheFileName = $"{channelId}-{(dbFile.MessageId != null ? dbFile.MessageId.ToString() : dbFile.Id)}-{name}";
+                var tempPath = Path.Combine(FileService.TEMPDIR, "_temp");
+                var sourcePath = Path.Combine(tempPath, cacheFileName);
+                var transcodedDir = Path.Combine(tempPath, "transcoded");
+                Directory.CreateDirectory(transcodedDir);
+
+                var targetExt = format == "mp3" ? "mp3" : "m4a";
+                var mimeType = format == "mp3" ? "audio/mpeg" : "audio/mp4";
+                var targetName = $"{Path.GetFileNameWithoutExtension(cacheFileName)}-{format}{bitrate}.{targetExt}";
+                var targetPath = Path.Combine(transcodedDir, targetName);
+                var downloadName = $"{Path.GetFileNameWithoutExtension(name)}.{targetExt}";
+
+                // Cached transcode: serve immediately with Range support
+                if (System.IO.File.Exists(targetPath))
+                {
+                    return PhysicalFile(targetPath, mimeType, downloadName, enableRangeProcessing: true);
+                }
+
+                // Per-target lock so concurrent requests don't transcode twice
+                var fileLock = _transcodeLocks.GetOrAdd(targetName, _ => new SemaphoreSlim(1, 1));
+                await fileLock.WaitAsync(HttpContext.RequestAborted);
+                try
+                {
+                    if (!System.IO.File.Exists(targetPath))
+                    {
+                        // Ensure the original is fully cached first
+                        if (!System.IO.File.Exists(sourcePath) || new FileInfo(sourcePath).Length < dbFile.Size)
+                        {
+                            _logger.LogInformation("Downloading original before transcode: {FileName}", name);
+                            await DownloadOriginalToCache(channelId, dbFile, sourcePath);
+                        }
+
+                        await _transcodeSemaphore.WaitAsync(HttpContext.RequestAborted);
+                        try
+                        {
+                            _logger.LogInformation("Transcoding {FileName} to {Format} {Bitrate}k", name, format, bitrate);
+                            await TranscodeAudioFile(sourcePath, targetPath, format, bitrate, HttpContext.RequestAborted);
+                        }
+                        finally
+                        {
+                            _transcodeSemaphore.Release();
+                        }
+                    }
+                }
+                finally
+                {
+                    fileLock.Release();
+                }
+
+                return PhysicalFile(targetPath, mimeType, downloadName, enableRangeProcessing: true);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogDebug("Transcoded download cancelled for {TfmId}", tfmId);
+                return new EmptyResult();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error transcoding {TfmId} from channel {ChannelId}", tfmId, channelId);
+                return StatusCode(500, ApiResponse<object>.Fail("Error transcoding audio"));
+            }
+        }
+
+        // Sequential full download of the original file into the streaming cache
+        private async Task DownloadOriginalToCache(string channelId, BsonFileManagerModel dbFile, string path)
+        {
+            if (!dbFile.MessageId.HasValue)
+            {
+                throw new InvalidOperationException("File has no MessageId");
+            }
+
+            var message = await _ts.getMessageFile(channelId, dbFile.MessageId.Value);
+            if (message == null)
+            {
+                throw new InvalidOperationException("Message not found in Telegram");
+            }
+
+            using var fileStream = new FileStream(path, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read);
+            var offset = fileStream.Length;
+            fileStream.Seek(0, SeekOrigin.End);
+
+            const int chunkSize = 512 * 1024;
+            while (offset < dbFile.Size)
+            {
+                HttpContext.RequestAborted.ThrowIfCancellationRequested();
+                var toDownload = (int)Math.Min(chunkSize, dbFile.Size - offset);
+                var chunk = await _ts.DownloadFileStream(message, offset, toDownload);
+                if (chunk.Length == 0) break;
+                await fileStream.WriteAsync(chunk, 0, chunk.Length, HttpContext.RequestAborted);
+                offset += chunk.Length;
+            }
+            await fileStream.FlushAsync();
+        }
+
+        // Run FFmpeg to a temp file, then move into place so partial results
+        // are never served
+        private async Task TranscodeAudioFile(string sourcePath, string targetPath, string format, int bitrate, CancellationToken ct)
+        {
+            var tempOut = targetPath + ".part";
+
+            // mp3: keep embedded cover art (optional video stream copied as attached pic)
+            // aac/m4a: audio only (cover copying into ipod container is less reliable)
+            var codecArgs = format == "mp3"
+                ? $"-map 0:a:0 -map 0:v? -c:v copy -disposition:v:0 attached_pic -codec:a libmp3lame -b:a {bitrate}k -id3v2_version 3 -f mp3"
+                : $"-vn -codec:a aac -b:a {bitrate}k -movflags +faststart -f ipod";
+
+            var args = $"-y -i \"{sourcePath}\" -map_metadata 0 {codecArgs} \"{tempOut}\"";
+
+            using var process = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = "ffmpeg",
+                    Arguments = args,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                }
+            };
+
+            process.Start();
+            var stderrTask = process.StandardError.ReadToEndAsync();
+            _ = process.StandardOutput.ReadToEndAsync();
+
+            try
+            {
+                await process.WaitForExitAsync(ct);
+            }
+            catch (OperationCanceledException)
+            {
+                try { process.Kill(entireProcessTree: true); } catch { /* already exited */ }
+                try { System.IO.File.Delete(tempOut); } catch { /* best effort */ }
+                throw;
+            }
+
+            if (process.ExitCode != 0)
+            {
+                var stderr = await stderrTask;
+                try { System.IO.File.Delete(tempOut); } catch { /* best effort */ }
+                throw new InvalidOperationException(
+                    $"FFmpeg exited with code {process.ExitCode}: {stderr.Substring(0, Math.Min(500, stderr.Length))}");
+            }
+
+            System.IO.File.Move(tempOut, targetPath, overwrite: true);
         }
     }
 }

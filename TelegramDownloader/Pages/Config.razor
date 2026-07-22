@@ -233,6 +233,119 @@
                     <div class="config-item">
                         <div class="config-item-info">
                             <div class="config-item-label">
+                                <i class="bi bi-lightning-charge"></i>
+                                Parallel Chunk Transfers
+                            </div>
+                            <div class="config-item-description">
+                                Number of chunks requested in parallel per transfer (1-16), used by standard (single-connection) downloads and uploads. Higher values remove the latency bottleneck; Premium accounts benefit the most. Applied on the next transfer.
+                                <br /><small class="text-muted">WTelegramClient default: <b>2</b> &middot; App default: <b>4</b> &middot; Recommended: <b>4-8</b></small>
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <NumberInput TValue="int" @bind-Value="Model!.ParallelTransfers" Min="1" Max="16" EnableMinMax="true" class="form-control" style="width: 80px;" />
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-diagram-3"></i>
+                                Multi-Connection Downloads
+                            </div>
+                            <div class="config-item-description">
+                                Download large files using several parallel connections, like Telegram Desktop does.
+                                Telegram limits speed per connection (~5-6 MB/s), so this is the way to go faster.
+                                The extra connections share your existing session authorization, so nothing new appears in your Telegram device list.
+                                <span class="badge bg-warning text-dark ms-2">Experimental</span>
+                                <br /><small class="text-muted">Default: <b>disabled</b> (library behavior: one connection per download) &middot; Recommended: <b>enabled</b> for large files on fast lines</small>
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputCheckbox @bind-Value="Model!.EnableMultiConnectionDownloads" class="form-check-input config-switch" />
+                        </div>
+                    </div>
+
+                    @if (Model!.EnableMultiConnectionDownloads)
+                    {
+                        <div class="config-item">
+                            <div class="config-item-info">
+                                <div class="config-item-label">
+                                    <i class="bi bi-ethernet"></i>
+                                    Download Connections
+                                </div>
+                                <div class="config-item-description">
+                                    Number of parallel connections used per file download (2-8).
+                                    <br /><small class="text-muted">App default: <b>4</b> &middot; Recommended: <b>4-8</b> (Telegram Desktop uses up to 8)</small>
+                                </div>
+                            </div>
+                            <div class="config-item-control">
+                                <NumberInput TValue="int" @bind-Value="Model!.DownloadConnections" Min="2" Max="8" EnableMinMax="true" class="form-control" style="width: 80px;" />
+                            </div>
+                        </div>
+
+                        <div class="config-item">
+                            <div class="config-item-info">
+                                <div class="config-item-label">
+                                    <i class="bi bi-hdd-stack"></i>
+                                    Chunk Size
+                                </div>
+                                <div class="config-item-description">
+                                    Size of each file chunk requested from Telegram. Bigger chunks mean fewer round-trips.
+                                    <br /><small class="text-muted">WTelegramClient default: <b>512 KB</b> &middot; App default and recommended: <b>1024 KB</b></small>
+                                </div>
+                            </div>
+                            <div class="config-item-control">
+                                <InputSelect @bind-Value="Model!.MultiConnectionPartSizeKB" class="form-select" style="width: 120px;">
+                                    <option value="128">128 KB</option>
+                                    <option value="256">256 KB</option>
+                                    <option value="512">512 KB</option>
+                                    <option value="1024">1024 KB</option>
+                                </InputSelect>
+                            </div>
+                        </div>
+
+                        <div class="config-item">
+                            <div class="config-item-info">
+                                <div class="config-item-label">
+                                    <i class="bi bi-collection"></i>
+                                    Block Size
+                                </div>
+                                <div class="config-item-description">
+                                    Work unit assigned to each connection (1-16 MB). All chunks of a block are requested in parallel on the same connection, so Block &divide; Chunk = requests in flight per connection.
+                                    <br /><small class="text-muted">App default: <b>4 MB</b> (= 4 chunks of 1024 KB in flight) &middot; Recommended: <b>4-8 MB</b></small>
+                                </div>
+                            </div>
+                            <div class="config-item-control">
+                                <div class="config-input-group">
+                                    <NumberInput TValue="int" @bind-Value="Model!.MultiConnectionBlockSizeMB" Min="1" Max="16" EnableMinMax="true" class="form-control" style="width: 80px;" />
+                                    <span class="text-muted">MB</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="config-item">
+                            <div class="config-item-info">
+                                <div class="config-item-label">
+                                    <i class="bi bi-rulers"></i>
+                                    Min. File Size
+                                </div>
+                                <div class="config-item-description">
+                                    Files smaller than this use the normal single-connection download (the setup is not worth it for small files).
+                                    <br /><small class="text-muted">App default and recommended: <b>32 MB</b></small>
+                                </div>
+                            </div>
+                            <div class="config-item-control">
+                                <div class="config-input-group">
+                                    <NumberInput TValue="int" @bind-Value="Model!.MultiConnectionMinFileSizeMB" Min="1" Max="1024" EnableMinMax="true" class="form-control" style="width: 90px;" />
+                                    <span class="text-muted">MB</span>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
                                 <i class="bi bi-file-earmark-arrow-down"></i>
                                 Max. Preload File Size
                             </div>
@@ -252,14 +365,24 @@
                         <div class="config-item-info">
                             <div class="config-item-label">
                                 <i class="bi bi-lightning"></i>
-                                Preload Files on Stream
+                                Streaming Mode (STRM / Emby / Kodi)
                             </div>
                             <div class="config-item-description">
-                                Automatically preload files to cache when streaming
+                                How exported .strm files play media from Telegram:
+                                <ul class="mb-0 mt-1" style="padding-left: 1.1rem;">
+                                    <li><strong>Direct streaming:</strong> plays instantly, chunks are fetched from Telegram on demand, nothing is stored on disk. Each play re-downloads from Telegram.</li>
+                                    <li><strong>Progressive cache:</strong> plays instantly while the file is downloaded to the local cache in the background. Next plays are served from disk. <span class="badge bg-success">Recommended</span></li>
+                                    <li><strong>Full preload:</strong> downloads the whole file before playback starts (legacy behavior).</li>
+                                </ul>
+                                <span class="text-muted d-block mt-1">Applies to newly exported STRM files and to playback through the streaming endpoints. Files smaller than "Max. Preload File Size" are always fully preloaded.</span>
                             </div>
                         </div>
                         <div class="config-item-control">
-                            <InputCheckbox @bind-Value="Model!.PreloadFilesOnStream" class="form-check-input config-switch" />
+                            <InputSelect @bind-Value="StreamingModeSetting" class="form-select" style="min-width: 190px;">
+                                <option value="@StreamingMode.DirectStream">Direct streaming</option>
+                                <option value="@StreamingMode.ProgressiveCache">Progressive cache</option>
+                                <option value="@StreamingMode.Preload">Full preload</option>
+                            </InputSelect>
                         </div>
                     </div>
                 </div>
@@ -913,6 +1036,23 @@
 
 @code {
     public GeneralConfig Model { get; set; }
+
+    /// <summary>
+    /// Proxy for the STRM streaming mode: reads the effective mode (falling back to the
+    /// legacy PreloadFilesOnStream flag) and keeps that flag in sync when changed.
+    /// </summary>
+    private StreamingMode StreamingModeSetting
+    {
+        get => Model?.GetEffectiveStreamingMode() ?? StreamingMode.DirectStream;
+        set
+        {
+            if (Model != null)
+            {
+                Model.StrmStreamingMode = value;
+                Model.PreloadFilesOnStream = value == StreamingMode.Preload;
+            }
+        }
+    }
     private bool _disposed = false;
     private bool isRestarting = false;
 
