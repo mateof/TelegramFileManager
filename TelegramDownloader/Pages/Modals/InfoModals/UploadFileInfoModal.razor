@@ -1,5 +1,8 @@
 @using TelegramDownloader.Models
 @using TelegramDownloader.Services
+@implements IDisposable
+
+@inject TransactionInfoService tis
 
 <style>
     .upload-modal-overlay {
@@ -422,6 +425,11 @@
         this.uploadModel = uploadModel;
         if (this.uploadModel != null)
         {
+            // Live refresh while the modal is open: the model reference is live,
+            // so re-rendering on the aggregated (throttled) transactions event
+            // keeps progress, state, duration and speed up to date.
+            tis.TransactionsChanged -= OnTransactionsChanged;
+            tis.TransactionsChanged += OnTransactionsChanged;
             isVisible = true;
             StateHasChanged();
         }
@@ -429,6 +437,7 @@
 
     private async Task HideModal()
     {
+        tis.TransactionsChanged -= OnTransactionsChanged;
         isVisible = false;
         StateHasChanged();
 
@@ -436,6 +445,21 @@
         {
             await OnClose.InvokeAsync();
         }
+    }
+
+    private async void OnTransactionsChanged(object sender, System.EventArgs e)
+    {
+        if (!isVisible) return;
+        try
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+        catch { }
+    }
+
+    public void Dispose()
+    {
+        tis.TransactionsChanged -= OnTransactionsChanged;
     }
 
     private async Task OnOverlayClick()
