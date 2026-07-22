@@ -237,7 +237,8 @@
                                 Parallel Chunk Transfers
                             </div>
                             <div class="config-item-description">
-                                Number of 512KB chunks requested in parallel per transfer (1-16). Higher values improve download/upload speed by removing the latency bottleneck; Premium accounts benefit the most. Applied on the next transfer.
+                                Number of chunks requested in parallel per transfer (1-16), used by standard (single-connection) downloads and uploads. Higher values remove the latency bottleneck; Premium accounts benefit the most. Applied on the next transfer.
+                                <br /><small class="text-muted">WTelegramClient default: <b>2</b> &middot; App default: <b>4</b> &middot; Recommended: <b>4-8</b></small>
                             </div>
                         </div>
                         <div class="config-item-control">
@@ -252,10 +253,11 @@
                                 Multi-Connection Downloads
                             </div>
                             <div class="config-item-description">
-                                Download large files (&gt;32MB) using several parallel connections, like Telegram Desktop does.
+                                Download large files using several parallel connections, like Telegram Desktop does.
                                 Telegram limits speed per connection (~5-6 MB/s), so this is the way to go faster.
                                 The extra connections share your existing session authorization, so nothing new appears in your Telegram device list.
                                 <span class="badge bg-warning text-dark ms-2">Experimental</span>
+                                <br /><small class="text-muted">Default: <b>disabled</b> (library behavior: one connection per download) &middot; Recommended: <b>enabled</b> for large files on fast lines</small>
                             </div>
                         </div>
                         <div class="config-item-control">
@@ -272,11 +274,71 @@
                                     Download Connections
                                 </div>
                                 <div class="config-item-description">
-                                    Number of parallel connections used per file download (2-8)
+                                    Number of parallel connections used per file download (2-8).
+                                    <br /><small class="text-muted">App default: <b>4</b> &middot; Recommended: <b>4-8</b> (Telegram Desktop uses up to 8)</small>
                                 </div>
                             </div>
                             <div class="config-item-control">
                                 <NumberInput TValue="int" @bind-Value="Model!.DownloadConnections" Min="2" Max="8" EnableMinMax="true" class="form-control" style="width: 80px;" />
+                            </div>
+                        </div>
+
+                        <div class="config-item">
+                            <div class="config-item-info">
+                                <div class="config-item-label">
+                                    <i class="bi bi-hdd-stack"></i>
+                                    Chunk Size
+                                </div>
+                                <div class="config-item-description">
+                                    Size of each file chunk requested from Telegram. Bigger chunks mean fewer round-trips.
+                                    <br /><small class="text-muted">WTelegramClient default: <b>512 KB</b> &middot; App default and recommended: <b>1024 KB</b></small>
+                                </div>
+                            </div>
+                            <div class="config-item-control">
+                                <InputSelect @bind-Value="Model!.MultiConnectionPartSizeKB" class="form-select" style="width: 120px;">
+                                    <option value="128">128 KB</option>
+                                    <option value="256">256 KB</option>
+                                    <option value="512">512 KB</option>
+                                    <option value="1024">1024 KB</option>
+                                </InputSelect>
+                            </div>
+                        </div>
+
+                        <div class="config-item">
+                            <div class="config-item-info">
+                                <div class="config-item-label">
+                                    <i class="bi bi-collection"></i>
+                                    Block Size
+                                </div>
+                                <div class="config-item-description">
+                                    Work unit assigned to each connection (1-16 MB). All chunks of a block are requested in parallel on the same connection, so Block &divide; Chunk = requests in flight per connection.
+                                    <br /><small class="text-muted">App default: <b>4 MB</b> (= 4 chunks of 1024 KB in flight) &middot; Recommended: <b>4-8 MB</b></small>
+                                </div>
+                            </div>
+                            <div class="config-item-control">
+                                <div class="config-input-group">
+                                    <NumberInput TValue="int" @bind-Value="Model!.MultiConnectionBlockSizeMB" Min="1" Max="16" EnableMinMax="true" class="form-control" style="width: 80px;" />
+                                    <span class="text-muted">MB</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="config-item">
+                            <div class="config-item-info">
+                                <div class="config-item-label">
+                                    <i class="bi bi-rulers"></i>
+                                    Min. File Size
+                                </div>
+                                <div class="config-item-description">
+                                    Files smaller than this use the normal single-connection download (the setup is not worth it for small files).
+                                    <br /><small class="text-muted">App default and recommended: <b>32 MB</b></small>
+                                </div>
+                            </div>
+                            <div class="config-item-control">
+                                <div class="config-input-group">
+                                    <NumberInput TValue="int" @bind-Value="Model!.MultiConnectionMinFileSizeMB" Min="1" Max="1024" EnableMinMax="true" class="form-control" style="width: 90px;" />
+                                    <span class="text-muted">MB</span>
+                                </div>
                             </div>
                         </div>
                     }
