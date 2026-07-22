@@ -459,22 +459,52 @@ namespace TelegramDownloader.Data
             using CancellationTokenSource cts = new CancellationTokenSource();
             dest.SetLength(size);
             var handle = dest.SafeFileHandle;
+            DateTime started = DateTime.Now;
 
-            void ReportPart(long block, int received, bool blockCompleted)
+            void ReportBytes(int received)
+            {
+                long confirmed;
+                lock (progressLock)
+                    confirmed = Math.Min(size, confirmedBlocks * (long)MULTICONN_BLOCK_SIZE);
+                // Throws when the task gets canceled or paused, stopping the workers.
+                model.ReportParallelProgress(confirmed, received, size);
+            }
+
+            void ReportBlockDone(long block)
             {
                 long confirmed;
                 lock (progressLock)
                 {
-                    if (blockCompleted)
-                    {
-                        blockDone[block] = true;
-                        while (confirmedBlocks < blockCount && blockDone[confirmedBlocks])
-                            confirmedBlocks++;
-                    }
+                    blockDone[block] = true;
+                    while (confirmedBlocks < blockCount && blockDone[confirmedBlocks])
+                        confirmedBlocks++;
                     confirmed = Math.Min(size, confirmedBlocks * (long)MULTICONN_BLOCK_SIZE);
                 }
-                // Throws when the task gets canceled or paused, stopping the workers.
-                model.ReportParallelProgress(confirmed, received, size);
+                model.ReportParallelProgress(confirmed, 0, size);
+            }
+
+            async Task DownloadPart(WTelegram.Client pc, long offset)
+            {
+                int expected = (int)Math.Min(MULTICONN_PART_SIZE, size - offset);
+                for (int attempt = 1; ; attempt++)
+                {
+                    cts.Token.ThrowIfCancellationRequested();
+                    try
+                    {
+                        Upload_FileBase resp = await pc.Upload_GetFile(location, offset, limit: MULTICONN_PART_SIZE);
+                        if (resp is not Upload_File part)
+                            throw new InvalidOperationException($"Unexpected {resp?.GetType().Name} from Upload_GetFile (CDN-served files are not supported)");
+                        if (part.bytes.Length < expected)
+                            throw new InvalidOperationException($"Short chunk at offset {offset}: {part.bytes.Length} < {expected}");
+                        RandomAccess.Write(handle, part.bytes.AsSpan(0, expected), offset);
+                        ReportBytes(expected);
+                        return;
+                    }
+                    catch (Exception) when (attempt < 3 && !cts.IsCancellationRequested)
+                    {
+                        await Task.Delay(1000 * attempt);
+                    }
+                }
             }
 
             async Task Worker(WTelegram.Client pc)
@@ -484,32 +514,17 @@ namespace TelegramDownloader.Data
                     long block = Interlocked.Increment(ref nextBlock);
                     if (block >= blockCount)
                         return;
-                    long offset = block * (long)MULTICONN_BLOCK_SIZE;
-                    long end = Math.Min(size, offset + MULTICONN_BLOCK_SIZE);
-                    while (offset < end)
-                    {
-                        cts.Token.ThrowIfCancellationRequested();
-                        Upload_FileBase resp = null;
-                        for (int attempt = 1; ; attempt++)
-                        {
-                            try
-                            {
-                                resp = await pc.Upload_GetFile(location, offset, limit: MULTICONN_PART_SIZE);
-                                break;
-                            }
-                            catch (Exception) when (attempt < 3 && !cts.IsCancellationRequested)
-                            {
-                                await Task.Delay(1000 * attempt);
-                            }
-                        }
-                        if (resp is not Upload_File part)
-                            throw new InvalidOperationException($"Unexpected {resp?.GetType().Name} from Upload_GetFile (CDN-served files are not supported)");
-                        if (part.bytes.Length == 0)
-                            throw new InvalidOperationException($"Empty chunk at offset {offset}");
-                        RandomAccess.Write(handle, part.bytes, offset);
-                        offset += part.bytes.Length;
-                        ReportPart(block, part.bytes.Length, offset >= end);
-                    }
+                    long blockStart = block * (long)MULTICONN_BLOCK_SIZE;
+                    long blockEnd = Math.Min(size, blockStart + MULTICONN_BLOCK_SIZE);
+                    // Request every part of the block concurrently on this
+                    // connection: sequential parts pay a full round-trip of dead
+                    // time each, capping a connection well below its server-side
+                    // allowance. Pipelining keeps the connection's pipe full.
+                    List<Task> parts = new List<Task>();
+                    for (long offset = blockStart; offset < blockEnd; offset += MULTICONN_PART_SIZE)
+                        parts.Add(DownloadPart(pc, offset));
+                    await Task.WhenAll(parts);
+                    ReportBlockDone(block);
                 }
             }
 
@@ -523,6 +538,9 @@ namespace TelegramDownloader.Data
             {
                 await Task.WhenAll(transfers.Select(pc => Task.Run(() => GuardedWorker(pc))));
                 await dest.FlushAsync();
+                double seconds = Math.Max(0.001, (DateTime.Now - started).TotalSeconds);
+                _logger.LogInformation("Multi-connection download completed - FileName: {Name}, {SizeMB:F1}MB in {Seconds:F1}s = {Speed:F1} MB/s over {Connections} connections",
+                    model.name, size / (1024.0 * 1024.0), seconds, size / (1024.0 * 1024.0) / seconds, transfers.Count);
                 return true;
             }
             catch (Exception ex)
