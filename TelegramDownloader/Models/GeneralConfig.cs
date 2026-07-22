@@ -204,8 +204,35 @@ namespace TelegramDownloader.Models
         /// <summary>
         /// Number of parallel connections used per file download (2-8).
         /// Only used when EnableMultiConnectionDownloads is true.
+        /// App default: 4. Recommended: 4-8.
         /// </summary>
         public int DownloadConnections { get; set; } = 4;
+
+        /// <summary>
+        /// Size in KB of each file chunk requested (upload.getFile limit).
+        /// Telegram only allows 128, 256, 512 or 1024 (values are snapped to
+        /// the nearest allowed one). WTelegramClient's own default is 512;
+        /// app default is 1024 (fewer round-trips).
+        /// Only used when EnableMultiConnectionDownloads is true.
+        /// </summary>
+        public int MultiConnectionPartSizeKB { get; set; } = 1024;
+
+        /// <summary>
+        /// Size in MB (1-16) of the work unit assigned to each connection.
+        /// All parts of a block are requested in parallel on the same
+        /// connection, so BlockSize / PartSize = requests in flight per
+        /// connection. App default: 4 (= 4 x 1MB in flight).
+        /// Only used when EnableMultiConnectionDownloads is true.
+        /// </summary>
+        public int MultiConnectionBlockSizeMB { get; set; } = 4;
+
+        /// <summary>
+        /// Files smaller than this size in MB use the normal single-connection
+        /// download (the setup cost is not worth it for small files).
+        /// App default: 32.
+        /// Only used when EnableMultiConnectionDownloads is true.
+        /// </summary>
+        public int MultiConnectionMinFileSizeMB { get; set; } = 32;
 
     }
 

@@ -271,19 +271,42 @@ namespace TelegramDownloader.Data
         }
 
         private static readonly DownloadPool downloadPool = new DownloadPool();
-        private const int MULTICONN_PART_SIZE = 1024 * 1024;        // upload.getFile max limit per request
-        private const int MULTICONN_BLOCK_SIZE = 4 * 1024 * 1024;   // work unit assigned to a connection
-        private const long MULTICONN_MIN_FILE_SIZE = 32L * 1024 * 1024;
 
         public static int GetConfiguredDownloadConnections()
         {
             return Math.Clamp(GeneralConfigStatic.config?.DownloadConnections ?? 4, 2, 8);
         }
 
+        /// <summary>
+        /// Chunk size for upload.getFile: Telegram only accepts limits that are
+        /// divisible by 4KB and divide 1MB evenly, so the configured value is
+        /// snapped to 128/256/512/1024 KB. 512 is WTelegramClient's own default;
+        /// 1024 (app default) halves the number of round-trips.
+        /// </summary>
+        private static int GetConfiguredPartSize()
+        {
+            int kb = GeneralConfigStatic.config?.MultiConnectionPartSizeKB ?? 1024;
+            if (kb >= 1024) return 1024 * 1024;
+            if (kb >= 512) return 512 * 1024;
+            if (kb >= 256) return 256 * 1024;
+            return 128 * 1024;
+        }
+
+        private static int GetConfiguredBlockSize(int partSize)
+        {
+            int mb = Math.Clamp(GeneralConfigStatic.config?.MultiConnectionBlockSizeMB ?? 4, 1, 16);
+            return Math.Max(mb * 1024 * 1024, partSize);
+        }
+
+        private static long GetConfiguredMinFileSize()
+        {
+            return Math.Max(1, GeneralConfigStatic.config?.MultiConnectionMinFileSizeMB ?? 32) * 1024L * 1024L;
+        }
+
         private static bool ShouldUseMultiConnection(TL.Document document)
         {
             GeneralConfig cfg = GeneralConfigStatic.config;
-            return cfg != null && cfg.EnableMultiConnectionDownloads && document.size >= MULTICONN_MIN_FILE_SIZE;
+            return cfg != null && cfg.EnableMultiConnectionDownloads && document.size >= GetConfiguredMinFileSize();
         }
 
         private async Task<List<WTelegram.Client>> GetDownloadPoolAsync(int count)
@@ -448,10 +471,15 @@ namespace TelegramDownloader.Data
                 thumb_size = ""
             };
 
-            _logger.LogInformation("Multi-connection download - FileName: {Name}, Size: {SizeMB:F2}MB, Connections: {Connections}",
-                model.name, size / (1024.0 * 1024.0), transfers.Count);
+            // Capture the tuning values once so a config change mid-download
+            // cannot desynchronize offsets.
+            int partSize = GetConfiguredPartSize();
+            int blockSize = GetConfiguredBlockSize(partSize);
 
-            long blockCount = (size + MULTICONN_BLOCK_SIZE - 1) / MULTICONN_BLOCK_SIZE;
+            _logger.LogInformation("Multi-connection download - FileName: {Name}, Size: {SizeMB:F2}MB, Connections: {Connections}, Part: {PartKB}KB, Block: {BlockMB}MB",
+                model.name, size / (1024.0 * 1024.0), transfers.Count, partSize / 1024, blockSize / (1024.0 * 1024.0));
+
+            long blockCount = (size + blockSize - 1) / blockSize;
             bool[] blockDone = new bool[blockCount];
             long confirmedBlocks = 0;
             long nextBlock = -1;
@@ -465,7 +493,7 @@ namespace TelegramDownloader.Data
             {
                 long confirmed;
                 lock (progressLock)
-                    confirmed = Math.Min(size, confirmedBlocks * (long)MULTICONN_BLOCK_SIZE);
+                    confirmed = Math.Min(size, confirmedBlocks * (long)blockSize);
                 // Throws when the task gets canceled or paused, stopping the workers.
                 model.ReportParallelProgress(confirmed, received, size);
             }
@@ -478,20 +506,20 @@ namespace TelegramDownloader.Data
                     blockDone[block] = true;
                     while (confirmedBlocks < blockCount && blockDone[confirmedBlocks])
                         confirmedBlocks++;
-                    confirmed = Math.Min(size, confirmedBlocks * (long)MULTICONN_BLOCK_SIZE);
+                    confirmed = Math.Min(size, confirmedBlocks * (long)blockSize);
                 }
                 model.ReportParallelProgress(confirmed, 0, size);
             }
 
             async Task DownloadPart(WTelegram.Client pc, long offset)
             {
-                int expected = (int)Math.Min(MULTICONN_PART_SIZE, size - offset);
+                int expected = (int)Math.Min(partSize, size - offset);
                 for (int attempt = 1; ; attempt++)
                 {
                     cts.Token.ThrowIfCancellationRequested();
                     try
                     {
-                        Upload_FileBase resp = await pc.Upload_GetFile(location, offset, limit: MULTICONN_PART_SIZE);
+                        Upload_FileBase resp = await pc.Upload_GetFile(location, offset, limit: partSize);
                         if (resp is not Upload_File part)
                             throw new InvalidOperationException($"Unexpected {resp?.GetType().Name} from Upload_GetFile (CDN-served files are not supported)");
                         if (part.bytes.Length < expected)
@@ -514,14 +542,14 @@ namespace TelegramDownloader.Data
                     long block = Interlocked.Increment(ref nextBlock);
                     if (block >= blockCount)
                         return;
-                    long blockStart = block * (long)MULTICONN_BLOCK_SIZE;
-                    long blockEnd = Math.Min(size, blockStart + MULTICONN_BLOCK_SIZE);
+                    long blockStart = block * (long)blockSize;
+                    long blockEnd = Math.Min(size, blockStart + blockSize);
                     // Request every part of the block concurrently on this
                     // connection: sequential parts pay a full round-trip of dead
                     // time each, capping a connection well below its server-side
                     // allowance. Pipelining keeps the connection's pipe full.
                     List<Task> parts = new List<Task>();
-                    for (long offset = blockStart; offset < blockEnd; offset += MULTICONN_PART_SIZE)
+                    for (long offset = blockStart; offset < blockEnd; offset += partSize)
                         parts.Add(DownloadPart(pc, offset));
                     await Task.WhenAll(parts);
                     ReportBlockDone(block);
