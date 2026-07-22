@@ -240,13 +240,16 @@ namespace TelegramDownloader.Data
         // are pipelined. Official clients reach high speeds by opening several
         // sessions to the file's DC and splitting the file between them.
         //
-        // This pool holds extra authorized account sessions (persisted as session
-        // files and reused across restarts). The server rejects
-        // auth.exportAuthorization towards the DC the caller is already on
-        // (DC_ID_INVALID), so pool clients are homed on a NEIGHBOR DC different
-        // from the account's home DC: main -> neighbor is always a cross-DC
-        // export, and from the neighbor the pool client can then export towards
-        // any file DC (including the account's home DC) - both hops cross-DC.
+        // This pool holds CLONES of the main session: each pool client loads a
+        // copy of the main session file, sharing its fully-authorized auth key,
+        // while WTelegram assigns a fresh MTProto session id per client instance
+        // (the id is transient, never persisted). The server sees them as extra
+        // connections of the existing authorization - the exact model official
+        // clients use for parallel downloads - so no new authorization is
+        // created, nothing shows up in the account's device list, and the
+        // auth.exportAuthorization/importAuthorization route (whose imported
+        // sessions turned out to be limited: file requests work but probe RPCs
+        // and re-exports answer AUTH_KEY_UNREGISTERED) is not needed at all.
         private class DownloadPool
         {
             public readonly SemaphoreSlim initLock = new SemaphoreSlim(1, 1);
@@ -306,23 +309,16 @@ namespace TelegramDownloader.Data
 
         private async Task<WTelegram.Client> CreateDownloadPoolClientAsync(int index)
         {
+            string mainSessionPath = UserService.USERDATAFOLDER + "/WTelegram.session";
             string sessionPath = Path.Combine(UserService.USERDATAFOLDER, $"WTelegram_dl_{index}.session");
             try
             {
-                // Home the pool client on a DC different from the account's home
-                // DC, because exporting an authorization towards the caller's own
-                // DC is rejected with DC_ID_INVALID.
-                TL.Config tlConfig = await client.Help_GetConfig();
-                int mainHomeDc = tlConfig.this_dc;
-                DcOption dc = tlConfig.dc_options
-                    .Where(x => x.id != mainHomeDc && (x.flags & (DcOption.Flags.ipv6 | DcOption.Flags.cdn | DcOption.Flags.tcpo_only | DcOption.Flags.media_only)) == 0)
-                    .OrderBy(x => x.id)
-                    .FirstOrDefault();
-                if (dc == null)
-                {
-                    _logger.LogWarning("No suitable neighbor DC found (home DC {Dc}) - multi-connection download unavailable", mainHomeDc);
-                    return null;
-                }
+                // Clone the main session file. Always copy fresh so leftovers from
+                // older bootstrap strategies (or a re-login of the main account)
+                // are overwritten. The file is encrypted with a key derived from
+                // the same api_hash, so the clone can read it as its own.
+                CopySessionWithRetry(mainSessionPath, sessionPath);
+
                 string apiId = GeneralConfigStatic.tlconfig?.api_id ?? Environment.GetEnvironmentVariable("api_id");
                 string apiHash = GeneralConfigStatic.tlconfig?.hash_id ?? Environment.GetEnvironmentVariable("hash_id");
                 WTelegram.Client pc = new WTelegram.Client(what => what switch
@@ -330,43 +326,14 @@ namespace TelegramDownloader.Data
                     "api_id" => apiId,
                     "api_hash" => apiHash,
                     "session_pathname" => sessionPath,
-                    "server_address" => $"{dc.ip_address}:{dc.port}",
-                    "device_model" => "TFM parallel download",
                     _ => null
                 });
                 try
                 {
                     await pc.ConnectAsync();
                     if (pc.UserId == 0)
-                    {
-                        // Fresh session: import the account authorization exported
-                        // by the main client (cross-DC, so it is accepted), then
-                        // finalize the login client-side with LoginAlreadyDone so
-                        // the session records the UserId. An imported session is
-                        // not a fully "logged" one - probe RPCs like
-                        // users.getUsers can answer AUTH_KEY_UNREGISTERED even
-                        // though file requests work - so no verification call is
-                        // made here: workers verify by use and fall back on error.
-                        // With the UserId recorded, WTelegram's GetClientForDC
-                        // handles the per-file-DC authorization automatically.
-                        Auth_ExportedAuthorization exported = await client.Auth_ExportAuthorization(dc.id);
-                        Auth_AuthorizationBase auth = null;
-                        try
-                        {
-                            auth = await pc.Auth_ImportAuthorization(exported.id, exported.bytes);
-                        }
-                        catch (RpcException rex) when (rex.Message == "AUTH_BYTES_INVALID")
-                        {
-                            // Session persisted by an earlier run whose import
-                            // succeeded but whose login was never finalized: the
-                            // key already holds the account authorization and
-                            // re-importing onto it is rejected. Record the login
-                            // client-side and let the workers verify by use.
-                            _logger.LogInformation("Download pool client {Index}: key already authorized on a previous run", index);
-                        }
-                        pc.LoginAlreadyDone(auth ?? new Auth_Authorization { user = new User { id = exported.id } });
-                    }
-                    _logger.LogInformation("Download pool client {Index} ready (homed on DC {Dc})", index, dc.id);
+                        throw new InvalidOperationException("Cloned session has no logged-in user");
+                    _logger.LogInformation("Download pool client {Index} ready (cloned session, user {UserId})", index, pc.UserId);
                     return pc;
                 }
                 catch
@@ -382,13 +349,30 @@ namespace TelegramDownloader.Data
             }
         }
 
+        private static void CopySessionWithRetry(string source, string destination)
+        {
+            // The main client rewrites its session file on saves; retry briefly in
+            // case the copy races with a write.
+            for (int attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    File.Copy(source, destination, overwrite: true);
+                    return;
+                }
+                catch (IOException) when (attempt < 3)
+                {
+                    Thread.Sleep(200 * attempt);
+                }
+            }
+        }
+
         /// <summary>
         /// Returns a client of <paramref name="owner"/> connected to the given DC.
-        /// Because the pool client's session records a UserId (LoginAlreadyDone),
-        /// WTelegram's GetClientForDC exports/imports the authorization towards
-        /// the file DC automatically when needed; the export is cross-DC (the
-        /// owner's home is never the account's home DC by construction), so it is
-        /// accepted even when the file lives on the account's home DC.
+        /// The clone's home DC is the account's home DC, so files there are served
+        /// by the clone's own connection; for files on other DCs, the clone is a
+        /// fully logged session and WTelegram's GetClientForDC handles the
+        /// cross-DC authorization automatically.
         /// </summary>
         private async Task<WTelegram.Client> GetAuthorizedTransferClientAsync(WTelegram.Client owner, int dcId)
         {
