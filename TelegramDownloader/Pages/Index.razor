@@ -3,6 +3,7 @@
 @implements IDisposable
 
 @using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.WebUtilities
 @using QRCoder
 @using TelegramDownloader.Data
 @using TelegramDownloader.Models
@@ -276,8 +277,32 @@
                     source.Cancel();
                 }
             }
-            NavManager.NavigateTo("/fetchdata");
+            NavManager.NavigateTo(GetReturnUrl() ?? "/fetchdata");
         }
+    }
+
+    /// <summary>
+    /// Returns the page the user originally requested (passed by the layouts'
+    /// auth guard as ?returnUrl=...), so a successful login lands back on it.
+    /// Only local paths are accepted, to avoid open redirects.
+    /// </summary>
+    private string GetReturnUrl()
+    {
+        try
+        {
+            var uri = NavManager.ToAbsoluteUri(NavManager.Uri);
+            if (QueryHelpers.ParseQuery(uri.Query).TryGetValue("returnUrl", out var value))
+            {
+                string url = value.ToString();
+                if (url.StartsWith('/') && !url.StartsWith("//") && url != "/" && !url.StartsWith("/?"))
+                    return url;
+            }
+        }
+        catch
+        {
+            // Malformed query - fall back to the default landing page
+        }
+        return null;
     }
 
     private void GenerateQR(string data)

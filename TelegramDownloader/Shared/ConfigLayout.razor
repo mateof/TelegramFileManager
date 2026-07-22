@@ -8,9 +8,34 @@
 <PageTitle>TelegramFileManager</PageTitle>
 
 @code {
-    protected override void OnInitialized()
+    private bool authResolved { get; set; } = false;
+
+    protected override async Task OnInitializedAsync()
     {
-        if (!ts.checkUserLogin()) NavManager.NavigateTo("/");
+        // Same auth guard as MainLayout: resolve the session before rendering
+        // any page content, trying a silent restore first and keeping the
+        // requested URL when interactive login is needed.
+        if (!ts.checkUserLogin())
+        {
+            string authType = null;
+            try
+            {
+                authType = await ts.checkAuth(null);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+            }
+            if (authType != "ok")
+            {
+                string returnUrl = new Uri(NavManager.Uri).PathAndQuery;
+                NavManager.NavigateTo(string.IsNullOrEmpty(returnUrl) || returnUrl == "/"
+                    ? "/"
+                    : $"/?returnUrl={Uri.EscapeDataString(returnUrl)}", forceLoad: true);
+                return;
+            }
+        }
+        authResolved = true;
     }
 }
 
@@ -39,7 +64,10 @@
         </div>
         <TelegramDownloader.Pages.Modals.ToastNotify></TelegramDownloader.Pages.Modals.ToastNotify>
         <article class="content px-4">
-            @Body
+            @if (authResolved)
+            {
+                @Body
+            }
         </article>
     </main>
 </div>
