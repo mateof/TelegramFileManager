@@ -19,6 +19,7 @@ namespace TelegramDownloader.Data
         Task<InvitationInfo?> getInvitationHash(long id);
         Task joinChatInvitationHash(string? hash);
         Task<User> CallQrGenerator(Action<string> func, CancellationToken ct, bool logoutFirst = false);
+        void ProvideQrLoginPassword(string password);
         Task<string> DownloadFile(ChatMessages message, string fileName = null, string folder = null, DownloadModel model = null, bool shouldAddToList = false);
         Task<Byte[]> DownloadFileStream(Message message, long offset, int limit);
         IAsyncEnumerable<byte[]> DownloadFileStreamChunks(Message message, long offset, long limit, CancellationToken ct = default);

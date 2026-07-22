@@ -44,6 +44,10 @@
                     <h1 class="login-title">Two-Factor Auth</h1>
                     <p class="login-subtitle">Enter your 2FA password</p>
                     break;
+                case "qr":
+                    <h1 class="login-title">Scan QR Code</h1>
+                    <p class="login-subtitle">Log in with your phone, no number needed</p>
+                    break;
                 case "ok":
                     <h1 class="login-title">Welcome Back!</h1>
                     <p class="login-subtitle">You are successfully authenticated</p>
@@ -82,6 +86,15 @@
                                        @bind-Value="Model!.value" placeholder="Enter your 2FA password" />
                         </div>
                         break;
+                    case "qr":
+                        <div class="text-center">
+                            <p class="login-subtitle" style="margin-bottom: 0;">
+                                Open Telegram on your phone and go to<br />
+                                <b>Settings &gt; Devices &gt; Link Desktop Device</b>,<br />
+                                then scan this code.
+                            </p>
+                        </div>
+                        break;
                     case "ok":
                         <div class="text-center">
                             <div class="success-badge">
@@ -97,6 +110,12 @@
                     {
                         <button class="btn-danger-custom" @onclick="Salir" type="button">
                             <i class="bi bi-box-arrow-right"></i> Disconnect
+                        </button>
+                    }
+                    else if (Model.type == "qr")
+                    {
+                        <button class="btn-secondary-custom" type="button" @onclick="CancelQrLogin">
+                            <i class="bi bi-arrow-left"></i> Back to phone login
                         </button>
                     }
                     else
@@ -119,6 +138,12 @@
                                 Cancel
                             </button>
                         }
+                    }
+                    @if (Model.type == "phone")
+                    {
+                        <button class="btn-secondary-custom" type="button" @onclick="StartQrLogin">
+                            <i class="bi bi-qr-code-scan"></i> Log in with QR code
+                        </button>
                     }
                 </div>
 
@@ -249,8 +274,75 @@
         }
     }
 
+    private bool qrMode = false;
+
+    private async Task StartQrLogin()
+    {
+        qrMode = true;
+        imageString = null;
+        Model.type = "qr";
+        source?.Cancel();
+        source = new CancellationTokenSource();
+        StateHasChanged();
+        TelegramService.QrPasswordNeeded += OnQrPasswordNeeded;
+        try
+        {
+            var user = await ts.CallQrGenerator(url => { _ = InvokeAsync(() => GenerateQR(url)); }, source.Token);
+            if (user != null)
+            {
+                imageString = null;
+                Model.type = "ok";
+                await InvokeAsync(StateHasChanged);
+                await isLogin();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // User went back to phone login or left the page
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"QR login failed: {ex.Message}");
+            qrMode = false;
+            imageString = null;
+            Model.type = "phone";
+            await InvokeAsync(StateHasChanged);
+        }
+        finally
+        {
+            TelegramService.QrPasswordNeeded -= OnQrPasswordNeeded;
+        }
+    }
+
+    private void OnQrPasswordNeeded(object sender, System.EventArgs e)
+    {
+        // The QR was accepted on the phone but the account has 2FA: switch the
+        // form to the password step; Submit routes the value back to the
+        // pending QR login.
+        imageString = null;
+        Model.value = "";
+        Model.type = "pass";
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private void CancelQrLogin()
+    {
+        qrMode = false;
+        imageString = null;
+        source?.Cancel();
+        Model.type = "phone";
+    }
+
     private async void Submit()
     {
+        if (qrMode && Model.type == "pass")
+        {
+            // 2FA password for a QR login: hand it to the waiting login task,
+            // which finishes the flow and navigates from StartQrLogin.
+            ts.ProvideQrLoginPassword(Model.value);
+            Model.value = "";
+            return;
+        }
         if (Model.type == "phone")
         {
             var phone = await JSRuntime.InvokeAsync<string>("getNumber");
@@ -333,6 +425,7 @@
 
     public void Dispose()
     {
+        TelegramService.QrPasswordNeeded -= OnQrPasswordNeeded;
         if (source != null)
         {
             if (source.Token.CanBeCanceled)

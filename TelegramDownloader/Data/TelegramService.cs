@@ -173,7 +173,20 @@ namespace TelegramDownloader.Data
             {
                 _logger.LogDebug(ex, "Could not snapshot the session file");
             }
-            client = new WTelegram.Client(Convert.ToInt32(GeneralConfigStatic.tlconfig?.api_id ?? Environment.GetEnvironmentVariable("api_id")), GeneralConfigStatic.tlconfig?.hash_id ?? Environment.GetEnvironmentVariable("hash_id"), UserService.USERDATAFOLDER + "/WTelegram.session");
+            string apiId = GeneralConfigStatic.tlconfig?.api_id ?? Environment.GetEnvironmentVariable("api_id");
+            string apiHash = GeneralConfigStatic.tlconfig?.hash_id ?? Environment.GetEnvironmentVariable("hash_id");
+            // Custom config callback instead of the convenience constructor: the
+            // QR login flow (LoginWithQRCode) asks for the 2FA password through
+            // Config("password") - with the default config that prompt would go
+            // to the console. Route it to the web UI instead.
+            client = new WTelegram.Client(what => what switch
+            {
+                "api_id" => apiId,
+                "api_hash" => apiHash,
+                "session_pathname" => UserService.USERDATAFOLDER + "/WTelegram.session",
+                "password" => RequestLoginPassword(),
+                _ => null
+            });
             ApplyConfiguredParallelTransfers(client);
             if (GeneralConfigStatic.config.ShouldShowLogInTerminal)
             {
@@ -585,9 +598,41 @@ namespace TelegramDownloader.Data
 
         #endregion
 
+        // 2FA password bridge for the QR login flow: WTelegram asks for the
+        // password via Config("password") on a background task; the UI is
+        // notified through QrPasswordNeeded and supplies the value with
+        // ProvideQrLoginPassword, unblocking the pending request.
+        private static TaskCompletionSource<string> qrPasswordRequest;
+        public static event EventHandler QrPasswordNeeded;
+
+        private static string RequestLoginPassword()
+        {
+            TaskCompletionSource<string> tcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+            qrPasswordRequest = tcs;
+            try
+            {
+                QrPasswordNeeded?.Invoke(null, EventArgs.Empty);
+            }
+            catch (Exception)
+            {
+            }
+            // Blocks the QR login background task, never the UI thread.
+            if (!tcs.Task.Wait(TimeSpan.FromMinutes(5)))
+                throw new TimeoutException("2FA password was not provided in time");
+            return tcs.Task.Result;
+        }
+
+        public void ProvideQrLoginPassword(string password)
+        {
+            qrPasswordRequest?.TrySetResult(password);
+        }
+
         public async Task<User> CallQrGenerator(Action<string> func, CancellationToken ct, bool logoutFirst = false)
         {
-            return await client.LoginWithQRCode(func, logoutFirst: logoutFirst, ct: ct);
+            User user = await client.LoginWithQRCode(func, logoutFirst: logoutFirst, ct: ct);
+            if (user != null)
+                await CompleteLogin();
+            return user;
         }
 
         public async Task<User> GetUser()
@@ -632,6 +677,16 @@ namespace TelegramDownloader.Data
                         return "pass"; // if user has enabled 2FA
                     default: break;
                 }
+            return await CompleteLogin();
+        }
+
+        /// <summary>
+        /// Post-login initialization shared by the interactive login flow and the
+        /// QR login flow: loads chats, resolves premium limits and notifies
+        /// subscribers.
+        /// </summary>
+        private async Task<string> CompleteLogin()
+        {
             await getAllChats();
             SetSplitSizeGB();
             if (client.User.flags.HasFlag(User.Flags.premium))
@@ -696,8 +751,20 @@ namespace TelegramDownloader.Data
                 }
                 else
                 {
-                    _logger.LogInformation("No saved user data found, requesting phone");
-                    return "phone";
+                    // No saved phone (e.g. the session was created via QR login):
+                    // try to restore the session directly - Login(null) completes
+                    // silently when the stored session is still authorized and
+                    // returns the "phone" step otherwise.
+                    try
+                    {
+                        _logger.LogInformation("No saved user data found, attempting session restore");
+                        return await DoLogin(null) ?? "phone";
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Session restore without saved user data failed, requesting phone");
+                        return "phone";
+                    }
                 }
 
             }
