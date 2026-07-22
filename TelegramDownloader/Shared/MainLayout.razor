@@ -136,7 +136,17 @@
         <TelegramDownloader.Pages.Modals.ToastNotify></TelegramDownloader.Pages.Modals.ToastNotify>
 
         <article class="content px-4">
-            @Body
+            @if (authResolved)
+            {
+                @Body
+            }
+            else
+            {
+                <div class="d-flex flex-column justify-content-center align-items-center" style="min-height: 60vh; gap: 12px;">
+                    <Spinner Type="SpinnerType.Border" />
+                    <span class="text-muted">Checking session...</span>
+                </div>
+            }
         </article>
 
         <TelegramDownloader.Pages.Modals.AudioPlayerModal @ref="audioPlayer" />
@@ -333,6 +343,7 @@
     private VersionBadge versionBadge { get; set; }
     private bool active { get; set; } = true;
     private bool sidebarCollapsed { get; set; } = false;
+    private bool authResolved { get; set; } = false;
     private bool navMenuCollapsed { get; set; } = true;
     private bool showVersionModal { get; set; } = false;
     private static MainLayout? _instance;
@@ -514,21 +525,6 @@
         }
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender)
-        {
-            try
-            {
-                if (!ts.checkUserLogin()) NavManager.NavigateTo("/", true);
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine(e);
-            }
-        }
-    }
-
     protected override async Task OnInitializedAsync()
     {
         // Check if setup is complete using async method to avoid deadlock
@@ -538,6 +534,34 @@
             NavManager.NavigateTo("/setup", forceLoad: true);
             return;
         }
+
+        // Auth guard: resolve the session BEFORE any page content renders (the
+        // page body is gated on authResolved, so page components are not even
+        // instantiated until this completes). After an app restart the client
+        // exists but the user is not loaded yet, so attempt a silent session
+        // restore first; only bounce to the login page - keeping the requested
+        // URL so login can come back to it - when interactive login is needed.
+        if (!ts.checkUserLogin())
+        {
+            string authType = null;
+            try
+            {
+                authType = await ts.checkAuth(null);
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+            }
+            if (authType != "ok")
+            {
+                string returnUrl = new Uri(NavManager.Uri).PathAndQuery;
+                NavManager.NavigateTo(string.IsNullOrEmpty(returnUrl) || returnUrl == "/"
+                    ? "/"
+                    : $"/?returnUrl={Uri.EscapeDataString(returnUrl)}", forceLoad: true);
+                return;
+            }
+        }
+        authResolved = true;
 
         await checkWorkingTasks();
         tis.TaskEventChanged += eventChangedWorkingTasks;
