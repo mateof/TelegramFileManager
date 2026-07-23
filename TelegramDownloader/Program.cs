@@ -170,8 +170,14 @@ ServiceLocator.ServiceProvider = builder.Services.BuildServiceProvider();
 #pragma warning restore ASP0000
 builder.Services.AddBlazorBootstrap();
 
-// Add controllers for Mobile API
+// Add controllers for Mobile API and the modular v1 API
 builder.Services.AddControllers();
+
+// Modular v1 API: SignalR transfer hub + its supporting services
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<TelegramDownloader.Services.Api.QrLoginSessionManager>();
+builder.Services.AddScoped<TelegramDownloader.Services.Api.ChannelFolderResolver>();
+builder.Services.AddHostedService<TelegramDownloader.Services.Api.TransferBroadcastService>();
 
 // CORS for PWA and mobile apps
 builder.Services.AddCors(options =>
@@ -193,19 +199,47 @@ builder.Services.AddSwaggerGen(c =>
     {
         Title = "TelegramFileManager Mobile API",
         Version = "v1",
-        Description = "REST API for mobile audio player application. Provides access to playlists, Telegram channels, file navigation and audio streaming.",
+        Description = "REST API for the mobile audio player application. Provides access to playlists, Telegram channels, file navigation and audio streaming.",
         Contact = new Microsoft.OpenApi.Models.OpenApiContact
         {
             Name = "TFM"
         }
     });
 
-    // Include only Mobile API controllers (FileController uses Syncfusion types that break Swagger)
+    c.SwaggerDoc("api-v1", new Microsoft.OpenApi.Models.OpenApiInfo
+    {
+        Title = "TelegramFileManager API v1",
+        Version = "1.0",
+        Description =
+            "Modular REST API exposing the full feature set of the web application: Telegram authentication, " +
+            "channel management, remote and local file management, transfers (downloads/uploads) with live " +
+            "progress over SignalR, playlists, sharing, configuration and system diagnostics.\n\n" +
+            "Live transfer progress is streamed over the SignalR hub at /hubs/transfers.",
+        Contact = new Microsoft.OpenApi.Models.OpenApiContact
+        {
+            Name = "TFM"
+        }
+    });
+
+    // Route each controller to its document. FileController and the other legacy
+    // controllers use Syncfusion types that break schema generation, so they are
+    // excluded from both documents.
     c.DocInclusionPredicate((docName, apiDesc) =>
     {
+        var route = apiDesc.RelativePath ?? string.Empty;
         var controllerName = apiDesc.ActionDescriptor.RouteValues["controller"];
+
+        if (docName == "api-v1")
+            return route.StartsWith("api/v1/", StringComparison.OrdinalIgnoreCase);
+
         return controllerName?.StartsWith("Mobile") == true;
     });
+
+    // Surface the XML doc comments written on the controllers and DTOs.
+    var xmlPath = Path.Combine(AppContext.BaseDirectory,
+        $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml");
+    if (File.Exists(xmlPath))
+        c.IncludeXmlComments(xmlPath, includeControllerXmlComments: true);
 
     // API Key authentication
     c.AddSecurityDefinition("ApiKey", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
@@ -327,7 +361,8 @@ app.UseStaticFiles(new StaticFileOptions
 app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
-    c.SwaggerEndpoint("/swagger/v1/swagger.json", "TFM Mobile API v1");
+    c.SwaggerEndpoint("/swagger/api-v1/swagger.json", "TFM API v1 (full)");
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "TFM Mobile API (audio player)");
     c.RoutePrefix = "api-docs";
 });
 
@@ -339,6 +374,9 @@ app.UseMiddleware<TelegramDownloader.Middleware.ApiKeyMiddleware>();
 
 app.UseRouting();
 app.MapControllers();
+
+// Live transfer progress for API clients (mobile apps, dashboards...)
+app.MapHub<TelegramDownloader.Hubs.TransferHub>("/hubs/transfers");
 
 app.MapBlazorHub();
 app.MapFallbackToPage("/_Host");

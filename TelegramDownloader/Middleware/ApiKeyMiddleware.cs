@@ -17,10 +17,20 @@ namespace TelegramDownloader.Middleware
             _logger = logger;
         }
 
+        /// <summary>
+        /// Path prefixes protected by the API key: the legacy mobile API, the
+        /// modular v1 API and the SignalR hubs it exposes.
+        /// </summary>
+        private static readonly string[] PROTECTED_PREFIXES =
+        {
+            "/api/mobile",
+            "/api/v1",
+            "/hubs"
+        };
+
         public async Task InvokeAsync(HttpContext context)
         {
-            // Only check API key for mobile API endpoints
-            if (context.Request.Path.StartsWithSegments("/api/mobile"))
+            if (PROTECTED_PREFIXES.Any(p => context.Request.Path.StartsWithSegments(p)))
             {
                 var configuredApiKey = GeneralConfigStatic.tlconfig?.mobile_api_key;
 
@@ -44,36 +54,40 @@ namespace TelegramDownloader.Middleware
                 {
                     providedApiKey = queryApiKey;
                 }
+                else if (context.Request.Query.TryGetValue("access_token", out var accessToken))
+                {
+                    // SignalR clients cannot set custom headers on the WebSocket
+                    // handshake, so they pass the key through the standard
+                    // access_token query parameter.
+                    providedApiKey = accessToken;
+                }
+                else if (context.Request.Headers.TryGetValue("Authorization", out var authHeader))
+                {
+                    // The SignalR JS/.NET clients send the access token as a
+                    // Bearer header on the negotiate request (only the socket
+                    // itself falls back to the query string).
+                    var value = authHeader.ToString();
+                    if (value.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                        providedApiKey = value["Bearer ".Length..].Trim();
+                }
 
                 if (string.IsNullOrEmpty(providedApiKey))
                 {
-                    _logger.LogWarning("Mobile API request without API key from {IP}",
+                    _logger.LogWarning("API request without API key from {IP}",
                         context.Connection.RemoteIpAddress);
 
-                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    context.Response.ContentType = "application/json";
-                    await context.Response.WriteAsJsonAsync(new
-                    {
-                        success = false,
-                        error = "API key required",
-                        message = $"Please provide your API key in the {API_KEY_HEADER} header or apiKey query parameter"
-                    });
+                    await WriteUnauthorized(context, "API key required",
+                        $"Provide your API key in the {API_KEY_HEADER} header, or in the apiKey/access_token query parameter");
                     return;
                 }
 
                 // Validate API key
                 if (!configuredApiKey.Equals(providedApiKey, StringComparison.Ordinal))
                 {
-                    _logger.LogWarning("Invalid mobile API key attempt from {IP}",
+                    _logger.LogWarning("Invalid API key attempt from {IP}",
                         context.Connection.RemoteIpAddress);
 
-                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    context.Response.ContentType = "application/json";
-                    await context.Response.WriteAsJsonAsync(new
-                    {
-                        success = false,
-                        error = "Invalid API key"
-                    });
+                    await WriteUnauthorized(context, "Invalid API key", null);
                     return;
                 }
 
@@ -81,6 +95,40 @@ namespace TelegramDownloader.Middleware
             }
 
             await _next(context);
+        }
+
+        /// <summary>
+        /// Writes the 401 body. The v1 API and the hubs use the v1 envelope
+        /// (<c>error</c> is an object with a machine-readable <c>code</c>);
+        /// <c>/api/mobile</c> keeps its original flat shape so the existing
+        /// audio app is not broken.
+        /// </summary>
+        private static async Task WriteUnauthorized(HttpContext context, string error, string? detail)
+        {
+            context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+            context.Response.ContentType = "application/json";
+
+            if (context.Request.Path.StartsWithSegments("/api/mobile"))
+            {
+                await context.Response.WriteAsJsonAsync(new
+                {
+                    success = false,
+                    error,
+                    message = detail
+                });
+                return;
+            }
+
+            await context.Response.WriteAsJsonAsync(new
+            {
+                success = false,
+                error = new
+                {
+                    code = Models.Api.ApiErrorCodes.Unauthorized,
+                    message = error,
+                    detail
+                }
+            });
         }
     }
 
