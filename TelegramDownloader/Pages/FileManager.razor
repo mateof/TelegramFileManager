@@ -56,6 +56,7 @@
             </DropdownItem>
         </DropdownMenu>
     </Dropdown>
+    <Button Color="ButtonColor.Info" class="ms-3" @onclick="openWebDavInfo"><i class="bi bi-hdd-network"></i> WebDav</Button>
 
 </h3>
 
@@ -70,6 +71,7 @@
 
 <TelegramDownloader.Pages.Partials.impl.FileManagerImpl @ref="fileManagerImpl" id="@id"></TelegramDownloader.Pages.Partials.impl.FileManagerImpl>
 <TelegramDownloader.Pages.Modals.ImportDataModal id="@id" @ref="ImportModal"></TelegramDownloader.Pages.Modals.ImportDataModal><TelegramDownloader.Pages.Modals.InfoModals.DeleteChannelModal @ref="deleteChannelModal" ChannelId="@id" ChannelName="@chatName"></TelegramDownloader.Pages.Modals.InfoModals.DeleteChannelModal>
+<TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal @ref="webDavModal" title="WebDav URL" url="@webDavUrl"></TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal>
 
 <TelegramDownloader.Pages.Modals.ConfirmationModal @ref="refreshConfirmModal"
     Title="Refresh Channel Data"
@@ -188,6 +190,8 @@
     [Parameter]
     public string id { get; set; }
     private DeleteChannelModal deleteChannelModal { get; set; } = default!;
+    private MediaUrlModal webDavModal { get; set; } = default!;
+    private string webDavUrl = "";
 
     BsonSharedInfoModel bsi { get; set; }
     public string chatName { get; set; }
@@ -230,6 +234,22 @@
             Logger.LogError(ex, "Error on GetSharedInfoById");
             nm.sendMessage("Error", "Error on GetSharedInfoById", NotificationTypes.Error);
         }
+    }
+
+    /// <summary>
+    /// Builds the WebDAV URL for the current channel and folder and shows it in a
+    /// copyable modal (e.g. to paste into a Synology Hyper Backup task).
+    /// </summary>
+    public async Task openWebDavInfo()
+    {
+        var folder = fileManagerImpl?.GetCurrentFolderPath() ?? "/";
+        var suffix = string.Join("/", folder
+            .Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Select(Uri.EscapeDataString));
+        if (suffix.Length > 0) suffix += "/";
+        webDavUrl = $"{MyNavigationManager.BaseUri}webdav/{id}/{suffix}";
+        StateHasChanged();
+        await webDavModal.OnShowModalClick();
     }
 
     public void exportData()

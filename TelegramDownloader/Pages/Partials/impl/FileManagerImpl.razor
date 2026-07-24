@@ -149,6 +149,17 @@
     MobileFileManager mobileFileManager { get; set; }
     NotificationModel nm = new NotificationModel();
 
+    /// <summary>
+    /// Current folder path inside the channel (e.g. "/" or "/Movies/2024/"), taken
+    /// from whichever file manager (desktop or mobile) is active. Used to build the
+    /// WebDAV URL for the current folder.
+    /// </summary>
+    public string GetCurrentFolderPath()
+    {
+        var path = _isMobileView ? mobileFileManager?.Path : fm?.Path;
+        return string.IsNullOrEmpty(path) ? "/" : path;
+    }
+
     // Mobile detection
     private bool _isMobileView = false;
     private bool _viewportDetected = false; // Don't render until viewport is detected
