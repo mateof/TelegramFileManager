@@ -61,13 +61,25 @@ namespace TelegramDownloader.Controllers.Api.V1
                     ? await _telegram.getAllSavedChats()
                     : await _telegram.getAllChats();
 
+                // TelegramService.getAllSavedChats only respects the in-memory
+                // chat cache; it does NOT filter by local index. Cross-reference
+                // with the actual Mongo databases so onlySaved is honoured and
+                // HasDatabase is reliable in the response.
+                var indexedIds = await GetIndexedChannelIdsAsync();
+
                 var favourites = GeneralConfigStatic.config.FavouriteChannels ?? new List<long>();
                 var items = (chats ?? new List<ChatViewBase>())
                     .Where(c => c?.chat != null)
-                    .Select(c => ApiChannelDto.FromChatViewBase(
-                        c,
-                        isFavorite: favourites.Contains(c.chat.ID),
-                        isOwner: SafeIsOwner(c.chat.ID)))
+                    .Where(c => !onlySaved || indexedIds.Contains(c.chat.ID))
+                    .Select(c =>
+                    {
+                        var dto = ApiChannelDto.FromChatViewBase(
+                            c,
+                            isFavorite: favourites.Contains(c.chat.ID),
+                            isOwner: SafeIsOwner(c.chat.ID));
+                        dto.HasDatabase = indexedIds.Contains(c.chat.ID);
+                        return dto;
+                    })
                     .ToList();
 
                 if (favoritesOnly)
@@ -103,6 +115,14 @@ namespace TelegramDownloader.Controllers.Api.V1
             {
                 var data = await _telegram.getChatsWithFolders();
                 var favourites = GeneralConfigStatic.config.FavouriteChannels ?? new List<long>();
+                var indexedIds = await GetIndexedChannelIdsAsync();
+
+                ApiChannelDto ToDto(ChatViewBase c)
+                {
+                    var dto = ApiChannelDto.FromChatViewBase(c, favourites.Contains(c.chat.ID), SafeIsOwner(c.chat.ID));
+                    dto.HasDatabase = indexedIds.Contains(c.chat.ID);
+                    return dto;
+                }
 
                 var dto = new ApiChannelsWithFoldersDto
                 {
@@ -113,12 +133,12 @@ namespace TelegramDownloader.Controllers.Api.V1
                         IconEmoji = f.IconEmoji,
                         Channels = (f.Chats ?? new List<ChatViewBase>())
                             .Where(c => c?.chat != null)
-                            .Select(c => ApiChannelDto.FromChatViewBase(c, favourites.Contains(c.chat.ID), SafeIsOwner(c.chat.ID)))
+                            .Select(ToDto)
                             .ToList()
                     }).ToList(),
                     Ungrouped = (data?.UngroupedChats ?? new List<ChatViewBase>())
                         .Where(c => c?.chat != null)
-                        .Select(c => ApiChannelDto.FromChatViewBase(c, favourites.Contains(c.chat.ID), SafeIsOwner(c.chat.ID)))
+                        .Select(ToDto)
                         .ToList()
                 };
                 dto.TotalChannels = dto.Folders.Sum(f => f.ChannelCount) + dto.Ungrouped.Count;
@@ -140,9 +160,15 @@ namespace TelegramDownloader.Controllers.Api.V1
             try
             {
                 var chats = await _telegram.GetFouriteChannels(refresh);
+                var indexedIds = await GetIndexedChannelIdsAsync();
                 var items = (chats ?? new List<ChatViewBase>())
                     .Where(c => c?.chat != null)
-                    .Select(c => ApiChannelDto.FromChatViewBase(c, isFavorite: true, isOwner: SafeIsOwner(c.chat.ID)))
+                    .Select(c =>
+                    {
+                        var dto = ApiChannelDto.FromChatViewBase(c, isFavorite: true, isOwner: SafeIsOwner(c.chat.ID));
+                        dto.HasDatabase = indexedIds.Contains(c.chat.ID);
+                        return dto;
+                    })
                     .OrderBy(c => c.Name)
                     .ToList();
                 return OkResult(items);
@@ -514,6 +540,31 @@ namespace TelegramDownloader.Controllers.Api.V1
         {
             try { return _telegram.isChannelOwner(channelId); }
             catch { return false; }
+        }
+
+        /// <summary>
+        /// Ids of channels that own a local Mongo database (index). The
+        /// TelegramService cache alone cannot answer this, so we ask the DB
+        /// layer directly. Returns an empty set on failure so callers keep
+        /// working (rows just miss the HasDatabase flag).
+        /// </summary>
+        private async Task<HashSet<long>> GetIndexedChannelIdsAsync()
+        {
+            try
+            {
+                var names = await _db.GetAllChannelDatabaseNames();
+                var ids = new HashSet<long>();
+                foreach (var name in names ?? new List<string>())
+                {
+                    if (long.TryParse(name, out var id)) ids.Add(id);
+                }
+                return ids;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not enumerate local channel databases; HasDatabase will not be populated");
+                return new HashSet<long>();
+            }
         }
 
         private static ApiChatMessageDto ToMessageDto(ChatMessages m)
