@@ -16,7 +16,6 @@ namespace TelegramDownloader.Models.Api
         public bool TelegramConfigured { get; set; }
         public bool TelegramAuthenticated { get; set; }
         public bool SetupComplete { get; set; }
-        public bool WebDavRunning { get; set; }
 
         /// <summary>Relative path of the SignalR hub streaming transfer updates.</summary>
         public string TransfersHubPath { get; set; } = "/hubs/transfers";
@@ -138,8 +137,6 @@ namespace TelegramDownloader.Models.Api
         public int MultiConnectionBlockSizeMB { get; set; }
         public int MultiConnectionMinFileSizeMB { get; set; }
 
-        public WebDavConfigDto WebDav { get; set; } = new();
-
         public static AppConfigDto From(GeneralConfig c) => new()
         {
             ShouldNotify = c.ShouldNotify,
@@ -168,24 +165,8 @@ namespace TelegramDownloader.Models.Api
             DownloadConnections = c.DownloadConnections,
             MultiConnectionPartSizeKB = c.MultiConnectionPartSizeKB,
             MultiConnectionBlockSizeMB = c.MultiConnectionBlockSizeMB,
-            MultiConnectionMinFileSizeMB = c.MultiConnectionMinFileSizeMB,
-            WebDav = new WebDavConfigDto
-            {
-                Host = c.webDav?.Host ?? "127.0.0.1",
-                InternalPort = c.webDav?.PuertoEntrada ?? 0,
-                ExternalPort = c.webDav?.PuertoSalida ?? 0,
-                IsRunning = c.webDav?.webDavService?.IsRunning ?? false
-            }
+            MultiConnectionMinFileSizeMB = c.MultiConnectionMinFileSizeMB
         };
-    }
-
-    /// <summary>WebDAV bridge settings and state.</summary>
-    public class WebDavConfigDto
-    {
-        public string Host { get; set; } = "127.0.0.1";
-        public int InternalPort { get; set; }
-        public int ExternalPort { get; set; }
-        public bool IsRunning { get; set; }
     }
 
     /// <summary>
@@ -220,9 +201,6 @@ namespace TelegramDownloader.Models.Api
         public int? MultiConnectionPartSizeKB { get; set; }
         public int? MultiConnectionBlockSizeMB { get; set; }
         public int? MultiConnectionMinFileSizeMB { get; set; }
-        public string? WebDavHost { get; set; }
-        public int? WebDavInternalPort { get; set; }
-        public int? WebDavExternalPort { get; set; }
     }
 
     /// <summary>One application log record.</summary>

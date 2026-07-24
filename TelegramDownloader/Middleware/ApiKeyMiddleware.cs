@@ -32,7 +32,11 @@ namespace TelegramDownloader.Middleware
         {
             if (PROTECTED_PREFIXES.Any(p => context.Request.Path.StartsWithSegments(p)))
             {
-                var configuredApiKey = GeneralConfigStatic.tlconfig?.mobile_api_key;
+                // Prefer the value managed from the Config UI (persisted in Mongo);
+                // fall back to config.json for backward compatibility.
+                var configuredApiKey = !string.IsNullOrEmpty(GeneralConfigStatic.config?.MobileApiKey)
+                    ? GeneralConfigStatic.config.MobileApiKey
+                    : GeneralConfigStatic.tlconfig?.mobile_api_key;
 
                 // If no API key is configured, allow all requests (development mode)
                 if (string.IsNullOrEmpty(configuredApiKey))

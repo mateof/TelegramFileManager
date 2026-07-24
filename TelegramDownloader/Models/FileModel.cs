@@ -179,42 +179,6 @@ namespace TelegramDownloader.Models
 
             };
         }
-        public WebDavFileModel toWebDavFileModel(String? channel = null)
-        {
-            return this.IsFile
-                ? new WebDavFileModel()
-                {
-                    name = this.Name,
-                    is_dir = false,
-                    file_id = this.Id,
-                    content_type = FileService.getMimeType(this.Type),
-                    content_length = this.Size,
-                    channel = channel,
-                    last_modified = this.DateModified
-                }
-                : new WebDavFileModel()
-                {
-                    name = this.Name,
-                    is_dir = true,
-                    last_modified = this.DateModified
-                };
-        }
-    }
-
-    public class WebDavFileModel
-    {
-        public string name { get; set; }
-        public bool is_dir { get; set; }
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-        public string file_id { get; set; }
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-        public string content_type { get; set; }
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-        public long content_length { get; set; }
-        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-        public string? channel { get; set; }
-        public DateTime last_modified { get; set; }
-
     }
 
     public class FileManagerModel

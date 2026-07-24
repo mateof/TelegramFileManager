@@ -352,7 +352,7 @@ namespace TelegramDownloader.Data
                             }
                             else
                             {
-                                if (isMyChannel && !await _db.existItemByTelegramId(dbName, (int)child.MessageId))
+                                if (isMyChannel && child.MessageId.HasValue && !await _db.existItemByTelegramId(dbName, (int)child.MessageId))
                                     await _ts.deleteFile(dbName, (int)child.MessageId);
                             }
                         }
@@ -377,7 +377,7 @@ namespace TelegramDownloader.Data
                     }
                     else
                     {
-                        if (isMyChannel && !await _db.existItemByTelegramId(dbName, (int)entry.MessageId))
+                        if (isMyChannel && entry.MessageId.HasValue && !await _db.existItemByTelegramId(dbName, (int)entry.MessageId))
                             await _ts.deleteFile(dbName, (int)entry.MessageId);
                     }
                 }
@@ -417,7 +417,7 @@ namespace TelegramDownloader.Data
                                     await _ts.deleteFile(dbName, id);
                             }
                         }
-                        else
+                        else if (child.MessageId.HasValue)
                         {
                             if (!await _db.existItemByTelegramId(dbName, (int)child.MessageId))
                                 await _ts.deleteFile(dbName, (int)child.MessageId);
@@ -442,7 +442,7 @@ namespace TelegramDownloader.Data
                             await _ts.deleteFile(dbName, id);
                     }
                 }
-                else
+                else if (entry.MessageId.HasValue)
                 {
                     if (!await _db.existItemByTelegramId(dbName, (int)entry.MessageId))
                         await _ts.deleteFile(dbName, (int)entry.MessageId);
@@ -477,7 +477,7 @@ namespace TelegramDownloader.Data
                                     await _ts.deleteFile(dbName, id);
                             }
                         }
-                        else
+                        else if (child.MessageId.HasValue)
                         {
                             if (!await _db.existItemByTelegramId(dbName, (int)child.MessageId))
                                 await _ts.deleteFile(dbName, (int)child.MessageId);
@@ -499,7 +499,7 @@ namespace TelegramDownloader.Data
                             await _ts.deleteFile(dbName, id);
                     }
                 }
-                else
+                else if (entry.MessageId.HasValue)
                 {
                     if (!await _db.existItemByTelegramId(dbName, (int)entry.MessageId))
                         await _ts.deleteFile(dbName, (int)entry.MessageId);
@@ -1198,7 +1198,9 @@ namespace TelegramDownloader.Data
         {
             _logger.LogInformation("Adding upload task from server - DbName: {DbName}, Path: {Path}, FilesCount: {Count}",
                 dbName, currentPath, files.Count);
-            idt = new InfoDownloadTaksModel();
+            // Reuse a caller-supplied task model when provided (e.g. the WebDAV PUT
+            // handler that needs to await this exact upload); otherwise create one.
+            idt ??= new InfoDownloadTaksModel();
             idt.tis = _tis;
             idt.id = Guid.NewGuid().ToString();
             idt.total = 0;
@@ -1250,6 +1252,43 @@ namespace TelegramDownloader.Data
 
             _tis.addToInfoDownloadTaskList(idt);
             _tis.CheckPendingUploadInfoTasks();
+        }
+
+        /// <summary>
+        /// Creates a zero-byte file as an index-only node (no Telegram message),
+        /// since Telegram cannot store empty files. Mirrors the FilterPath/FilterId/
+        /// FilePath computation used by the regular upload so the entry is consistent.
+        /// <paramref name="currentPath"/> must be a normalized folder path with a
+        /// trailing slash (e.g. "/" or "/backups/").
+        /// </summary>
+        public async Task CreateEmptyFile(string dbName, string currentPath, string fileName)
+        {
+            BsonFileManagerModel parent = await _db.getParentDirectoryByPath(dbName, currentPath)
+                                          ?? await _db.getRootFolder(dbName);
+
+            var model = new BsonFileManagerModel
+            {
+                Name = fileName,
+                IsFile = true,
+                HasChild = false,
+                DateCreated = DateTime.Now,
+                DateModified = DateTime.Now,
+                FilterPath = parent.FilterPath == "" ? "/" : string.Concat(parent.FilterPath, parent.Name, "/"),
+                FilterId = string.Concat(parent.FilterId, parent.Id.ToString(), "/"),
+                ParentId = parent.Id,
+                FilePath = System.IO.Path.Combine(currentPath, fileName),
+                Type = System.IO.Path.GetExtension(fileName),
+                Size = 0,
+                MessageId = null,
+                isSplit = false
+            };
+
+            if (await _db.getFileByPath(dbName, System.IO.Path.Combine(currentPath, fileName)) == null)
+            {
+                await _db.createEntry(dbName, model);
+                if (!parent.HasChild)
+                    await _db.setDirectoryHasChild(dbName, parent.Id);
+            }
         }
 
         /// <summary>

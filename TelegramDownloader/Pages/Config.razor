@@ -1023,6 +1023,58 @@
                 </div>
             </div>
 
+            <!-- API & WebDAV Access Section -->
+            <div class="config-section">
+                <div class="config-section-header">
+                    <i class="bi bi-shield-lock"></i>
+                    <span>API &amp; WebDAV Access</span>
+                </div>
+                <div class="config-section-body">
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-key"></i>
+                                Mobile / v1 API Key
+                            </div>
+                            <div class="config-item-description">
+                                Required in the <code>X-Api-Key</code> header for <code>/api/mobile</code>, <code>/api/v1</code> and <code>/hubs</code>. Leave empty to disable authentication. Overrides <code>mobile_api_key</code> in config.json when set.
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputText @bind-Value="Model!.MobileApiKey" class="form-control" style="width: 220px;" autocomplete="off" />
+                        </div>
+                    </div>
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-person"></i>
+                                WebDAV User
+                            </div>
+                            <div class="config-item-description">
+                                HTTP Basic user for the native WebDAV endpoint (<code>/webdav</code>). Leave empty to leave WebDAV open. Overrides config.json when set.
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputText @bind-Value="Model!.WebDavUser" class="form-control" style="width: 220px;" autocomplete="off" />
+                        </div>
+                    </div>
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-key-fill"></i>
+                                WebDAV Password
+                            </div>
+                            <div class="config-item-description">
+                                HTTP Basic password for the native WebDAV endpoint. Serve WebDAV over HTTPS: Basic auth is base64-encoded, not encrypted.
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputText @bind-Value="Model!.WebDavPassword" type="password" class="form-control" style="width: 220px;" autocomplete="new-password" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Save Button -->
             <div class="config-save-section">
                 <button class="btn btn-primary config-save-btn" type="submit">

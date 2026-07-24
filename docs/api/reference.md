@@ -137,9 +137,6 @@ server serves at **`/swagger/api-v1/swagger.json`** (browsable at
 | --- | --- | :---: | --- |
 | GET | `/api/v1/config` | | Read configuration. |
 | PATCH | `/api/v1/config` | | Partial update. |
-| GET | `/api/v1/config/webdav` | | WebDAV bridge state. |
-| POST | `/api/v1/config/webdav/start` | | Start the WebDAV bridge. |
-| POST | `/api/v1/config/webdav/stop` | | Stop the WebDAV bridge. |
 
 ### System
 
@@ -270,7 +267,7 @@ interface PlaylistTrackModel { fileId: string; channelId: string; channelName: s
 ### System & config
 
 ```ts
-interface ServerInfoDto { product: string; version: string; apiVersion: string; serverTimeUtc: string; mongoConnected: boolean; telegramConfigured: boolean; telegramAuthenticated: boolean; setupComplete: boolean; webDavRunning: boolean; transfersHubPath: string; requiresApiKey: boolean; }
+interface ServerInfoDto { product: string; version: string; apiVersion: string; serverTimeUtc: string; mongoConnected: boolean; telegramConfigured: boolean; telegramAuthenticated: boolean; setupComplete: boolean; transfersHubPath: string; requiresApiKey: boolean; }
 interface SystemMetricsDto { systemCpuUsage: number; appCpuUsage: number; processorCount: number; totalMemoryBytes: number; usedMemoryBytes: number; availableMemoryBytes: number; memoryUsagePercent: number; appMemoryBytes: number; tempFolderPath?: string; tempFolderSizeBytes: number; diskTotalBytes: number; diskUsedBytes: number; diskFreeBytes: number; diskUsagePercent: number; }
 interface AppConfigDto { /* see system-and-config.md; PATCH with UpdateConfigRequest (all fields optional) */ }
 interface LogEntryDto { id: string; timestamp: string; level?: string; message?: string; logger?: string; exception?: string; version?: string; }

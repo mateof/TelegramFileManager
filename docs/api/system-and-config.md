@@ -1,7 +1,8 @@
 # System, diagnostics & configuration
 
-Health, metrics, logs, database maintenance, application settings and the WebDAV
-bridge. None of these require a Telegram session (they only need the API key).
+Health, metrics, logs, database maintenance and application settings. None of
+these require a Telegram session (they only need the API key). The native WebDAV
+endpoint is documented separately in [webdav.md](webdav.md).
 
 ## System
 
@@ -27,7 +28,6 @@ GET /api/v1/system/info     # server identity and readiness
     "telegramConfigured": true,
     "telegramAuthenticated": false,
     "setupComplete": true,
-    "webDavRunning": false,
     "transfersHubPath": "/hubs/transfers",
     "requiresApiKey": true
   }
@@ -124,7 +124,6 @@ Returns the full `AppConfigDto`. Highlights:
 | `enableMultiConnectionDownloads`, `downloadConnections` (2–8) | Multi-connection downloads for large files. |
 | `enableMemorySplitUpload`, `memorySplitSizeGB` | Split large uploads in memory instead of on disk. |
 | `favouriteChannels` | Ids of favourite channels. |
-| `webDav` | The WebDAV bridge block (host, ports, running state). |
 
 <a id="streaming"></a>
 
@@ -142,19 +141,18 @@ Premium, 2 GB otherwise) and by `splitSize`, and `parallelTransfers`,
 `downloadConnections`, `multiConnectionBlockSizeMB` are clamped to their valid
 ranges. An unknown `strmStreamingMode` yields `400 invalid_request`.
 
-## WebDAV bridge
+## WebDAV
 
-Exposes channels as WebDAV shares so media servers can mount a library.
+Each channel is exposed as a **native, always-on read/write WebDAV share** at
+`/webdav/{channelId}/` — there is no bridge to start or stop. This is what a
+Synology Hyper Backup task (or rclone, davfs2, Windows Explorer…) mounts.
+Authentication is HTTP Basic, configured from the **Config** page
+(`WebDAV User` / `WebDAV Password`).
 
-```
-GET  /api/v1/config/webdav          # state
-POST /api/v1/config/webdav/start    # start the bridge
-POST /api/v1/config/webdav/stop     # stop the bridge
-```
+See **[webdav.md](webdav.md)** for the full guide: URL layout, supported verbs,
+`curl` examples and Hyper Backup setup.
 
-Once running, a channel is reachable at
-`http://<host>:<externalPort>/<channelId>/`. `409 already_running` if you start
-it twice. Change the host/ports via `PATCH /api/v1/config`
-(`webDavHost`, `webDavInternalPort`, `webDavExternalPort`).
+> The old Python WebDAV proxy (`config/webdav/*` endpoints, `webDav` config block)
+> was removed in favour of this native implementation.
 
 Next: [reference.md](reference.md).

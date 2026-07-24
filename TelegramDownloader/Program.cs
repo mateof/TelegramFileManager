@@ -150,6 +150,7 @@ builder.Services.AddSingleton<GHService>();
 
 // Progressive download service for streaming with background caching
 builder.Services.AddSingleton<IProgressiveDownloadService, ProgressiveDownloadService>();
+builder.Services.AddSingleton<TelegramDownloader.Services.WebDavLockManager>();
 
 // Task persistence services
 builder.Services.AddSingleton<ITaskPersistenceService, TaskPersistenceService>();
