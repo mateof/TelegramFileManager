@@ -61,8 +61,8 @@ namespace TelegramDownloader.Controllers.Api.V1
             {
                 Version = typeof(Program).Assembly.GetName().Version?.ToString() ?? "unknown",
                 TelegramConfigured = _telegram.IsConfigured,
-                RequiresApiKey = !string.IsNullOrEmpty(GeneralConfigStatic.tlconfig?.mobile_api_key),
-                WebDavRunning = GeneralConfigStatic.config?.webDav?.webDavService?.IsRunning ?? false
+                RequiresApiKey = !string.IsNullOrEmpty(GeneralConfigStatic.config?.MobileApiKey)
+                                 || !string.IsNullOrEmpty(GeneralConfigStatic.tlconfig?.mobile_api_key)
             };
 
             try

@@ -90,11 +90,6 @@ namespace TelegramDownloader.Controllers.Api.V1
                 if (request.MultiConnectionBlockSizeMB.HasValue) c.MultiConnectionBlockSizeMB = Math.Clamp(request.MultiConnectionBlockSizeMB.Value, 1, 16);
                 if (request.MultiConnectionMinFileSizeMB.HasValue) c.MultiConnectionMinFileSizeMB = request.MultiConnectionMinFileSizeMB.Value;
 
-                c.webDav ??= new WebDavModel();
-                if (!string.IsNullOrWhiteSpace(request.WebDavHost)) c.webDav.Host = request.WebDavHost;
-                if (request.WebDavInternalPort.HasValue) c.webDav.PuertoEntrada = request.WebDavInternalPort.Value;
-                if (request.WebDavExternalPort.HasValue) c.webDav.PuertoSalida = request.WebDavExternalPort.Value;
-
                 await GeneralConfigStatic.SaveChanges(_db, c);
 
                 return OkResult(AppConfigDto.From(GeneralConfigStatic.config), "Configuration saved");
@@ -106,55 +101,5 @@ namespace TelegramDownloader.Controllers.Api.V1
             }
         }
 
-        /// <summary>State of the WebDAV bridge.</summary>
-        [HttpGet("webdav")]
-        [ProducesResponseType(typeof(ApiResult<WebDavConfigDto>), StatusCodes.Status200OK)]
-        public IActionResult WebDav() => OkResult(AppConfigDto.From(GeneralConfigStatic.config).WebDav);
-
-        /// <summary>Starts the WebDAV bridge.</summary>
-        /// <remarks>
-        /// Once running, channels are reachable as WebDAV shares at
-        /// <c>http://&lt;host&gt;:&lt;externalPort&gt;/&lt;channelId&gt;/</c>,
-        /// which is how media servers mount a library.
-        /// </remarks>
-        [HttpPost("webdav/start")]
-        [ProducesResponseType(typeof(ApiResult<WebDavConfigDto>), StatusCodes.Status200OK)]
-        public IActionResult StartWebDav()
-        {
-            try
-            {
-                var webDav = GeneralConfigStatic.config.webDav;
-                if (webDav == null)
-                    return BadRequestResult("WebDAV is not configured");
-
-                if (webDav.webDavService?.IsRunning == true)
-                    return ConflictResult("The WebDAV bridge is already running", ApiErrorCodes.AlreadyRunning);
-
-                webDav.start();
-                return OkResult(AppConfigDto.From(GeneralConfigStatic.config).WebDav, "WebDAV bridge started");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error starting the WebDAV bridge");
-                return ErrorResult("Could not start the WebDAV bridge", ex);
-            }
-        }
-
-        /// <summary>Stops the WebDAV bridge.</summary>
-        [HttpPost("webdav/stop")]
-        [ProducesResponseType(typeof(ApiResult<WebDavConfigDto>), StatusCodes.Status200OK)]
-        public IActionResult StopWebDav()
-        {
-            try
-            {
-                GeneralConfigStatic.config.webDav?.stop();
-                return OkResult(AppConfigDto.From(GeneralConfigStatic.config).WebDav, "WebDAV bridge stopped");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error stopping the WebDAV bridge");
-                return ErrorResult("Could not stop the WebDAV bridge", ex);
-            }
-        }
     }
 }

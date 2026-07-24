@@ -45,13 +45,4 @@
     <Folder Include="wwwroot\local\temp\" />
   </ItemGroup>
 
-  <ItemGroup>
-    <None Update="WebDav\requirements.txt">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-    <None Update="WebDav\webdav_api_proxy.py">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-    </None>
-  </ItemGroup>
-
 </Project>

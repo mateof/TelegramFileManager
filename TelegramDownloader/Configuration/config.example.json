@@ -5,5 +5,7 @@
   "mongo_connection_string": "",
   "avoid_checking_certificate": false,
   "open_browser_on_startup": true,
-  "mobile_api_key": "my_api_key"
+  "mobile_api_key": "my_api_key",
+  "webdav_user": "",
+  "webdav_password": ""
 }

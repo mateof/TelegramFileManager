@@ -30,7 +30,8 @@ This API lives side by side with the app's existing surfaces:
 | [local-files.md](local-files.md) | Browsing and managing the server's local storage, the streaming cache. |
 | [playlists.md](playlists.md) | Playlists mixing Telegram and local tracks, reordering, bulk download. |
 | [shares.md](shares.md) | Sharing a channel folder and importing a share, `.strm` export for media servers. |
-| [system-and-config.md](system-and-config.md) | Health, metrics, logs, database maintenance, application settings, WebDAV bridge. |
+| [system-and-config.md](system-and-config.md) | Health, metrics, logs, database maintenance, application settings. |
+| [webdav.md](webdav.md) | Native WebDAV endpoint for mounting a channel as a read/write share (Synology Hyper Backup, rclone, davfs2). |
 | [reference.md](reference.md) | Full endpoint table and the data models returned by the API. |
 
 ## Interactive documentation (Swagger / OpenAPI)
