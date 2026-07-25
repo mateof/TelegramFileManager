@@ -28,6 +28,9 @@ namespace TelegramDownloader.Data
         Task<List<ChatViewBase>> GetFouriteChannels(bool mustRefresh = true);
         Task AddFavouriteChannel(long id);
         Task RemoveFavouriteChannel(long id);
+        Task AddHiddenChannel(long id);
+        Task RemoveHiddenChannel(long id);
+        Task<List<ChatViewBase>> GetHiddenChannels();
         Task<List<ChatViewBase>> getAllChats();
         Task<List<ChatViewBase>> getAllSavedChats();
         Task<ChatsWithFolders> getChatsWithFolders();

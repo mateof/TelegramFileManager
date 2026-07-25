@@ -727,6 +727,21 @@
                     <div class="config-item">
                         <div class="config-item-info">
                             <div class="config-item-label">
+                                <i class="bi bi-eye-slash"></i>
+                                Show Hidden Channels
+                            </div>
+                            <div class="config-item-description">
+                                Show channels you've marked as hidden in the sidebar and channel lists (needed to unhide them)
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputCheckbox @bind-Value="Model!.ShowHiddenChannels" class="form-check-input config-switch" />
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
                                 <i class="bi bi-images"></i>
                                 Channel Image Cache
                             </div>

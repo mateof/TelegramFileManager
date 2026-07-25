@@ -124,6 +124,8 @@ Returns the full `AppConfigDto`. Highlights:
 | `enableMultiConnectionDownloads`, `downloadConnections` (2–8) | Multi-connection downloads for large files. |
 | `enableMemorySplitUpload`, `memorySplitSizeGB` | Split large uploads in memory instead of on disk. |
 | `favouriteChannels` | Ids of favourite channels. |
+| `hiddenChannels` | Ids of channels hidden from the channel lists (read-only here; change via `POST/DELETE /api/v1/channels/{id}/hidden`). |
+| `showHiddenChannels` | When `true`, hidden channels are still shown in the channel lists. |
 
 <a id="streaming"></a>
 

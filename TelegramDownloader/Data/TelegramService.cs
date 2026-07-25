@@ -1531,6 +1531,30 @@ namespace TelegramDownloader.Data
                 await GetFouriteChannels();
             }
         }
+
+        public async Task AddHiddenChannel(long id)
+        {
+            if (!GeneralConfigStatic.config.HiddenChannels.Contains(id))
+            {
+                GeneralConfigStatic.AddHiddenChannel(id);
+                await GeneralConfigStatic.SaveChanges(_db, GeneralConfigStatic.config);
+            }
+        }
+
+        public async Task RemoveHiddenChannel(long id)
+        {
+            if (GeneralConfigStatic.config.HiddenChannels.Contains(id))
+            {
+                GeneralConfigStatic.DeleteHiddenChannel(id);
+                await GeneralConfigStatic.SaveChanges(_db, GeneralConfigStatic.config);
+            }
+        }
+
+        public async Task<List<ChatViewBase>> GetHiddenChannels()
+        {
+            var hidden = GeneralConfigStatic.config.HiddenChannels ?? new List<long>();
+            return (await getAllSavedChats()).Where(x => hidden.Contains(x.chat.ID)).ToList();
+        }
         public async Task<Byte[]> DownloadFileStream(Message message, long offset, int limit)
         {
             _logger.LogDebug("DownloadFileStream - Offset: {Offset}, Limit: {Limit}", offset, limit);

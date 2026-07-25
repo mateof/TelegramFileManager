@@ -16,10 +16,11 @@ namespace TelegramDownloader.Models.Mobile
         public bool IsOwner { get; set; }
         public bool CanPost { get; set; }
         public bool IsFavorite { get; set; }
+        public bool IsHidden { get; set; }
         public string Type { get; set; } = string.Empty; // channel, group, chat
         public int FileCount { get; set; }
 
-        public static ChannelDto FromChatViewBase(ChatViewBase chat, bool isFavorite = false, bool isOwner = false)
+        public static ChannelDto FromChatViewBase(ChatViewBase chat, bool isFavorite = false, bool isOwner = false, bool isHidden = false)
         {
             var channelId = chat.chat.ID;
             var name = chat.chat switch
@@ -51,6 +52,7 @@ namespace TelegramDownloader.Models.Mobile
                 IsOwner = isOwner,
                 CanPost = canPost,
                 IsFavorite = isFavorite,
+                IsHidden = isHidden,
                 Type = type
             };
         }

@@ -17,13 +17,16 @@ namespace TelegramDownloader.Models.Api
         /// <summary>True when the channel is marked as favourite in the app config.</summary>
         public bool IsFavorite { get; set; }
 
+        /// <summary>True when the channel is hidden from the channel lists in the app config.</summary>
+        public bool IsHidden { get; set; }
+
         /// <summary>Relative URL serving the channel avatar.</summary>
         public string ImageUrl { get; set; } = string.Empty;
 
         /// <summary>True when the app already has an indexed file database for this channel.</summary>
         public bool HasDatabase { get; set; }
 
-        public static ApiChannelDto FromChatViewBase(ChatViewBase chat, bool isFavorite = false, bool isOwner = false)
+        public static ApiChannelDto FromChatViewBase(ChatViewBase chat, bool isFavorite = false, bool isOwner = false, bool isHidden = false)
         {
             var id = chat.chat.ID;
             var name = chat.chat switch
@@ -47,6 +50,7 @@ namespace TelegramDownloader.Models.Api
                 Type = type,
                 IsOwner = isOwner,
                 IsFavorite = isFavorite,
+                IsHidden = isHidden,
                 ImageUrl = $"/api/channel/image/{id}"
             };
         }

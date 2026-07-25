@@ -32,11 +32,14 @@ server serves at **`/swagger/api-v1/swagger.json`** (browsable at
 
 | Method | Path | Sess. | Description |
 | --- | --- | :---: | --- |
-| GET | `/api/v1/channels` | ✓ | List chats (`onlySaved`, `favoritesOnly`, `search`, sort, paging). |
+| GET | `/api/v1/channels` | ✓ | List chats (`onlySaved`, `favoritesOnly`, `hiddenOnly`, `includeHidden`, `search`, sort, paging). |
 | GET | `/api/v1/channels/folders` | ✓ | Chats grouped by Telegram folder. |
 | GET | `/api/v1/channels/favorites` | ✓ | Favourite channels. |
 | POST | `/api/v1/channels/{id}/favorite` | ✓ | Add favourite. |
 | DELETE | `/api/v1/channels/{id}/favorite` | ✓ | Remove favourite. |
+| GET | `/api/v1/channels/hidden` | ✓ | Hidden channels. |
+| POST | `/api/v1/channels/{id}/hidden` | ✓ | Hide channel. |
+| DELETE | `/api/v1/channels/{id}/hidden` | ✓ | Unhide channel. |
 | GET | `/api/v1/channels/{id}` | ✓ | Details + indexed-content stats. |
 | POST | `/api/v1/channels` | ✓ | Create a channel. |
 | POST | `/api/v1/channels/{id}/database` | ✓ | Create the local index. |
@@ -201,7 +204,7 @@ interface QrLoginDto { sessionId: string; loginUrl?: string; qrImageBase64?: str
 ### Channels
 
 ```ts
-interface ApiChannelDto { id: number; name: string; type: "channel"|"group"|"chat"; isOwner: boolean; isFavorite: boolean; imageUrl: string; hasDatabase: boolean; }
+interface ApiChannelDto { id: number; name: string; type: "channel"|"group"|"chat"; isOwner: boolean; isFavorite: boolean; isHidden: boolean; imageUrl: string; hasDatabase: boolean; }
 interface ApiChannelDetailDto extends ApiChannelDto {
   fileCount: number; folderCount: number; totalSize: number; totalSizeText: string;
   audioCount: number; videoCount: number; photoCount: number; documentCount: number;

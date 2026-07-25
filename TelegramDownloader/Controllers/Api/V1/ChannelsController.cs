@@ -46,6 +46,8 @@ namespace TelegramDownloader.Controllers.Api.V1
         /// <param name="query">Paging and sorting.</param>
         /// <param name="onlySaved">Only channels with a local index.</param>
         /// <param name="favoritesOnly">Only channels marked as favourite.</param>
+        /// <param name="hiddenOnly">Only channels marked as hidden.</param>
+        /// <param name="includeHidden">Include hidden channels even when the "show hidden channels" setting is off.</param>
         /// <param name="search">Case-insensitive substring match on the name.</param>
         [HttpGet]
         [ProducesResponseType(typeof(ApiResult<List<ApiChannelDto>>), StatusCodes.Status200OK)]
@@ -53,6 +55,8 @@ namespace TelegramDownloader.Controllers.Api.V1
             [FromQuery] PagedQuery query,
             [FromQuery] bool onlySaved = false,
             [FromQuery] bool favoritesOnly = false,
+            [FromQuery] bool hiddenOnly = false,
+            [FromQuery] bool includeHidden = false,
             [FromQuery] string? search = null)
         {
             try
@@ -68,6 +72,7 @@ namespace TelegramDownloader.Controllers.Api.V1
                 var indexedIds = await GetIndexedChannelIdsAsync();
 
                 var favourites = GeneralConfigStatic.config.FavouriteChannels ?? new List<long>();
+                var hidden = GeneralConfigStatic.config.HiddenChannels ?? new List<long>();
                 var items = (chats ?? new List<ChatViewBase>())
                     .Where(c => c?.chat != null)
                     .Where(c => !onlySaved || indexedIds.Contains(c.chat.ID))
@@ -76,7 +81,8 @@ namespace TelegramDownloader.Controllers.Api.V1
                         var dto = ApiChannelDto.FromChatViewBase(
                             c,
                             isFavorite: favourites.Contains(c.chat.ID),
-                            isOwner: SafeIsOwner(c.chat.ID));
+                            isOwner: SafeIsOwner(c.chat.ID),
+                            isHidden: hidden.Contains(c.chat.ID));
                         dto.HasDatabase = indexedIds.Contains(c.chat.ID);
                         return dto;
                     })
@@ -84,6 +90,13 @@ namespace TelegramDownloader.Controllers.Api.V1
 
                 if (favoritesOnly)
                     items = items.Where(c => c.IsFavorite).ToList();
+
+                // Hidden channels are excluded unless explicitly requested or the
+                // "show hidden channels" setting is on.
+                if (hiddenOnly)
+                    items = items.Where(c => c.IsHidden).ToList();
+                else if (!includeHidden && !GeneralConfigStatic.config.ShowHiddenChannels)
+                    items = items.Where(c => !c.IsHidden).ToList();
 
                 if (!string.IsNullOrWhiteSpace(search))
                     items = items.Where(c => c.Name.Contains(search, StringComparison.OrdinalIgnoreCase)).ToList();
@@ -115,14 +128,17 @@ namespace TelegramDownloader.Controllers.Api.V1
             {
                 var data = await _telegram.getChatsWithFolders();
                 var favourites = GeneralConfigStatic.config.FavouriteChannels ?? new List<long>();
+                var hidden = GeneralConfigStatic.config.HiddenChannels ?? new List<long>();
+                var showHidden = GeneralConfigStatic.config.ShowHiddenChannels;
                 var indexedIds = await GetIndexedChannelIdsAsync();
 
                 ApiChannelDto ToDto(ChatViewBase c)
                 {
-                    var dto = ApiChannelDto.FromChatViewBase(c, favourites.Contains(c.chat.ID), SafeIsOwner(c.chat.ID));
+                    var dto = ApiChannelDto.FromChatViewBase(c, favourites.Contains(c.chat.ID), SafeIsOwner(c.chat.ID), hidden.Contains(c.chat.ID));
                     dto.HasDatabase = indexedIds.Contains(c.chat.ID);
                     return dto;
                 }
+                bool Visible(ChatViewBase c) => c?.chat != null && (showHidden || !hidden.Contains(c.chat.ID));
 
                 var dto = new ApiChannelsWithFoldersDto
                 {
@@ -132,12 +148,12 @@ namespace TelegramDownloader.Controllers.Api.V1
                         Title = f.Title,
                         IconEmoji = f.IconEmoji,
                         Channels = (f.Chats ?? new List<ChatViewBase>())
-                            .Where(c => c?.chat != null)
+                            .Where(Visible)
                             .Select(ToDto)
                             .ToList()
                     }).ToList(),
                     Ungrouped = (data?.UngroupedChats ?? new List<ChatViewBase>())
-                        .Where(c => c?.chat != null)
+                        .Where(Visible)
                         .Select(ToDto)
                         .ToList()
                 };
@@ -161,11 +177,12 @@ namespace TelegramDownloader.Controllers.Api.V1
             {
                 var chats = await _telegram.GetFouriteChannels(refresh);
                 var indexedIds = await GetIndexedChannelIdsAsync();
+                var hidden = GeneralConfigStatic.config.HiddenChannels ?? new List<long>();
                 var items = (chats ?? new List<ChatViewBase>())
                     .Where(c => c?.chat != null)
                     .Select(c =>
                     {
-                        var dto = ApiChannelDto.FromChatViewBase(c, isFavorite: true, isOwner: SafeIsOwner(c.chat.ID));
+                        var dto = ApiChannelDto.FromChatViewBase(c, isFavorite: true, isOwner: SafeIsOwner(c.chat.ID), isHidden: hidden.Contains(c.chat.ID));
                         dto.HasDatabase = indexedIds.Contains(c.chat.ID);
                         return dto;
                     })
@@ -214,6 +231,69 @@ namespace TelegramDownloader.Controllers.Api.V1
             }
         }
 
+        /// <summary>Lists the hidden channels.</summary>
+        [HttpGet("hidden")]
+        [ProducesResponseType(typeof(ApiResult<List<ApiChannelDto>>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> Hidden()
+        {
+            try
+            {
+                var chats = await _telegram.GetHiddenChannels();
+                var indexedIds = await GetIndexedChannelIdsAsync();
+                var favourites = GeneralConfigStatic.config.FavouriteChannels ?? new List<long>();
+                var items = (chats ?? new List<ChatViewBase>())
+                    .Where(c => c?.chat != null)
+                    .Select(c =>
+                    {
+                        var dto = ApiChannelDto.FromChatViewBase(c, favourites.Contains(c.chat.ID), SafeIsOwner(c.chat.ID), isHidden: true);
+                        dto.HasDatabase = indexedIds.Contains(c.chat.ID);
+                        return dto;
+                    })
+                    .OrderBy(c => c.Name)
+                    .ToList();
+                return OkResult(items);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error listing hidden channels");
+                return ErrorResult("Could not list the hidden channels", ex);
+            }
+        }
+
+        /// <summary>Hides a channel from the channel lists.</summary>
+        [HttpPost("{id}/hidden")]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> AddHidden(long id)
+        {
+            try
+            {
+                await _telegram.AddHiddenChannel(id);
+                return OkEmpty("Channel hidden");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error hiding channel {Id}", id);
+                return ErrorResult("Could not hide the channel", ex);
+            }
+        }
+
+        /// <summary>Unhides a channel.</summary>
+        [HttpDelete("{id}/hidden")]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status200OK)]
+        public async Task<IActionResult> RemoveHidden(long id)
+        {
+            try
+            {
+                await _telegram.RemoveHiddenChannel(id);
+                return OkEmpty("Channel unhidden");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error unhiding channel {Id}", id);
+                return ErrorResult("Could not unhide the channel", ex);
+            }
+        }
+
         /// <summary>Details and indexed-content statistics of one channel.</summary>
         [HttpGet("{id}")]
         [ProducesResponseType(typeof(ApiResult<ApiChannelDetailDto>), StatusCodes.Status200OK)]
@@ -236,6 +316,7 @@ namespace TelegramDownloader.Controllers.Api.V1
                     Name = name ?? channelId.ToString(),
                     IsOwner = isOwner,
                     IsFavorite = (GeneralConfigStatic.config.FavouriteChannels ?? new List<long>()).Contains(channelId),
+                    IsHidden = (GeneralConfigStatic.config.HiddenChannels ?? new List<long>()).Contains(channelId),
                     ImageUrl = $"/api/channel/image/{channelId}",
                     IsRefreshing = _files.isChannelRefreshing(id),
                     CanRefresh = !_telegram.isMyChat(channelId) || GeneralConfigStatic.config.EnableRefreshOwnChannels

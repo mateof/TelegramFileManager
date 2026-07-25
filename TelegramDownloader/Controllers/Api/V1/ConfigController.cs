@@ -71,6 +71,7 @@ namespace TelegramDownloader.Controllers.Api.V1
 
                 if (request.ShouldShowPaginatedFileChannel.HasValue) c.ShouldShowPaginatedFileChannel = request.ShouldShowPaginatedFileChannel.Value;
                 if (request.ShowChannelImages.HasValue) c.ShowChannelImages = request.ShowChannelImages.Value;
+                if (request.ShowHiddenChannels.HasValue) c.ShowHiddenChannels = request.ShowHiddenChannels.Value;
 
                 if (request.EnableTaskPersistence.HasValue) c.EnableTaskPersistence = request.EnableTaskPersistence.Value;
                 if (request.TaskPersistenceDebounceSeconds.HasValue) c.TaskPersistenceDebounceSeconds = request.TaskPersistenceDebounceSeconds.Value;

@@ -117,7 +117,9 @@ namespace TelegramDownloader.Models.Api
 
         public bool ShouldShowPaginatedFileChannel { get; set; }
         public bool ShowChannelImages { get; set; }
+        public bool ShowHiddenChannels { get; set; }
         public List<long> FavouriteChannels { get; set; } = new();
+        public List<long> HiddenChannels { get; set; } = new();
 
         public bool EnableTaskPersistence { get; set; }
         public int TaskPersistenceDebounceSeconds { get; set; }
@@ -151,7 +153,9 @@ namespace TelegramDownloader.Models.Api
             StrmStreamingMode = c.GetEffectiveStreamingMode().ToString(),
             ShouldShowPaginatedFileChannel = c.ShouldShowPaginatedFileChannel,
             ShowChannelImages = c.ShowChannelImages,
+            ShowHiddenChannels = c.ShowHiddenChannels,
             FavouriteChannels = c.FavouriteChannels ?? new List<long>(),
+            HiddenChannels = c.HiddenChannels ?? new List<long>(),
             EnableTaskPersistence = c.EnableTaskPersistence,
             TaskPersistenceDebounceSeconds = c.TaskPersistenceDebounceSeconds,
             StaleTaskCleanupDays = c.StaleTaskCleanupDays,
@@ -187,6 +191,7 @@ namespace TelegramDownloader.Models.Api
         public string? StrmStreamingMode { get; set; }
         public bool? ShouldShowPaginatedFileChannel { get; set; }
         public bool? ShowChannelImages { get; set; }
+        public bool? ShowHiddenChannels { get; set; }
         public bool? EnableTaskPersistence { get; set; }
         public int? TaskPersistenceDebounceSeconds { get; set; }
         public int? StaleTaskCleanupDays { get; set; }

@@ -23,7 +23,12 @@ GET /api/v1/channels
 | --- | --- | --- |
 | `onlySaved` | `false` | Only channels that already have a local index. |
 | `favoritesOnly` | `false` | Only favourites. |
+| `hiddenOnly` | `false` | Only hidden channels. |
+| `includeHidden` | `false` | Include hidden channels even when "show hidden channels" is off. |
 | `search` | – | Case-insensitive substring on the name. |
+
+Hidden channels are **excluded by default** unless the `showHiddenChannels`
+config option is on, or you pass `includeHidden=true` / `hiddenOnly=true`.
 | `sortBy` | `name` | `name` or `id`. |
 | `sortDescending` | `false` | |
 | `page`, `pageSize` | 1, 50 | |
@@ -38,6 +43,7 @@ GET /api/v1/channels
       "type": "channel",
       "isOwner": false,
       "isFavorite": true,
+      "isHidden": false,
       "imageUrl": "/api/channel/image/1290586824",
       "hasDatabase": true
     }
@@ -83,6 +89,19 @@ DELETE /api/v1/channels/{id}/favorite       # remove
 
 Favourites are stored in the app configuration and shared with the web UI.
 
+## Hidden channels
+
+```
+GET    /api/v1/channels/hidden              # list the hidden channels
+POST   /api/v1/channels/{id}/hidden         # hide a channel
+DELETE /api/v1/channels/{id}/hidden         # unhide a channel
+```
+
+Hidden channels are stored in the app configuration and shared with the web UI.
+By default they are excluded from `GET /api/v1/channels` and the folders list;
+turn on the `showHiddenChannels` config option (or pass `includeHidden=true` /
+`hiddenOnly=true`) to see them. Each channel DTO carries an `isHidden` flag.
+
 ## Channel details
 
 ```
@@ -99,6 +118,7 @@ Adds indexed-content statistics on top of the basic fields:
     "type": "channel",
     "isOwner": false,
     "isFavorite": true,
+    "isHidden": false,
     "imageUrl": "/api/channel/image/1290586824",
     "hasDatabase": true,
     "fileCount": 3120,

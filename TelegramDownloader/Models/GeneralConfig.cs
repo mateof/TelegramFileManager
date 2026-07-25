@@ -76,6 +76,16 @@ namespace TelegramDownloader.Models
             config.FavouriteChannels.Remove(id);
         }
 
+        public static void AddHiddenChannel(long id)
+        {
+            config.HiddenChannels.Add(id);
+        }
+
+        public static void DeleteHiddenChannel(long id)
+        {
+            config.HiddenChannels.Remove(id);
+        }
+
         public static void loadDbConfig()
         {
             tlconfig = LoadJson<TLConfig>("./Configuration/config.json");
@@ -139,7 +149,12 @@ namespace TelegramDownloader.Models
         public bool hasFileManagerVirtualScroll { get; set; } = false;
         public bool UseMobileFileManagerAlways { get; set; } = false;
         public bool ShowChannelImages { get; set; } = false;
+        /// <summary>When true, channels marked as hidden are still shown in the
+        /// channel lists (web + API); when false they are excluded.</summary>
+        public bool ShowHiddenChannels { get; set; } = false;
         public List<long> FavouriteChannels { get; set; } = new List<long>();
+        /// <summary>Ids of channels the user chose to hide from the channel lists.</summary>
+        public List<long> HiddenChannels { get; set; } = new List<long>();
 
         // API / WebDAV credentials, managed from the Config page and persisted in
         // MongoDB. When set here they take precedence over the equivalents in
