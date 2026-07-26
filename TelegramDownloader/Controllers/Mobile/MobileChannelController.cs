@@ -46,13 +46,16 @@ namespace TelegramDownloader.Controllers.Mobile
             {
                 var chats = await _ts.getAllSavedChats();
                 var favorites = GeneralConfigStatic.config.FavouriteChannels ?? new List<long>();
+                var hidden = GeneralConfigStatic.config.HiddenChannels ?? new List<long>();
+                var showHidden = GeneralConfigStatic.config.ShowHiddenChannels;
 
                 var dtos = new List<ChannelDto>();
                 foreach (var chat in chats)
                 {
+                    if (!showHidden && hidden.Contains(chat.chat.ID)) continue;
                     var isFavorite = favorites.Contains(chat.chat.ID);
                     var isOwner = _ts.isChannelOwner(chat.chat.ID);
-                    var dto = ChannelDto.FromChatViewBase(chat, isFavorite, isOwner);
+                    var dto = ChannelDto.FromChatViewBase(chat, isFavorite, isOwner, hidden.Contains(chat.chat.ID));
 
                     // Get file count for this channel
                     try
@@ -95,12 +98,14 @@ namespace TelegramDownloader.Controllers.Mobile
             {
                 var chatsWithFolders = await _ts.getChatsWithFolders();
                 var favorites = GeneralConfigStatic.config.FavouriteChannels ?? new List<long>();
+                var hidden = GeneralConfigStatic.config.HiddenChannels ?? new List<long>();
+                var showHidden = GeneralConfigStatic.config.ShowHiddenChannels;
 
                 // Helper function to create ChannelDto with FileCount
                 async Task<ChannelDto> CreateChannelDtoAsync(ChatViewBase chat, bool isFavorite)
                 {
                     var isOwner = _ts.isChannelOwner(chat.chat.ID);
-                    var dto = ChannelDto.FromChatViewBase(chat, isFavorite, isOwner);
+                    var dto = ChannelDto.FromChatViewBase(chat, isFavorite, isOwner, hidden.Contains(chat.chat.ID));
                     try
                     {
                         var files = await _db.getAllFilesInDirectoryById(chat.chat.ID.ToString(), null);
@@ -130,10 +135,12 @@ namespace TelegramDownloader.Controllers.Mobile
                         {
                             foreach (var chat in f.Chats)
                             {
+                                if (!showHidden && hidden.Contains(chat.chat.ID)) continue;
                                 var isFavorite = favorites.Contains(chat.chat.ID);
                                 folderDto.Channels.Add(await CreateChannelDtoAsync(chat, isFavorite));
                             }
                         }
+                        folderDto.ChannelCount = folderDto.Channels.Count;
 
                         result.Folders.Add(folderDto);
                     }
@@ -144,6 +151,7 @@ namespace TelegramDownloader.Controllers.Mobile
                 {
                     foreach (var chat in chatsWithFolders.UngroupedChats)
                     {
+                        if (!showHidden && hidden.Contains(chat.chat.ID)) continue;
                         var isFavorite = favorites.Contains(chat.chat.ID);
                         result.UngroupedChannels.Add(await CreateChannelDtoAsync(chat, isFavorite));
                     }

@@ -919,6 +919,21 @@
         return GeneralConfigStatic.config.FavouriteChannels.Contains(id);
     }
 
+    private async Task ToggleHide(long id)
+    {
+        if (isHidden(id))
+            await ts.RemoveHiddenChannel(id);
+        else
+            await ts.AddHiddenChannel(id);
+        await OnInitializedAsync();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private bool isHidden(long id)
+    {
+        return GeneralConfigStatic.config.HiddenChannels.Contains(id);
+    }
+
     private async Task showPlayer()
     {
         await JS.InvokeVoidAsync("openAudioModal", "");
@@ -935,6 +950,14 @@
         {
             sChats = allChats.ToList();
         }
+        // Exclude hidden channels unless the "show hidden channels" setting is on.
+        // sChats drives the Fav/Folders/Ungrouped views, so this covers them all.
+        if (!GeneralConfigStatic.config.ShowHiddenChannels)
+        {
+            var hidden = GeneralConfigStatic.config.HiddenChannels ?? new List<long>();
+            if (hidden.Count > 0)
+                sChats = sChats.Where(x => !hidden.Contains(x.chat.ID)).ToList();
+        }
         filterMyChats(searchString);
     }
 
@@ -950,11 +973,18 @@
 
     private IEnumerable<ChatViewBase> FilterChats(List<ChatViewBase> chats)
     {
-        if (string.IsNullOrEmpty(searchString))
+        IEnumerable<ChatViewBase> result = chats;
+        // Exclude hidden channels unless the "show hidden channels" setting is on.
+        // This helper feeds the Folders / Ungrouped views (which bypass sChats).
+        if (!GeneralConfigStatic.config.ShowHiddenChannels)
         {
-            return chats;
+            var hidden = GeneralConfigStatic.config.HiddenChannels ?? new List<long>();
+            if (hidden.Count > 0)
+                result = result.Where(x => !hidden.Contains(x.chat.ID));
         }
-        return chats.Where(x => x.chat.Title.ToLower().Contains(searchString.ToLower()));
+        if (!string.IsNullOrEmpty(searchString))
+            result = result.Where(x => x.chat.Title.ToLower().Contains(searchString.ToLower()));
+        return result;
     }
 
     private List<ChatViewBase> GetUngroupedChatsFiltered()
@@ -1014,6 +1044,9 @@
                 <button class="channel-action-btn" @onclick="@(async () => await goTo($"/fetchdata/{cb.chat.ID}"))" @onclick:stopPropagation="true" title="Chat view">
                     <i class="bi bi-chat-left-text"></i>
                 </button>
+                <button class="channel-action-btn" @onclick="@(async () => await ToggleHide(cb.chat.ID))" @onclick:stopPropagation="true" title="@(isHidden(cb.chat.ID) ? "Unhide channel" : "Hide channel")">
+                    <i class="bi @(isHidden(cb.chat.ID) ? "bi-eye" : "bi-eye-slash")"></i>
+                </button>
                 <button class="channel-action-btn channel-action-btn-danger"
                         @onclick="@(() => OpenDeleteLeaveModal(cb.chat.ID, cb.chat.Title))"
                         @onclick:stopPropagation="true"
@@ -1049,8 +1082,17 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Preserve which folders are expanded across reloads (e.g. after hiding or
+        // starring a channel), so the folder the user is working in doesn't collapse.
+        var expandedFolderIds = chatsWithFolders?.Folders?
+            .Where(f => f.IsExpanded).Select(f => f.Id).ToHashSet() ?? new HashSet<int>();
+
         allChats = await ts.getAllSavedChats();
         chatsWithFolders = await ts.getChatsWithFolders();
+        foreach (var f in chatsWithFolders.Folders)
+            if (expandedFolderIds.Contains(f.Id))
+                f.IsExpanded = true;
+
         filterChats();
         favouriteChats = (await ts.GetFouriteChannels(false)).Where(x => sChats.Select(x => x.chat.ID).ToList().Contains(x.chat.ID)).ToList();
         sharedChats = await db.getSharedInfoList(filter: searchString);
@@ -1060,8 +1102,12 @@
     private void filterMyChats(string? searchString = null)
     {
         mineChats = new List<ChatViewBase>();
+        var hiddenIds = GeneralConfigStatic.config.ShowHiddenChannels
+            ? new List<long>()
+            : (GeneralConfigStatic.config.HiddenChannels ?? new List<long>());
         foreach (var chat in allChats)
         {
+            if (hiddenIds.Contains(chat.chat.ID)) continue;
             if (chat.chat is Channel chat1)
             {
                 if (chat1.flags.HasFlag(Channel.Flags.creator))

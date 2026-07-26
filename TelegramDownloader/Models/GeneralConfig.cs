@@ -76,6 +76,16 @@ namespace TelegramDownloader.Models
             config.FavouriteChannels.Remove(id);
         }
 
+        public static void AddHiddenChannel(long id)
+        {
+            config.HiddenChannels.Add(id);
+        }
+
+        public static void DeleteHiddenChannel(long id)
+        {
+            config.HiddenChannels.Remove(id);
+        }
+
         public static void loadDbConfig()
         {
             tlconfig = LoadJson<TLConfig>("./Configuration/config.json");
@@ -139,8 +149,20 @@ namespace TelegramDownloader.Models
         public bool hasFileManagerVirtualScroll { get; set; } = false;
         public bool UseMobileFileManagerAlways { get; set; } = false;
         public bool ShowChannelImages { get; set; } = false;
+        /// <summary>When true, channels marked as hidden are still shown in the
+        /// channel lists (web + API); when false they are excluded.</summary>
+        public bool ShowHiddenChannels { get; set; } = false;
         public List<long> FavouriteChannels { get; set; } = new List<long>();
-        public WebDavModel webDav { get; set; } = new WebDavModel();
+        /// <summary>Ids of channels the user chose to hide from the channel lists.</summary>
+        public List<long> HiddenChannels { get; set; } = new List<long>();
+
+        // API / WebDAV credentials, managed from the Config page and persisted in
+        // MongoDB. When set here they take precedence over the equivalents in
+        // config.json (TLConfig), so they can be changed from the UI without
+        // editing files or restarting. Empty => fall back to config.json.
+        public string? MobileApiKey { get; set; }
+        public string? WebDavUser { get; set; }
+        public string? WebDavPassword { get; set; }
 
         // Task Persistence Settings
         public bool EnableTaskPersistence { get; set; } = true;
@@ -247,24 +269,19 @@ namespace TelegramDownloader.Models
         /// API key for mobile app authentication. If set, mobile API endpoints require this key in X-Api-Key header.
         /// </summary>
         public string? mobile_api_key { get; set; }
-    }
 
-    public class WebDavModel
-    {
-        public string Host { get; set; } = "127.0.0.1";
-        public int PuertoEntrada { get; set; } = 8080;
-        public int PuertoSalida { get; set; } = 9081;
-        [BsonIgnore]
-        public WebbDavService? webDavService { get; set; } = new WebbDavService();
+        /// <summary>
+        /// Username for the native WebDAV endpoint (HTTP Basic). If empty, the
+        /// WebDAV endpoint is open (development mode). Used by Hyper Backup and
+        /// other WebDAV clients that authenticate with user/password.
+        /// </summary>
+        public string? webdav_user { get; set; }
 
-        public void start()
-        {
-            webDavService.Start(port: PuertoEntrada, externalPort: PuertoSalida, host: Host);
-        }
-
-        public void stop()
-        {
-            webDavService.Stop();
-        }
+        /// <summary>
+        /// Password for the native WebDAV endpoint (HTTP Basic). Only checked
+        /// when <see cref="webdav_user"/> is set. Serve over HTTPS: Basic auth
+        /// sends credentials base64-encoded.
+        /// </summary>
+        public string? webdav_password { get; set; }
     }
 }

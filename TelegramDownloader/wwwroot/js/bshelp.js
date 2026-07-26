@@ -4,7 +4,41 @@ var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
 })
 
 function copyToClipboard(text) {
-    navigator.clipboard.writeText(text);
+    // Legacy copy via a temporary textarea + execCommand('copy'). Unlike
+    // navigator.clipboard (which only works in secure contexts, i.e. HTTPS or
+    // localhost), this works over plain HTTP too. Throws on failure so callers
+    // can surface an error.
+    var textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.top = '-9999px';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+
+    var selection = document.getSelection();
+    var savedRange = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
+
+    var succeeded = false;
+    try {
+        succeeded = document.execCommand('copy');
+    } catch (e) {
+        succeeded = false;
+    }
+
+    document.body.removeChild(textarea);
+    if (savedRange && selection) {
+        selection.removeAllRanges();
+        selection.addRange(savedRange);
+    }
+
+    if (!succeeded) {
+        throw new Error('copy command was unsuccessful');
+    }
 }
 
 function focusElement (id) {

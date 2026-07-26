@@ -36,19 +36,5 @@ RUN dotnet publish "./TelegramDownloader.csproj" -c $BUILD_CONFIGURATION -o /app
 FROM base AS final
 WORKDIR /app
 
-# Install Python (Alpine uses apk instead of apt)
-RUN apk add --no-cache python3 py3-pip && \
-    ln -sf /usr/bin/python3 /usr/bin/python
-
-COPY ./WebDav /app/WebDav
-
-# Create venv and install dependencies in single layer
-RUN python3 -m venv /app/venv && \
-    /app/venv/bin/pip install --no-cache-dir --upgrade pip && \
-    /app/venv/bin/pip install --no-cache-dir -r /app/WebDav/requirements.txt && \
-    /app/venv/bin/python -c "import uvicorn; print('uvicorn OK', uvicorn.__version__)"
-
-ENV PATH="/app/venv/bin:${PATH}"
-
 COPY --from=publish /app/publish .
 ENTRYPOINT ["dotnet", "TelegramDownloader.dll"]

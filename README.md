@@ -100,6 +100,46 @@ services:
 - When you want, you can download the files again to a location on your local computer, selecting the files or folders and clicking the `Download to Local` button.
 
 
+## Android apps
+
+Both apps are native Kotlin + Jetpack Compose clients built on the server's REST API v1
+(`/api/v1`), documented in [`docs/api`](docs/api). Point them at your server address and
+API key and they work over the same Telegram session as the web.
+
+### Phone and tablet — [tfm-android-app](https://github.com/mateof/tfm-android-app)
+
+Full file manager on the go:
+
+- Telegram login from the app, by **QR** or phone number (with 2FA).
+- **Channels**: saved / all / favourites, search, statistics, create a channel, join by
+  invitation, leave, and build or refresh a channel index choosing which media types to
+  scan.
+- **File browser** with breadcrumbs, filters, recursive search, multi-select, folder
+  creation, rename, copy/move, delete, **upload from the device** and download to the
+  server or to the device.
+- **Server local storage**: browse, upload, send to a Telegram channel without
+  re-uploading the bytes, and clear the streaming cache.
+- **Live transfers** over the `/hubs/transfers` SignalR hub: speed, progress and queues,
+  with global and per-item pause, resume, cancel and retry.
+- **Background audio player** (Media3 + MediaSession) with a mini player and server-side
+  playlists, plus **video streaming** for channel and local files.
+- Server settings: simultaneous downloads, parallel chunks, connections per download.
+
+### Android TV and Fire TV — [tfm-android-tv-app](https://github.com/mateof/tfm-android-tv-app)
+
+A D-pad first client focused on watching the videos you keep in your channels:
+
+- Channels split into mine, shared, favourites, Telegram chat folders and all, with a
+  name search.
+- Folder navigation inside a channel, an **all videos** view and a **messages** view,
+  each sortable by name, date or size.
+- Playback with the built-in player (ExoPlayer plus FFmpeg software decoders, so MKV or
+  AVI with AC3/DTS play fine), VLC, any other installed player or the system default.
+- Updates itself from GitHub Releases, and runs on Android 6.0, which covers Fire TV
+  sticks from 2015 onwards.
+
+Both repositories publish a signed APK as a GitHub Release on every push to `main`.
+
 ## Music player
 
 <img width="598" height="889" alt="Music player" src="https://github.com/user-attachments/assets/c4842c34-ea8f-4664-b22c-93b43a9aaf02" />

@@ -56,10 +56,7 @@
             </DropdownItem>
         </DropdownMenu>
     </Dropdown>
-    @if (webDavService.IsRunning)
-    {
-        <Button Color="ButtonColor.Info" class="ms-3" @onclick="openWebDavInfo"><i class="bi bi-info-circle"></i> WebDav</Button>
-    }
+    <Button Color="ButtonColor.Info" class="ms-3" @onclick="openWebDavInfo"><i class="bi bi-hdd-network"></i> WebDav</Button>
 
 </h3>
 
@@ -73,9 +70,8 @@
 </ul>
 
 <TelegramDownloader.Pages.Partials.impl.FileManagerImpl @ref="fileManagerImpl" id="@id"></TelegramDownloader.Pages.Partials.impl.FileManagerImpl>
-<TelegramDownloader.Pages.Modals.ImportDataModal id="@id" @ref="ImportModal"></TelegramDownloader.Pages.Modals.ImportDataModal>
-<TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal @ref="mediaUrlModal" title="WebDav URL" url="@webDavUrl"></TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal>
-<TelegramDownloader.Pages.Modals.InfoModals.DeleteChannelModal @ref="deleteChannelModal" ChannelId="@id" ChannelName="@chatName"></TelegramDownloader.Pages.Modals.InfoModals.DeleteChannelModal>
+<TelegramDownloader.Pages.Modals.ImportDataModal id="@id" @ref="ImportModal"></TelegramDownloader.Pages.Modals.ImportDataModal><TelegramDownloader.Pages.Modals.InfoModals.DeleteChannelModal @ref="deleteChannelModal" ChannelId="@id" ChannelName="@chatName"></TelegramDownloader.Pages.Modals.InfoModals.DeleteChannelModal>
+<TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal @ref="webDavModal" title="WebDav URL" url="@webDavUrl"></TelegramDownloader.Pages.Modals.InfoModals.MediaUrlModal>
 
 <TelegramDownloader.Pages.Modals.ConfirmationModal @ref="refreshConfirmModal"
     Title="Refresh Channel Data"
@@ -193,11 +189,9 @@
     private Modals.ConfirmationModal refreshConfirmModal { get; set; } = default!;
     [Parameter]
     public string id { get; set; }
-    private MediaUrlModal mediaUrlModal { get; set; } = default!;
     private DeleteChannelModal deleteChannelModal { get; set; } = default!;
-
-    private WebbDavService webDavService = GeneralConfigStatic.config.webDav.webDavService ?? new WebbDavService();
-    private String webDavUrl = "";
+    private MediaUrlModal webDavModal { get; set; } = default!;
+    private string webDavUrl = "";
 
     BsonSharedInfoModel bsi { get; set; }
     public string chatName { get; set; }
@@ -242,10 +236,20 @@
         }
     }
 
+    /// <summary>
+    /// Builds the WebDAV URL for the current channel and folder and shows it in a
+    /// copyable modal (e.g. to paste into a Synology Hyper Backup task).
+    /// </summary>
     public async Task openWebDavInfo()
     {
-        webDavUrl = $"{new Uri(MyNavigationManager.BaseUri).Host}:{GeneralConfigStatic.config.webDav.PuertoSalida}/{id}/";
-        mediaUrlModal.OnShowModalClick();
+        var folder = fileManagerImpl?.GetCurrentFolderPath() ?? "/";
+        var suffix = string.Join("/", folder
+            .Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Select(Uri.EscapeDataString));
+        if (suffix.Length > 0) suffix += "/";
+        webDavUrl = $"{MyNavigationManager.BaseUri}webdav/{id}/{suffix}";
+        StateHasChanged();
+        await webDavModal.OnShowModalClick();
     }
 
     public void exportData()
