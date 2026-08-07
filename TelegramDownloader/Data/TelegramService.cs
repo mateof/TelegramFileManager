@@ -794,6 +794,52 @@ namespace TelegramDownloader.Data
             await DoLogin(vc);
         }
 
+        // Single automatic restore attempt per process, shared by every caller
+        // (startup service and concurrent API requests await the same task). A
+        // failed attempt is NOT retried automatically: retrying checkAuth with
+        // a saved phone on a revoked session would trigger a new verification
+        // code on every call - the interactive (web) login is required then.
+        private static Task<bool> autoRestoreTask = null;
+        private static readonly object autoRestoreLock = new object();
+
+        public Task<bool> TryRestoreSessionAsync()
+        {
+            if (client == null)
+                return Task.FromResult(false);
+            if (client.User != null)
+                return Task.FromResult(true);
+            // UserId == 0 means the session file holds no authorized user:
+            // there is nothing to restore, interactive login is required.
+            if (client.UserId == 0)
+                return Task.FromResult(false);
+            lock (autoRestoreLock)
+            {
+                autoRestoreTask ??= RestoreSessionAsync();
+                return autoRestoreTask;
+            }
+        }
+
+        private async Task<bool> RestoreSessionAsync()
+        {
+            try
+            {
+                _logger.LogInformation("Restoring previous Telegram session automatically");
+                string result = await checkAuth(null);
+                if (result == "ok")
+                {
+                    _logger.LogInformation("Telegram session restored automatically");
+                    return true;
+                }
+                _logger.LogWarning("Automatic session restore not completed (result: {Result}) - interactive login required", result);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Automatic session restore failed - interactive login required");
+                return false;
+            }
+        }
+
         public bool checkUserLogin()
         {
 

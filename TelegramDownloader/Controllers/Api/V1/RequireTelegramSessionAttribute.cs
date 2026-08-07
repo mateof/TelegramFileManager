@@ -42,6 +42,22 @@ namespace TelegramDownloader.Controllers.Api.V1
 
             if (!loggedIn)
             {
+                // After a restart the session file may hold a valid session
+                // that nobody has loaded yet (it is normally loaded when the
+                // web UI is opened). Try the automatic restore before failing;
+                // concurrent requests share the same single attempt.
+                try
+                {
+                    loggedIn = await telegram.TryRestoreSessionAsync();
+                }
+                catch
+                {
+                    loggedIn = false;
+                }
+            }
+
+            if (!loggedIn)
+            {
                 context.Result = new ObjectResult(ApiResult.Fail(
                     ApiErrorCodes.NotLoggedIn,
                     "No Telegram session is active. Sign in through /api/v1/auth."))

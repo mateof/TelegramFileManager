@@ -156,6 +156,12 @@ builder.Services.AddSingleton<TelegramDownloader.Services.WebDavLockManager>();
 builder.Services.AddSingleton<ITaskPersistenceService, TaskPersistenceService>();
 builder.Services.AddHostedService<TaskResumeService>();
 
+// Restore a previously authorized Telegram session on startup so the API and
+// WebDAV work after a restart without opening the web UI first. Registered
+// after TaskResumeService so its OnUserLoggedIn subscription exists when the
+// restore completes.
+builder.Services.AddHostedService<TelegramSessionRestoreService>();
+
 // Log query service - only if MongoDB is available
 builder.Services.AddSingleton<ILogQueryService>(sp =>
     new LogQueryService(mongoConnectionString ?? "mongodb://localhost:27017", sp.GetRequiredService<ILogger<LogQueryService>>()));

@@ -11,6 +11,7 @@ namespace TelegramDownloader.Data
         bool IsConfigured { get; }
         void InitializeClient();
         Task<string> checkAuth(string number, bool isPhone = false);
+        Task<bool> TryRestoreSessionAsync();
         Task<User> GetUser();
         bool checkChannelExist(string id);
         bool checkUserLogin();
