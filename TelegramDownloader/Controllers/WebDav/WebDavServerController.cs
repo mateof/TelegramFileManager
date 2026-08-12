@@ -156,7 +156,8 @@ namespace TelegramDownloader.Controllers.WebDav
         {
             if (!IsAuthorized()) return Challenge401();
             var node = await ResolveFile(channel, path);
-            if (node == null) return NotFound();
+            if (node == null)
+                return await DirectoryListing(channel, path);
 
             var ct = HttpContext.RequestAborted;
             long totalLength = node.Size;
@@ -556,6 +557,79 @@ namespace TelegramDownloader.Controllers.WebDav
             _locks.Release(channel + ":" + NormalizeInner(path), token);
             return NoContent(); // lenient: 204 even if the token was unknown/expired
         }
+
+        // ------------------------------------------------------ directory listing
+
+        /// <summary>
+        /// Browsers issue a plain GET when the WebDAV URL is opened (the "open
+        /// URL" button of the file manager modal), so a GET on a collection
+        /// serves a minimal HTML index instead of 404, the same way Apache and
+        /// nginx do. WebDAV clients keep using PROPFIND and never hit this.
+        /// </summary>
+        private async Task<IActionResult> DirectoryListing(string channel, string? path)
+        {
+            if (string.IsNullOrWhiteSpace(channel)) return NotFound();
+            var inner = NormalizeInner(path);
+
+            if (inner == "/")
+            {
+                // Only list the root of channels that actually have an index,
+                // so a mistyped channel id still answers 404.
+                var known = await _db.GetAllChannelDatabaseNames();
+                if (!known.Contains(channel)) return NotFound();
+            }
+            else
+            {
+                var dir = await _db.getFileByPath(channel, inner);
+                if (dir == null || dir.IsFile) return NotFound();
+            }
+
+            var children = await _db.getAllFilesInDirectoryPath(channel, inner == "/" ? "/" : inner + "/");
+            var title = "/webdav/" + channel + (inner == "/" ? "/" : inner + "/");
+
+            var sb = new StringBuilder();
+            sb.Append("<!DOCTYPE html><html><head><meta charset=\"utf-8\"/>");
+            sb.Append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"/>");
+            sb.Append($"<title>{HtmlEscape(title)}</title>");
+            sb.Append("<style>body{font-family:system-ui,-apple-system,sans-serif;margin:2rem;color:#212529}" +
+                      "h1{font-size:1.15rem;word-break:break-all}table{border-collapse:collapse;min-width:34rem}" +
+                      "th,td{text-align:left;padding:.3rem 1.25rem .3rem 0;border-bottom:1px solid #dee2e6}" +
+                      "th{font-size:.8rem;text-transform:uppercase;color:#6c757d}" +
+                      "td.num{text-align:right}a{text-decoration:none;color:#0d6efd}a:hover{text-decoration:underline}</style>");
+            sb.Append("</head><body>");
+            sb.Append($"<h1>{HtmlEscape(title)}</h1>");
+            sb.Append("<table><tr><th>Name</th><th class=\"num\">Size</th><th>Modified</th></tr>");
+
+            if (inner != "/")
+            {
+                SplitPath(inner, out var parent, out _);
+                var parentHref = BuildHref(channel, parent, isDir: true);
+                sb.Append($"<tr><td><a href=\"{HtmlEscape(parentHref)}\">../</a></td><td class=\"num\"></td><td></td></tr>");
+            }
+
+            foreach (var child in children.OrderByDescending(c => !c.IsFile).ThenBy(c => c.Name, StringComparer.OrdinalIgnoreCase))
+            {
+                var childInner = (inner == "/" ? "/" : inner + "/") + child.Name;
+                var href = BuildHref(channel, childInner, isDir: !child.IsFile);
+                var name = child.IsFile ? child.Name : child.Name + "/";
+                var size = child.IsFile ? HelperService.SizeSuffix(child.Size) : "";
+                sb.Append("<tr>");
+                sb.Append($"<td><a href=\"{HtmlEscape(href)}\">{HtmlEscape(name)}</a></td>");
+                sb.Append($"<td class=\"num\">{HtmlEscape(size)}</td>");
+                sb.Append($"<td>{child.DateModified.ToUniversalTime():yyyy-MM-dd HH:mm} UTC</td>");
+                sb.Append("</tr>");
+            }
+            sb.Append("</table></body></html>");
+
+            return new ContentResult
+            {
+                Content = sb.ToString(),
+                ContentType = "text/html; charset=utf-8",
+                StatusCode = StatusCodes.Status200OK
+            };
+        }
+
+        private static string HtmlEscape(string? s) => System.Net.WebUtility.HtmlEncode(s ?? string.Empty);
 
         // ---------------------------------------------------------------- helpers
 
