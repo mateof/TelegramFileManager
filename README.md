@@ -6,7 +6,6 @@
   <a href="https://github.com/mateof/TelegramFileManager/pkgs/container/telegramfilemanager"><img alt="GHCR image" src="https://img.shields.io/badge/ghcr.io-image-2496ED?logo=docker&amp;logoColor=white"></a>
   <a href="https://dotnet.microsoft.com/"><img alt=".NET" src="https://img.shields.io/badge/.NET-Blazor%20Server-512BD4?logo=dotnet&amp;logoColor=white"></a>
   <a href="https://github.com/mateof/TelegramFileManager/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/mateof/TelegramFileManager/total?label=downloads&amp;color=success"></a>
-  <a href="https://github.com/mateof/TelegramFileManager/pkgs/container/telegramfilemanager"><img alt="GHCR downloads" src="https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fmateof%2FTelegramFileManager%2Fbadges%2Fghcr-downloads.json"></a>
   <a href="https://github.com/mateof/TelegramFileManager/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/mateof/TelegramFileManager?style=flat&amp;logo=github&amp;color=yellow"></a>
   <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/mateof/TelegramFileManager"></a>
   <a href="https://github.com/mateof/TelegramFileManager/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/mateof/TelegramFileManager"></a>
