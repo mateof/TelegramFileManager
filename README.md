@@ -1,4 +1,14 @@
 # TelegramFileManager
+
+<p align="center">
+  <a href="https://github.com/mateof/TelegramFileManager/actions/workflows/docker-image.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/mateof/TelegramFileManager/docker-image.yml?branch=develop&amp;label=CI&amp;logo=github"></a>
+  <a href="https://github.com/mateof/TelegramFileManager/releases/latest"><img alt="Version" src="https://img.shields.io/github/v/release/mateof/TelegramFileManager?label=version&amp;color=blue"></a>
+  <a href="https://github.com/mateof/TelegramFileManager/pkgs/container/telegramfilemanager"><img alt="GHCR image" src="https://img.shields.io/badge/ghcr.io-image-2496ED?logo=docker&amp;logoColor=white"></a>
+  <a href="https://dotnet.microsoft.com/"><img alt=".NET" src="https://img.shields.io/badge/.NET-Blazor%20Server-512BD4?logo=dotnet&amp;logoColor=white"></a>
+  <a href="LICENSE"><img alt="License" src="https://img.shields.io/github/license/mateof/TelegramFileManager"></a>
+  <a href="https://github.com/mateof/TelegramFileManager/commits/main"><img alt="Last commit" src="https://img.shields.io/github/last-commit/mateof/TelegramFileManager"></a>
+</p>
+
 With telegramFileManager you can have your own unlimited cloud and manage it through a file system in a simple way.
 You will be able to store files of unlimited size.
 
