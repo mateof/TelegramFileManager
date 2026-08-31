@@ -201,6 +201,34 @@ GET /api/v1/channels/{id}/refresh      -> true | false
 
 and watch `/hubs/transfers` for the download/index activity it generates.
 
+### What the scan added
+
+Once the poll above answers `false`, read the breakdown of the finished scan:
+
+```
+GET /api/v1/channels/{id}/refresh/result
+```
+
+```json
+{
+  "channelId": "1234567890",
+  "startedAt": "2026-08-31T16:38:02Z",
+  "finishedAt": "2026-08-31T16:40:57Z",
+  "failed": false,
+  "photos": 0,
+  "videos": 12,
+  "audios": 3,
+  "documents": 5,
+  "total": 20
+}
+```
+
+- `data: null` when the channel has not been refreshed since the server
+  started — the result is a report on this run, not history.
+- `failed: true` means the scan threw; the counts are what it managed to index
+  before giving up.
+- A scan that found nothing new answers with every count at `0`, not `null`.
+
 ## Message history
 
 ```
