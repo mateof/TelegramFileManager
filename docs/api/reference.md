@@ -47,6 +47,7 @@ server serves at **`/swagger/api-v1/swagger.json`** (browsable at
 | POST | `/api/v1/channels/{id}/leave` | ✓ | Leave / delete a channel. |
 | POST | `/api/v1/channels/{id}/refresh` | ✓ | Index new files (background). |
 | GET | `/api/v1/channels/{id}/refresh` | ✓ | Is a refresh running? |
+| GET | `/api/v1/channels/{id}/refresh/result` | ✓ | What the last refresh added, per type. |
 | GET | `/api/v1/channels/{id}/messages` | ✓ | Recent message history. |
 | GET | `/api/v1/channels/{id}/image` | ✓ | Channel avatar (image bytes). |
 | GET | `/api/v1/channels/{id}/invitation` | ✓ | Invitation link. |

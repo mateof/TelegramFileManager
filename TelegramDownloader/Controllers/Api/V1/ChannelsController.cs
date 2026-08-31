@@ -516,6 +516,21 @@ namespace TelegramDownloader.Controllers.Api.V1
         [ProducesResponseType(typeof(ApiResult<bool>), StatusCodes.Status200OK)]
         public IActionResult RefreshStatus(string id) => OkResult(_files.isChannelRefreshing(id));
 
+        /// <summary>What the last finished refresh added, broken down by media type.</summary>
+        /// <remarks>
+        /// Poll <c>GET /api/v1/channels/{id}/refresh</c> until it answers false,
+        /// then read this to find out what the scan actually indexed. Answers
+        /// <c>data: null</c> when the channel has not been refreshed since the
+        /// server started: the result is a report on this run, not history.
+        /// </remarks>
+        [HttpGet("{id}/refresh/result")]
+        [ProducesResponseType(typeof(ApiResult<ApiChannelRefreshResultDto>), StatusCodes.Status200OK)]
+        public IActionResult RefreshResult(string id)
+        {
+            ChannelRefreshResult? result = _files.getLastRefreshResult(id);
+            return OkResult(result == null ? null : ApiChannelRefreshResultDto.From(result));
+        }
+
         /// <summary>Reads the recent message history of a chat.</summary>
         /// <remarks>
         /// This hits Telegram directly and does not use the local index, so it

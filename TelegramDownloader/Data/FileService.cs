@@ -236,6 +236,12 @@ namespace TelegramDownloader.Data
         protected ITaskPersistenceService _persistence { get; set; }
         private static Mutex refreshMutex = new Mutex();
 
+        // The refresh is fire-and-forget, so the outcome is kept here for the
+        // client that started it to read once the scan is done. In memory only:
+        // it is a report on this run, not history worth persisting.
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, ChannelRefreshResult>
+            lastRefreshResults = new System.Collections.Concurrent.ConcurrentDictionary<string, ChannelRefreshResult>();
+
         const int MaxSize = 1024 * 1024 * 1000; // 1GB
 
 
@@ -1776,67 +1782,89 @@ namespace TelegramDownloader.Data
             refreshChannelList.Add(channelId);
             refreshMutex.ReleaseMutex();
             DateTime init = DateTime.Now;
-            List<int> presentIds = await _db.getAllIdsFromChannel(channelId);
-            _logger.LogInformation($"Refresh channel with id: {channelId}");
-
-            // Use default options if none provided
-            refreshOptions ??= new RefreshChannelOptions();
-
-            List<TelegramChatDocuments> telegramChatDocuments = (await _ts.searchAllChannelFiles(Convert.ToInt64(channelId), (presentIds.Count > 0 && !force) ? presentIds.Max() : 0, refreshOptions)).Where(x => x.name != null).ToList();
-            _logger.LogInformation($"Get the telegram files in: {(DateTime.Now - init).TotalSeconds} seconds  for channel id:{channelId}");
-            List<string> fileNames = await _db.getAllFileNamesFromChannel(channelId);
-            var nameCount = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-
-            foreach (string name in fileNames)
+            ChannelRefreshResult result = new ChannelRefreshResult
             {
-                nameCount[name] = 1;
-            }
-
-            foreach (var doc in telegramChatDocuments)
+                ChannelId = channelId,
+                StartedAt = init
+            };
+            try
             {
-                var baseName = doc.name;
-                var name = baseName;
-                int count = 0;
+                List<int> presentIds = await _db.getAllIdsFromChannel(channelId);
+                _logger.LogInformation($"Refresh channel with id: {channelId}");
 
-                while (nameCount.ContainsKey(name))
+                // Use default options if none provided
+                refreshOptions ??= new RefreshChannelOptions();
+
+                List<TelegramChatDocuments> telegramChatDocuments = (await _ts.searchAllChannelFiles(Convert.ToInt64(channelId), (presentIds.Count > 0 && !force) ? presentIds.Max() : 0, refreshOptions)).Where(x => x.name != null).ToList();
+                _logger.LogInformation($"Get the telegram files in: {(DateTime.Now - init).TotalSeconds} seconds  for channel id:{channelId}");
+                List<string> fileNames = await _db.getAllFileNamesFromChannel(channelId);
+                var nameCount = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (string name in fileNames)
                 {
-                    count++;
-                    name = $"{baseName}({count})";
+                    nameCount[name] = 1;
                 }
 
-                doc.name = name;
-                nameCount[name] = 1;
-                if (count == 0)
-                    nameCount[baseName] = 1;
-            }
+                foreach (var doc in telegramChatDocuments)
+                {
+                    var baseName = doc.name;
+                    var name = baseName;
+                    int count = 0;
+
+                    while (nameCount.ContainsKey(name))
+                    {
+                        count++;
+                        name = $"{baseName}({count})";
+                    }
+
+                    doc.name = name;
+                    nameCount[name] = 1;
+                    if (count == 0)
+                        nameCount[baseName] = 1;
+                }
             
-            var rootFolder = await _db.getRootFolder(channelId);
-            foreach (TelegramChatDocuments tcd in telegramChatDocuments)
-            {
-                if (!presentIds.Contains(tcd.id))
+                var rootFolder = await _db.getRootFolder(channelId);
+                foreach (TelegramChatDocuments tcd in telegramChatDocuments)
                 {
-                    BsonFileManagerModel model = new BsonFileManagerModel();
-                    model.Size = tcd.fileSize;
-                    model.MessageId = tcd.id;
-                    model.Name = tcd.name;
-                    model.IsFile = true;
-                    model.HasChild = false;
-                    model.DateCreated = tcd.creationDate;
-                    model.DateModified = tcd.modifiedDate;
-                    model.FilterPath = "/";
-                    model.FilterId = rootFolder.Id + "/";
-                    model.ParentId = rootFolder.Id;
-                    model.FilePath = "/" + tcd.name;
-                    model.Type = tcd.extension;
-                    model.isSplit = false;
-                    model.isEncrypted = false;
-                    await _db.createEntry(channelId, model);
-                    totalNewMessages++;
+                    if (!presentIds.Contains(tcd.id))
+                    {
+                        BsonFileManagerModel model = new BsonFileManagerModel();
+                        model.Size = tcd.fileSize;
+                        model.MessageId = tcd.id;
+                        model.Name = tcd.name;
+                        model.IsFile = true;
+                        model.HasChild = false;
+                        model.DateCreated = tcd.creationDate;
+                        model.DateModified = tcd.modifiedDate;
+                        model.FilterPath = "/";
+                        model.FilterId = rootFolder.Id + "/";
+                        model.ParentId = rootFolder.Id;
+                        model.FilePath = "/" + tcd.name;
+                        model.Type = tcd.extension;
+                        model.isSplit = false;
+                        model.isEncrypted = false;
+                        await _db.createEntry(channelId, model);
+                        totalNewMessages++;
+                        result.Count(tcd.documentType);
+                    }
                 }
             }
-            refreshMutex.WaitOne();
-            refreshChannelList.Remove(channelId);
-            refreshMutex.ReleaseMutex();
+            catch
+            {
+                result.Failed = true;
+                throw;
+            }
+            finally
+            {
+                // Without this, a scan that throws would leave the channel
+                // flagged as refreshing forever and a polling client would
+                // never stop waiting.
+                refreshMutex.WaitOne();
+                refreshChannelList.Remove(channelId);
+                refreshMutex.ReleaseMutex();
+                result.FinishedAt = DateTime.Now;
+                lastRefreshResults[channelId] = result;
+            }
             _logger.LogInformation($"Finish Refresh channel with id: {channelId} with {totalNewMessages} new files added.");
 
             // Fix for CS1739: Removed the invalid 'autoHide' parameter and replaced it with the correct property assignment.
@@ -1855,6 +1883,11 @@ namespace TelegramDownloader.Data
         public bool isChannelRefreshing(string channelId)
         {
             return refreshChannelList.Contains(channelId);
+        }
+
+        public ChannelRefreshResult? getLastRefreshResult(string channelId)
+        {
+            return lastRefreshResults.TryGetValue(channelId, out ChannelRefreshResult? result) ? result : null;
         }
 
         public async Task UploadFile(string dbName, string currentPath, UploadFiles file) // ItemsUploadedEventArgs<FileManagerDirectoryContent> args)

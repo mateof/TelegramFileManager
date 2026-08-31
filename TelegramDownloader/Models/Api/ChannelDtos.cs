@@ -75,6 +75,36 @@ namespace TelegramDownloader.Models.Api
         public bool CanRefresh { get; set; }
     }
 
+    /// <summary>What the last finished index refresh added, per media type.</summary>
+    public class ApiChannelRefreshResultDto
+    {
+        public string ChannelId { get; set; } = string.Empty;
+        public DateTime StartedAt { get; set; }
+        public DateTime FinishedAt { get; set; }
+
+        /// <summary>The scan threw; the counts are what it managed before failing.</summary>
+        public bool Failed { get; set; }
+
+        public int Photos { get; set; }
+        public int Videos { get; set; }
+        public int Audios { get; set; }
+        public int Documents { get; set; }
+        public int Total { get; set; }
+
+        public static ApiChannelRefreshResultDto From(ChannelRefreshResult r) => new ApiChannelRefreshResultDto
+        {
+            ChannelId = r.ChannelId,
+            StartedAt = r.StartedAt,
+            FinishedAt = r.FinishedAt,
+            Failed = r.Failed,
+            Photos = r.Photos,
+            Videos = r.Videos,
+            Audios = r.Audios,
+            Documents = r.Documents,
+            Total = r.Total
+        };
+    }
+
     /// <summary>A Telegram chat folder (filter) with the channels it contains.</summary>
     public class ApiChannelFolderDto
     {
