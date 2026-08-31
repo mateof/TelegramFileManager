@@ -649,21 +649,31 @@ namespace TelegramDownloader.Services
             return infoDownloadTaksModel.Count();
         }
 
-        public void clearUploadCompleted()
+        /// <summary>
+        /// A finished entry can be cleared away. When <paramref name="states"/>
+        /// is given, only those states qualify, so a caller can drop just the
+        /// completed ones and keep the failures on screen.
+        /// </summary>
+        private static bool isClearable(StateTask state, IReadOnlyCollection<StateTask>? states)
         {
-            List<UploadModel> removed = uploadModels.Where(x => x.state != StateTask.Working).ToList();
-            uploadModels.RemoveAll(x => x.state != StateTask.Working);
+            return state != StateTask.Working && (states == null || states.Contains(state));
+        }
+
+        public void clearUploadCompleted(IReadOnlyCollection<StateTask>? states = null)
+        {
+            List<UploadModel> removed = uploadModels.Where(x => isClearable(x.state, states)).ToList();
+            uploadModels.RemoveAll(x => isClearable(x.state, states));
             foreach (UploadModel um in removed)
                 unhookModel(um);
             EventChanged?.Invoke(this, new EventArgs());
             NotifyTransactionsChanged();
         }
 
-        public void clearDownloadCompleted()
+        public void clearDownloadCompleted(IReadOnlyCollection<StateTask>? states = null)
         {
             PendingDownloadMutex.WaitOne();
-            List<DownloadModel> removed = downloadModels.Where(x => x.state != StateTask.Working).ToList();
-            downloadModels.RemoveAll(x => x.state != StateTask.Working);
+            List<DownloadModel> removed = downloadModels.Where(x => isClearable(x.state, states)).ToList();
+            downloadModels.RemoveAll(x => isClearable(x.state, states));
             PendingDownloadMutex.ReleaseMutex();
             foreach (DownloadModel dm in removed.Where(x => !pendingDownloadModels.Contains(x)))
                 unhookModel(dm);
@@ -671,10 +681,10 @@ namespace TelegramDownloader.Services
             NotifyTransactionsChanged();
         }
 
-        public void clearTasksCompleted()
+        public void clearTasksCompleted(IReadOnlyCollection<StateTask>? states = null)
         {
-            List<InfoDownloadTaksModel> removed = infoDownloadTaksModel.Where(x => x.state != StateTask.Working).ToList();
-            infoDownloadTaksModel.RemoveAll(x => x.state != StateTask.Working);
+            List<InfoDownloadTaksModel> removed = infoDownloadTaksModel.Where(x => isClearable(x.state, states)).ToList();
+            infoDownloadTaksModel.RemoveAll(x => isClearable(x.state, states));
             foreach (InfoDownloadTaksModel idt in removed)
                 unhookModel(idt);
             EventChanged?.Invoke(this, new EventArgs());

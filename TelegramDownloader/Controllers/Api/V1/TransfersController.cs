@@ -403,33 +403,77 @@ namespace TelegramDownloader.Controllers.Api.V1
 
         /// <summary>Removes finished entries (completed, cancelled and failed) from a list.</summary>
         /// <param name="scope"><c>downloads</c>, <c>uploads</c>, <c>tasks</c> or <c>all</c>.</param>
+        /// <param name="states">
+        /// Comma-separated states to restrict the cleanup to: <c>completed</c>,
+        /// <c>error</c>, <c>canceled</c>, <c>paused</c> or <c>pending</c>. Omit it
+        /// to remove every finished entry, as before. <c>working</c> is rejected:
+        /// a running transfer is cancelled, not cleared.
+        /// </param>
         [HttpPost("clear")]
         [ProducesResponseType(typeof(ApiResult<TransfersSnapshotDto>), StatusCodes.Status200OK)]
-        public IActionResult Clear([FromQuery] string scope = "all")
+        public IActionResult Clear([FromQuery] string scope = "all", [FromQuery] string? states = null)
         {
+            HashSet<StateTask>? wanted;
+            if (!TryParseStates(states, out wanted, out string? stateError))
+                return BadRequestResult(stateError!);
+
             switch (scope?.ToLowerInvariant())
             {
                 case "downloads":
-                    _tis.clearDownloadCompleted();
+                    _tis.clearDownloadCompleted(wanted);
                     break;
                 case "uploads":
-                    _tis.clearUploadCompleted();
+                    _tis.clearUploadCompleted(wanted);
                     break;
                 case "tasks":
-                    _tis.clearTasksCompleted();
+                    _tis.clearTasksCompleted(wanted);
                     break;
                 case "all":
                 case null:
                 case "":
-                    _tis.clearDownloadCompleted();
-                    _tis.clearUploadCompleted();
-                    _tis.clearTasksCompleted();
+                    _tis.clearDownloadCompleted(wanted);
+                    _tis.clearUploadCompleted(wanted);
+                    _tis.clearTasksCompleted(wanted);
                     break;
                 default:
                     return BadRequestResult("scope must be one of: downloads, uploads, tasks, all");
             }
 
             return OkResult(TransferSnapshotBuilder.BuildSnapshot(_tis), "Finished entries cleared");
+        }
+
+        /// <summary>
+        /// Reads the optional <c>states</c> filter. Null means "every finished
+        /// state", which is what the endpoint did before the filter existed.
+        /// </summary>
+        private static bool TryParseStates(string? states, out HashSet<StateTask>? parsed, out string? error)
+        {
+            parsed = null;
+            error = null;
+            if (string.IsNullOrWhiteSpace(states))
+                return true;
+
+            HashSet<StateTask> result = new HashSet<StateTask>();
+            foreach (string raw in states.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                // "failed" reads better than the enum's "error" from a client.
+                string name = raw.ToLowerInvariant() switch
+                {
+                    "failed" => "error",
+                    "cancelled" => "canceled",
+                    var other => other
+                };
+
+                if (!Enum.TryParse(name, ignoreCase: true, out StateTask state) || state == StateTask.Working)
+                {
+                    error = $"Unknown state '{raw}'. Valid states: completed, error, canceled, paused, pending";
+                    return false;
+                }
+                result.Add(state);
+            }
+
+            parsed = result;
+            return true;
         }
 
         /// <summary>Empties a queue without touching what is already running.</summary>

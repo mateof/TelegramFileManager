@@ -89,7 +89,7 @@ server serves at **`/swagger/api-v1/swagger.json`** (browsable at
 | POST | `/api/v1/transfers/{id}/pause` | | Pause one download. |
 | POST | `/api/v1/transfers/{id}/cancel` | | Cancel one transfer. |
 | POST | `/api/v1/transfers/{id}/retry` | | Retry a transfer. |
-| POST | `/api/v1/transfers/clear` | | Remove finished entries (`scope`). |
+| POST | `/api/v1/transfers/clear` | | Remove finished entries (`scope`, `states`). |
 | POST | `/api/v1/transfers/queue/clear` | | Empty a queue (`scope`). |
 | GET | `/api/v1/transfers/persisted` | | List persisted transfers. |
 | DELETE | `/api/v1/transfers/persisted/{internalId}` | | Delete one persisted transfer. |
