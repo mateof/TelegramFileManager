@@ -176,6 +176,19 @@ Works on any chat, indexed or not — this is how you save a file straight from 
 The pause/resume/stop endpoints return the fresh `summary`; the per-item ones
 return an empty success. Watch the hub for the state change either way.
 
+`clear` also takes an optional `states` filter, so a client can tidy up the
+successes and leave the failures on screen to look at:
+
+```
+POST /api/v1/transfers/clear?scope=all&states=completed
+POST /api/v1/transfers/clear?scope=all&states=completed,failed
+```
+
+Valid states are `completed`, `error` (or `failed`), `canceled` (or
+`cancelled`), `paused` and `pending`; `working` is rejected, since a running
+transfer is cancelled rather than cleared. Without `states` the endpoint
+removes every finished entry, as it always did.
+
 ## Persisted transfers (survive restarts)
 
 When `enableTaskPersistence` is on (default), transfers are written to MongoDB.
