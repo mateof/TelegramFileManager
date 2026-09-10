@@ -263,7 +263,9 @@ namespace TelegramDownloader.Models
         public string LibraryLanguage { get; set; } = "es-ES";
         /// <summary>Scan a channel's new files right after its index is refreshed.</summary>
         public bool LibraryAutoScan { get; set; } = true;
-        /// <summary>Channels the library never scans.</summary>
+        /// <summary>Channels the library scans. Empty means every channel with an index.</summary>
+        public List<long> LibraryIncludedChannels { get; set; } = new List<long>();
+        /// <summary>Channels the library never scans, even when included.</summary>
         public List<long> LibraryExcludedChannels { get; set; } = new List<long>();
         /// <summary>Fraction of the duration after which a file counts as watched (0.5-1).</summary>
         public double LibraryWatchedThreshold { get; set; } = 0.92;

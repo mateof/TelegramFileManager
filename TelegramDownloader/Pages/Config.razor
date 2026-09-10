@@ -1157,15 +1157,53 @@
                     <div class="config-item">
                         <div class="config-item-info">
                             <div class="config-item-label">
+                                <i class="bi bi-list-check"></i>
+                                Channels To Scan
+                            </div>
+                            <div class="config-item-description">
+                                Which indexed channels the library looks at. Either every channel with an index, or only the ones you pick.
+                            </div>
+                        </div>
+                        <div class="config-item-control" style="display: flex; flex-direction: column; gap: 0.35rem;">
+                            <label class="form-check-label" style="display: flex; gap: 0.35rem; align-items: center; cursor: pointer;">
+                                <input type="radio" class="form-check-input m-0" name="libraryChannelMode" checked="@(!libraryUseIncludeList)" @onchange="() => SetLibraryChannelMode(false)" />
+                                All indexed channels
+                            </label>
+                            <label class="form-check-label" style="display: flex; gap: 0.35rem; align-items: center; cursor: pointer;">
+                                <input type="radio" class="form-check-input m-0" name="libraryChannelMode" checked="@libraryUseIncludeList" @onchange="() => SetLibraryChannelMode(true)" />
+                                Only the selected channels
+                            </label>
+                        </div>
+                    </div>
+                    @if (libraryUseIncludeList)
+                    {
+                        <div class="config-item">
+                            <div class="config-item-info">
+                                <div class="config-item-label">
+                                    <i class="bi bi-check2-square"></i>
+                                    Included Channels
+                                </div>
+                                <div class="config-item-description">
+                                    Only these channels are scanned. With none selected the library scans every indexed channel.
+                                </div>
+                            </div>
+                            <div class="config-item-control">
+                                <ChannelPicker Channels="libraryChannels" @bind-Selected="Model!.LibraryIncludedChannels" Placeholder="Search channels to include…" />
+                            </div>
+                        </div>
+                    }
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
                                 <i class="bi bi-eye-slash"></i>
                                 Excluded Channels
                             </div>
                             <div class="config-item-description">
-                                Channel ids the library never scans, separated by commas.
+                                Channels the library never scans, even when included above.
                             </div>
                         </div>
                         <div class="config-item-control">
-                            <input type="text" class="form-control" style="width: 220px;" @bind="LibraryExcludedText" />
+                            <ChannelPicker Channels="libraryChannels" @bind-Selected="Model!.LibraryExcludedChannels" Placeholder="Search channels to exclude…" />
                         </div>
                     </div>
 
@@ -1324,16 +1362,46 @@
     // Media library
     private TelegramDownloader.Models.Library.LibraryScanState? libraryScan;
 
-    private string LibraryExcludedText
+    private List<ChannelPicker.ChannelOption> libraryChannels = new();
+    private bool libraryUseIncludeList;
+
+    private void SetLibraryChannelMode(bool useIncludeList)
     {
-        get => string.Join(", ", Model?.LibraryExcludedChannels ?? new List<long>());
-        set
+        libraryUseIncludeList = useIncludeList;
+        // "All channels" is represented by an empty include list
+        if (!useIncludeList && Model != null)
+            Model.LibraryIncludedChannels = new List<long>();
+    }
+
+    /// <summary>Channels with a MongoDB index, named from the chat cache when available.</summary>
+    private async Task LoadLibraryChannelsAsync()
+    {
+        try
         {
-            if (Model == null) return;
-            Model.LibraryExcludedChannels = (value ?? string.Empty)
-                .Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(s => long.TryParse(s.Trim(), out var id) ? id : (long?)null)
-                .Where(id => id.HasValue).Select(id => id!.Value).Distinct().ToList();
+            var names = new Dictionary<long, string>();
+            try
+            {
+                foreach (var chat in await ts.getAllSavedChats() ?? new List<ChatViewBase>())
+                    if (chat?.chat != null)
+                        names[chat.chat.ID] = chat.chat.Title ?? chat.chat.ID.ToString();
+            }
+            catch
+            {
+                // No Telegram session: fall back to bare ids
+            }
+            var options = new List<ChannelPicker.ChannelOption>();
+            foreach (var dbName in await db.GetAllChannelDatabaseNames())
+                if (long.TryParse(dbName, out var id))
+                    options.Add(new ChannelPicker.ChannelOption(id, names.TryGetValue(id, out var n) ? n : $"Channel {id}"));
+            // Keep selected ids whose index is gone, so they can still be unselected
+            foreach (var id in (Model?.LibraryIncludedChannels ?? new()).Concat(Model?.LibraryExcludedChannels ?? new()).Distinct())
+                if (options.All(o => o.Id != id))
+                    options.Add(new ChannelPicker.ChannelOption(id, names.TryGetValue(id, out var n) ? n : $"Channel {id} (no index)"));
+            libraryChannels = options;
+        }
+        catch
+        {
+            libraryChannels = new();
         }
     }
 
@@ -1378,6 +1446,10 @@
         // One row per known provider, so keys can be added before anything is enabled
         Model.LibraryProviders = TelegramDownloader.Services.Library.MetadataProviderRegistry.EffectiveConfigs(Model);
         Model.LibraryLanguage ??= "es-ES";
+        Model.LibraryIncludedChannels ??= new List<long>();
+        Model.LibraryExcludedChannels ??= new List<long>();
+        libraryUseIncludeList = Model.LibraryIncludedChannels.Count > 0;
+        await LoadLibraryChannelsAsync();
         await RefreshLibraryScan();
         if (!_disposed)
         {

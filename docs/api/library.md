@@ -51,9 +51,11 @@ as usual.
 Until the library is enabled the catalogue endpoints answer
 `503 library_disabled`. The watch-state endpoints always work.
 
-Other settings: `libraryAutoScan`, `libraryExcludedChannels` (ids never
-scanned), `libraryWatchedThreshold` (fraction of the duration after which a file
-counts as watched, default `0.92`).
+Other settings: `libraryAutoScan`, `libraryIncludedChannels` (ids to scan;
+empty means every indexed channel), `libraryExcludedChannels` (ids never
+scanned, even when included), `libraryWatchedThreshold` (fraction of the
+duration after which a file counts as watched, default `0.92`). The Config page
+offers both channel lists as searchable pickers.
 
 ## How files are identified
 
@@ -178,8 +180,9 @@ GET  /api/v1/library/scan          -> state of the current / last scan (persiste
 DELETE /api/v1/library/scan        -> cancel
 ```
 
-Omit `channelId` to scan every channel with an index (minus
-`libraryExcludedChannels`). `409 already_running` while a scan is in progress.
+Omit `channelId` to scan the configured channels (`libraryIncludedChannels`, or
+every indexed channel when empty, minus `libraryExcludedChannels`).
+`409 already_running` while a scan is in progress.
 The state carries `running`, `startedAt`, `finishedAt`, `channelsTotal`,
 `channelsScanned`, `currentChannel`, `filesSeen`, `filesNew`, `filesRemoved`,
 `matched`, `review`, `unmatched`, `failed`, `cancelled` and `error` (set, for

@@ -142,6 +142,8 @@ namespace TelegramDownloader.Models.Api
         public bool LibraryEnabled { get; set; }
         public string LibraryLanguage { get; set; } = "es-ES";
         public bool LibraryAutoScan { get; set; }
+        /// <summary>Channels to scan; empty means every indexed channel.</summary>
+        public List<long> LibraryIncludedChannels { get; set; } = new();
         public List<long> LibraryExcludedChannels { get; set; } = new();
         public double LibraryWatchedThreshold { get; set; }
         /// <summary>Metadata providers with masked keys. Update them with <c>libraryProviders</c> in the PATCH body.</summary>
@@ -152,6 +154,7 @@ namespace TelegramDownloader.Models.Api
             LibraryEnabled = c.LibraryEnabled,
             LibraryLanguage = c.LibraryLanguage ?? "es-ES",
             LibraryAutoScan = c.LibraryAutoScan,
+            LibraryIncludedChannels = c.LibraryIncludedChannels ?? new List<long>(),
             LibraryExcludedChannels = c.LibraryExcludedChannels ?? new List<long>(),
             LibraryWatchedThreshold = c.LibraryWatchedThreshold,
             LibraryProviders = Services.Library.MetadataProviderRegistry.EffectiveConfigs(c)
@@ -225,6 +228,7 @@ namespace TelegramDownloader.Models.Api
         public bool? LibraryEnabled { get; set; }
         public string? LibraryLanguage { get; set; }
         public bool? LibraryAutoScan { get; set; }
+        public List<long>? LibraryIncludedChannels { get; set; }
         public List<long>? LibraryExcludedChannels { get; set; }
         public double? LibraryWatchedThreshold { get; set; }
         /// <summary>Per provider: <c>enabled</c>, <c>apiKey</c> (omit to keep, empty to clear) and <c>priority</c>.</summary>

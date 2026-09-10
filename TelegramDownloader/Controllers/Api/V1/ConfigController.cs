@@ -94,6 +94,7 @@ namespace TelegramDownloader.Controllers.Api.V1
                 if (request.LibraryEnabled.HasValue) c.LibraryEnabled = request.LibraryEnabled.Value;
                 if (request.LibraryLanguage != null) c.LibraryLanguage = string.IsNullOrWhiteSpace(request.LibraryLanguage) ? "en-US" : request.LibraryLanguage.Trim();
                 if (request.LibraryAutoScan.HasValue) c.LibraryAutoScan = request.LibraryAutoScan.Value;
+                if (request.LibraryIncludedChannels != null) c.LibraryIncludedChannels = request.LibraryIncludedChannels.Distinct().ToList();
                 if (request.LibraryExcludedChannels != null) c.LibraryExcludedChannels = request.LibraryExcludedChannels.Distinct().ToList();
                 if (request.LibraryWatchedThreshold.HasValue) c.LibraryWatchedThreshold = Math.Clamp(request.LibraryWatchedThreshold.Value, 0.5, 1.0);
                 if (request.LibraryProviders != null)
