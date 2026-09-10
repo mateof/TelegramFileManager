@@ -12,6 +12,7 @@
 @inject IHostApplicationLifetime applicationLifetime
 @inject ITelegramService ts
 @inject TelegramDownloader.Services.Library.LibraryScanService libraryScanService
+@inject ILibraryDbService libraryDb
 @using TelegramDownloader.Shared
 
 <style>
@@ -1207,6 +1208,62 @@
                         </div>
                     </div>
 
+                    <div class="config-item" style="flex-direction: column; align-items: stretch; gap: 0.5rem;">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-folder-symlink"></i>
+                                Folder Rules
+                            </div>
+                            <div class="config-item-description">
+                                Tell the scan what a folder holds when a channel mixes content: <strong>Series</strong>, <strong>Movies</strong> or <strong>Ignore</strong> (extras, trailers). The rule covers every subfolder; the most specific path wins, and <code>/</code> means the whole channel. Folders simply named <em>Series</em>, <em>Películas</em>, <em>Cine</em>, <em>Movies</em>… are recognised without a rule. Manual fixes are never undone by a rule.
+                            </div>
+                        </div>
+                        @if (Model!.LibraryFolderRules.Count > 0)
+                        {
+                            <table class="table table-sm mb-1" style="max-width: 860px;">
+                                <thead><tr><th>Channel</th><th>Folder</th><th>Kind</th><th></th></tr></thead>
+                                <tbody>
+                                    @foreach (var rule in Model!.LibraryFolderRules.OrderBy(r => LibraryChannelName(r.ChannelId)).ThenBy(r => r.Path))
+                                    {
+                                        <tr>
+                                            <td class="text-truncate" style="max-width: 260px;" title="@rule.ChannelId">@LibraryChannelName(rule.ChannelId)</td>
+                                            <td><code>@rule.Path</code></td>
+                                            <td>@FolderRuleKindLabel(rule.Kind)</td>
+                                            <td class="text-end"><button type="button" class="btn btn-link btn-sm p-0 text-danger" title="Remove" @onclick="() => RemoveFolderRule(rule)"><i class="bi bi-x-lg"></i></button></td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                        <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start;">
+                            <div>
+                                <small class="text-muted d-block mb-1">1. Channel</small>
+                                <ChannelPicker Channels="libraryChannels" Selected="newRuleChannel" SelectedChanged="OnRuleChannelChanged" Single="true" Placeholder="Search a channel…" />
+                            </div>
+                            <div>
+                                <small class="text-muted d-block mb-1">2. Folder</small>
+                                @if (newRuleChannel.Count == 0)
+                                {
+                                    <small class="text-muted">Pick a channel first.</small>
+                                }
+                                else
+                                {
+                                    <FolderPicker Folders="newRuleFolders" @bind-Selected="newRulePath" />
+                                }
+                            </div>
+                            <div>
+                                <small class="text-muted d-block mb-1">3. Kind</small>
+                                <select class="form-select form-select-sm mb-2" style="width: 160px;" @bind="newRuleKind">
+                                    <option value="series">Series</option>
+                                    <option value="movie">Movies</option>
+                                    <option value="ignore">Ignore</option>
+                                </select>
+                                <button type="button" class="btn btn-outline-primary btn-sm" disabled="@(newRuleChannel.Count == 0)" @onclick="AddFolderRule"><i class="bi bi-plus-lg"></i> Add rule</button>
+                                <small class="text-muted d-block mt-1">Rules are stored when you save the configuration.</small>
+                            </div>
+                        </div>
+                    </div>
+
                     @foreach (var provider in Model!.LibraryProviders)
                     {
                         var info = TelegramDownloader.Services.Library.MetadataProviderRegistry.Describe(provider.Id);
@@ -1365,6 +1422,52 @@
     private List<ChannelPicker.ChannelOption> libraryChannels = new();
     private bool libraryUseIncludeList;
 
+    // Folder rule being composed
+    private List<long> newRuleChannel = new();
+    private List<string> newRuleFolders = new();
+    private string newRulePath = "/";
+    private string newRuleKind = "series";
+
+    private string LibraryChannelName(long id) => libraryChannels.FirstOrDefault(c => c.Id == id)?.Name ?? $"Channel {id}";
+
+    private static string FolderRuleKindLabel(string kind) => kind switch
+    {
+        "series" => "Series",
+        "movie" => "Movies",
+        "ignore" => "Ignore",
+        _ => kind
+    };
+
+    private async Task OnRuleChannelChanged(List<long> selected)
+    {
+        newRuleChannel = selected;
+        newRulePath = "/";
+        newRuleFolders = new();
+        if (selected.Count == 0) return;
+        try
+        {
+            newRuleFolders = await libraryDb.GetChannelFolders(selected[0].ToString());
+        }
+        catch
+        {
+            newRuleFolders = new();
+        }
+    }
+
+    private void AddFolderRule()
+    {
+        if (Model == null || newRuleChannel.Count == 0) return;
+        var path = TelegramDownloader.Services.Library.LibraryFolderRules.Normalize(newRulePath);
+        Model.LibraryFolderRules.RemoveAll(r => r.ChannelId == newRuleChannel[0] && r.Path.Equals(path, StringComparison.OrdinalIgnoreCase));
+        Model.LibraryFolderRules.Add(new LibraryFolderRule { ChannelId = newRuleChannel[0], Path = path, Kind = newRuleKind });
+        newRulePath = "/";
+    }
+
+    private void RemoveFolderRule(LibraryFolderRule rule)
+    {
+        Model?.LibraryFolderRules.Remove(rule);
+    }
+
     private void SetLibraryChannelMode(bool useIncludeList)
     {
         libraryUseIncludeList = useIncludeList;
@@ -1446,6 +1549,7 @@
         Model.LibraryLanguage ??= "es-ES";
         Model.LibraryIncludedChannels ??= new List<long>();
         Model.LibraryExcludedChannels ??= new List<long>();
+        Model.LibraryFolderRules ??= new List<LibraryFolderRule>();
         libraryUseIncludeList = Model.LibraryIncludedChannels.Count > 0;
         await LoadLibraryChannelsAsync();
         await RefreshLibraryScan();

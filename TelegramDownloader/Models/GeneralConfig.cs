@@ -271,7 +271,20 @@ namespace TelegramDownloader.Models
         public double LibraryWatchedThreshold { get; set; } = 0.92;
         /// <summary>Metadata providers, their keys and the order they are asked in.</summary>
         public List<LibraryProviderConfig> LibraryProviders { get; set; } = new List<LibraryProviderConfig>();
+        /// <summary>What a channel folder holds (movies, series, nothing). Longest matching path wins.</summary>
+        public List<LibraryFolderRule> LibraryFolderRules { get; set; } = new List<LibraryFolderRule>();
 
+    }
+
+    /// <summary>A folder of a channel index and the kind of content the library should expect there.</summary>
+    [BsonIgnoreExtraElements]
+    public class LibraryFolderRule
+    {
+        public long ChannelId { get; set; }
+        /// <summary>Folder path as stored in the index (<c>/Series/</c>); <c>/</c> is the whole channel.</summary>
+        public string Path { get; set; } = "/";
+        /// <summary><c>movie</c>, <c>series</c> or <c>ignore</c>.</summary>
+        public string Kind { get; set; } = "series";
     }
 
     /// <summary>One metadata provider of the media library (tmdb, omdb...).</summary>

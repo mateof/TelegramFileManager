@@ -15,6 +15,8 @@ namespace TelegramDownloader.Data.db
         // Channel indexes (read only)
         Task<List<string>> GetChannelDatabaseNames();
         Task<List<BsonFileManagerModel>> GetChannelFiles(string channelId);
+        /// <summary>Folder paths of a channel index (<c>/Series/Breaking Bad/</c>), root excluded.</summary>
+        Task<List<string>> GetChannelFolders(string channelId);
         Task<BsonFileManagerModel?> GetChannelFile(string channelId, string fileId);
 
         // Items
