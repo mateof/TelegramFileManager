@@ -126,6 +126,8 @@ Returns the full `AppConfigDto`. Highlights:
 | `favouriteChannels` | Ids of favourite channels. |
 | `hiddenChannels` | Ids of channels hidden from the channel lists (read-only here; change via `POST/DELETE /api/v1/channels/{id}/hidden`). |
 | `showHiddenChannels` | When `true`, hidden channels are still shown in the channel lists. |
+| `libraryEnabled`, `libraryLanguage`, `libraryAutoScan`, `libraryExcludedChannels`, `libraryWatchedThreshold` | Media library settings (see [library.md](library.md)). |
+| `libraryProviders` | Metadata providers (`id`, `enabled`, `priority`, `hasKey`, `apiKeyMasked`). PATCH with `[{ id, enabled?, apiKey?, priority? }]`; omit `apiKey` to keep the current key, send `""` to clear it. |
 
 <a id="streaming"></a>
 

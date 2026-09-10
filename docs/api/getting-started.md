@@ -123,6 +123,7 @@ conventions (`404`, `409`, `503`…), but the code is the source of truth.
 | `forbidden` | 403 | Operation not allowed for this account (e.g. deleting a channel you don't own). |
 | `not_supported` | 400 | Operation does not apply to this resource. |
 | `service_unavailable` | 503 | A dependency (MongoDB, log store) is not available. |
+| `library_disabled` | 503 | The media library is off in the settings (see [library.md](library.md)). |
 | `internal_error` | 500 | Unexpected server error; `error.detail` carries the exception message. |
 
 ## Paging and sorting

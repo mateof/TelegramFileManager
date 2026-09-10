@@ -135,6 +135,39 @@ server serves at **`/swagger/api-v1/swagger.json`** (browsable at
 | DELETE | `/api/v1/shares/{id}` | ✓ | Delete a shared collection. |
 | POST | `/api/v1/shares/strm` | ✓ | Export `.strm` files. |
 
+### Library
+
+| Method | Path | Sess. | Description |
+| --- | --- | :---: | --- |
+| GET | `/api/v1/library/items` | | Movies and series (filters, sorting, paging). |
+| GET | `/api/v1/library/items/{id}` | | Item detail: files or seasons/episodes, watch state, next up. |
+| GET | `/api/v1/library/continue` | | Files with playback in progress. |
+| GET | `/api/v1/library/recent` | | Recently added items. |
+| GET | `/api/v1/library/genres` | | Genres with counts. |
+| GET | `/api/v1/library/stats` | | Settings summary, providers, counts, last scan. |
+| GET | `/api/v1/library/files` | | Files by identification status (review queue). |
+| GET | `/api/v1/library/files/{channelId}/{fileId}` | | One file as the library sees it. |
+| GET | `/api/v1/library/images/{key}` | | Cached poster/backdrop/still (`?size=`). |
+| POST | `/api/v1/library/scan` | | Start a scan (202 / 409). |
+| GET | `/api/v1/library/scan` | | Scan state (persisted). |
+| DELETE | `/api/v1/library/scan` | | Cancel the scan. |
+| GET | `/api/v1/library/providers` | | Providers and their configuration (masked keys). |
+| GET | `/api/v1/library/providers/search` | | Search providers by `q`/`kind`/`year` or `imdbId`. |
+| PUT | `/api/v1/library/files/{channelId}/{fileId}/match` | | Identify a file by hand (locks it). |
+| DELETE | `/api/v1/library/files/{channelId}/{fileId}/match` | | Drop a file's identification. |
+| POST | `/api/v1/library/files/{channelId}/{fileId}/ignore` | | Keep a file out of the library. |
+| DELETE | `/api/v1/library/files/{channelId}/{fileId}/ignore` | | Put it back. |
+| PUT | `/api/v1/library/items/{id}/identify` | | Move every file of an item to another title. |
+| POST | `/api/v1/library/items/{id}/refresh` | | Re-download metadata and episodes. |
+| GET | `/api/v1/library/watch/{channelId}/{fileId}` | | Playback progress of a file. |
+| PUT | `/api/v1/library/watch/{channelId}/{fileId}` | | Save playback progress. |
+| DELETE | `/api/v1/library/watch/{channelId}/{fileId}` | | Forget the progress. |
+| POST | `/api/v1/library/watch/{channelId}/{fileId}/watched` | | Mark watched. |
+| DELETE | `/api/v1/library/watch/{channelId}/{fileId}/watched` | | Mark not watched. |
+| POST | `/api/v1/library/items/{id}/watched` | | Mark an item (or a season) watched. |
+| DELETE | `/api/v1/library/items/{id}/watched` | | Mark an item (or a season) not watched. |
+| GET | `/api/v1/library/watch/history` | | Watched files, most recent first. |
+
 ### Configuration
 
 | Method | Path | Sess. | Description |
@@ -266,6 +299,22 @@ interface PersistedTaskDto { id: string; internalId: string; type: string; state
 ```ts
 interface PlaylistModel { id: string; name: string; description?: string; tracks: PlaylistTrackModel[]; dateCreated: string; dateModified: string; trackCount: number; }
 interface PlaylistTrackModel { fileId: string; channelId: string; channelName: string; fileName: string; filePath: string; fileType: string; fileSize: number; order: number; directUrl?: string; isLocalFile: boolean; dateAdded: string; }
+```
+
+### Library
+
+```ts
+interface ApiLibraryItemDto { id: string; kind: "movie" | "series"; title: string; originalTitle?: string; year?: number; overview?: string; genres: string[]; rating?: number; voteCount?: number; runtime?: number; posterUrl?: string; backdropUrl?: string; provider: string; providerId: string; imdbId?: string; externalIds: Record<string, string>; locked: boolean; fileCount: number; channelIds: number[]; seasonCount: number; addedAt: string; watch: ApiWatchSummaryDto; }
+interface ApiLibraryItemDetailDto extends ApiLibraryItemDto { tagline?: string; status?: string; files: ApiLibraryFileDto[]; seasons: ApiLibrarySeasonDto[]; nextUp?: ApiLibraryEpisodeDto; resume?: ApiLibraryFileDto; }
+interface ApiLibrarySeasonDto { number: number; name?: string; overview?: string; posterUrl?: string; episodeCount?: number; episodes: ApiLibraryEpisodeDto[]; episodesWatched: number; }
+interface ApiLibraryEpisodeDto { season: number; number: number; title?: string; overview?: string; stillUrl?: string; airDate?: string; runtime?: number; rating?: number; files: ApiLibraryFileDto[]; watch?: ApiWatchStateDto; completed: boolean; }
+interface ApiLibraryFileDto { channelId: number; fileId: string; fileName: string; folderPath: string; size: number; sizeText: string; status: "matched" | "review" | "unmatched" | "ignored"; confidence: number; matchSource: "auto" | "manual"; locked: boolean; parsed: { title: string; year?: number; season?: number; episode?: number; isSeries: boolean; source: string }; itemId?: string; kind?: string; season?: number; episode?: number; file: ApiFileDto; watch?: ApiWatchStateDto; item?: ApiLibraryItemDto; scannedAt: string; error?: string; }
+interface ApiWatchStateDto { channelId: number; fileId: string; fileName?: string; itemId?: string; season?: number; episode?: number; positionMs: number; durationMs: number; progress: number; completed: boolean; playCount: number; firstPlayedAt: string; lastPlayedAt: string; }
+interface ApiWatchSummaryDto { completed: boolean; inProgress: boolean; positionMs: number; durationMs: number; progress: number; episodesTotal: number; episodesWatched: number; lastPlayedAt?: string; }
+interface ApiProviderCandidateDto { provider: string; providerId: string; kind: string; title: string; originalTitle?: string; year?: number; overview?: string; posterUrl?: string; imdbId?: string; }
+interface ApiLibraryProviderDto { id: string; name: string; website: string; keyUrl: string; requiresKey: boolean; supportsEpisodes: boolean; supportsImages: boolean; supportsLanguage: boolean; enabled: boolean; hasKey: boolean; apiKeyMasked?: string; priority: number; }
+interface ApiLibraryScanStateDto { running: boolean; cancelled: boolean; startedAt?: string; finishedAt?: string; scope: string; force: boolean; channelsTotal: number; channelsScanned: number; currentChannel?: string; filesSeen: number; filesNew: number; filesRemoved: number; matched: number; review: number; unmatched: number; failed: number; error?: string; }
+interface ApiLibraryStatsDto { enabled: boolean; language: string; autoScan: boolean; watchedThreshold: number; providers: ApiLibraryProviderDto[]; ready: boolean; movies: number; series: number; files: Record<string, number>; inProgress: number; scan?: ApiLibraryScanStateDto; }
 ```
 
 ### System & config

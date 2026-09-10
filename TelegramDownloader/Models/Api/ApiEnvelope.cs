@@ -79,6 +79,7 @@ namespace TelegramDownloader.Models.Api
         public const string Forbidden = "forbidden";
         public const string NotSupported = "not_supported";
         public const string ServiceUnavailable = "service_unavailable";
+        public const string LibraryDisabled = "library_disabled";
         public const string InternalError = "internal_error";
     }
 

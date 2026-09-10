@@ -139,8 +139,23 @@ namespace TelegramDownloader.Models.Api
         public int MultiConnectionBlockSizeMB { get; set; }
         public int MultiConnectionMinFileSizeMB { get; set; }
 
+        public bool LibraryEnabled { get; set; }
+        public string LibraryLanguage { get; set; } = "es-ES";
+        public bool LibraryAutoScan { get; set; }
+        public List<long> LibraryExcludedChannels { get; set; } = new();
+        public double LibraryWatchedThreshold { get; set; }
+        /// <summary>Metadata providers with masked keys. Update them with <c>libraryProviders</c> in the PATCH body.</summary>
+        public List<ApiLibraryProviderDto> LibraryProviders { get; set; } = new();
+
         public static AppConfigDto From(GeneralConfig c) => new()
         {
+            LibraryEnabled = c.LibraryEnabled,
+            LibraryLanguage = c.LibraryLanguage ?? "es-ES",
+            LibraryAutoScan = c.LibraryAutoScan,
+            LibraryExcludedChannels = c.LibraryExcludedChannels ?? new List<long>(),
+            LibraryWatchedThreshold = c.LibraryWatchedThreshold,
+            LibraryProviders = Services.Library.MetadataProviderRegistry.EffectiveConfigs(c)
+                .Select(p => ApiLibraryProviderDto.From(Services.Library.MetadataProviderRegistry.Describe(p.Id)!, p)).ToList(),
             ShouldNotify = c.ShouldNotify,
             TimeSleepBetweenTransactions = c.TimeSleepBetweenTransactions,
             SplitSize = c.SplitSize,
@@ -206,6 +221,14 @@ namespace TelegramDownloader.Models.Api
         public int? MultiConnectionPartSizeKB { get; set; }
         public int? MultiConnectionBlockSizeMB { get; set; }
         public int? MultiConnectionMinFileSizeMB { get; set; }
+
+        public bool? LibraryEnabled { get; set; }
+        public string? LibraryLanguage { get; set; }
+        public bool? LibraryAutoScan { get; set; }
+        public List<long>? LibraryExcludedChannels { get; set; }
+        public double? LibraryWatchedThreshold { get; set; }
+        /// <summary>Per provider: <c>enabled</c>, <c>apiKey</c> (omit to keep, empty to clear) and <c>priority</c>.</summary>
+        public List<LibraryProviderConfigDto>? LibraryProviders { get; set; }
     }
 
     /// <summary>One application log record.</summary>

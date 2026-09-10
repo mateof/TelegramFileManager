@@ -32,6 +32,7 @@ This API lives side by side with the app's existing surfaces:
 | [shares.md](shares.md) | Sharing a channel folder and importing a share, `.strm` export for media servers. |
 | [system-and-config.md](system-and-config.md) | Health, metrics, logs, database maintenance, application settings. |
 | [webdav.md](webdav.md) | Native WebDAV endpoint for mounting a channel as a read/write share (Synology Hyper Backup, rclone, davfs2). |
+| [library.md](library.md) | Media library: movies and series identified from the channel indexes (TMDB/OMDb), posters, playback progress, manual corrections. |
 | [reference.md](reference.md) | Full endpoint table and the data models returned by the API. |
 
 ## Interactive documentation (Swagger / OpenAPI)

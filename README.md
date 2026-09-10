@@ -149,6 +149,10 @@ A D-pad first client focused on watching the videos you keep in your channels:
   AVI with AC3/DTS play fine), VLC, any other installed player or the system default.
 - Updates itself from GitHub Releases, and runs on Android 6.0, which covers Fire TV
   sticks from 2015 onwards.
+- **Library** (Plex/Emby style): the server identifies the movies and series in your
+  channels through TMDB and/or OMDb, caches posters and keeps playback progress, so the TV
+  shows a catalogue with "continue watching", next episodes, watched marks and a way to
+  fix a wrong identification. Enable it and add the provider keys in the Config page.
 
 Both repositories publish a signed APK as a GitHub Release on every push to `main`.
 

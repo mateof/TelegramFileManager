@@ -256,6 +256,31 @@ namespace TelegramDownloader.Models
         /// </summary>
         public int MultiConnectionMinFileSizeMB { get; set; } = 32;
 
+        // Media library (movies / series identified from the channel indexes)
+        /// <summary>Master switch of the media library. Off: no scans, library endpoints answer 503.</summary>
+        public bool LibraryEnabled { get; set; } = false;
+        /// <summary>Language for titles and overviews at providers that support it (TMDB), e.g. es-ES.</summary>
+        public string LibraryLanguage { get; set; } = "es-ES";
+        /// <summary>Scan a channel's new files right after its index is refreshed.</summary>
+        public bool LibraryAutoScan { get; set; } = true;
+        /// <summary>Channels the library never scans.</summary>
+        public List<long> LibraryExcludedChannels { get; set; } = new List<long>();
+        /// <summary>Fraction of the duration after which a file counts as watched (0.5-1).</summary>
+        public double LibraryWatchedThreshold { get; set; } = 0.92;
+        /// <summary>Metadata providers, their keys and the order they are asked in.</summary>
+        public List<LibraryProviderConfig> LibraryProviders { get; set; } = new List<LibraryProviderConfig>();
+
+    }
+
+    /// <summary>One metadata provider of the media library (tmdb, omdb...).</summary>
+    [BsonIgnoreExtraElements]
+    public class LibraryProviderConfig
+    {
+        public string Id { get; set; } = string.Empty;
+        public bool Enabled { get; set; }
+        public string? ApiKey { get; set; }
+        /// <summary>Lower goes first when identifying.</summary>
+        public int Priority { get; set; } = 100;
     }
 
     public class TLConfig

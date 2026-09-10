@@ -226,6 +226,8 @@ namespace TelegramDownloader.Data
     {"zip", "application/zip"}
   };
         public static List<string> refreshChannelList = new List<string>();
+        /// <summary>Raised after a channel index refresh finishes successfully, with the channel id.</summary>
+        public static event Action<string>? ChannelRefreshed;
 
         protected PhysicalFileProvider operation = new PhysicalFileProvider();
         protected ITelegramService _ts { get; set; }
@@ -1866,6 +1868,16 @@ namespace TelegramDownloader.Data
                 lastRefreshResults[channelId] = result;
             }
             _logger.LogInformation($"Finish Refresh channel with id: {channelId} with {totalNewMessages} new files added.");
+
+            // Let the media library pick up the new files (it subscribes at startup)
+            try
+            {
+                ChannelRefreshed?.Invoke(channelId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "A channel refresh listener failed for {ChannelId}", channelId);
+            }
 
             // Fix for CS1739: Removed the invalid 'autoHide' parameter and replaced it with the correct property assignment.
             ToastMessage tm = new ToastMessage

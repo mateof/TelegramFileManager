@@ -91,6 +91,26 @@ namespace TelegramDownloader.Controllers.Api.V1
                 if (request.MultiConnectionBlockSizeMB.HasValue) c.MultiConnectionBlockSizeMB = Math.Clamp(request.MultiConnectionBlockSizeMB.Value, 1, 16);
                 if (request.MultiConnectionMinFileSizeMB.HasValue) c.MultiConnectionMinFileSizeMB = request.MultiConnectionMinFileSizeMB.Value;
 
+                if (request.LibraryEnabled.HasValue) c.LibraryEnabled = request.LibraryEnabled.Value;
+                if (request.LibraryLanguage != null) c.LibraryLanguage = string.IsNullOrWhiteSpace(request.LibraryLanguage) ? "en-US" : request.LibraryLanguage.Trim();
+                if (request.LibraryAutoScan.HasValue) c.LibraryAutoScan = request.LibraryAutoScan.Value;
+                if (request.LibraryExcludedChannels != null) c.LibraryExcludedChannels = request.LibraryExcludedChannels.Distinct().ToList();
+                if (request.LibraryWatchedThreshold.HasValue) c.LibraryWatchedThreshold = Math.Clamp(request.LibraryWatchedThreshold.Value, 0.5, 1.0);
+                if (request.LibraryProviders != null)
+                {
+                    var providers = Services.Library.MetadataProviderRegistry.EffectiveConfigs(c);
+                    foreach (var update in request.LibraryProviders)
+                    {
+                        var target = providers.FirstOrDefault(p => p.Id.Equals(update.Id, StringComparison.OrdinalIgnoreCase));
+                        if (target == null)
+                            return BadRequestResult($"Unknown metadata provider '{update.Id}'");
+                        if (update.Enabled.HasValue) target.Enabled = update.Enabled.Value;
+                        if (update.ApiKey != null) target.ApiKey = update.ApiKey.Trim();
+                        if (update.Priority.HasValue) target.Priority = update.Priority.Value;
+                    }
+                    c.LibraryProviders = providers;
+                }
+
                 await GeneralConfigStatic.SaveChanges(_db, c);
 
                 return OkResult(AppConfigDto.From(GeneralConfigStatic.config), "Configuration saved");
