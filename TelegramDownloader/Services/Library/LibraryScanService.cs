@@ -77,9 +77,25 @@ namespace TelegramDownloader.Services.Library
         {
             var config = GeneralConfigStatic.config;
             if (!config.LibraryEnabled || !config.LibraryAutoScan) return;
-            if (long.TryParse(channelId, out var id) && (config.LibraryExcludedChannels?.Contains(id) ?? false)) return;
+            if (!IsChannelSelected(config, channelId)) return;
             if (!Start(channelId, false, out _))
                 _pending.Enqueue(channelId);
+        }
+
+        /// <summary>
+        /// The channels a scan covers: the included list when one is set (else
+        /// every indexed channel), minus the excluded ones.
+        /// </summary>
+        public static List<string> SelectChannels(GeneralConfig config, IEnumerable<string> indexedChannels) =>
+            indexedChannels.Where(c => IsChannelSelected(config, c)).ToList();
+
+        public static bool IsChannelSelected(GeneralConfig config, string channelId)
+        {
+            if (!long.TryParse(channelId, out var id)) return false;
+            var included = config.LibraryIncludedChannels ?? new List<long>();
+            var excluded = config.LibraryExcludedChannels ?? new List<long>();
+            if (excluded.Contains(id)) return false;
+            return included.Count == 0 || included.Contains(id);
         }
 
         #endregion
@@ -134,12 +150,7 @@ namespace TelegramDownloader.Services.Library
                 var config = GeneralConfigStatic.config;
                 List<string> channels;
                 if (state.Scope == "all")
-                {
-                    var excluded = config.LibraryExcludedChannels ?? new List<long>();
-                    channels = (await _lib.GetChannelDatabaseNames())
-                        .Where(n => !(long.TryParse(n, out var id) && excluded.Contains(id)))
-                        .ToList();
-                }
+                    channels = SelectChannels(config, await _lib.GetChannelDatabaseNames());
                 else
                     channels = new List<string> { state.Scope };
                 await ScanAsync(state, channels, state.Force, ct);
