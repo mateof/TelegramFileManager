@@ -1,9 +1,11 @@
-@* Single-select of a folder path with a search box. "/" stands for the whole channel. *@
+@* Single-select of a folder path with a search box. "/" stands for the whole channel.
+   Only the first levels are listed by default; deeper folders are reached by searching,
+   and the list is capped so a channel with thousands of folders does not freeze the page. *@
 <div class="folder-picker" style="width: 100%; max-width: 420px;">
     <input type="text" class="form-control form-control-sm mb-1" placeholder="@Placeholder"
            value="@filter" @oninput="e => filter = e.Value?.ToString() ?? string.Empty" />
     <div style="max-height: 200px; overflow-y: auto; border: 1px solid var(--bs-border-color, #dee2e6); border-radius: .375rem; padding: .25rem .5rem;">
-        @foreach (var folder in Filtered)
+        @foreach (var folder in visible)
         {
             var isSelected = string.Equals(folder, Selected, StringComparison.OrdinalIgnoreCase);
             <label class="d-flex align-items-center gap-2" style="cursor: pointer; padding: 2px 0; margin: 0;">
@@ -11,11 +13,25 @@
                 <span class="text-truncate" title="@folder">@(folder == "/" ? "/ (whole channel)" : folder)</span>
             </label>
         }
-        @if (!Filtered.Any())
+        @if (visible.Count == 0)
         {
             <small class="text-muted">No folder matches</small>
         }
     </div>
+    <small class="text-muted d-block mt-1">
+        @if (matches > visible.Count)
+        {
+            <span>Showing @visible.Count of @matches folders — refine the search.</span>
+        }
+        else if (string.IsNullOrWhiteSpace(filter) && hiddenDeeper > 0)
+        {
+            <span>First @MaxDepth levels shown (@hiddenDeeper deeper folders); search to reach them.</span>
+        }
+        else
+        {
+            <span>@matches folders</span>
+        }
+    </small>
 </div>
 
 @code {
@@ -23,24 +39,47 @@
     [Parameter] public string Selected { get; set; } = "/";
     [Parameter] public EventCallback<string> SelectedChanged { get; set; }
     [Parameter] public string Placeholder { get; set; } = "Search folders…";
+    /// <summary>Levels listed without a search: "/A/B/C/" is depth 3.</summary>
+    [Parameter] public int MaxDepth { get; set; } = 3;
+    /// <summary>Rows rendered at most; beyond that the user is asked to search.</summary>
+    [Parameter] public int MaxRows { get; set; } = 200;
 
     private string filter = string.Empty;
     private readonly string radioName = "folder-" + Guid.NewGuid().ToString("N");
+    private List<string> visible = new();
+    private int matches;
+    private int hiddenDeeper;
 
-    private IEnumerable<string> Filtered
+    protected override void OnParametersSet() => Recompute();
+
+    private static int DepthOf(string path) => path.Count(c => c == '/') - 1;
+
+    private void Recompute()
     {
-        get
+        var all = new[] { "/" }.Concat(Folders.Where(f => f != "/"));
+        IEnumerable<string> candidates;
+        if (string.IsNullOrWhiteSpace(filter))
         {
-            var all = new[] { "/" }.Concat(Folders.Where(f => f != "/"));
-            return string.IsNullOrWhiteSpace(filter)
-                ? all
-                : all.Where(f => f == "/" || f.Contains(filter, StringComparison.OrdinalIgnoreCase));
+            hiddenDeeper = Folders.Count(f => f != "/" && DepthOf(f) > MaxDepth);
+            candidates = all.Where(f => f == "/" || DepthOf(f) <= MaxDepth);
         }
+        else
+        {
+            hiddenDeeper = 0;
+            candidates = all.Where(f => f == "/" || f.Contains(filter, StringComparison.OrdinalIgnoreCase));
+        }
+        // Keep the selected folder visible even when it falls outside the window
+        var list = candidates.ToList();
+        if (!string.IsNullOrEmpty(Selected) && Selected != "/" && !list.Contains(Selected, StringComparer.OrdinalIgnoreCase) && Folders.Contains(Selected))
+            list.Insert(1, Selected);
+        matches = list.Count;
+        visible = list.Take(MaxRows).ToList();
     }
 
     private async Task Select(string folder)
     {
         Selected = folder;
         await SelectedChanged.InvokeAsync(folder);
+        Recompute();
     }
 }

@@ -1237,14 +1237,18 @@
                         }
                         <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start;">
                             <div>
-                                <small class="text-muted d-block mb-1">1. Channel</small>
-                                <ChannelPicker Channels="libraryChannels" Selected="newRuleChannel" SelectedChanged="OnRuleChannelChanged" Single="true" Placeholder="Search a channel…" />
+                                <small class="text-muted d-block mb-1">1. Channel (one at a time)</small>
+                                <ChannelSelect Channels="libraryChannels" Selected="newRuleChannelId" SelectedChanged="OnRuleChannelChanged" Placeholder="Search a channel…" />
                             </div>
                             <div>
-                                <small class="text-muted d-block mb-1">2. Folder</small>
-                                @if (newRuleChannel.Count == 0)
+                                <small class="text-muted d-block mb-1">2. Folder@(newRuleChannelId is long rc ? $" of {LibraryChannelName(rc)}" : string.Empty)</small>
+                                @if (newRuleChannelId == null)
                                 {
                                     <small class="text-muted">Pick a channel first.</small>
+                                }
+                                else if (newRuleFoldersLoading)
+                                {
+                                    <small class="text-muted">Loading folders…</small>
                                 }
                                 else
                                 {
@@ -1258,7 +1262,7 @@
                                     <option value="movie">Movies</option>
                                     <option value="ignore">Ignore</option>
                                 </select>
-                                <button type="button" class="btn btn-outline-primary btn-sm" disabled="@(newRuleChannel.Count == 0)" @onclick="AddFolderRule"><i class="bi bi-plus-lg"></i> Add rule</button>
+                                <button type="button" class="btn btn-outline-primary btn-sm" disabled="@(newRuleChannelId == null)" @onclick="AddFolderRule"><i class="bi bi-plus-lg"></i> Add rule</button>
                                 <small class="text-muted d-block mt-1">Rules are stored when you save the configuration.</small>
                             </div>
                         </div>
@@ -1423,8 +1427,9 @@
     private bool libraryUseIncludeList;
 
     // Folder rule being composed
-    private List<long> newRuleChannel = new();
+    private long? newRuleChannelId;
     private List<string> newRuleFolders = new();
+    private bool newRuleFoldersLoading;
     private string newRulePath = "/";
     private string newRuleKind = "series";
 
@@ -1438,28 +1443,34 @@
         _ => kind
     };
 
-    private async Task OnRuleChannelChanged(List<long> selected)
+    private async Task OnRuleChannelChanged(long? selected)
     {
-        newRuleChannel = selected;
+        newRuleChannelId = selected;
         newRulePath = "/";
         newRuleFolders = new();
-        if (selected.Count == 0) return;
+        if (selected == null) return;
+        newRuleFoldersLoading = true;
         try
         {
-            newRuleFolders = await libraryDb.GetChannelFolders(selected[0].ToString());
+            newRuleFolders = await libraryDb.GetChannelFolders(selected.Value.ToString());
         }
         catch
         {
             newRuleFolders = new();
         }
+        finally
+        {
+            newRuleFoldersLoading = false;
+        }
     }
 
     private void AddFolderRule()
     {
-        if (Model == null || newRuleChannel.Count == 0) return;
+        if (Model == null || newRuleChannelId is not long channelId) return;
         var path = TelegramDownloader.Services.Library.LibraryFolderRules.Normalize(newRulePath);
-        Model.LibraryFolderRules.RemoveAll(r => r.ChannelId == newRuleChannel[0] && r.Path.Equals(path, StringComparison.OrdinalIgnoreCase));
-        Model.LibraryFolderRules.Add(new LibraryFolderRule { ChannelId = newRuleChannel[0], Path = path, Kind = newRuleKind });
+        Model.LibraryFolderRules.RemoveAll(r => r.ChannelId == channelId && r.Path.Equals(path, StringComparison.OrdinalIgnoreCase));
+        Model.LibraryFolderRules.Add(new LibraryFolderRule { ChannelId = channelId, Path = path, Kind = newRuleKind });
+        // The channel stays selected so several folders of it can be added in a row
         newRulePath = "/";
     }
 

@@ -34,8 +34,6 @@
     [Parameter] public List<long> Selected { get; set; } = new();
     [Parameter] public EventCallback<List<long>> SelectedChanged { get; set; }
     [Parameter] public string Placeholder { get; set; } = "Search channels…";
-    /// <summary>Only one channel can be selected; picking another replaces it.</summary>
-    [Parameter] public bool Single { get; set; }
 
     private string filter = string.Empty;
 
@@ -47,7 +45,7 @@
 
     private async Task Toggle(long id, bool on)
     {
-        var next = Single ? new List<long>() : new List<long>(Selected);
+        var next = new List<long>(Selected);
         if (on) { if (!next.Contains(id)) next.Add(id); }
         else next.Remove(id);
         Selected = next;

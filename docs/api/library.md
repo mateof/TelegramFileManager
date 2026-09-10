@@ -84,8 +84,9 @@ PATCH /api/v1/config
 - Changing or removing a rule makes the next scan re-decide the files under it,
   no `force` needed. Files identified by hand are never touched.
 
-The body replaces the whole list. The Config page manages the same list with
-searchable channel and folder pickers.
+The body replaces the whole list. The Config page manages the same list with a
+single-choice channel selector and a folder picker that lists the first three
+levels of the channel (deeper folders are reached by searching).
 
 ## How files are identified
 
