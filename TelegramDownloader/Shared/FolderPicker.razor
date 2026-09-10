@@ -3,7 +3,7 @@
    and the list is capped so a channel with thousands of folders does not freeze the page. *@
 <div class="folder-picker" style="width: 100%; max-width: 420px;">
     <input type="text" class="form-control form-control-sm mb-1" placeholder="@Placeholder"
-           value="@filter" @oninput="e => filter = e.Value?.ToString() ?? string.Empty" />
+           value="@filter" @oninput="OnFilter" />
     <div style="max-height: 200px; overflow-y: auto; border: 1px solid var(--bs-border-color, #dee2e6); border-radius: .375rem; padding: .25rem .5rem;">
         @foreach (var folder in visible)
         {
@@ -74,6 +74,13 @@
             list.Insert(1, Selected);
         matches = list.Count;
         visible = list.Take(MaxRows).ToList();
+    }
+
+    // The visible window is computed eagerly, so typing must recompute it
+    private void OnFilter(Microsoft.AspNetCore.Components.ChangeEventArgs e)
+    {
+        filter = e.Value?.ToString() ?? string.Empty;
+        Recompute();
     }
 
     private async Task Select(string folder)
