@@ -11,6 +11,7 @@
 @inject TransactionInfoService tis
 @inject IHostApplicationLifetime applicationLifetime
 @inject ITelegramService ts
+@inject TelegramDownloader.Services.Library.LibraryScanService libraryScanService
 @using TelegramDownloader.Shared
 
 <style>
@@ -1090,6 +1091,153 @@
                 </div>
             </div>
 
+            <!-- Media Library Section -->
+            <div class="config-section">
+                <div class="config-section-header">
+                    <i class="bi bi-film"></i>
+                    <span>Media Library</span>
+                </div>
+                <div class="config-section-body">
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-collection-play"></i>
+                                Enable Media Library
+                            </div>
+                            <div class="config-item-description">
+                                Identify movies and series in the indexed channels (Plex/Emby style) using the metadata providers below, and keep playback progress for the TV and mobile apps. Needs at least one provider with an API key.
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputCheckbox @bind-Value="Model!.LibraryEnabled" class="form-check-input config-switch" />
+                        </div>
+                    </div>
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-translate"></i>
+                                Metadata Language
+                            </div>
+                            <div class="config-item-description">
+                                Language for titles and overviews at providers that support it (TMDB), e.g. <code>es-ES</code>, <code>en-US</code>.
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputText @bind-Value="Model!.LibraryLanguage" class="form-control" style="width: 120px;" />
+                        </div>
+                    </div>
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-arrow-repeat"></i>
+                                Scan After Channel Refresh
+                            </div>
+                            <div class="config-item-description">
+                                When a channel index is refreshed, identify its new video files right away.
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputCheckbox @bind-Value="Model!.LibraryAutoScan" class="form-check-input config-switch" />
+                        </div>
+                    </div>
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-check2-circle"></i>
+                                Watched Threshold
+                            </div>
+                            <div class="config-item-description">
+                                Fraction of the duration after which a file counts as watched (0.5 – 1). Default 0.92 leaves room for end credits.
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputNumber TValue="double" @bind-Value="Model!.LibraryWatchedThreshold" step="0.01" min="0.5" max="1" class="form-control" style="width: 100px;" />
+                        </div>
+                    </div>
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-eye-slash"></i>
+                                Excluded Channels
+                            </div>
+                            <div class="config-item-description">
+                                Channel ids the library never scans, separated by commas.
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <input type="text" class="form-control" style="width: 220px;" @bind="LibraryExcludedText" />
+                        </div>
+                    </div>
+
+                    @foreach (var provider in Model!.LibraryProviders)
+                    {
+                        var info = TelegramDownloader.Services.Library.MetadataProviderRegistry.Describe(provider.Id);
+                        if (info == null) continue;
+                        <div class="config-item">
+                            <div class="config-item-info">
+                                <div class="config-item-label">
+                                    <i class="bi bi-database"></i>
+                                    @info.Name
+                                </div>
+                                <div class="config-item-description">
+                                    <a href="@info.Website" target="_blank" rel="noopener">@info.Website</a> ·
+                                    <a href="@info.KeyUrl" target="_blank" rel="noopener">get an API key</a>.
+                                    @(info.SupportsLanguage ? "Localized titles, posters, backdrops, episodes." : "IMDb ratings and English plots; its ids are IMDb ids.")
+                                    Lower priority number is asked first.
+                                </div>
+                            </div>
+                            <div class="config-item-control" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                                <label class="form-check-label" style="display: flex; gap: 0.35rem; align-items: center;">
+                                    <InputCheckbox @bind-Value="provider.Enabled" class="form-check-input config-switch" />
+                                    Enabled
+                                </label>
+                                <InputText @bind-Value="provider.ApiKey" type="password" class="form-control" style="width: 220px;" placeholder="API key" autocomplete="new-password" />
+                                <InputNumber TValue="int" @bind-Value="provider.Priority" class="form-control" style="width: 80px;" title="Priority" />
+                            </div>
+                        </div>
+                    }
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-search"></i>
+                                Library Scan
+                            </div>
+                            <div class="config-item-description">
+                                @if (libraryScan == null)
+                                {
+                                    <span>Never scanned.</span>
+                                }
+                                else if (libraryScan.Running)
+                                {
+                                    <span>Scanning @(libraryScan.ChannelsScanned)/@(libraryScan.ChannelsTotal) channels (current: @libraryScan.CurrentChannel) — @libraryScan.Matched matched, @libraryScan.Review to review, @libraryScan.Unmatched unmatched.</span>
+                                }
+                                else
+                                {
+                                    <span>Last scan @(libraryScan.FinishedAt?.ToLocalTime().ToString("g")): @libraryScan.FilesSeen files seen, @libraryScan.FilesNew new, @libraryScan.Matched matched, @libraryScan.Review to review, @libraryScan.Unmatched unmatched@(libraryScan.Cancelled ? " (cancelled)" : "").</span>
+                                    @if (!string.IsNullOrEmpty(libraryScan.Error))
+                                    {
+                                        <br /><span class="text-danger">@libraryScan.Error</span>
+                                    }
+                                }
+                            </div>
+                        </div>
+                        <div class="config-item-control" style="display: flex; gap: 0.5rem;">
+                            @if (libraryScan?.Running == true)
+                            {
+                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="RefreshLibraryScan"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+                                <button type="button" class="btn btn-outline-danger btn-sm" @onclick="CancelLibraryScan"><i class="bi bi-x-lg"></i> Cancel</button>
+                            }
+                            else
+                            {
+                                <button type="button" class="btn btn-outline-primary btn-sm" @onclick="() => StartLibraryScan(false)" title="Save the settings and identify new files"><i class="bi bi-play-fill"></i> Save &amp; scan</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => StartLibraryScan(true)" title="Identify every file again (manual fixes are kept)"><i class="bi bi-arrow-repeat"></i> Full rescan</button>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Save Button -->
             <div class="config-save-section">
                 <button class="btn btn-primary config-save-btn" type="submit">
@@ -1173,9 +1321,64 @@
         }
     }
 
+    // Media library
+    private TelegramDownloader.Models.Library.LibraryScanState? libraryScan;
+
+    private string LibraryExcludedText
+    {
+        get => string.Join(", ", Model?.LibraryExcludedChannels ?? new List<long>());
+        set
+        {
+            if (Model == null) return;
+            Model.LibraryExcludedChannels = (value ?? string.Empty)
+                .Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => long.TryParse(s.Trim(), out var id) ? id : (long?)null)
+                .Where(id => id.HasValue).Select(id => id!.Value).Distinct().ToList();
+        }
+    }
+
+    private async Task RefreshLibraryScan()
+    {
+        try
+        {
+            libraryScan = await libraryScanService.GetStateAsync();
+        }
+        catch
+        {
+            libraryScan = null;
+        }
+    }
+
+    private async Task StartLibraryScan(bool force)
+    {
+        await Submit();
+        if (!Model!.LibraryEnabled)
+        {
+            toastService.Notify(new(ToastType.Warning, "Enable the media library first") { Title = "Media library", AutoHide = true });
+            return;
+        }
+        if (libraryScanService.Start(null, force, out var error))
+            toastService.Notify(new(ToastType.Success, force ? "Full library rescan started" : "Library scan started") { Title = "Media library", AutoHide = true });
+        else
+            toastService.Notify(new(ToastType.Warning, error ?? "Could not start the scan") { Title = "Media library", AutoHide = true });
+        await Task.Delay(500);
+        await RefreshLibraryScan();
+    }
+
+    private async Task CancelLibraryScan()
+    {
+        libraryScanService.Cancel();
+        await Task.Delay(500);
+        await RefreshLibraryScan();
+    }
+
     private async Task LoadModelAsync()
     {
         Model ??= await GeneralConfigStatic.Load(db);
+        // One row per known provider, so keys can be added before anything is enabled
+        Model.LibraryProviders = TelegramDownloader.Services.Library.MetadataProviderRegistry.EffectiveConfigs(Model);
+        Model.LibraryLanguage ??= "es-ES";
+        await RefreshLibraryScan();
         if (!_disposed)
         {
             await InvokeAsync(StateHasChanged);

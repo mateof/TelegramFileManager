@@ -186,6 +186,17 @@ builder.Services.AddSingleton<TelegramDownloader.Services.Api.QrLoginSessionMana
 builder.Services.AddScoped<TelegramDownloader.Services.Api.ChannelFolderResolver>();
 builder.Services.AddHostedService<TelegramDownloader.Services.Api.TransferBroadcastService>();
 
+// Media library: identification through metadata providers, cached images, watch state
+builder.Services.AddHttpClient("library-provider", c => c.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddHttpClient("library-images", c => c.Timeout = TimeSpan.FromSeconds(60));
+builder.Services.AddSingleton<TelegramDownloader.Data.db.ILibraryDbService, TelegramDownloader.Data.db.LibraryDbService>();
+builder.Services.AddSingleton<TelegramDownloader.Services.Library.MetadataProviderRegistry>();
+builder.Services.AddSingleton<TelegramDownloader.Services.Library.IMetadataProviderSource>(sp => sp.GetRequiredService<TelegramDownloader.Services.Library.MetadataProviderRegistry>());
+builder.Services.AddSingleton<TelegramDownloader.Services.Library.LibraryImageService>();
+builder.Services.AddSingleton<TelegramDownloader.Services.Library.LibraryScanService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<TelegramDownloader.Services.Library.LibraryScanService>());
+builder.Services.AddSingleton<TelegramDownloader.Services.Library.LibraryService>();
+
 // CORS for PWA and mobile apps
 builder.Services.AddCors(options =>
 {
