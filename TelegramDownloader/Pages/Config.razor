@@ -1393,10 +1393,8 @@
             foreach (var dbName in await db.GetAllChannelDatabaseNames())
                 if (long.TryParse(dbName, out var id))
                     options.Add(new ChannelPicker.ChannelOption(id, names.TryGetValue(id, out var n) ? n : $"Channel {id}"));
-            // Keep selected ids whose index is gone, so they can still be unselected
-            foreach (var id in (Model?.LibraryIncludedChannels ?? new()).Concat(Model?.LibraryExcludedChannels ?? new()).Distinct())
-                if (options.All(o => o.Id != id))
-                    options.Add(new ChannelPicker.ChannelOption(id, names.TryGetValue(id, out var n) ? n : $"Channel {id} (no index)"));
+            // Only channels with an index are offered; ids that lost theirs are
+            // dropped from both lists on save (see PruneLibraryChannelLists)
             libraryChannels = options;
         }
         catch
@@ -1491,8 +1489,17 @@
         toastService.Notify(new(ToastType.Success, "Persisted tasks cleared") { Title = "Success", AutoHide = true });
     }
 
+    private void PruneLibraryChannelLists()
+    {
+        if (Model == null || libraryChannels.Count == 0) return;
+        var indexed = libraryChannels.Select(c => c.Id).ToHashSet();
+        Model.LibraryIncludedChannels = (Model.LibraryIncludedChannels ?? new()).Where(indexed.Contains).Distinct().ToList();
+        Model.LibraryExcludedChannels = (Model.LibraryExcludedChannels ?? new()).Where(indexed.Contains).Distinct().ToList();
+    }
+
     private async Task Submit()
     {
+        PruneLibraryChannelLists();
         await GeneralConfigStatic.SaveChanges(db, Model);
         toastService.Notify(new(ToastType.Success, "Configuration saved successfully") { Title = "Success", AutoHide = true });
     }
