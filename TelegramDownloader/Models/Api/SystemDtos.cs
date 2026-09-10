@@ -148,6 +148,8 @@ namespace TelegramDownloader.Models.Api
         public double LibraryWatchedThreshold { get; set; }
         /// <summary>Metadata providers with masked keys. Update them with <c>libraryProviders</c> in the PATCH body.</summary>
         public List<ApiLibraryProviderDto> LibraryProviders { get; set; } = new();
+        /// <summary>What each channel folder holds: <c>movie</c>, <c>series</c> or <c>ignore</c>. Longest path wins.</summary>
+        public List<LibraryFolderRule> LibraryFolderRules { get; set; } = new();
 
         public static AppConfigDto From(GeneralConfig c) => new()
         {
@@ -159,6 +161,7 @@ namespace TelegramDownloader.Models.Api
             LibraryWatchedThreshold = c.LibraryWatchedThreshold,
             LibraryProviders = Services.Library.MetadataProviderRegistry.EffectiveConfigs(c)
                 .Select(p => ApiLibraryProviderDto.From(Services.Library.MetadataProviderRegistry.Describe(p.Id)!, p)).ToList(),
+            LibraryFolderRules = c.LibraryFolderRules ?? new List<LibraryFolderRule>(),
             ShouldNotify = c.ShouldNotify,
             TimeSleepBetweenTransactions = c.TimeSleepBetweenTransactions,
             SplitSize = c.SplitSize,
@@ -233,6 +236,8 @@ namespace TelegramDownloader.Models.Api
         public double? LibraryWatchedThreshold { get; set; }
         /// <summary>Per provider: <c>enabled</c>, <c>apiKey</c> (omit to keep, empty to clear) and <c>priority</c>.</summary>
         public List<LibraryProviderConfigDto>? LibraryProviders { get; set; }
+        /// <summary>Replaces the whole list of folder rules (<c>channelId</c>, <c>path</c>, <c>kind</c>).</summary>
+        public List<LibraryFolderRule>? LibraryFolderRules { get; set; }
     }
 
     /// <summary>One application log record.</summary>

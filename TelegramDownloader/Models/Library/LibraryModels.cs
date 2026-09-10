@@ -141,6 +141,8 @@ namespace TelegramDownloader.Models.Library
         public string MatchSource { get; set; } = LibraryMatchSource.Auto;
         /// <summary>Set by a manual action: rescans leave it alone.</summary>
         public bool Locked { get; set; }
+        /// <summary>Folder rule or folder-name hint applied at scan time; a change triggers a rescan.</summary>
+        public string? RuleKind { get; set; }
         public DateTime ScannedAt { get; set; } = DateTime.UtcNow;
         public string? Error { get; set; }
 

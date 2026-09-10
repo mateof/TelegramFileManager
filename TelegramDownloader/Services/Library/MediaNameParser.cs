@@ -45,7 +45,25 @@ namespace TelegramDownloader.Services.Library
         private static readonly Regex Spaces = new(@"\s+", Opts);
         private static readonly Regex Articles = new(@"^(?:the|a|an|el|la|los|las|un|una|unos|unas|le|les|der|die|das|il|lo|gli)\s+", Opts);
 
-        public static ParsedName Parse(string fileName, string? folderPath = null, string? caption = null)
+        /// <param name="kindHint"><c>series</c> or <c>movie</c> when the folder rules already know what this is.</param>
+        public static ParsedName Parse(string fileName, string? folderPath = null, string? caption = null, string? kindHint = null)
+        {
+            var result = ParseInner(fileName, folderPath, caption);
+            if (kindHint == LibraryKind.Series)
+            {
+                result.IsSeries = true;
+            }
+            else if (kindHint == LibraryKind.Movie)
+            {
+                result.IsSeries = false;
+                result.Season = null;
+                result.Episode = null;
+                result.EpisodeEnd = null;
+            }
+            return result;
+        }
+
+        private static ParsedName ParseInner(string fileName, string? folderPath, string? caption)
         {
             var result = ParseName(StripExtension(fileName ?? string.Empty), "file");
 

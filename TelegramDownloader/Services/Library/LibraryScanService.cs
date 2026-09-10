@@ -253,18 +253,30 @@ namespace TelegramDownloader.Services.Library
                 state.FilesRemoved++;
             }
 
-            var groups = new Dictionary<string, List<(BsonFileManagerModel Doc, ParsedName Parsed, LibraryFile? Old)>>();
+            var config = GeneralConfigStatic.config;
+            var groups = new Dictionary<string, List<(BsonFileManagerModel Doc, ParsedName Parsed, LibraryFile? Old, string? Hint)>>();
             foreach (var doc in docs)
             {
                 existing.TryGetValue(doc.Id, out var old);
-                if (old != null && !ShouldRescan(old, force)) continue;
+                var hint = LibraryFolderRules.Effective(config, chId, doc.FilterPath);
+                if (old != null && !ShouldRescan(old, force, hint)) continue;
 
-                var parsed = MediaNameParser.Parse(doc.Name, doc.FilterPath);
+                if (hint == LibraryRuleKind.Ignore)
+                {
+                    // Folder rule: not library material (extras, trailers...)
+                    var ignored = NewFile(chId, doc, old, MediaNameParser.Parse(doc.Name, doc.FilterPath), null, hint);
+                    ignored.Status = LibraryFileStatus.Ignored;
+                    await _lib.UpsertFile(ignored);
+                    if (old?.ItemId != null) touched.Add(old.ItemId);
+                    continue;
+                }
+
+                var parsed = MediaNameParser.Parse(doc.Name, doc.FilterPath, null, hint);
                 var kind = parsed.IsSeries ? LibraryKind.Series : LibraryKind.Movie;
                 var key = $"{kind}|{MediaNameParser.NormalizeForMatch(parsed.Title)}|{parsed.Year}";
                 if (!groups.TryGetValue(key, out var list))
                     groups[key] = list = new();
-                list.Add((doc, parsed, old));
+                list.Add((doc, parsed, old, hint));
             }
 
             foreach (var group in groups.Values)
@@ -274,16 +286,39 @@ namespace TelegramDownloader.Services.Library
             }
         }
 
-        private static bool ShouldRescan(LibraryFile old, bool force)
+        private static bool ShouldRescan(LibraryFile old, bool force, string? hint)
         {
-            if (old.Locked || old.Status == LibraryFileStatus.Ignored) return false;
+            if (old.Locked) return false;
+            // A folder rule that changed since the file was scanned re-decides it
+            if (!string.Equals(old.RuleKind, hint, StringComparison.Ordinal)) return true;
+            if (old.Status == LibraryFileStatus.Ignored) return false;
             if (force) return true;
             // Unmatched files get another chance every scan (a new provider or a
             // cache refresh may know them now); matched ones are left alone.
             return old.Status == LibraryFileStatus.Unmatched;
         }
 
-        private async Task ProcessGroupAsync(long channelId, List<(BsonFileManagerModel Doc, ParsedName Parsed, LibraryFile? Old)> files,
+        private static LibraryFile NewFile(long channelId, BsonFileManagerModel doc, LibraryFile? old, ParsedName parsed, string? kind, string? hint) => new()
+        {
+            Id = old?.Id ?? MongoDB.Bson.ObjectId.GenerateNewId().ToString(),
+            ChannelId = channelId,
+            FileId = doc.Id,
+            MessageId = doc.MessageId,
+            IsSplit = doc.isSplit,
+            FileName = doc.Name ?? string.Empty,
+            Type = doc.Type ?? string.Empty,
+            FolderPath = string.IsNullOrEmpty(doc.FilterPath) ? "/" : doc.FilterPath,
+            Size = doc.Size,
+            FileDate = doc.DateCreated,
+            Parsed = parsed,
+            Kind = kind,
+            Status = LibraryFileStatus.Unmatched,
+            MatchSource = LibraryMatchSource.Auto,
+            RuleKind = hint,
+            ScannedAt = DateTime.UtcNow
+        };
+
+        private async Task ProcessGroupAsync(long channelId, List<(BsonFileManagerModel Doc, ParsedName Parsed, LibraryFile? Old, string? Hint)> files,
             LibraryScanState state, HashSet<string> touched, CancellationToken ct)
         {
             var sample = files[0].Parsed;
@@ -319,27 +354,10 @@ namespace TelegramDownloader.Services.Library
                 }
             }
 
-            foreach (var (doc, parsed, old) in files)
+            foreach (var (doc, parsed, old, hint) in files)
             {
-                var file = new LibraryFile
-                {
-                    Id = old?.Id ?? MongoDB.Bson.ObjectId.GenerateNewId().ToString(),
-                    ChannelId = channelId,
-                    FileId = doc.Id,
-                    MessageId = doc.MessageId,
-                    IsSplit = doc.isSplit,
-                    FileName = doc.Name ?? string.Empty,
-                    Type = doc.Type ?? string.Empty,
-                    FolderPath = string.IsNullOrEmpty(doc.FilterPath) ? "/" : doc.FilterPath,
-                    Size = doc.Size,
-                    FileDate = doc.DateCreated,
-                    Parsed = parsed,
-                    Kind = kind,
-                    Status = LibraryFileStatus.Unmatched,
-                    MatchSource = LibraryMatchSource.Auto,
-                    ScannedAt = DateTime.UtcNow,
-                    Error = error
-                };
+                var file = NewFile(channelId, doc, old, parsed, kind, hint);
+                file.Error = error;
 
                 if (item != null && best != null)
                 {

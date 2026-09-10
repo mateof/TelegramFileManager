@@ -37,6 +37,8 @@ namespace Test.Library
         public Task<List<string>> GetChannelDatabaseNames() => Task.FromResult(Channels.Keys.ToList());
         public Task<List<BsonFileManagerModel>> GetChannelFiles(string channelId) =>
             Task.FromResult(Channels.TryGetValue(channelId, out var l) ? l.ToList() : new List<BsonFileManagerModel>());
+        public Task<List<string>> GetChannelFolders(string channelId) =>
+            Task.FromResult(Channels.TryGetValue(channelId, out var l) ? l.Select(d => d.FilterPath).Where(p => p != "/").Distinct().ToList() : new List<string>());
         public Task<BsonFileManagerModel?> GetChannelFile(string channelId, string fileId) =>
             Task.FromResult(Channels.TryGetValue(channelId, out var l) ? l.FirstOrDefault(d => d.Id == fileId) : null);
 

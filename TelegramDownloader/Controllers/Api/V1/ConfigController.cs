@@ -111,6 +111,20 @@ namespace TelegramDownloader.Controllers.Api.V1
                     }
                     c.LibraryProviders = providers;
                 }
+                if (request.LibraryFolderRules != null)
+                {
+                    var rules = new List<LibraryFolderRule>();
+                    foreach (var rule in request.LibraryFolderRules)
+                    {
+                        if (rule.ChannelId == 0) return BadRequestResult("Each folder rule needs a channelId");
+                        if (!Services.Library.LibraryRuleKind.IsValid(rule.Kind))
+                            return BadRequestResult("Folder rule kind must be movie, series or ignore");
+                        var path = Services.Library.LibraryFolderRules.Normalize(rule.Path);
+                        rules.RemoveAll(r => r.ChannelId == rule.ChannelId && r.Path.Equals(path, StringComparison.OrdinalIgnoreCase));
+                        rules.Add(new LibraryFolderRule { ChannelId = rule.ChannelId, Path = path, Kind = rule.Kind });
+                    }
+                    c.LibraryFolderRules = rules;
+                }
 
                 await GeneralConfigStatic.SaveChanges(_db, c);
 

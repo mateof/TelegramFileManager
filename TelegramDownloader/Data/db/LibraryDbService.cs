@@ -76,6 +76,18 @@ namespace TelegramDownloader.Data.db
             return await col.Find(Builders<BsonFileManagerModel>.Filter.Eq(x => x.IsFile, true)).ToListAsync();
         }
 
+        public async Task<List<string>> GetChannelFolders(string channelId)
+        {
+            var col = _db.getDatabase(channelId).GetCollection<BsonFileManagerModel>("directory");
+            var folders = await col.Find(Builders<BsonFileManagerModel>.Filter.Eq(x => x.IsFile, false)).ToListAsync();
+            return folders
+                .Where(f => !string.IsNullOrEmpty(f.Name) && !(string.IsNullOrEmpty(f.FilterPath) && string.IsNullOrEmpty(f.FilePath)))
+                .Select(f => Services.Library.LibraryFolderRules.Normalize((f.FilterPath ?? "/") + f.Name))
+                .Distinct()
+                .OrderBy(p => p, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
         public async Task<BsonFileManagerModel?> GetChannelFile(string channelId, string fileId)
         {
             try

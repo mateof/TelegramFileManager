@@ -57,6 +57,36 @@ scanned, even when included), `libraryWatchedThreshold` (fraction of the
 duration after which a file counts as watched, default `0.92`). The Config page
 offers both channel lists as searchable pickers.
 
+## Folder rules
+
+A channel often mixes content: `Series/` next to `Cine/`, an `Extras/` folder
+with trailers. **Folder rules** tell the scan what to expect under a folder:
+
+```
+PATCH /api/v1/config
+{ "libraryFolderRules": [
+    { "channelId": 1290586824, "path": "/Series/", "kind": "series" },
+    { "channelId": 1290586824, "path": "/Cine/",   "kind": "movie" },
+    { "channelId": 1290586824, "path": "/Extras/", "kind": "ignore" },
+    { "channelId": 1417000000, "path": "/",        "kind": "series" }
+] }
+```
+
+- A rule covers every subfolder; when several apply, the **longest path wins**.
+  `/` is the whole channel, which is how you say "this channel is only series".
+- `series`: every file is looked up as a series; one without a season/episode
+  number lands in the review queue instead of becoming a movie.
+- `movie`: every file is a movie, even if the name has something like `1x02`.
+- `ignore`: the files stay out of the library, no provider call is made.
+- Folders whose name is `Series`, `Serie`, `TV`, `Shows`, `Películas`,
+  `Peliculas`, `Pelis`, `Cine`, `Movies` or `Films` are recognised **without a
+  rule** (deepest folder name wins); an explicit rule overrides that.
+- Changing or removing a rule makes the next scan re-decide the files under it,
+  no `force` needed. Files identified by hand are never touched.
+
+The body replaces the whole list. The Config page manages the same list with
+searchable channel and folder pickers.
+
 ## How files are identified
 
 For each video file the parser extracts a title, a year and, for series, season
