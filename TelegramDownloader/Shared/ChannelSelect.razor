@@ -1,0 +1,40 @@
+@* Single-choice channel selector: a search box over a list where exactly one channel can be chosen. *@
+<div class="channel-select" style="width: 100%; max-width: 420px;">
+    <input type="text" class="form-control form-control-sm mb-1" placeholder="@Placeholder"
+           value="@filter" @oninput="e => filter = e.Value?.ToString() ?? string.Empty" />
+    <select class="form-select form-select-sm" size="7" value="@(Selected?.ToString() ?? string.Empty)" @onchange="OnChange">
+        @foreach (var channel in Filtered)
+        {
+            <option value="@channel.Id" selected="@(Selected == channel.Id)">@channel.Name (@channel.Id)</option>
+        }
+    </select>
+    @if (!Filtered.Any())
+    {
+        <small class="text-muted">@(Channels.Count == 0 ? "No indexed channels" : "No channel matches")</small>
+    }
+    else if (Selected is long id)
+    {
+        <small class="text-muted">Selected: @(Channels.FirstOrDefault(c => c.Id == id)?.Name ?? id.ToString())</small>
+    }
+</div>
+
+@code {
+    [Parameter] public List<ChannelPicker.ChannelOption> Channels { get; set; } = new();
+    [Parameter] public long? Selected { get; set; }
+    [Parameter] public EventCallback<long?> SelectedChanged { get; set; }
+    [Parameter] public string Placeholder { get; set; } = "Search a channel…";
+
+    private string filter = string.Empty;
+
+    private IEnumerable<ChannelPicker.ChannelOption> Filtered => Channels
+        .Where(c => string.IsNullOrWhiteSpace(filter)
+            || c.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)
+            || c.Id.ToString().Contains(filter))
+        .OrderBy(c => c.Name, StringComparer.CurrentCultureIgnoreCase);
+
+    private async Task OnChange(Microsoft.AspNetCore.Components.ChangeEventArgs e)
+    {
+        Selected = long.TryParse(e.Value?.ToString(), out var id) ? id : null;
+        await SelectedChanged.InvokeAsync(Selected);
+    }
+}
