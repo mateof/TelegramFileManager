@@ -53,6 +53,9 @@
         }
 
         #reconnect-modal {
+            /* Hidden until Blazor's reconnection display flags it with one of
+               the classes above; without this the dialog is simply always on. */
+            display: none;
             position: fixed;
             top: 0;
             left: 0;
