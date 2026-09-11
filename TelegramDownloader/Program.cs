@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Web;
@@ -54,6 +55,15 @@ if (!Directory.Exists(UserService.USERDATAFOLDER))
 {
     Directory.CreateDirectory(UserService.USERDATAFOLDER);
 }
+
+// Data Protection keys (antiforgery, cookies) must survive container restarts:
+// with the default in-container location every restart minted a new key and
+// browsers kept failing with "antiforgery token could not be decrypted".
+var dataProtectionKeys = Path.Combine(UserService.USERDATAFOLDER, "keys");
+Directory.CreateDirectory(dataProtectionKeys);
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeys))
+    .SetApplicationName("TelegramFileManager");
 
 if (!Directory.Exists(FileService.LOCALDIR))
 {
@@ -136,6 +146,9 @@ builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor(options =>
 {
     options.DetailedErrors = true; // Enable detailed errors for debugging
+    // A phone that comes back after a few minutes should find its circuit
+    // still there instead of having to reload the page (default: 3 minutes)
+    options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromMinutes(10);
 })
 .AddCircuitOptions(options =>
 {
@@ -396,7 +409,10 @@ app.MapControllers();
 // Live transfer progress for API clients (mobile apps, dashboards...)
 app.MapHub<TelegramDownloader.Hubs.TransferHub>("/hubs/transfers");
 
-app.MapBlazorHub();
+// Behind a proxy that does not forward WebSocket upgrades, SignalR falls back
+// to long polling; keep each poll below the usual 60 s proxy read timeout so
+// the fallback works instead of dropping the circuit every minute.
+app.MapBlazorHub(options => options.LongPolling.PollTimeout = TimeSpan.FromSeconds(45));
 app.MapFallbackToPage("/_Host");
 
 try
