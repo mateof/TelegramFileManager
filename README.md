@@ -138,8 +138,6 @@ A D-pad first client focused on watching the videos you keep in your channels:
 - Updates itself from GitHub Releases, and runs on Android 6.0, which covers Fire TV
   sticks from 2015 onwards.
 
-Both repositories publish a signed APK as a GitHub Release on every push to `main`.
-
 ## Music player
 
 <img width="598" height="889" alt="Music player" src="https://github.com/user-attachments/assets/c4842c34-ea8f-4664-b22c-93b43a9aaf02" />
