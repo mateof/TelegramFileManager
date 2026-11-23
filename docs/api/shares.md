@@ -36,13 +36,25 @@ Persist or transmit this JSON however you like (a file, a QR, a link).
 
 ```
 POST /api/v1/shares/import
+Content-Type: application/json
 { "share": { …the ShareFilesModel from an export… } }
+```
+
+or, with the `.tfm` file the web UI exports:
+
+```
+POST /api/v1/shares/import
+Content-Type: multipart/form-data   (part "file" = MyShare.tfm)
 ```
 
 The account joins the channel automatically when it is not a member yet and the
 share carries an `invitationHash`. Import runs in the background and returns
-`202 Accepted`. The imported files then appear under the shared collections and
-can be downloaded with
+`202 Accepted` with `{ importId, kind: "share" }`; progress arrives as
+`ImportProgress` messages on
+[`/hubs/events`](signalr.md#application-events-hub-hubsevents). A body that cannot
+be read (bad JSON, not a zip) answers `400`. The imported files then appear
+under the shared collections; browse them with the files endpoints and
+`collectionId` ([files.md](files.md#shared-collections)) and download them with
 `POST /api/v1/transfers/downloads` using `sharedCollectionId`.
 
 ### Manage stored shares

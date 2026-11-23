@@ -20,6 +20,9 @@ namespace TelegramDownloader.Models.Api
         /// <summary>Relative path of the SignalR hub streaming transfer updates.</summary>
         public string TransfersHubPath { get; set; } = "/hubs/transfers";
 
+        /// <summary>Relative path of the SignalR hub streaming application events (notifications, progress, session state).</summary>
+        public string EventsHubPath { get; set; } = "/hubs/events";
+
         /// <summary>True when the server requires an <c>X-Api-Key</c> header.</summary>
         public bool RequiresApiKey { get; set; }
     }
@@ -139,6 +142,27 @@ namespace TelegramDownloader.Models.Api
         public int MultiConnectionBlockSizeMB { get; set; }
         public int MultiConnectionMinFileSizeMB { get; set; }
 
+        /// <summary>Always use the touch file manager in the web UI, also on desktop.</summary>
+        public bool UseMobileFileManagerAlways { get; set; }
+
+        /// <summary>Virtual scrolling in the web UI file manager.</summary>
+        public bool HasFileManagerVirtualScroll { get; set; }
+
+        /// <summary>
+        /// API key for apps, masked (<c>****</c> plus the last 4 characters);
+        /// null when none is set. Set it with <c>mobileApiKey</c> in the PATCH body.
+        /// </summary>
+        public string? MobileApiKey { get; set; }
+
+        /// <summary>An API key is configured (here or in config.json).</summary>
+        public bool MobileApiKeySet { get; set; }
+
+        /// <summary>WebDAV user name.</summary>
+        public string? WebDavUser { get; set; }
+
+        /// <summary>A WebDAV password is configured. The password itself is never returned.</summary>
+        public bool WebDavPasswordSet { get; set; }
+
         public bool LibraryEnabled { get; set; }
         public string LibraryLanguage { get; set; } = "es-ES";
         public bool LibraryAutoScan { get; set; }
@@ -190,8 +214,21 @@ namespace TelegramDownloader.Models.Api
             DownloadConnections = c.DownloadConnections,
             MultiConnectionPartSizeKB = c.MultiConnectionPartSizeKB,
             MultiConnectionBlockSizeMB = c.MultiConnectionBlockSizeMB,
-            MultiConnectionMinFileSizeMB = c.MultiConnectionMinFileSizeMB
+            MultiConnectionMinFileSizeMB = c.MultiConnectionMinFileSizeMB,
+            UseMobileFileManagerAlways = c.UseMobileFileManagerAlways,
+            HasFileManagerVirtualScroll = c.hasFileManagerVirtualScroll,
+            MobileApiKey = MaskSecret(c.MobileApiKey),
+            MobileApiKeySet = !string.IsNullOrEmpty(c.MobileApiKey) || !string.IsNullOrEmpty(GeneralConfigStatic.tlconfig?.mobile_api_key),
+            WebDavUser = c.WebDavUser,
+            WebDavPasswordSet = !string.IsNullOrEmpty(c.WebDavPassword)
         };
+
+        /// <summary><c>****</c> plus the last 4 characters (just <c>****</c> for short values); null when empty.</summary>
+        public static string? MaskSecret(string? secret)
+        {
+            if (string.IsNullOrEmpty(secret)) return null;
+            return secret.Length <= 8 ? "****" : "****" + secret[^4..];
+        }
     }
 
     /// <summary>
@@ -227,6 +264,18 @@ namespace TelegramDownloader.Models.Api
         public int? MultiConnectionPartSizeKB { get; set; }
         public int? MultiConnectionBlockSizeMB { get; set; }
         public int? MultiConnectionMinFileSizeMB { get; set; }
+
+        public bool? UseMobileFileManagerAlways { get; set; }
+        public bool? HasFileManagerVirtualScroll { get; set; }
+
+        /// <summary>New API key for apps. Omit to keep, empty string to remove (falls back to config.json).</summary>
+        public string? MobileApiKey { get; set; }
+
+        /// <summary>WebDAV user. Omit to keep, empty string to clear.</summary>
+        public string? WebDavUser { get; set; }
+
+        /// <summary>WebDAV password (write-only). Omit to keep, empty string to clear.</summary>
+        public string? WebDavPassword { get; set; }
 
         public bool? LibraryEnabled { get; set; }
         public string? LibraryLanguage { get; set; }

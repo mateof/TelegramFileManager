@@ -1558,6 +1558,34 @@ namespace TelegramDownloader.Data
 
         }
 
+        public async Task<byte[]?> downloadMessageThumb(Message message)
+        {
+            // Same download as downloadPhotoThumb, but of a small size (photos)
+            // or of the embedded preview (videos and other documents) and as
+            // raw JPEG bytes so the API can cache it on disk.
+            using MemoryStream ms = new MemoryStream();
+            switch (message?.media)
+            {
+                case MessageMediaPhoto { photo: Photo photo }:
+                    {
+                        PhotoSizeBase? size = Services.Api.ThumbnailSizePicker.Pick(photo.sizes, s => s.Type);
+                        if (size == null) return null;
+                        await client.DownloadFileAsync(photo, ms, size);
+                        break;
+                    }
+                case MessageMediaDocument { document: TL.Document document } when document.thumbs != null:
+                    {
+                        PhotoSizeBase? size = Services.Api.ThumbnailSizePicker.Pick(document.thumbs, s => s.Type);
+                        if (size == null) return null;
+                        await client.DownloadFileAsync(document, ms, size);
+                        break;
+                    }
+                default:
+                    return null;
+            }
+            return ms.Length > 0 ? ms.ToArray() : null;
+        }
+
         public async Task AddFavouriteChannel(long id)
         {
             if (!GeneralConfigStatic.config.FavouriteChannels.Contains(id))

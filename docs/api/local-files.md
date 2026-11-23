@@ -84,6 +84,33 @@ GET /api/v1/local/download?path=music/rock/song.mp3
 Streams the file with HTTP range support and the right content type. Behind the
 API key, so use `?apiKey=…` when embedding.
 
+`disposition=inline` serves it for viewing in the browser instead of saving it
+(this is the `contentUrl` of local entries):
+
+```
+GET /api/v1/local/download?path=music/song.mp3&disposition=inline
+```
+
+## Copy / move
+
+```
+POST /api/v1/local/copy
+POST /api/v1/local/move
+{ "paths": ["music/rock", "notes.txt"], "targetPath": "backup/2026", "overwrite": false }
+```
+
+- Every source and the target are checked against the local root like the other
+  endpoints (`400` when `targetPath` escapes it); sources that escape it are
+  skipped.
+- The target folder is created when missing. Folders are copied recursively;
+  a move across volumes falls back to copy + delete.
+- An entry whose name already exists in the target is skipped unless
+  `overwrite` is true (then the existing entry is replaced).
+- Copying/moving an entry onto itself, or a folder into itself or one of its
+  sub-folders, skips that entry.
+
+Answers `{ accepted, skipped }` (the paths not processed).
+
 ## Upload into local storage
 
 ```

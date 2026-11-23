@@ -230,6 +230,15 @@ namespace TelegramDownloader.Data
         private static readonly ChannelRefreshRegistry refreshRegistry = new ChannelRefreshRegistry();
         /// <summary>Raised after a channel index refresh finishes successfully, with the channel id.</summary>
         public static event Action<string>? ChannelRefreshed;
+        /// <summary>
+        /// Raised after every channel refresh ends (success, cancel or failure),
+        /// with its result. Unlike <see cref="ChannelRefreshed"/> it also fires
+        /// for canceled and failed scans, so live clients can stop waiting.
+        /// </summary>
+        public static event Action<ChannelRefreshResult>? ChannelRefreshFinished;
+
+        /// <summary>Live progress of every refresh in flight (for the events hub).</summary>
+        public static IReadOnlyList<ChannelRefreshProgressSnapshot> GetRunningRefreshes() => refreshRegistry.Snapshots();
 
         protected PhysicalFileProvider operation = new PhysicalFileProvider();
         protected ITelegramService _ts { get; set; }
@@ -2084,6 +2093,15 @@ namespace TelegramDownloader.Data
             }
             _logger.LogInformation("Finish refresh of channel {ChannelId}: {Total} new files added (canceled {Canceled}, failed {Failed})",
                 channelId, result.Total, result.Canceled, result.Failed);
+
+            try
+            {
+                ChannelRefreshFinished?.Invoke(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "A channel refresh listener failed for {ChannelId}", channelId);
+            }
 
             // Let the media library pick up the new files (it subscribes at startup)
             if (result.Total > 0 || (!result.Failed && !result.Canceled))

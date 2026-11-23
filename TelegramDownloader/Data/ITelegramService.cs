@@ -44,6 +44,8 @@ namespace TelegramDownloader.Data
         Task<Message> getMessageFile(string chatId, int idMessage);
         Task<string> getPhotoThumb(ChatBase chat);
         Task<string> downloadPhotoThumb(Photo thumb);
+        /// <summary>JPEG preview of a photo message (a small size) or of a video/document message (its embedded thumbnail); null when it has none.</summary>
+        Task<byte[]?> downloadMessageThumb(Message message);
         Task<byte[]?> DownloadChannelPhoto(long channelId);
         Task logOff();
         Task sendVerificationCode(string vc);

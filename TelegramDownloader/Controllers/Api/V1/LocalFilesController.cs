@@ -249,12 +249,15 @@ namespace TelegramDownloader.Controllers.Api.V1
         /// <summary>Downloads a local file.</summary>
         /// <remarks>
         /// Supports HTTP range requests, so it can be used directly as a media
-        /// source by a player.
+        /// source by a player. <c>disposition=inline</c> serves it for viewing
+        /// in the browser instead of saving it.
         /// </remarks>
+        /// <param name="path">File path relative to the local root.</param>
+        /// <param name="disposition"><c>attachment</c> (default) or <c>inline</c>.</param>
         [HttpGet("download")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status404NotFound)]
-        public IActionResult Download([FromQuery] string path)
+        public IActionResult Download([FromQuery] string path, [FromQuery] string? disposition = null)
         {
             if (!TryResolve(path, out var absolute, out _, out var error))
                 return BadRequestResult(error!);
@@ -262,9 +265,135 @@ namespace TelegramDownloader.Controllers.Api.V1
             if (!System.IO.File.Exists(absolute))
                 return NotFoundResult("File not found", ApiErrorCodes.FileNotFound);
 
+            var mime = FileService.getMimeType(Path.GetFileName(absolute)) ?? "application/octet-stream";
             var stream = new FileStream(absolute, FileMode.Open, FileAccess.Read, FileShare.Read);
-            return File(stream, FileService.getMimeType(Path.GetExtension(absolute)) ?? "application/octet-stream",
-                Path.GetFileName(absolute), enableRangeProcessing: true);
+            if (string.Equals(disposition, "inline", StringComparison.OrdinalIgnoreCase))
+            {
+                Response.Headers["Content-Disposition"] = $"inline; filename*=UTF-8''{Uri.EscapeDataString(Path.GetFileName(absolute))}";
+                return File(stream, mime, enableRangeProcessing: true);
+            }
+            return File(stream, mime, Path.GetFileName(absolute), enableRangeProcessing: true);
+        }
+
+        /// <summary>Copies local files and folders into another local folder.</summary>
+        /// <remarks>
+        /// Every path (sources and <c>targetPath</c>) must stay inside the local
+        /// root. Folders are copied recursively; the target folder is created
+        /// when missing. Entries whose name already exists in the target are
+        /// skipped unless <c>overwrite</c> is true. Copying a folder into itself
+        /// (or one of its sub-folders) is refused for that entry.
+        /// </remarks>
+        [HttpPost("copy")]
+        [ProducesResponseType(typeof(ApiResult<TransferAcceptedDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status400BadRequest)]
+        public IActionResult Copy([FromBody] LocalCopyMoveRequest request) => CopyOrMove(request, move: false);
+
+        /// <summary>Moves local files and folders into another local folder.</summary>
+        /// <remarks>Same rules as <c>POST /api/v1/local/copy</c>.</remarks>
+        [HttpPost("move")]
+        [ProducesResponseType(typeof(ApiResult<TransferAcceptedDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status400BadRequest)]
+        public IActionResult Move([FromBody] LocalCopyMoveRequest request) => CopyOrMove(request, move: true);
+
+        private IActionResult CopyOrMove(LocalCopyMoveRequest request, bool move)
+        {
+            if (request == null || request.Paths == null || request.Paths.Count == 0)
+                return BadRequestResult("At least one path is required");
+            if (!TryResolve(request.TargetPath, out var targetAbsolute, out _, out var error))
+                return BadRequestResult(error!);
+            if (System.IO.File.Exists(targetAbsolute))
+                return BadRequestResult("targetPath is a file, not a folder");
+
+            var done = 0;
+            var skipped = new List<string>();
+            try
+            {
+                Directory.CreateDirectory(targetAbsolute);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Could not create the local folder {Path}", request.TargetPath);
+                return ErrorResult("Could not create the target folder", ex);
+            }
+
+            foreach (var path in request.Paths)
+            {
+                if (!TryResolve(path, out var source, out var sourceRelative, out _) || string.IsNullOrEmpty(sourceRelative))
+                {
+                    skipped.Add(path);
+                    continue;
+                }
+
+                var destination = Path.Combine(targetAbsolute, Path.GetFileName(source));
+                if (!LocalCopyMovePlanner.CanPlace(source, destination, Directory.Exists(source)))
+                {
+                    skipped.Add(path);
+                    continue;
+                }
+
+                try
+                {
+                    var exists = System.IO.File.Exists(destination) || Directory.Exists(destination);
+                    if (exists)
+                    {
+                        if (!request.Overwrite)
+                        {
+                            skipped.Add(path);
+                            continue;
+                        }
+                        if (System.IO.File.Exists(destination)) System.IO.File.Delete(destination);
+                        else Directory.Delete(destination, true);
+                    }
+
+                    if (System.IO.File.Exists(source))
+                    {
+                        if (move) System.IO.File.Move(source, destination);
+                        else System.IO.File.Copy(source, destination);
+                    }
+                    else if (Directory.Exists(source))
+                    {
+                        if (move) MoveDirectory(source, destination);
+                        else CopyDirectory(source, destination);
+                    }
+                    else
+                    {
+                        skipped.Add(path);
+                        continue;
+                    }
+                    done++;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Could not {Operation} local path {Path}", move ? "move" : "copy", path);
+                    skipped.Add(path);
+                }
+            }
+
+            return OkResult(new TransferAcceptedDto { Accepted = done, Skipped = skipped },
+                move ? $"{done} entries moved" : $"{done} entries copied");
+        }
+
+        private static void CopyDirectory(string source, string destination)
+        {
+            Directory.CreateDirectory(destination);
+            foreach (var file in Directory.EnumerateFiles(source))
+                System.IO.File.Copy(file, Path.Combine(destination, Path.GetFileName(file)), overwrite: true);
+            foreach (var dir in Directory.EnumerateDirectories(source))
+                CopyDirectory(dir, Path.Combine(destination, Path.GetFileName(dir)));
+        }
+
+        private static void MoveDirectory(string source, string destination)
+        {
+            try
+            {
+                Directory.Move(source, destination);
+            }
+            catch (IOException)
+            {
+                // Different volume (e.g. a bind mount): copy, then delete.
+                CopyDirectory(source, destination);
+                Directory.Delete(source, true);
+            }
         }
 
         /// <summary>Uploads a file into the local storage.</summary>
@@ -347,31 +476,7 @@ namespace TelegramDownloader.Controllers.Api.V1
         /// escapes it.
         /// </summary>
         private static bool TryResolve(string? path, out string absolute, out string relative, out string? error)
-        {
-            absolute = string.Empty;
-            relative = string.Empty;
-            error = null;
-
-            var candidate = (path ?? string.Empty).Replace("\\", "/").Trim().TrimStart('/');
-            if (Path.IsPathRooted(candidate))
-            {
-                error = "Only paths relative to the local root are accepted";
-                return false;
-            }
-
-            var root = Path.GetFullPath(FileService.LOCALDIR);
-            var full = Path.GetFullPath(Path.Combine(root, candidate));
-
-            if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase))
-            {
-                error = "The path escapes the local root";
-                return false;
-            }
-
-            absolute = full;
-            relative = candidate.Trim('/');
-            return true;
-        }
+            => LocalPathGuard.TryResolve(FileService.LOCALDIR, path, out absolute, out relative, out error);
 
         private static List<ApiFileDto> ApplyFilter(List<ApiFileDto> items, string? filter)
         {

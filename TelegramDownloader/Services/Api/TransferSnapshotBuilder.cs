@@ -63,6 +63,9 @@ namespace TelegramDownloader.Services.Api
             };
         }
 
+        /// <summary>Whether an entry in <paramref name="state"/> can be removed from the lists (anything but running).</summary>
+        public static bool CanRemove(StateTask state) => state != StateTask.Working;
+
         /// <summary>
         /// Finds a running or queued transfer by its id across every list.
         /// </summary>

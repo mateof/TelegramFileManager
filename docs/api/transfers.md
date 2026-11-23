@@ -239,6 +239,7 @@ Works on any chat, indexed or not — this is how you save a file straight from 
 | `POST /api/v1/transfers/{id}/retry` | Retry a paused/cancelled/failed download or task. |
 | `POST /api/v1/transfers/clear?scope=all` | Remove finished entries (`downloads`/`uploads`/`tasks`/`all`). |
 | `POST /api/v1/transfers/queue/clear?scope=all` | Empty a queue without touching running transfers. |
+| `DELETE /api/v1/transfers/{id}` | Remove one entry from the lists ("remove from list"): finished, paused or queued. A running transfer answers `409` (cancel it first). |
 
 The pause/resume/stop endpoints return the fresh `summary`; the per-item ones
 return an empty success. Watch the hub for the state change either way.

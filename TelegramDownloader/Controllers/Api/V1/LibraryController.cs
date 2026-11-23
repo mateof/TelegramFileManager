@@ -40,6 +40,31 @@ namespace TelegramDownloader.Controllers.Api.V1
             GeneralConfigStatic.config.LibraryEnabled ? null
                 : UnavailableResult("The media library is disabled. Enable it and add a metadata provider key in the server settings.", ApiErrorCodes.LibraryDisabled);
 
+        /// <summary>Folder paths of a channel, for the folder rules picker.</summary>
+        /// <remarks>
+        /// Every folder of the channel index as a normalised path
+        /// (<c>/movies/</c>, <c>/series/drama/</c>...), sorted. These are the
+        /// values <c>libraryFolderRules[].path</c> expects. Works even when the
+        /// library is disabled, so rules can be prepared before enabling it.
+        /// </remarks>
+        [HttpGet("channel-folders")]
+        [ProducesResponseType(typeof(ApiResult<List<string>>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> ChannelFolders([FromQuery] string channelId)
+        {
+            if (string.IsNullOrWhiteSpace(channelId))
+                return BadRequestResult("channelId is required");
+            try
+            {
+                return OkResult(await _db.GetChannelFolders(channelId.Trim()));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error listing the folders of channel {ChannelId}", channelId);
+                return ErrorResult("Could not list the channel folders", ex);
+            }
+        }
+
         #region Catalogue
 
         /// <summary>Lists the movies and series of the library.</summary>

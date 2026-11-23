@@ -1,8 +1,11 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Options;
 using TelegramDownloader.Data;
 using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
 using TelegramDownloader.Models.Api;
+using TelegramDownloader.Services.Api;
 
 namespace TelegramDownloader.Controllers.Api.V1
 {
@@ -132,29 +135,67 @@ namespace TelegramDownloader.Controllers.Api.V1
         /// share carries an invitation hash. Import runs in the background; the
         /// imported files then appear under the shared collections and can be
         /// downloaded with <c>POST /api/v1/transfers/downloads</c> using
-        /// <c>sharedCollectionId</c>.
+        /// <c>sharedCollectionId</c>, or browsed with the files endpoints and
+        /// <c>collectionId</c>.
+        ///
+        /// Two body formats are accepted:
+        /// <list type="bullet">
+        /// <item><c>application/json</c>: <c>{ "share": { ...ShareFilesModel } }</c> (what <c>GET /api/v1/shares/export</c> returns).</item>
+        /// <item><c>multipart/form-data</c> with a <c>file</c> part holding a <c>.tfm</c> file (the zip the web UI exports).</item>
+        /// </list>
+        /// The response carries an <c>importId</c>; progress arrives as
+        /// <c>ImportProgress</c> messages (<c>kind: share</c>) on <c>/hubs/events</c>.
         /// </remarks>
         [HttpPost("import")]
-        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status202Accepted)]
-        public IActionResult Import([FromBody] ImportSharedRequest request)
+        [Consumes("application/json", "multipart/form-data")]
+        [RequestSizeLimit(512L * 1024 * 1024)]
+        [RequestFormLimits(MultipartBodyLengthLimit = 512L * 1024 * 1024)]
+        [ProducesResponseType(typeof(ApiResult<ImportStartedDto>), StatusCodes.Status202Accepted)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> Import(
+            [FromServices] ImportProgressTracker imports,
+            [FromServices] IOptions<JsonOptions> jsonOptions)
         {
-            if (request?.Share == null || string.IsNullOrWhiteSpace(request.Share.id))
-                return BadRequestResult("A share payload with a channel id is required");
-
-            var progress = new GenericNotificationProgressModel();
-            _ = Task.Run(async () =>
+            ShareFilesModel? share;
+            try
             {
-                try
+                if (Request.HasFormContentType)
                 {
-                    await _files.importSharedData(request.Share, progress);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Background import of a share failed");
-                }
-            });
+                    var form = await Request.ReadFormAsync(HttpContext.RequestAborted);
+                    var file = form.Files.GetFile("file") ?? form.Files.FirstOrDefault();
+                    if (file == null || file.Length == 0)
+                        return BadRequestResult("A non-empty .tfm file part named 'file' is required");
 
-            return Accepted(ApiResult.Done("Share import started"));
+                    using var ms = new MemoryStream();
+                    await file.CopyToAsync(ms, HttpContext.RequestAborted);
+                    ms.Position = 0;
+                    share = await FileService.UnZipArchiveToFile<ShareFilesModel>(ms);
+                }
+                else
+                {
+                    var request = await JsonSerializer.DeserializeAsync<ImportSharedRequest>(
+                        Request.Body, jsonOptions.Value.JsonSerializerOptions, HttpContext.RequestAborted);
+                    share = request?.Share;
+                }
+            }
+            catch (Exception ex) when (ex is JsonException or InvalidDataException or Newtonsoft.Json.JsonException)
+            {
+                return BadRequestResult("The share could not be read", detail: ex.Message);
+            }
+
+            if (share == null || string.IsNullOrWhiteSpace(share.id))
+                return BadRequestResult("A share payload with a channel id is required");
+            if (share.files == null)
+                share.files = new List<BsonFileManagerModel>();
+
+            var importId = imports.Run(
+                ImportKinds.Share,
+                progress => _files.importSharedData(share, progress),
+                _logger);
+
+            return Accepted(ApiResult<ImportStartedDto>.Ok(
+                new ImportStartedDto { ImportId = importId, Kind = ImportKinds.Share },
+                "Share import started"));
         }
 
         /// <summary>Deletes a shared collection from this server.</summary>
