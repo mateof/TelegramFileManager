@@ -1,6 +1,7 @@
 // Payloads of the /hubs/events SignalR hub (application-wide realtime events).
 // PROVISIONAL where marked: the hub is written by the API agent in parallel; align at merge.
 import type { ApiChannelRefreshProgressDto, ApiChannelRefreshResultDto } from './channels';
+import type { ApiLibraryScanStateDto } from './library';
 
 export type NotificationLevel = 'info' | 'success' | 'warning' | 'error';
 
@@ -43,8 +44,15 @@ export interface AuthStateEvent {
 /** `Metrics`: system metrics, pushed after invoking `SubscribeMetrics`. PROVISIONAL shape. */
 export type MetricsEvent = Record<string, unknown>;
 
-/** `LibraryScan`: progress/result of a media library scan. PROVISIONAL shape. */
-export type LibraryScanEvent = Record<string, unknown>;
+/**
+ * `LibraryScan`: every second while a media library scan runs, once when it ends (`running: false`)
+ * and on connect when one is running.
+ */
+export interface LibraryScanEvent {
+  running: boolean;
+  /** Same shape as `GET /api/v1/library/scan`. */
+  progress?: ApiLibraryScanStateDto | null;
+}
 
 /** Message name → payload of every server → client message of /hubs/events. */
 export interface EventsHubMessages {
