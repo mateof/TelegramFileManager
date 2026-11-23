@@ -81,6 +81,14 @@ namespace TelegramDownloader.Models.Api
         public const string ServiceUnavailable = "service_unavailable";
         public const string LibraryDisabled = "library_disabled";
         public const string InternalError = "internal_error";
+
+        // Web session (web-auth)
+        public const string InvalidCredentials = "invalid_credentials";
+        public const string TooManyAttempts = "too_many_attempts";
+        public const string PasswordAlreadySet = "password_already_set";
+        public const string PasswordNotSet = "password_not_set";
+        public const string WeakPassword = "weak_password";
+        public const string CsrfHeaderMissing = "csrf_header_missing";
     }
 
     /// <summary>

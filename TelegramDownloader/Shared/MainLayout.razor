@@ -13,6 +13,7 @@
 @inject ModalService ModalService
 @inject TransactionInfoService tis
 @inject IFileService FileService
+@inject TelegramDownloader.Services.WebAuth.IWebAuthService WebAuth
 
 <PageTitle>TelegramFileManager</PageTitle>
 
@@ -192,6 +193,15 @@
 
                 <div class="offcanvas-divider"></div>
                 <div class="offcanvas-section-title">Account</div>
+
+                @if (WebAuth.PasswordSet)
+                {
+                    @* Ends the web session (cookie); the Telegram session stays signed in *@
+                    <button @onclick="WebSignOutAndClose" class="offcanvas-menu-item">
+                        <i class="bi bi-door-open"></i>
+                        <span class="menu-text">Sign out</span>
+                    </button>
+                }
 
                 <button @onclick="LogoutAndClose" class="offcanvas-menu-item danger">
                     <i class="bi bi-box-arrow-right"></i>
@@ -617,6 +627,13 @@
             await InvokeAsync(StateHasChanged);
         }
         catch { }
+    }
+
+    private async Task WebSignOutAndClose()
+    {
+        await JS.InvokeVoidAsync("blurActiveElement");
+        await offcanvas.HideAsync();
+        await TelegramDownloader.Services.WebAuth.WebAuthBrowser.SignOutAsync(JS);
     }
 
     private async Task LogoutAndClose()

@@ -323,5 +323,13 @@ namespace TelegramDownloader.Models
         /// sends credentials base64-encoded.
         /// </summary>
         public string? webdav_password { get; set; }
+
+        /// <summary>
+        /// Reverse proxies allowed to set X-Forwarded-For/Proto/Host (IPs or
+        /// CIDR ranges). Overridden by the <c>TrustedProxies</c> setting
+        /// (appsettings or environment variable). Default when both are empty:
+        /// loopback and private ranges.
+        /// </summary>
+        public List<string>? trusted_proxies { get; set; }
     }
 }

@@ -56,6 +56,9 @@ namespace TelegramDownloader.Data.db
         /// <summary>Entries whose FilePath is a direct child of <paramref name="currentPath"/> (one indexed query).</summary>
         Task<List<BsonFileManagerModel>> getDirectChildrenByFilePathPrefix(string dbName, string currentPath, string collectionName = "directory");
         Task<GeneralConfig> LoadConfig();
+        /// <summary>Web UI password and LAN bypass settings (own document, never part of a GeneralConfig save).</summary>
+        Task<WebAuthSettings?> LoadWebAuth();
+        Task SaveWebAuth(WebAuthSettings settings);
         Task resetDatabase(string dbName = "default");
         Task resetCollection(string dbName = "default", string collection = "directory", IClientSessionHandle? session = null);
         Task SaveConfig(GeneralConfig gc);

@@ -193,6 +193,15 @@ builder.Services.AddBlazorBootstrap();
 // Add controllers for Mobile API and the modular v1 API
 builder.Services.AddControllers();
 
+// Web authentication: optional web password (cookie session), LAN bypass and
+// the single access policy enforced by WebAccessMiddleware.
+builder.Services.AddSingleton<TelegramDownloader.Services.WebAuth.IWebAuthService>(sp =>
+    new TelegramDownloader.Services.WebAuth.WebAuthService(
+        sp.GetRequiredService<IDbService>(),
+        sp.GetRequiredService<ILogger<TelegramDownloader.Services.WebAuth.WebAuthService>>()));
+TelegramDownloader.Services.WebAuth.WebAuthSession.AddWebAuthentication(builder.Services);
+TelegramDownloader.Services.WebAuth.InternalHttpClient.AddInternalHttpClient(builder.Services);
+
 // Modular v1 API: SignalR transfer hub + its supporting services
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<TelegramDownloader.Services.Api.QrLoginSessionManager>();
@@ -317,14 +326,35 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
+// Record the socket peer address and the proxy headers as they arrived, before
+// UseForwardedHeaders rewrites/removes them: the LAN bypass of the web password
+// must decide on the real TCP peer, never on a client-supplied header.
+app.UseMiddleware<TelegramDownloader.Middleware.ConnectionInfoCaptureMiddleware>();
+
 // Configure forwarded headers for reverse proxy support (HTTPS via nginx, traefik, etc.)
+// Only proxies listed in TrustedProxies (IPs/CIDRs; appsettings/env
+// "TrustedProxies" or config.json "trusted_proxies"; default: loopback and
+// private ranges) may rewrite the client address, scheme and host. Previously
+// every peer was trusted, so any client on the internet could forge
+// X-Forwarded-For (spoofing the IP in logs and in the login rate limiter) or
+// X-Forwarded-Proto/Host. Reverse proxies in Docker networks or on the LAN keep
+// working with the default.
 var forwardedHeadersOptions = new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost
 };
-// Clear default limits to accept forwarded headers from any proxy
-forwardedHeadersOptions.KnownNetworks.Clear();
-forwardedHeadersOptions.KnownProxies.Clear();
+{
+    var invalidProxies = new List<string>();
+    var trustedProxyList = TelegramDownloader.Services.WebAuth.NetworkRules.ReadTrustedProxyList(
+        app.Configuration, GeneralConfigStatic.tlconfig?.trusted_proxies);
+    var (trustedProxies, trustedNetworks) = TelegramDownloader.Services.WebAuth.NetworkRules.ParseTrustedProxies(trustedProxyList, invalidProxies);
+    forwardedHeadersOptions.KnownIPNetworks.Clear();
+    forwardedHeadersOptions.KnownProxies.Clear();
+    foreach (var proxy in trustedProxies) forwardedHeadersOptions.KnownProxies.Add(proxy);
+    foreach (var network in trustedNetworks) forwardedHeadersOptions.KnownIPNetworks.Add(network);
+    foreach (var bad in invalidProxies) Log.Warning("TrustedProxies: ignoring invalid entry {Entry}", bad);
+    Log.Information("Trusted reverse proxies: {Proxies}", string.Join(", ", trustedProxyList));
+}
 app.UseForwardedHeaders(forwardedHeadersOptions);
 
 // Load config from DB only if MongoDB is available
@@ -344,6 +374,10 @@ if (mongoAvailable)
     }
 }
 
+// Web password / LAN bypass (MongoDB, with a local copy so it fails closed
+// when the database is unreachable).
+await app.Services.GetRequiredService<TelegramDownloader.Services.WebAuth.IWebAuthService>().LoadAsync(mongoAvailable);
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
@@ -360,6 +394,16 @@ var compositeProvider = new CompositeFileProvider(wrProvider);
 var compositeProviderImg = new CompositeFileProvider(imgProvider);
 
 // app.UseHttpsRedirection();
+
+// CORS first so preflights are answered and 401s carry the CORS headers.
+app.UseCors("MobilePolicy");
+
+// Access gate (replaces the former ApiKeyMiddleware): web session cookie, API
+// key or LAN bypass, see WebAccessPolicy. It runs before every static file
+// provider because /local/** (user files) and /img/telegram/** are protected
+// too; wwwroot assets and the /app shell are classified as public.
+app.UseAuthentication();
+app.UseMiddleware<TelegramDownloader.Middleware.WebAccessMiddleware>();
 
 app.UseStaticFiles();
 
@@ -399,12 +443,6 @@ app.UseSwaggerUI(c =>
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "TFM Mobile API (audio player)");
     c.RoutePrefix = "api-docs";
 });
-
-// CORS must be before routing
-app.UseCors("MobilePolicy");
-
-// API Key authentication middleware for mobile endpoints
-app.UseMiddleware<TelegramDownloader.Middleware.ApiKeyMiddleware>();
 
 app.UseRouting();
 app.MapControllers();

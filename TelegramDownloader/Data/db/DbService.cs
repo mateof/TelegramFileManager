@@ -294,6 +294,25 @@ namespace TelegramDownloader.Data.db
             return await (await getDatabase(CONFIG_DB_NAME).GetCollection<GeneralConfig>("config").FindAsync(Builders<GeneralConfig>.Filter.Where(x => x.type == "general"))).FirstOrDefaultAsync() ?? new GeneralConfig();
         }
 
+        // Web authentication lives in its own collection of the config database:
+        // the Config page and the v1 config endpoint save whole (often stale)
+        // GeneralConfig documents, which must never overwrite or clear the password.
+        private const string WEB_AUTH_COLLECTION = "webauth";
+
+        public async Task<WebAuthSettings?> LoadWebAuth()
+        {
+            return await (await getDatabase(CONFIG_DB_NAME).GetCollection<WebAuthSettings>(WEB_AUTH_COLLECTION)
+                .FindAsync(Builders<WebAuthSettings>.Filter.Eq(x => x.Id, WebAuthSettings.DocumentId))).FirstOrDefaultAsync();
+        }
+
+        public async Task SaveWebAuth(WebAuthSettings settings)
+        {
+            settings.Id = WebAuthSettings.DocumentId;
+            await getDatabase(CONFIG_DB_NAME).GetCollection<WebAuthSettings>(WEB_AUTH_COLLECTION)
+                .ReplaceOneAsync(Builders<WebAuthSettings>.Filter.Eq(x => x.Id, WebAuthSettings.DocumentId), settings,
+                    new ReplaceOptions { IsUpsert = true });
+        }
+
         public async Task<List<BsonFileManagerModel>> getAllDatabaseData(string dbName, string collectionName = "directory")
         {
             if (collectionName == null)

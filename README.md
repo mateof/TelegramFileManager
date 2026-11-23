@@ -95,6 +95,22 @@ services:
     ports:
       - "27000:8081"
 ```
+
+### Security
+
+- **Web password** (Config → Web Security): off by default, which keeps the web UI open as in
+  previous versions. Set one before exposing the server outside your network; the web UI, the
+  API, the SignalR hubs, the media/file URLs, `/local` and Swagger then need the password
+  (cookie session) or the API key. Optional "no password on the local network" for devices that
+  connect directly from the LAN; requests through a reverse proxy always need the password.
+  Forgot it? Start once with `TFM_RESET_WEB_PASSWORD=true`.
+- **API key** (Config → API & WebDAV Access): what the Android, TV and TFM Player apps use. While
+  a web password is set it is the only way in for the apps.
+- **Reverse proxy**: only proxies in `TrustedProxies` (default: loopback and private ranges) may
+  set `X-Forwarded-*`. Set e.g. `TrustedProxies=172.18.0.0/16` to restrict it.
+
+Details: [docs/api/authentication.md](docs/api/authentication.md#web-session).
+
 ## Compile
 
 > dotnet publish -c Release --output ./MyTargetFolder .\TelegramDownloader.csproj
