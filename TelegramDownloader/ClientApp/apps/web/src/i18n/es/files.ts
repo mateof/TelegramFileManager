@@ -43,7 +43,7 @@ const files: Record<string, string> = {
   'Refresh': 'Actualizar',
   'Search files...': 'Buscar ficheros...',
   'Clear search': 'Borrar la búsqueda',
-  'View': 'Vista',
+  'View mode': 'Modo de vista',
   'List': 'Lista',
   'Grid': 'Cuadrícula',
   'Details': 'Detalles',

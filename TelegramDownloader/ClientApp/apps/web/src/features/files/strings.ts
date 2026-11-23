@@ -11,7 +11,7 @@ export function fileManagerStrings(): Partial<FileManagerStrings> {
     search: t('Search'),
     searchPlaceholder: t('Search files...'),
     clearSearch: t('Clear search'),
-    viewMode: t('View'),
+    viewMode: t('View mode'),
     viewList: t('List'),
     viewGrid: t('Grid'),
     viewDetails: t('Details'),

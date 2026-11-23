@@ -69,7 +69,7 @@ const channels: Record<string, string> = {
   'Searching Telegram': 'Buscando en Telegram',
   'Cancel requested': 'Cancelación solicitada',
   'New files': 'Ficheros nuevos',
-  'Full rescan': 'Volver a escanear todo',
+  'Full rescan': 'Reescaneo completo',
   'Scan the whole history again instead of only the new messages.': 'Escanea de nuevo todo el historial en lugar de solo los mensajes nuevos.',
   'The last refresh failed': 'La última actualización falló',
   'The last refresh was canceled': 'La última actualización se canceló',
