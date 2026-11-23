@@ -26,8 +26,8 @@ const apps: Record<string, string> = {
   'Continue watching': 'Seguir viendo',
   'Designed for the remote': 'Pensada para el mando',
   'Connect an app to this server': 'Conecta una app a este servidor',
-  'Use this address in the app. If the server has an API key, you will find it in Settings → Security.':
-    'Usa esta dirección en la app. Si el servidor tiene API key, la encontrarás en Ajustes → Seguridad.',
+  'Use this address in the app. If the server has an API key, you will find it in Settings → Apps & API.':
+    'Usa esta dirección en la app. Si el servidor tiene API key, la encontrarás en Ajustes → Apps y API.',
   'Prefer the previous interface? The classic UI keeps working.': '¿Prefieres la interfaz anterior? La interfaz clásica sigue funcionando.'
 };
 

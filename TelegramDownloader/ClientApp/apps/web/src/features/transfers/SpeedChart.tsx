@@ -82,14 +82,14 @@ export function SpeedChart({ series, windowSeconds }: { series: SpeedSeries[]; w
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
         <span className="flex items-center gap-2 text-fg-muted">
           <span aria-hidden className="h-0.5 w-4 rounded-full bg-primary" />
-          {t('Download')}
+          {t('Downloads')}
           <span className="font-semibold tabular-nums text-fg">{speed(last?.down ?? 0)}</span>
         </span>
         <span className="flex items-center gap-2 text-fg-muted">
           <svg aria-hidden width="16" height="2">
             <line x1="0" y1="1" x2="16" y2="1" stroke={upColor} strokeWidth="2" strokeDasharray="4 3" />
           </svg>
-          {t('Upload')}
+          {t('Uploads')}
           <span className="font-semibold tabular-nums text-fg">{speed(last?.up ?? 0)}</span>
         </span>
         <span className="ml-auto text-fg-subtle">{t('Last {minutes} minutes', { minutes: Math.round(windowSeconds / 60) })}</span>
@@ -130,10 +130,10 @@ export function SpeedChart({ series, windowSeconds }: { series: SpeedSeries[]; w
           >
             <p className="text-fg-subtle">{new Date(hovered.t).toLocaleTimeString()}</p>
             <p className="tabular-nums text-fg">
-              {t('Download')}: <b>{speed(hovered.down)}</b>
+              {t('Downloads')}: <b>{speed(hovered.down)}</b>
             </p>
             <p className="tabular-nums text-fg">
-              {t('Upload')}: <b>{speed(hovered.up)}</b>
+              {t('Uploads')}: <b>{speed(hovered.up)}</b>
             </p>
           </div>
         )}

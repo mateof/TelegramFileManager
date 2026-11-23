@@ -55,6 +55,20 @@ export interface AppConfigDto {
   multiConnectionPartSizeKB: number;
   multiConnectionBlockSizeMB: number;
   multiConnectionMinFileSizeMB: number;
+  /** Always use the touch file manager in the web UI, also on desktop. */
+  useMobileFileManagerAlways: boolean;
+  /** Virtual scrolling in the web UI file manager. */
+  hasFileManagerVirtualScroll: boolean;
+  /** API key for apps, masked (`****` + the last 4 characters); null when none is set here. */
+  mobileApiKey: string | null;
+  /** An API key is configured (here or in config.json). */
+  mobileApiKeySet: boolean;
+  /** UI served at `/`: `classic` (Blazor) or `app` (redirects to `/app/`). */
+  defaultWebUi: 'classic' | 'app' | (string & {});
+  /** WebDAV user name. */
+  webDavUser: string | null;
+  /** A WebDAV password is configured (the password itself is never returned). */
+  webDavPasswordSet: boolean;
   libraryEnabled: boolean;
   libraryLanguage: string;
   libraryAutoScan: boolean;
@@ -100,6 +114,16 @@ export interface UpdateConfigRequest {
   multiConnectionPartSizeKB?: number | null;
   multiConnectionBlockSizeMB?: number | null;
   multiConnectionMinFileSizeMB?: number | null;
+  useMobileFileManagerAlways?: boolean | null;
+  hasFileManagerVirtualScroll?: boolean | null;
+  /** New API key for apps (8+ characters). Omit to keep, `""` to remove (config.json applies). */
+  mobileApiKey?: string | null;
+  /** `classic` or `app` (400 for other values). */
+  defaultWebUi?: 'classic' | 'app' | null;
+  /** WebDAV user. Omit to keep, `""` to clear. */
+  webDavUser?: string | null;
+  /** WebDAV password (write-only). Omit to keep, `""` to clear. */
+  webDavPassword?: string | null;
   libraryEnabled?: boolean | null;
   libraryLanguage?: string | null;
   libraryAutoScan?: boolean | null;

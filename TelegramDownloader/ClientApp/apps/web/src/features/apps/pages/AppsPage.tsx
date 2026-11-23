@@ -153,7 +153,7 @@ export default function AppsPage() {
         <div className="min-w-0 flex-1">
           <h2 className="font-semibold text-fg">{t('Connect an app to this server')}</h2>
           <p className="text-sm text-fg-muted">
-            {t('Use this address in the app. If the server has an API key, you will find it in Settings → Security.')}
+            {t('Use this address in the app. If the server has an API key, you will find it in Settings → Apps & API.')}
           </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <code className="rounded-lg border border-border bg-surface-2 px-2.5 py-1 font-mono text-sm text-fg">{serverUrl}</code>

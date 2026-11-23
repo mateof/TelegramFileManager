@@ -41,7 +41,7 @@ const player: Record<string, string> = {
   // bar, expanded view, queue
   'Player': 'Reproductor',
   'Open the player': 'Abrir el reproductor',
-  'Expand': 'Ampliar',
+  'Expand': 'Expandir',
   'Now playing': 'Reproduciendo',
   'Minimize the player': 'Minimizar el reproductor',
   'Queue': 'Cola',

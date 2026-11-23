@@ -10,7 +10,6 @@ const transfers: Record<string, string> = {
   'In the queue': 'En cola',
   '{count} downloads': '{count} descargas',
   '{count} uploads': '{count} subidas',
-  'Upload': 'Subida',
   'Last {minutes} minutes': 'Últimos {minutes} minutos',
   'Transfer speed over time': 'Velocidad de transferencia en el tiempo',
   'Waiting for speed samples...': 'Esperando muestras de velocidad...',
@@ -50,13 +49,11 @@ const transfers: Record<string, string> = {
   'Folder task': 'Tarea de carpeta',
   'Type': 'Tipo',
   'Path': 'Ruta',
-  'From': 'Origen',
-  'To': 'Destino',
   'Size': 'Tamaño',
   'Transferred': 'Transferido',
   'Files': 'Ficheros',
   'Yes': 'Sí',
-  'Created': 'Creada',
+  'Created': 'Creado',
   'Started': 'Iniciada',
   'Id': 'Id',
 
@@ -89,7 +86,13 @@ const transfers: Record<string, string> = {
   'Forget every saved task?': '¿Olvidar todas las tareas guardadas?',
   'They will not be resumed after a restart. Running transfers are not stopped.':
     'No se reanudarán tras un reinicio. Las transferencias en curso no se detienen.',
-  '{count} retries': '{count} reintentos'
+  '{count} retries': '{count} reintentos',
+  'Downloads': 'Descargas',
+  'Uploads': 'Subidas',
+  'Download task': 'Descarga',
+  'Upload task': 'Subida',
+  'Source': 'Origen',
+  'Destination': 'Destino',
 };
 
 export default transfers;

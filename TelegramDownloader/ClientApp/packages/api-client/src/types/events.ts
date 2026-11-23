@@ -2,6 +2,7 @@
 // PROVISIONAL where marked: the hub is written by the API agent in parallel; align at merge.
 import type { ApiChannelRefreshProgressDto, ApiChannelRefreshResultDto } from './channels';
 import type { ApiLibraryScanStateDto } from './library';
+import type { SystemMetricsDto } from './system';
 
 export type NotificationLevel = 'info' | 'success' | 'warning' | 'error';
 
@@ -52,8 +53,8 @@ export interface AuthStateEvent {
   telegramLoggedIn: boolean;
 }
 
-/** `Metrics`: system metrics, pushed after invoking `SubscribeMetrics`. PROVISIONAL shape. */
-export type MetricsEvent = Record<string, unknown>;
+/** `Metrics`: a `SystemMetricsDto` every 2 seconds, only after invoking `SubscribeMetrics`. */
+export type MetricsEvent = SystemMetricsDto;
 
 /**
  * `LibraryScan`: every second while a media library scan runs, once when it ends (`running: false`)

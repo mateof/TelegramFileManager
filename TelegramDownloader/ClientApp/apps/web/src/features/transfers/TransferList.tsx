@@ -183,7 +183,7 @@ function TransferDetails({ item, metrics }: { item: TransferDto; metrics?: ItemM
   const lang = getLanguage();
   const g = stateGroup(item);
   const date = (iso: string | null) => (iso ? `${new Date(iso).toLocaleString(lang)} (${formatRelative(iso, lang)})` : null);
-  const kind = item.kind === 'download' ? t('Download') : item.kind === 'upload' ? t('Upload') : t('Folder task');
+  const kind = item.kind === 'download' ? t('Download task') : item.kind === 'upload' ? t('Upload task') : t('Folder task');
   return (
     <div className="flex flex-col gap-4 px-5 pb-6">
       <div className="flex flex-col gap-2 rounded-2xl border border-border bg-surface-2/50 p-4">
@@ -201,8 +201,8 @@ function TransferDetails({ item, metrics }: { item: TransferDto; metrics?: ItemM
         <Detail label={t('Type')} value={`${kind}${item.action ? ` · ${item.action}` : ''}`} />
         <Detail label={t('Channel')} value={item.channelName ?? item.channelId} />
         <Detail label={t('Path')} value={item.path} />
-        <Detail label={t('From')} value={item.fromPath} />
-        <Detail label={t('To')} value={item.toPath} />
+        <Detail label={t('Source')} value={item.fromPath} />
+        <Detail label={t('Destination')} value={item.toPath} />
         <Detail label={t('Size')} value={item.size ? `${item.sizeText || formatBytes(item.size)} (${item.size.toLocaleString(lang)} B)` : null} />
         <Detail label={t('Transferred')} value={item.transmitted ? item.transmittedText || formatBytes(item.transmitted) : null} />
         {item.kind === 'task' && <Detail label={t('Files')} value={item.totalItems ? t('{done} of {total} files', { done: item.executedItems ?? 0, total: item.totalItems }) : null} />}

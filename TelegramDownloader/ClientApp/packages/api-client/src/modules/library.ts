@@ -61,6 +61,10 @@ export function createLibraryApi(http: HttpClient) {
      */
     imageUrl: (key: string, size?: string) => http.url(`${BASE}/images/${enc(key)}`, { size }),
 
+    /** GET /api/v1/library/channel-folders?channelId=: folder paths of a channel index (for folder rules). */
+    channelFolders: (channelId: number | string, signal?: AbortSignal) =>
+      http.get<string[]>(`${BASE}/channel-folders`, { query: { channelId: String(channelId) }, signal }),
+
     // ----- scan -----
     /** POST /api/v1/library/scan (202; 409 `already_running`) */
     scan: (body: LibraryScanRequest = {}) => http.post<void>(`${BASE}/scan`, body),
