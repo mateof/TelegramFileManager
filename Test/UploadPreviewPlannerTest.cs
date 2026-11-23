@@ -1,6 +1,6 @@
-using Syncfusion.Blazor.FileManager;
 using TelegramDownloader.Models;
 using TelegramDownloader.Services.Upload;
+using TelegramDownloader.Models.FileSystem;
 
 namespace Test
 {
@@ -12,17 +12,17 @@ namespace Test
     {
         private static readonly DateTime T0 = new(2024, 1, 1, 12, 0, 0);
 
-        private static FileManagerDirectoryContent LocalFile(string filterPath, string name, long size, DateTime modified)
+        private static FsEntry LocalFile(string filterPath, string name, long size, DateTime modified)
             => new() { FilterPath = filterPath, Name = name, IsFile = true, Size = size, DateModified = modified };
 
-        private static FileManagerDirectoryContent LocalFolder(string filterPath, string name)
+        private static FsEntry LocalFolder(string filterPath, string name)
             => new() { FilterPath = filterPath, Name = name, IsFile = false };
 
         private static BsonFileManagerModel Indexed(string filePath, bool isFile, DateTime modified)
             => new() { FilePath = filePath, IsFile = isFile, DateModified = modified, Name = Path.GetFileName(filePath) };
 
         /// <summary>Local tree: relative folder path -> its content.</summary>
-        private static Dictionary<string, List<FileManagerDirectoryContent>> LocalTree() => new()
+        private static Dictionary<string, List<FsEntry>> LocalTree() => new()
         {
             ["/music/album/"] = new()
             {
@@ -46,7 +46,7 @@ namespace Test
             Indexed("/dest/single.mp3", true, T0),                         // equal date: replace
         };
 
-        private static List<FileManagerDirectoryContent> Selection() => new()
+        private static List<FsEntry> Selection() => new()
         {
             LocalFolder("/music/", "album"),                                // existing-folder
             LocalFile("/music/", "single.mp3", 50, T0),
@@ -58,11 +58,11 @@ namespace Test
             return index.Where(x => regex.IsMatch(x.FilePath));
         }
 
-        private static UploadPlanSource Source(List<BsonFileManagerModel> index, Dictionary<string, List<FileManagerDirectoryContent>> tree)
+        private static UploadPlanSource Source(List<BsonFileManagerModel> index, Dictionary<string, List<FsEntry>> tree)
             => new()
             {
                 LoadDestinationChildren = (path, _) => Task.FromResult(Children(index, path)),
-                ListLocalFolder = rel => tree.TryGetValue(rel, out var items) ? items : new List<FileManagerDirectoryContent>(),
+                ListLocalFolder = rel => tree.TryGetValue(rel, out var items) ? items : new List<FsEntry>(),
             };
 
         /// <summary>
@@ -71,8 +71,8 @@ namespace Test
         /// when an entry was read, and folder creation when the key is unknown.
         /// </summary>
         private static Dictionary<string, string> RealUploadDecisions(
-            string currentPath, List<FileManagerDirectoryContent> files, List<BsonFileManagerModel> index,
-            Dictionary<string, List<FileManagerDirectoryContent>> tree, UploadDestinationCache cache, Dictionary<string, string> result)
+            string currentPath, List<FsEntry> files, List<BsonFileManagerModel> index,
+            Dictionary<string, List<FsEntry>> tree, UploadDestinationCache cache, Dictionary<string, string> result)
         {
             if (currentPath != null && files.Count > 0 && !cache.IsFolderLoaded(currentPath))
                 cache.LoadFolder(currentPath, Children(index, currentPath));

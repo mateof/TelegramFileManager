@@ -17,6 +17,7 @@
 @inject ILogger<FileManager> Logger
 @inject IJSRuntime JSRuntime;
 @inject NavigationManager MyNavigationManager;
+@using TelegramDownloader.Shared.SyncfusionAdapters
 
 @* Loading while detecting viewport *@
 @if (!_viewportDetected)
@@ -535,7 +536,7 @@
 
     public async Task ItemRenamingAsync(ItemRenameEventArgs<FileManagerDirectoryContent> args)
     {
-        args.Response = await fs.RenameFileOrFolder(id, args.File, args.NewName);
+        args.Response = await fs.SfRenameFileOrFolder(id, args.File, args.NewName);
     }
 
     public async Task fileOpen(FileOpenEventArgs<FileManagerDirectoryContent> args)
@@ -577,7 +578,7 @@
     {
         try
         {
-            args.Response = isShared ? await fs.SearchAsync(DbService.SHARED_DB_NAME, args.Path, args.SearchText, bsi.CollectionId) : await fs.SearchAsync(id, args.Path, args.SearchText);
+            args.Response = isShared ? await fs.SfSearchAsync(DbService.SHARED_DB_NAME, args.Path, args.SearchText, bsi.CollectionId) : await fs.SfSearchAsync(id, args.Path, args.SearchText);
         }
         catch (Exception e)
         {
@@ -591,7 +592,7 @@
     {
         try
         {
-            args.Response = await fs.itemDeleteAsync(id, args);
+            args.Response = await fs.SfItemDeleteAsync(id, args);
         }
         catch (Exception e)
         {
@@ -605,7 +606,7 @@
     {
         try
         {
-            args.Response = await fs.CopyItems(id, args);
+            args.Response = await fs.SfCopyItems(id, args);
         }
         catch (Exception e)
         {
@@ -655,7 +656,7 @@
             var channelId = isShared ? bsi.ChannelId : id;
             _ = Task.Run(async () =>
             {
-                var count = await fs.PreloadFilesToTemp(channelId, args.FileDetails.ToList());
+                var count = await fs.SfPreloadFilesToTemp(channelId, args.FileDetails.ToList());
                 nm.sendMessage("Preload Complete", $"Preloaded {count} files to cache", NotificationTypes.Success);
             });
         }
@@ -728,7 +729,7 @@
         try
         {
             foreach (UploadFiles file in args.Files)
-                await fs.UploadFile(id, args.Path, file);
+                await fs.UploadFile(id, args.Path, file.File);
         }
         catch (Exception e)
         {
@@ -773,7 +774,7 @@
         try
         {
             FileManagerResponse<FileManagerDirectoryContent> response = new FileManagerResponse<FileManagerDirectoryContent>();
-            response.Files = await fs.createFolder(id, args);
+            response.Files = await fs.SfCreateFolder(id, args);
             await Task.Yield();
             args.Response = response;
         }
@@ -807,7 +808,7 @@
             string path = args.Path;
             List<FileManagerDirectoryContent> fileDetails = args.Folder;
 
-            args.Response = isShared ? await fs.GetFilesPath(DbService.SHARED_DB_NAME, path, fileDetails, bsi.CollectionId) : await fs.GetFilesPath(id, path, fileDetails);
+            args.Response = isShared ? await fs.SfGetFilesPath(DbService.SHARED_DB_NAME, path, fileDetails, bsi.CollectionId) : await fs.SfGetFilesPath(id, path, fileDetails);
         }
         catch (Exception e)
         {
@@ -826,8 +827,8 @@
         try
         {
             args.Response = isShared
-                ? await fs.GetFilesPath(DbService.SHARED_DB_NAME, args.Path, null, bsi.CollectionId)
-                : await fs.GetFilesPath(id, args.Path, null);
+                ? await fs.SfGetFilesPath(DbService.SHARED_DB_NAME, args.Path, null, bsi.CollectionId)
+                : await fs.SfGetFilesPath(id, args.Path, null);
         }
         catch (Exception e)
         {
@@ -842,7 +843,7 @@
         {
             foreach (var file in args.Files)
             {
-                await fs.oneItemDeleteAsync(id, file);
+                await fs.SfOneItemDeleteAsync(id, file);
             }
         }
         catch (Exception e)
@@ -881,7 +882,7 @@
                 };
             }
 
-            args.Response = await fs.CopyOrMoveItems(id, normalizedFiles, targetPath, targetData, args.IsCopy);
+            args.Response = await fs.SfCopyOrMoveItems(id, normalizedFiles, targetPath, targetData, args.IsCopy);
         }
         catch (Exception e)
         {
@@ -896,7 +897,7 @@
         {
             if (args.File != null)
             {
-                args.Response = await fs.RenameFileOrFolder(id, args.File, args.NewName);
+                args.Response = await fs.SfRenameFileOrFolder(id, args.File, args.NewName);
             }
         }
         catch (Exception e)
@@ -913,7 +914,7 @@
             FileManagerResponse<FileManagerDirectoryContent> response = new FileManagerResponse<FileManagerDirectoryContent>();
 
             // Use the ParentFolder from args which has the correct Id
-            response.Files = await fs.createFolder(id, args.Path, args.FolderName, args.ParentFolder);
+            response.Files = await fs.SfCreateFolder(id, args.Path, args.FolderName, args.ParentFolder);
 
             args.Response = response;
         }
@@ -929,8 +930,8 @@
         try
         {
             args.Response = isShared
-                ? await fs.SearchAsync(DbService.SHARED_DB_NAME, args.Path, args.SearchText, bsi.CollectionId)
-                : await fs.SearchAsync(id, args.Path, args.SearchText);
+                ? await fs.SfSearchAsync(DbService.SHARED_DB_NAME, args.Path, args.SearchText, bsi.CollectionId)
+                : await fs.SfSearchAsync(id, args.Path, args.SearchText);
         }
         catch (Exception e)
         {
@@ -1101,7 +1102,7 @@
                 var channelId = isShared ? bsi.ChannelId : id;
                 _ = Task.Run(async () =>
                 {
-                    var count = await fs.PreloadFilesToTemp(channelId, args.Items.ToList());
+                    var count = await fs.SfPreloadFilesToTemp(channelId, args.Items.ToList());
                     nm.sendMessage("Preload Complete", $"Preloaded {count} files to cache", NotificationTypes.Success);
                 });
             }
@@ -1261,8 +1262,8 @@
 
             // Get all files in current folder
             var response = isShared
-                ? await fs.GetFilesPath(DbService.SHARED_DB_NAME, currentPath, null, bsi.CollectionId)
-                : await fs.GetFilesPath(id, currentPath, null);
+                ? await fs.SfGetFilesPath(DbService.SHARED_DB_NAME, currentPath, null, bsi.CollectionId)
+                : await fs.SfGetFilesPath(id, currentPath, null);
 
             // Filter to only images and build ImageInfo list
             var imageFiles = response?.Files?
@@ -1314,8 +1315,8 @@
 
             // Get all files in current folder
             var response = isShared
-                ? await fs.GetFilesPath(DbService.SHARED_DB_NAME, currentPath, null, bsi.CollectionId)
-                : await fs.GetFilesPath(id, currentPath, null);
+                ? await fs.SfGetFilesPath(DbService.SHARED_DB_NAME, currentPath, null, bsi.CollectionId)
+                : await fs.SfGetFilesPath(id, currentPath, null);
 
             // Filter to only images and build ImageInfo list
             var imageFiles = response?.Files?

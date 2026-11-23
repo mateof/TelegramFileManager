@@ -158,7 +158,6 @@ builder.Services.AddSingleton<ITelegramService, TelegramService>();
 builder.Services.AddSingleton<IDbService, DbService>();
 builder.Services.AddTransient<IFileService, FileServiceV2>();
 builder.Services.AddSingleton<TransactionInfoService>();
-builder.Services.AddSingleton<FileManagerService>();
 builder.Services.AddSingleton<GHService>();
 
 // Progressive download service for streaming with background caching
