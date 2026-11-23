@@ -114,14 +114,14 @@ function Browse({ kind }: { kind: LibraryKind | 'all' }) {
         />
         <Select
           aria-label={t('Genre')}
-          className="w-40"
+          className="w-44"
           value={filters.genre ?? ANY}
           onValueChange={(v) => update({ genre: v === ANY ? null : v })}
           options={[{ value: ANY, label: t('All genres') }, ...(genres.data ?? []).map((g) => ({ value: g.name, label: `${g.name} (${g.count})` }))]}
         />
         <Select
           aria-label={t('Decade')}
-          className="w-32"
+          className="w-36"
           value={filters.decade ? String(filters.decade) : ANY}
           onValueChange={(v) => update({ decade: v === ANY ? null : v })}
           options={[{ value: ANY, label: t('Any year') }, ...decades().map((d) => ({ value: String(d), label: `${d}s` }))]}

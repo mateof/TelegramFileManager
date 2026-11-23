@@ -93,6 +93,23 @@ export default function LibraryItemPage() {
   );
 }
 
+/** Release status of the metadata providers (TMDB / OMDb answer in English). */
+function statusLabel(status: string | null): string | null {
+  if (!status) return null;
+  const labels: Record<string, string> = {
+    Released: t('Released'),
+    'Post Production': t('Post-production'),
+    'In Production': t('In production'),
+    Planned: t('Planned'),
+    Rumored: t('Rumored'),
+    Canceled: t('Cancelled'),
+    Ended: t('Ended'),
+    'Returning Series': t('Returning series'),
+    Pilot: t('Pilot')
+  };
+  return labels[status] ?? status;
+}
+
 function ItemSkeleton() {
   return (
     <div className="flex flex-col">
@@ -132,13 +149,15 @@ function ItemHeader({ item, onIdentify }: { item: ApiLibraryItemDetailDto; onIde
   const left = minutesLeft(play?.watch);
   const imdb = item.imdbId ?? item.externalIds?.['imdb'];
   const tmdb = item.externalIds?.['tmdb'];
-  const meta = [item.year, formatRuntime(item.runtime), isSeries && item.seasonCount ? (item.seasonCount === 1 ? t('1 season') : t('{count} seasons', { count: item.seasonCount })) : null, item.status].filter(Boolean);
+  const meta = [item.year, formatRuntime(item.runtime), isSeries && item.seasonCount ? (item.seasonCount === 1 ? t('1 season') : t('{count} seasons', { count: item.seasonCount })) : null, statusLabel(item.status)].filter(Boolean);
 
   return (
     <section className="relative isolate overflow-hidden">
       <LibraryImage src={item.backdropUrl ?? item.posterUrl} alt="" size="w1280" eager className="absolute inset-0 -z-10 size-full" imgClassName="motion-safe:animate-[tfm-kenburns_30s_ease-out_both]" />
       <div className="absolute inset-0 -z-10 bg-gradient-to-r from-black/90 via-black/60 to-black/20" />
-      <div className="absolute inset-0 -z-10 bg-gradient-to-t from-bg via-transparent to-transparent" />
+      <div className="absolute inset-0 -z-10 bg-gradient-to-t from-bg via-transparent to-transparent light:hidden" />
+      {/* Light theme: only a thin fade, the white text needs the dark backdrop */}
+      <div className="absolute inset-x-0 bottom-0 -z-10 hidden h-8 bg-gradient-to-t from-bg to-transparent light:block" />
 
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 pb-10 pt-5 sm:px-6 lg:px-10">
         <Link to={isSeries ? '/library/series' : '/library/movies'} className="inline-flex w-fit items-center gap-1.5 rounded-full bg-black/30 px-3 py-1.5 text-sm text-white/80 backdrop-blur-md hover:text-white">

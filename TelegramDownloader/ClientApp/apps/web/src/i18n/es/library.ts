@@ -149,7 +149,15 @@ const library: Record<string, string> = {
   'Descending': 'Descendente',
   'Ascending': 'Ascendente',
   'No titles': 'Sin títulos',
-  'Nothing matches these filters.': 'Nada coincide con estos filtros.'
+  'Nothing matches these filters.': 'Nada coincide con estos filtros.',
+  Released: 'Estrenada',
+  'Post-production': 'Postproducción',
+  'In production': 'En producción',
+  Planned: 'Planeada',
+  Rumored: 'Rumoreada',
+  Ended: 'Finalizada',
+  'Returning series': 'En emisión',
+  Pilot: 'Piloto'
 };
 
 export default library;

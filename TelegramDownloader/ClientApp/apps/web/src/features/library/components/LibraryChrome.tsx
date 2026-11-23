@@ -137,7 +137,9 @@ export function Hero({ item, onPlay }: { item: ApiLibraryItemDto; onPlay?: () =>
     <section className="relative isolate overflow-hidden">
       <LibraryImage src={item.backdropUrl ?? item.posterUrl} alt="" size="w1280" eager className="absolute inset-0 -z-10 h-full w-full" imgClassName="motion-safe:animate-[tfm-kenburns_30s_ease-out_both]" />
       <div className="absolute inset-0 -z-10 bg-gradient-to-r from-black/85 via-black/45 to-transparent" />
-      <div className="absolute inset-0 -z-10 bg-gradient-to-t from-bg via-bg/10 to-transparent" />
+      <div className="absolute inset-0 -z-10 bg-gradient-to-t from-bg via-bg/10 to-transparent light:hidden" />
+      {/* Light theme: only a thin fade, the white text needs the dark backdrop */}
+      <div className="absolute inset-x-0 bottom-0 -z-10 hidden h-8 bg-gradient-to-t from-bg to-transparent light:block" />
       <div className="flex min-h-[22rem] flex-col justify-end gap-4 px-4 pb-10 pt-24 sm:min-h-[28rem] sm:px-6 lg:min-h-[32rem] lg:px-10">
         <div className="flex max-w-2xl animate-fade-in flex-col gap-3 text-white">
           <span className="text-xs font-semibold uppercase tracking-[0.2em] text-white/60">
