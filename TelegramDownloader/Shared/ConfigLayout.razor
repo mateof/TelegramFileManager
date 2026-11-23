@@ -79,7 +79,7 @@
         nm.sendEvent(new Notification("<h1>Body message</h1>", "Title", NotificationTypes.Info));
     }
 
-    private async void Logout()
+    private async Task Logout()
     {
         await ts.logOff();
         NavManager.NavigateTo("/");

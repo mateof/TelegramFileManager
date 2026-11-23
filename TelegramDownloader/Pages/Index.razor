@@ -333,7 +333,7 @@
         Model.type = "phone";
     }
 
-    private async void Submit()
+    private async Task Submit()
     {
         if (qrMode && Model.type == "pass")
         {
@@ -409,7 +409,7 @@
         }
     }
 
-    private async void Salir()
+    private async Task Salir()
     {
         await ts.logOff();
         Model.value = "";
@@ -417,7 +417,7 @@
         StateHasChanged();
     }
 
-    private async void Cancel()
+    private async Task Cancel()
     {
         await ts.logOff();
         NavManager.NavigateTo("/", true);

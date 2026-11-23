@@ -8,7 +8,7 @@
     <!-- - `.p-3` to prevent the toasts from sticking to the edge of the container  -->
     <div class="toast-container position-absolute top-0 end-0 p-3">
     
-@foreach (var n in nl)
+@foreach (var n in Snapshot())
 {
             <div class="toast show" id="@DateTime.Now.Millisecond" data-bs-animation="true" data-bs-autohide="true" data-bs-delay="5000" style="position: relative; z-index:999" role="alert" aria-live="assertive" aria-atomic="true">
         <div class="toast-header" style="background-color:@getBackground(n.type)">
@@ -27,7 +27,14 @@
 
 @code {
     public List<Notification> nl { get; set; } = new List<Notification>();
-    Mutex mut = new Mutex();
+    // Notifications arrive on any thread while the list is rendered.
+    private readonly object nlLock = new object();
+
+    private List<Notification> Snapshot()
+    {
+        lock (nlLock)
+            return nl.ToList();
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -51,24 +58,38 @@
 
     }
 
+    private async Task RemoveLaterAsync(Notification e)
+    {
+        try
+        {
+            await Task.Delay(5000);
+            lock (nlLock)
+                nl.Remove(e);
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            // The component may be gone by then.
+            Logger.LogDebug(ex, "Toast removal skipped");
+        }
+    }
+
     async void eventNotification(object sender, Notification e)
     {
         if (GeneralConfigStatic.config.ShouldNotify || e.isForced)
         {
             // Logger.LogInformation("Message received");
-            mut.WaitOne();
-            nl.Add(e);
-            mut.ReleaseMutex();
-            Task.Delay(5000).ContinueWith(async (task) =>
+            lock (nlLock)
+                nl.Add(e);
+            _ = RemoveLaterAsync(e);
+            try
             {
-                mut.WaitOne();
-                nl.Remove(e);
-                mut.ReleaseMutex();
                 await InvokeAsync(StateHasChanged);
-
-            });
-
-            await InvokeAsync(StateHasChanged);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogDebug(ex, "Toast render skipped");
+            }
         }
         
     }

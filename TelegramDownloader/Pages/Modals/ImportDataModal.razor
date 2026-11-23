@@ -275,11 +275,18 @@
         await InvokeAsync(StateHasChanged);
     }
 
+    // Event handler (async void by necessity): an exception here, e.g. after
+    // the circuit is gone, would otherwise take the process down.
     async void eventChanged(object sender, NotificationProgressEvent e)
     {
         npe = e;
-        await InvokeAsync(StateHasChanged);
-
+        try
+        {
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception)
+        {
+        }
     }
 
 
