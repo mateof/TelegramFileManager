@@ -3,9 +3,7 @@
 using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.Bson;
 using TelegramDownloader.Data.db;
-using Syncfusion.Blazor.RichTextEditor;
 using Newtonsoft.Json;
-using Syncfusion.Blazor.Charts;
 using TelegramDownloader.Data;
 using System.Diagnostics;
 using TelegramDownloader.Services;

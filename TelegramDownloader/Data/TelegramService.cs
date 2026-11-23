@@ -2,10 +2,6 @@
 using BlazorBootstrap;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
-using Syncfusion.Blazor.Inputs;
-using Syncfusion.Blazor.Kanban.Internal;
-using Syncfusion.Blazor.Schedule;
-using Syncfusion.Blazor.Sparkline.Internal;
 using System.Collections.Generic;
 using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;

@@ -36,7 +36,7 @@ namespace TelegramDownloader.Services.WebAuth
         string SecurityStamp { get; }
         /// <summary>
         /// Per-process secret the server-side HTTP calls of the Blazor UI (the
-        /// Syncfusion file manager calls the legacy endpoints from the server,
+        /// legacy EJ2 file manager calls the legacy endpoints from the server,
         /// without the browser's cookie) send in <see cref="InternalTokenHeader"/>.
         /// </summary>
         string InternalToken { get; }
