@@ -2,3 +2,7 @@ TelegramDownloader/userData.json
 TelegramDownloader/.claude/
 .claude/
 plans/
+
+# React web app build output (npm run build in TelegramDownloader/ClientApp)
+TelegramDownloader/wwwroot/app/*
+!TelegramDownloader/wwwroot/app/.gitkeep

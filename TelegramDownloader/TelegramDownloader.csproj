@@ -12,6 +12,8 @@
     <DockerfileContext>.</DockerfileContext>
     <!-- XML doc comments feed the Swagger/OpenAPI description of the v1 API -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- The React front-end (ClientApp, with its node_modules) is built by npm into wwwroot/app; keep it out of MSBuild items -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);ClientApp\**</DefaultItemExcludes>
     <!-- Suppress warnings that are by design or acceptable -->
     <!-- CS1998/CS4014: Async/await patterns for parallel execution -->
     <!-- CS0618/SYSLIB0014/ASPDEPR005: Obsolete API warnings -->
