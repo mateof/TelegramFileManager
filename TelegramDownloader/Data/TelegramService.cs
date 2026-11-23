@@ -2174,7 +2174,7 @@ namespace TelegramDownloader.Data
                         results.Add(new TelegramChatDocuments
                         {
                             id = msgBase.id,
-                            documentType = DocumentType.Document,
+                            documentType = DocumentType.Audio,
                             name = filename,
                             fileSize = doc.size,
                             extension = Path.GetExtension(filename),
@@ -2256,7 +2256,7 @@ namespace TelegramDownloader.Data
                         results.Add(new TelegramChatDocuments
                         {
                             id = msgBase.id,
-                            documentType = DocumentType.Document,
+                            documentType = DocumentType.Video,
                             name = filename,
                             fileSize = doc.size,
                             extension = Path.GetExtension(filename),

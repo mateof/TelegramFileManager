@@ -44,6 +44,8 @@ namespace TelegramDownloader.Data
         Task CreateEmptyFile(string dbName, string currentPath, string fileName);
         Task refreshChannelFIles(string channelId, bool force = false, RefreshChannelOptions? refreshOptions = null);
         bool isChannelRefreshing(string channelId);
+        /// <summary>Atomically claims the channel and starts the refresh in the background; false if one is already running.</summary>
+        bool tryStartChannelRefresh(string channelId, bool force, RefreshChannelOptions? refreshOptions, out Task refreshTask);
         ChannelRefreshResult? getLastRefreshResult(string channelId);
         Task<int> PreloadFilesToTemp(string channelId, List<FileManagerDirectoryContent> items);
         Task DownloadPlaylistToLocal(PlaylistModel playlist, string destinationFolder);

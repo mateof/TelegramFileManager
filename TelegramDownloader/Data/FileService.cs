@@ -225,7 +225,8 @@ namespace TelegramDownloader.Data
     {"xyz", "chemical/x-xyz"},
     {"zip", "application/zip"}
   };
-        public static List<string> refreshChannelList = new List<string>();
+        // Channels with a scan in flight; claiming one is atomic (see tryStartChannelRefresh).
+        private static readonly ChannelRefreshRegistry refreshRegistry = new ChannelRefreshRegistry();
         /// <summary>Raised after a channel index refresh finishes successfully, with the channel id.</summary>
         public static event Action<string>? ChannelRefreshed;
 
@@ -236,7 +237,6 @@ namespace TelegramDownloader.Data
         protected TransactionInfoService _tis { get; set; }
         protected ToastService _toastService { get; set;  }
         protected ITaskPersistenceService _persistence { get; set; }
-        private static Mutex refreshMutex = new Mutex();
 
         // The refresh is fire-and-forget, so the outcome is kept here for the
         // client that started it to read once the scan is done. In memory only:
@@ -1779,10 +1779,38 @@ namespace TelegramDownloader.Data
 
         public async Task refreshChannelFIles(string channelId, bool force = false, RefreshChannelOptions? refreshOptions = null)
         {
+            if (!refreshRegistry.TryBegin(channelId))
+            {
+                _logger.LogInformation("Refresh of channel {ChannelId} skipped: another refresh is already running", channelId);
+                _toastService.Notify(new ToastMessage
+                {
+                    Type = ToastType.Warning,
+                    IconName = IconName.ExclamationTriangle,
+                    Title = "Refresh channel files",
+                    Message = "This channel is already being refreshed.",
+                    AutoHide = true
+                });
+                return;
+            }
+            await runChannelRefresh(channelId, force, refreshOptions);
+        }
+
+        public bool tryStartChannelRefresh(string channelId, bool force, RefreshChannelOptions? refreshOptions, out Task refreshTask)
+        {
+            if (!refreshRegistry.TryBegin(channelId))
+            {
+                refreshTask = Task.CompletedTask;
+                return false;
+            }
+            // Marked before returning, so a status poll right after sees it running.
+            refreshTask = Task.Run(() => runChannelRefresh(channelId, force, refreshOptions));
+            return true;
+        }
+
+        // The caller must have claimed the channel in refreshRegistry; it is released here.
+        private async Task runChannelRefresh(string channelId, bool force, RefreshChannelOptions? refreshOptions)
+        {
             int totalNewMessages = 0;
-            refreshMutex.WaitOne();
-            refreshChannelList.Add(channelId);
-            refreshMutex.ReleaseMutex();
             DateTime init = DateTime.Now;
             ChannelRefreshResult result = new ChannelRefreshResult
             {
@@ -1839,9 +1867,7 @@ namespace TelegramDownloader.Data
                 // Without this, a scan that throws would leave the channel
                 // flagged as refreshing forever and a polling client would
                 // never stop waiting.
-                refreshMutex.WaitOne();
-                refreshChannelList.Remove(channelId);
-                refreshMutex.ReleaseMutex();
+                refreshRegistry.End(channelId);
                 result.FinishedAt = DateTime.Now;
                 lastRefreshResults[channelId] = result;
             }
@@ -1872,7 +1898,7 @@ namespace TelegramDownloader.Data
 
         public bool isChannelRefreshing(string channelId)
         {
-            return refreshChannelList.Contains(channelId);
+            return refreshRegistry.IsRunning(channelId);
         }
 
         public ChannelRefreshResult? getLastRefreshResult(string channelId)

@@ -491,22 +491,15 @@ namespace TelegramDownloader.Controllers.Api.V1
             if (!request.ToOptions().HasAnySelection)
                 return BadRequestResult("Select at least one media type to fetch");
 
-            if (_files.isChannelRefreshing(id))
+            // Check-and-mark is atomic, so two simultaneous requests cannot both start.
+            if (!_files.tryStartChannelRefresh(id, request.Force, request.ToOptions(), out Task refreshTask))
                 return ConflictResult("This channel is already being refreshed", ApiErrorCodes.AlreadyRunning);
 
             // Fire and forget: the scan is long running and reports through the
             // notification/transfer pipeline.
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await _files.refreshChannelFIles(id, request.Force, request.ToOptions());
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Background refresh of channel {Id} failed", id);
-                }
-            });
+            _ = refreshTask.ContinueWith(
+                t => _logger.LogError(t.Exception, "Background refresh of channel {Id} failed", id),
+                TaskContinuationOptions.OnlyOnFaulted);
 
             return Accepted(ApiResult.Done("Channel refresh started"));
         }
