@@ -14,7 +14,7 @@ namespace TelegramDownloader.Data.db
         Task<BsonSharedInfoModel> getSingleFile(string id, string dbName = DbService.SHARED_DB_NAME, string collection = "info");
         Task DeleteSharedCollection(string collectionId, string dbName = DbService.SHARED_DB_NAME);
         Task DeleteSharedInfo(string id, string dbName = DbService.SHARED_DB_NAME, string collection = "info");
-        Task addBytesToFolder(string dbName, string folderId, long bytes, string collectionName = "directory");
+        Task addBytesToFolder(string dbName, string folderId, long bytes, string collectionName = "directory", string? filterIdHint = null);
         Task checkAndSetDirectoryHasChild(string dbName, string id, string collectionName = "directory");
         Task<BsonFileManagerModel> copyItem(string dbName, string sourceId, FileManagerDirectoryContent target, string targetPath, bool isFile, string collectionName = "directory");
         Task CreateDatabase(string dbName = "default", string collection = "directory", bool CreateDefaultEntry = true);
@@ -22,6 +22,12 @@ namespace TelegramDownloader.Data.db
         Task createEntries(string dbName, IReadOnlyList<BsonFileManagerModel> files, string collectionName = "directory");
         Task<BsonFileManagerModel> getRootFolder(string dbName, string collectionName = "directory");
         Task createIndex(string dbName, string collectionName = "directory");
+        /// <summary>Creates the channel indexes once per process (idempotent).</summary>
+        Task EnsureIndexes(string dbName, string collectionName = "directory");
+        /// <summary>Distinct sizes of the files of a channel that have a stored <c>XXHash</c>.</summary>
+        Task<HashSet<long>> GetHashedFileSizes(string dbName, CancellationToken cancellationToken = default, string collectionName = "directory");
+        /// <summary>Files of a channel whose stored <c>XXHash</c> is one of <paramref name="hashes"/>.</summary>
+        Task<List<BsonFileManagerModel>> GetFilesByXxHashes(string dbName, IEnumerable<string> hashes, CancellationToken cancellationToken = default, string collectionName = "directory");
         Task deleteDatabase(string dbName = "default");
         Task deleteEntry(string dbName, string id, string collectionName = "directory");
         Task<bool> existItemByTelegramId(string dbName, int id, string collectionName = "directory");
@@ -59,7 +65,7 @@ namespace TelegramDownloader.Data.db
         /// <summary>Full documents for the given ids (one $in query). Unknown ids are ignored.</summary>
         Task<List<BsonFileManagerModel>> GetFilesByIds(string dbName, IEnumerable<string> ids, CancellationToken cancellationToken = default, string collectionName = "directory");
         Task setDirectoryHasChild(string dbName, string id, string collectionName = "directory", bool hasChild = true);
-        Task subBytesToFolder(string dbName, string folderId, long bytes, string collectionName = "directory");
+        Task subBytesToFolder(string dbName, string folderId, long bytes, string collectionName = "directory", string? filterIdHint = null);
         Task<BsonFileManagerModel> toBasonFile(string Path, string FolderName, FileManagerDirectoryContent ParentFolder);
         void updateAllPathFiles(string dbName, string oldPath, string newPath, string collectionName = "directory");
         Task<BsonFileManagerModel> updateName(string dbName, string id, string newName, string oldName, bool isFile, string filePath, string collectionName = "directory");

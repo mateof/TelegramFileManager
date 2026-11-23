@@ -393,7 +393,7 @@ namespace TelegramDownloader.Data
 
 
 
-                await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size);
+                await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size, filterIdHint: entry.FilterId);
             }
 
             var firstFile = args.Files.FirstOrDefault();
@@ -460,7 +460,7 @@ namespace TelegramDownloader.Data
 
 
 
-            await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size);
+            await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size, filterIdHint: entry.FilterId);
 
             await _db.checkAndSetDirectoryHasChild(dbName, parentId);
         }
@@ -497,7 +497,7 @@ namespace TelegramDownloader.Data
                     //if (item.IsFile)
                     //    await _db.subBytesToFolder(dbName, item.ParentId, item.Size);
                 }
-                await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size);
+                await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size, filterIdHint: entry.FilterId);
             }
             if (entry.IsFile)
                 if (entry.isSplit)
@@ -515,7 +515,7 @@ namespace TelegramDownloader.Data
                 }
 
             await _db.deleteEntry(dbName, entry.Id);
-            await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size);
+            await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size, filterIdHint: entry.FilterId);
         }
 
         public async Task<FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>> RenameFileOrFolder(string dbName, Syncfusion.Blazor.FileManager.FileManagerDirectoryContent file, string newName)
@@ -1271,6 +1271,91 @@ namespace TelegramDownloader.Data
             return (total, totalSize);
         }
 
+        public async Task<UploadPreviewResult> PreviewUploadFromServer(string dbName, string currentPath, List<FileManagerDirectoryContent> files, bool findDuplicates = false, int maxItems = UploadPreviewPlanner.DefaultMaxItems, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(currentPath);
+            files ??= new List<FileManagerDirectoryContent>();
+            await EnsureChannelIndexes(dbName);
+
+            // Same index snapshot, local listing and path keys as UploadFileFromServer.
+            var source = new UploadPlanSource
+            {
+                LoadDestinationChildren = async (path, ct) => await _db.getDirectChildrenByFilePathPrefix(dbName, path),
+                ListLocalFolder = ListLocalFolderForUpload,
+                LocalFileLength = relative =>
+                {
+                    var info = new System.IO.FileInfo(LocalAbsolutePath(relative));
+                    return info.Exists ? info.Length : null;
+                }
+            };
+            var toUpload = new List<UploadPreviewItem>();
+            // Off the caller's thread: the walk touches the disk (Blazor circuit).
+            var result = await Task.Run(() => UploadPreviewPlanner.PlanAsync(currentPath, files, source, maxItems, toUpload, cancellationToken), cancellationToken);
+
+            // The upload looks the destination up the same way; when it is missing
+            // the entries are attached to the root folder.
+            result.TargetFolderExists = await _db.getParentDirectoryByPath(dbName, currentPath) != null;
+
+            if (findDuplicates)
+                await FindUploadDuplicates(dbName, result, toUpload, cancellationToken);
+            return result;
+        }
+
+        /// <summary>
+        /// Duplicate detection of the upload preview. Only local files whose size
+        /// equals the size of a channel file with a stored XXHash can match, so
+        /// only those are read and hashed (same stored format as CheckHash).
+        /// </summary>
+        private async Task FindUploadDuplicates(string dbName, UploadPreviewResult result, List<UploadPreviewItem> toUpload, CancellationToken cancellationToken)
+        {
+            result.DuplicateCheck = true;
+            var hashedSizes = await _db.GetHashedFileSizes(dbName, cancellationToken);
+            if (hashedSizes.Count == 0)
+                return;
+
+            var localHashes = new List<(UploadPreviewItem Item, string Hash)>();
+            foreach (var item in toUpload)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!hashedSizes.Contains(item.Size))
+                    continue;
+                var absolute = LocalAbsolutePath(item.LocalPath);
+                if (!File.Exists(absolute))
+                    continue;
+                var hash = await StoredXxHash.ComputeFileAsync(absolute, cancellationToken);
+                result.HashedFiles++;
+                result.HashedBytes += item.Size;
+                localHashes.Add((item, hash));
+            }
+            if (localHashes.Count == 0)
+                return;
+
+            var byHash = (await _db.GetFilesByXxHashes(dbName, localHashes.Select(x => x.Hash), cancellationToken))
+                .GroupBy(x => x.XXHash, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+
+            foreach (var (item, hash) in localHashes)
+            {
+                if (!byHash.TryGetValue(hash, out var sameHash))
+                    continue;
+                // "Elsewhere": the entry this upload replaces does not count.
+                var matches = sameHash
+                    .Where(m => m.Size == item.Size && m.FilePath != item.TargetPath)
+                    .Select(m => new UploadPreviewDuplicateMatch { Id = m.Id, FilePath = m.FilePath, Size = m.Size })
+                    .ToList();
+                if (matches.Count == 0)
+                    continue;
+                result.Duplicates.Add(new UploadPreviewDuplicate
+                {
+                    LocalPath = item.LocalPath,
+                    TargetPath = item.TargetPath,
+                    Size = item.Size,
+                    XxHash = hash,
+                    Matches = matches
+                });
+            }
+        }
+
         /// <summary>
         /// Creates a zero-byte file as an index-only node (no Telegram message),
         /// since Telegram cannot store empty files. Mirrors the FilterPath/FilterId/
@@ -1423,11 +1508,25 @@ namespace TelegramDownloader.Data
             }
         }
 
-        public Task UploadFileFromServer(string dbName, string currentPath, List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files, InfoDownloadTaksModel dm = null) // ItemsUploadedEventArgs<FileManagerDirectoryContent> args)
+        public async Task UploadFileFromServer(string dbName, string currentPath, List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files, InfoDownloadTaksModel dm = null) // ItemsUploadedEventArgs<FileManagerDirectoryContent> args)
         {
+            await EnsureChannelIndexes(dbName);
             // Each run (first start or retry) gets a fresh view of the destination
             // index; it is shared by the recursive calls for the subfolders.
-            return UploadFileFromServer(dbName, currentPath, files, dm, new UploadDestinationCache(), isRoot: true);
+            await UploadFileFromServer(dbName, currentPath, files, dm, new UploadDestinationCache(), isRoot: true);
+        }
+
+        /// <summary>The indexes the upload lookups rely on; never fails the caller.</summary>
+        private async Task EnsureChannelIndexes(string dbName)
+        {
+            try
+            {
+                await _db.EnsureIndexes(dbName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not ensure the indexes of channel {DbName}", dbName);
+            }
         }
 
         private async Task UploadFileFromServer(string dbName, string currentPath, List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files, InfoDownloadTaksModel dm, UploadDestinationCache cache, bool isRoot)
@@ -1490,12 +1589,12 @@ namespace TelegramDownloader.Data
                             continue;
                         };
                         model.Size = fileInfo.Length;
-                        if (GeneralConfigStatic.config.CheckHash)
-                        {
-                            _logger.LogInformation($"Calculating HASH of file {currentFilePath}");
-                            model.XXHash = ComputeXXHash64(currentFilePath);
-                            _logger.LogInformation($"Calculated HASH of file {currentFilePath}: {model.XXHash}");
-                        }
+                        // CheckHash: the XXHash is only stored on the new entry, so it is
+                        // computed from the bytes the upload reads instead of a full read
+                        // of the file beforehand (see UploadHashAccumulator).
+                        UploadHashAccumulator? hasher = GeneralConfigStatic.config.CheckHash
+                            ? new UploadHashAccumulator(fileInfo.Length)
+                            : null;
                         TL.Message m = null;
                         long max = (long)MaxSize * (long)TelegramService.splitSizeGB;
                         if (fileInfo.Length > max)
@@ -1534,9 +1633,10 @@ namespace TelegramDownloader.Data
                                         {
                                             wt = new WaitingTime();
                                             using (var chunkStream = new Services.Streams.FileChunkStream(currentFilePath, chunkStart, chunkLength))
+                                            using (var uploadStream = WrapForHash(chunkStream, hasher, chunkStart))
                                             {
                                                 string chunkFileName = $"({chunkIndex + 1} of {totalChunks}) - " + file.Name;
-                                                m = await _ts.uploadFile(dbName, chunkStream, chunkFileName, um: um, caption: getCaption(filePath));
+                                                m = await _ts.uploadFile(dbName, uploadStream, chunkFileName, um: um, caption: getCaption(filePath));
                                             }
                                             sent = true;
                                             attempts = 0;
@@ -1584,7 +1684,8 @@ namespace TelegramDownloader.Data
                             else
                             {
                                 // Disk-based splitting - create temp split files
-                                List<string> filesSplit = await splitFileStreamAsync(folderPath, file.Name, MaxSize);
+                                // The split pass reads the original file once: hash it there.
+                                List<string> filesSplit = await splitFileStreamAsync(folderPath, file.Name, MaxSize, hasher);
                                 int i = 1;
 
                                 foreach (string s in filesSplit)
@@ -1670,7 +1771,8 @@ namespace TelegramDownloader.Data
                                     try
                                     {
                                         wt = new WaitingTime();
-                                        using (FileStream ms = new FileStream(System.IO.Path.Combine(currentFilePath), FileMode.Open))
+                                        using (FileStream fileStream = new FileStream(System.IO.Path.Combine(currentFilePath), FileMode.Open))
+                                        using (Stream ms = WrapForHash(fileStream, hasher, 0))
                                             if (ImageExtensions.Any(x => file.Name.ToUpper().EndsWith(x)) && file.Size >= (1024 * 1024 * GeneralConfigStatic.config.MaxImageUploadSizeInMb))
                                             {
                                                 m = await _ts.uploadFile(dbName, ms, file.Name, "application/octet-stream", um, caption: getCaption(filePath));
@@ -1682,7 +1784,8 @@ namespace TelegramDownloader.Data
                                     {
                                         if (new List<string> { "IMAGE", "PHOTO" }.Any(x => ex.Message.Contains(x)))
                                         {
-                                            using (FileStream ms = new FileStream(System.IO.Path.Combine(currentFilePath), FileMode.Open))
+                                            using (FileStream fileStream = new FileStream(System.IO.Path.Combine(currentFilePath), FileMode.Open))
+                                            using (Stream ms = WrapForHash(fileStream, hasher, 0))
                                                 m = await _ts.uploadFile(dbName, ms, file.Name, "application/octet-stream", um, caption: getCaption(filePath));
                                         }
                                         else
@@ -1731,6 +1834,8 @@ namespace TelegramDownloader.Data
 
                             model.MessageId = m.ID;
                         }
+                        if (hasher != null)
+                            model.XXHash = CompleteUploadHash(hasher, currentFilePath);
                         // delete previous file, when the new modified date file is newest
                         if (savedFile != null)
                         {
@@ -1788,7 +1893,7 @@ namespace TelegramDownloader.Data
                     }
                     if (file.IsFile)
                     {
-                        await _db.addBytesToFolder(dbName, model.ParentId, model.Size);
+                        await _db.addBytesToFolder(dbName, model.ParentId, model.Size, filterIdHint: model.FilterId);
                         if (idt != null) idt.AddOne(file.Size);
                     }
                     else
@@ -1826,6 +1931,16 @@ namespace TelegramDownloader.Data
 
         private async Task getFilesInDirectory(string dbName, string currentPath, string path, InfoDownloadTaksModel dm, UploadDestinationCache cache)
         {
+            await UploadFileFromServer(dbName, currentPath, ListLocalFolderForUpload(path), dm, cache, isRoot: false);
+        }
+
+        /// <summary>
+        /// Content of a local folder (path relative to the local root) as the
+        /// folder upload walks it: hidden items left out, Synology
+        /// <c>@eaDir</c> folders skipped. Shared by the upload and its preview.
+        /// </summary>
+        private List<FileManagerDirectoryContent> ListLocalFolderForUpload(string path)
+        {
             var operation = new PhysicalFileProvider();
             operation.RootFolder(Path.Combine(Environment.CurrentDirectory, FileService.RELATIVELOCALDIR));
             var files = operation.GetFiles(path, false);
@@ -1835,8 +1950,31 @@ namespace TelegramDownloader.Data
                 if (!f.IsFile && f.Name == "@eaDir") continue;
                 fileContents.Add(f);
             }
-            files.Files = fileContents;
-            await UploadFileFromServer(dbName, currentPath, converToFMD(files.Files), dm, cache, isRoot: false);
+            return converToFMD(fileContents);
+        }
+
+        /// <summary>Absolute path of an item given relative to the local root (forward slashes).</summary>
+        private static string LocalAbsolutePath(string relativePath)
+            => System.IO.Path.Combine(LOCALDIR, relativePath.Length > 0 && relativePath[0] == '/' ? relativePath.Substring(1) : relativePath).Replace("\\", "/");
+
+        /// <summary>Wraps an upload stream so the bytes it reads feed the file hash.</summary>
+        private static Stream WrapForHash(Stream inner, UploadHashAccumulator? hasher, long baseOffset)
+            => hasher == null ? inner : new HashingReadStream(inner, hasher, baseOffset, leaveOpen: true);
+
+        /// <summary>
+        /// Finishes the hash of an uploaded file. Normally every byte was already
+        /// hashed while it was sent; anything the upload did not read in order is
+        /// read from the file here, so the value always equals the old two-pass hash.
+        /// </summary>
+        private string CompleteUploadHash(UploadHashAccumulator hasher, string filePath)
+        {
+            using var source = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var hash = hasher.Complete(source);
+            if (hasher.CatchUpBytes > 0)
+                _logger.LogInformation("Calculated HASH of file {FilePath}: {Hash} ({CatchUp} bytes read after the upload)", filePath, hash, hasher.CatchUpBytes);
+            else
+                _logger.LogInformation("Calculated HASH of file {FilePath} while uploading: {Hash}", filePath, hash);
+            return hash;
         }
 
         private List<FileManagerDirectoryContent> converToFMD(IEnumerable<Syncfusion.EJ2.FileManager.Base.FileManagerDirectoryContent> liste2j)
@@ -2095,7 +2233,7 @@ namespace TelegramDownloader.Data
                 await _db.createEntry(dbName, model);
                 _logger.LogDebug("Database entry created for file");
 
-                await _db.addBytesToFolder(dbName, model.ParentId, model.Size);
+                await _db.addBytesToFolder(dbName, model.ParentId, model.Size, filterIdHint: model.FilterId);
                 _logger.LogDebug("Folder size updated");
 
                 GC.Collect();
@@ -2367,26 +2505,6 @@ namespace TelegramDownloader.Data
             }
         }
 
-        private string ComputeXXHash64(string filePath)
-        {
-            XxHashModel _xxHash = new XxHashModel();
-            _xxHash.path = filePath;
-            var hashAlgorithm = new XxHash64();
-            var buffer = new Span<byte>(new byte[512]);
-            using (Stream entryStream = File.OpenRead(filePath))
-            {
-                _tis.addToUploadList(_xxHash);
-                _xxHash.Init(entryStream.Length, Path.GetFileName(filePath));
-                while (entryStream.Read(buffer) > 0)
-                {
-                    hashAlgorithm.Append(buffer);
-                }
-            }
-
-            return BitConverter.ToString(hashAlgorithm.GetHashAndReset()).Replace("-", string.Empty);
-
-        }
-
         private async Task<List<Stream>> splitFileAsync(Stream s, int size)
         {
             List<Stream> ls = new List<Stream>();
@@ -2409,7 +2527,7 @@ namespace TelegramDownloader.Data
 
         }
 
-        private async Task<List<string>> splitFileStreamAsync(string path, string name, int splitSize)
+        private async Task<List<string>> splitFileStreamAsync(string path, string name, int splitSize, UploadHashAccumulator? hasher = null)
         {
             var originalFileInfo = new System.IO.FileInfo(System.IO.Path.Combine(path, name));
             long originalFileSize = originalFileInfo.Length;
@@ -2466,7 +2584,9 @@ namespace TelegramDownloader.Data
                     while (fs.Position < fs.Length && gb > 0)
                     {
                         int readSize = Convert.ToInt32(Math.Min(splitSize, fs.Length - fs.Position));
+                        long readOffset = fs.Position;
                         int readBytes = await fs.ReadAsync(buffer, 0, readSize);
+                        hasher?.Observe(readOffset, buffer.AsSpan(0, readBytes));
 
                         using (FileStream fsPart = new FileStream(partPath, FileMode.Append))
                             await fsPart.WriteAsync(buffer, 0, readSize);

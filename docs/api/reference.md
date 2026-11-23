@@ -85,6 +85,7 @@ server serves at **`/swagger/api-v1/swagger.json`** (browsable at
 | GET | `/api/v1/transfers/{id}` | | One transfer. |
 | POST | `/api/v1/transfers/downloads` | ✓ | Download channel files to the server. |
 | POST | `/api/v1/transfers/uploads` | ✓ | Upload server files to a channel. |
+| POST | `/api/v1/transfers/uploads/preview` | | Dry run of an upload: new / replaced / skipped files, bytes, folders, optional duplicates. |
 | POST | `/api/v1/transfers/messages` | ✓ | Download media from raw messages. |
 | POST | `/api/v1/transfers/downloads/pause` | | Pause all downloads. |
 | POST | `/api/v1/transfers/downloads/resume` | | Resume the download queue. |
@@ -344,6 +345,7 @@ interface SharedCollectionDto { id: string; name?: string; description?: string;
 | `POST …/files/copy` · `/move` | `{ ids: string[]; targetPath?: string; targetFolderId?: string }` |
 | `POST /transfers/downloads` | `{ channelId: string; fileIds: string[]; targetPath?: string; sharedCollectionId?: string }` |
 | `POST /transfers/uploads` | `{ channelId: string; localPaths: string[]; targetPath?: string }` |
+| `POST /transfers/uploads/preview` | `{ channelId: string; localPaths: string[]; targetPath?: string; findDuplicates?: boolean; maxItems?: number }` |
 | `POST /transfers/messages` | `{ chatId: number; messageIds: number[]; targetPath?: string }` |
 | `POST /local/folders` | `{ path: string; name: string }` |
 | `POST /local/rename` | `{ path: string; newName: string }` |
