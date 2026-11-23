@@ -191,6 +191,16 @@ export interface PersistedTaskDto {
   lastError: string | null;
 }
 
+/** Result of `POST /api/v1/transfers/persisted/{internalId}/resume`. */
+export interface TaskResumeResultDto {
+  internalId: string;
+  /** True when the transfer was queued again. */
+  resumed: boolean;
+  /** `Skip`, `Fail`, `ResumeDownload`, `ResumeSplitDownload` or `ResumeBatchUpload`. */
+  action: string;
+  message: string | null;
+}
+
 /** Action labels used in {@link UploadPreviewItem.action}. */
 export const UploadPreviewActions = {
   /** File not in the destination: will be uploaded. */

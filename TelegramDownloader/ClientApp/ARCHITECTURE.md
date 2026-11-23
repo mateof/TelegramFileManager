@@ -124,9 +124,14 @@ Rules:
 - Shared state across features: a zustand store in your feature folder (persist only UI prefs).
 - Tests: `*.test.ts(x)` next to the code; `npm test` runs them. The setup file sets the language to
   English, so assert on the English keys.
-- **Player slot**: `features/player/PlayerSlot.tsx` is rendered by the layout on every page (between
-  the content and the mobile bottom nav). The media feature replaces it; keep heavy code (audio
-  engine, waveform, video) behind `lazy()`/`import()` so the initial bundle stays under budget.
+- **Media**: play or show files only through the public modules —
+  `playAudio(tracks, start)`, `enqueueAudio(tracks, 'next' | 'end')`, `openViewer(items, index)` from
+  `@/features/player/public` and `openAddToPlaylist(candidates)` from `@/features/playlists/public`.
+  They are tiny; the engine, the player UI, the viewers and the picker are lazy chunks.
+  `features/player/PlayerSlot.tsx` (rendered by the layout between the content and the mobile
+  bottom nav) mounts them: the player bar while the queue is not empty (the queue is persisted and
+  comes back paused after a reload), the viewer overlay and the playlist picker while open.
+  Audio URLs must be same-origin (`contentUrl`/`playbackUrl` of the v1 files, `api.local.downloadUrl`).
 
 ## 3. i18n
 

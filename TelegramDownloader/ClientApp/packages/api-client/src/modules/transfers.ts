@@ -5,6 +5,7 @@ import type {
   SpeedHistoryDto,
   StartDownloadRequest,
   StartUploadRequest,
+  TaskResumeResultDto,
   TransferAcceptedDto,
   TransferClearQuery,
   TransferDto,
@@ -63,6 +64,8 @@ export function createTransfersApi(http: HttpClient) {
     pause: (id: string) => http.post<void>(`${BASE}/${enc(id)}/pause`),
     /** POST /api/v1/transfers/{id}/retry (downloads and batch tasks) */
     retry: (id: string) => http.post<void>(`${BASE}/${enc(id)}/retry`),
+    /** DELETE /api/v1/transfers/{id}: removes one finished, paused or queued entry from the lists (409 while it runs). */
+    remove: (id: string) => http.delete<void>(`${BASE}/${enc(id)}`),
     /** POST /api/v1/transfers/clear: removes finished entries; `states` is sent comma separated. */
     clear: (query: TransferClearQuery = {}) =>
       http.post<TransfersSnapshotDto>(`${BASE}/clear`, undefined, {
@@ -74,6 +77,8 @@ export function createTransfersApi(http: HttpClient) {
     /** GET /api/v1/transfers/persisted (paged) */
     persisted: (query: PagedQuery = {}, signal?: AbortSignal): Promise<Paged<PersistedTaskDto>> =>
       http.getPaged<PersistedTaskDto>(`${BASE}/persisted`, { query: { ...query }, signal }),
+    /** POST /api/v1/transfers/persisted/{internalId}/resume: resumes or retries one persisted transfer. */
+    resumePersisted: (internalId: string) => http.post<TaskResumeResultDto>(`${BASE}/persisted/${enc(internalId)}/resume`),
     /** DELETE /api/v1/transfers/persisted/{internalId} */
     deletePersisted: (internalId: string) => http.delete<void>(`${BASE}/persisted/${enc(internalId)}`),
     /** DELETE /api/v1/transfers/persisted */

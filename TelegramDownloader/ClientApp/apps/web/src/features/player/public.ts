@@ -3,10 +3,10 @@
  * search, library, playlists, chat) to play or view media without depending
  * on the player's internals.
  *
- * CONTRACT — the media feature replaces the bodies, the signatures stay.
- * Heavy code must stay lazy: implementations should `import()` the player or
- * viewers on first use, because this module is imported from many places.
+ * This module is imported from many places, so it stays tiny: the playback
+ * engine and the viewers are loaded with `import()` on first use.
  */
+import { useViewer } from './viewerStore';
 
 /** A playable audio item. URLs must be playable by an <audio> element (same-origin cookie auth). */
 export interface AudioTrack {
@@ -45,17 +45,32 @@ export interface ViewerItem {
   watch?: { channelId: string; fileId: string; startAtSeconds?: number };
 }
 
+const loadEngine = () => import('./engine').then((m) => m.getEngine());
+
 /** Replace the queue with `tracks` and start at `startIndex`. */
 export function playAudio(tracks: AudioTrack[], startIndex = 0): void {
-  console.warn('[player] playAudio not implemented yet', tracks.length, startIndex);
+  if (tracks.length === 0) return;
+  void loadEngine().then((engine) => engine.playQueue(tracks, startIndex));
 }
 
 /** Add tracks after the current one ("play next") or at the end. */
 export function enqueueAudio(tracks: AudioTrack[], position: 'next' | 'end' = 'end'): void {
-  console.warn('[player] enqueueAudio not implemented yet', tracks.length, position);
+  if (tracks.length === 0) return;
+  void loadEngine().then((engine) => engine.enqueue(tracks, position));
 }
 
 /** Open the viewer on `items[index]` (images become a gallery, video a player...). */
 export function openViewer(items: ViewerItem[], index = 0): void {
-  console.warn('[player] openViewer not implemented yet', items.length, index);
+  const item = items[index];
+  if (!item) return;
+  // Audio goes to the global player instead of an overlay
+  if (item.kind === 'audio') {
+    const audio = items.filter((i) => i.kind === 'audio');
+    playAudio(
+      audio.map((i) => ({ id: i.id, title: i.name, url: i.playbackUrl ?? i.url, coverUrl: i.thumbnailUrl, size: i.size })),
+      audio.indexOf(item)
+    );
+    return;
+  }
+  useViewer.getState().show(items, index);
 }
