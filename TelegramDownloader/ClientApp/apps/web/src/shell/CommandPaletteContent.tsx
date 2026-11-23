@@ -63,7 +63,7 @@ export default function CommandPaletteContent() {
         { id: 'theme', label: t('Toggle light / dark theme'), icon: <SunMoon />, onSelect: toggleLight },
         { id: 'sidebar', label: t('Toggle sidebar'), icon: <PanelLeft />, onSelect: toggleSidebar },
         { id: 'apps', label: t('Get the mobile and TV apps'), icon: <LayoutGrid />, onSelect: () => navigate('/apps') },
-        { id: 'classic', label: t('Open the classic interface'), icon: <Undo2 />, onSelect: () => window.location.assign('/') }
+        { id: 'classic', label: t('Open the classic interface'), icon: <Undo2 />, onSelect: () => window.location.assign('/?ui=classic') }
       ]
     };
     return [actions, pages, ...Object.values(extra), channelGroup];

@@ -368,3 +368,20 @@ main {
     letter-spacing: 1px;
     color: rgba(255, 255, 255, 0.4);
 }
+
+/* "New interface" entry of the offcanvas menu (link to /app) */
+::deep .offcanvas-menu-item.offcanvas-newui i {
+    color: #e94560;
+}
+
+/* First-run banner pointing to the new web interface */
+.newui-banner {
+    font-size: 0.9rem;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+}
+
+.newui-banner .btn-close {
+    position: static;
+    padding: 0.5rem;
+}

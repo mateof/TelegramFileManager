@@ -1,45 +1,43 @@
-﻿using Microsoft.AspNetCore.Http.Features;
+#nullable disable
+using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.Mvc;
-using MongoDB.Driver;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using Syncfusion.Blazor.FileManager;
 using Syncfusion.EJ2.FileManager.Base;
 using Syncfusion.EJ2.FileManager.PhysicalFileProvider;
-using TelegramDownloader.Data;
-using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
 
-// For more information on enabling Web API for empty projects, visit https://go.microsoft.com/fwlink/?LinkID=397860
+// LEGACY — Syncfusion EJ2 file-manager AJAX endpoints of the Blazor UI.
+//
+// The local-file manager of the Blazor UI (Pages/Partials/impl/LocalFileManagerImpl.razor,
+// AjaxSettings url /api/file/FileOperations, plus Download, Upload and GetImage)
+// calls these actions. They are kept only for
+// that UI and are deleted together with it: see docs/architecture/retiring-blazor.md.
+// The rest of FileController (streams, downloads, strm, export, share) is not
+// Syncfusion-based and stays in Controllers/FileController.cs.
 
 namespace TelegramDownloader.Controllers
 {
-    [Route("api/[controller]")]
-    [ApiController]
-    public class TempController : ControllerBase
+    public partial class FileController
     {
         public PhysicalFileProvider operation;
-        public string basePath;
-        string root = FileService.RELATIVELOCALDIR;
-        IDbService _db { get; set; }
-        ITelegramService _ts { get; set; }
-        IFileService _fs { get; set; }
 
-        public TempController(IDbService db, ITelegramService ts, IFileService fs)
+        partial void OnLegacyFileManagerInit()
         {
-            _fs = fs; ;
-            _ts = ts;
-            _db = db;
-            this.basePath = Environment.CurrentDirectory;
             this.operation = new PhysicalFileProvider();
             this.operation.RootFolder(Path.Combine(basePath, root));
-
         }
 
-        [Route("FileOperations/{id:int}")]
-        public async Task<object> FileOperations([FromBody] Syncfusion.EJ2.FileManager.Base.FileManagerDirectoryContent args, int id)
+        /// <summary>
+        /// File manager operations (read, delete, copy, move, create, search, rename)
+        /// </summary>
+        [HttpPost]
+        [Route("FileOperations")]
+        [ProducesResponseType(typeof(object), 200)]
+        public async Task<object> FileOperations([FromBody] Syncfusion.EJ2.FileManager.Base.FileManagerDirectoryContent args)
         {
-            this.operation.RootFolder(Path.Combine(basePath, root, id.ToString()));
+
             switch (args.Action)
             {
                 // Add your custom action here.
@@ -47,8 +45,9 @@ namespace TelegramDownloader.Controllers
                     //return null;
                     //string path = System.IO.Path.Combine("/" + id.ToString() + "/", args.Path);
                     // Path - Current path; ShowHiddenItems - Boolean value to show/hide hidden items.
-                    var f = this.operation.GetFiles(args.Path, false);
-                    return this.operation.ToCamelCase(f);
+                    //var f = this.operation.GetFiles(args.Path, false);
+                    //return this.operation.ToCamelCase(f);
+                    return this.operation.ToCamelCase(this.operation.GetFiles(args.Path, args.ShowHiddenItems));
                 // return ToCamelCase(await convertAsync(args.Path == "/" ? await _db.getAllFiles() : await _db.getAllFilesInDirectory(args.Data.Count() > 0 && args.Data[0] != null ? args.Data[0].FilterId + args.Data[0].Id + "/" : args.Path), args.Data.Count() > 0 && args.Data[0] != null ? args.Data[0].Id : null));  // this.operation.ToCamelCase(this.operation.GetFiles(args.Path, args.ShowHiddenItems));
                 case "delete":
                     //foreach (string name in args.Names)
@@ -65,7 +64,8 @@ namespace TelegramDownloader.Controllers
                     //return ToCamelCase(await convertAsync(await _db.getAllFilesInDirectoryPath(args.Path), null, args.Action, false));
                 case "copy":
                     //  Path - Path from where the file was copied; TargetPath - Path where the file/folder is to be copied; RenameFiles - Files with same name in the copied location that is confirmed for renaming; TargetData - Data of the copied file
-                    return this.operation.ToCamelCase(this.operation.Copy(args.Path, args.TargetPath, args.Names, args.RenameFiles, args.TargetData));
+                    var result = this.operation.Copy(args.Path, args.TargetPath, args.Names, args.RenameFiles, args.TargetData);
+                    return this.operation.ToCamelCase(result);
                 case "move":
                     // Path - Path from where the file was cut; TargetPath - Path where the file/folder is to be moved; RenameFiles - Files with same name in the moved location that is confirmed for renaming; TargetData - Data of the moved file
                     return this.operation.ToCamelCase(this.operation.Move(args.Path, args.TargetPath, args.Names, args.RenameFiles, args.TargetData));
@@ -76,11 +76,12 @@ namespace TelegramDownloader.Controllers
                     //var create = await _db.createEntry(new BsonFileManagerModel(args));
                     //// Path - Current path where the folder is to be created; Name - Name of the new folder
                     //return ToCamelCase(await convertAsync(create, args.TargetData?.Id, args.Action, false));
-                    return this.operation.ToCamelCase(this.operation.Create(args.Path, args.Name));
+                return this.operation.ToCamelCase(this.operation.Create(args.Path, args.Name));
                 // return ToCamelCase(await convertAsync(args, await _db.getAllFiles()));
                 case "search":
                     // Path - Current path where the search is performed; SearchString - String typed in the searchbox; CaseSensitive - Boolean value which specifies whether the search must be casesensitive
-                    return this.operation.ToCamelCase(this.operation.Search(args.Path, args.SearchString, args.ShowHiddenItems, args.CaseSensitive));
+                    var search =  this.operation.Search(args.Path, args.SearchString, args.ShowHiddenItems, args.CaseSensitive);
+                    return this.operation.ToCamelCase(search);
                 case "rename":
                     // Path - Current path of the renamed file; Name - Old file name; NewName - New file name
                     return this.operation.ToCamelCase(this.operation.Rename(args.Path, args.Name, args.NewName));
@@ -125,25 +126,25 @@ namespace TelegramDownloader.Controllers
             return response;
         }
 
-        [Route("Download/{id:int}")]
-        public IActionResult Download([FromForm] string downloadInput, int id)
+        /// <summary>
+        /// Download a file from local storage
+        /// </summary>
+        [HttpPost]
+        [Route("Download")]
+        [ProducesResponseType(typeof(FileResult), 200)]
+        public IActionResult Download([FromForm] string downloadInput)
         {
-            this.operation.RootFolder(Path.Combine(basePath, root, id.ToString()));
             //Invoking download operation with the required parameters.
             // path - Current path where the file is downloaded; Names - Files to be downloaded;
             Syncfusion.EJ2.FileManager.Base.FileManagerDirectoryContent args = JsonConvert.DeserializeObject<Syncfusion.EJ2.FileManager.Base.FileManagerDirectoryContent>(downloadInput);
             return operation.Download(args.Path, args.Names);
         }
 
-        // Processing the Upload operation.
-        //[Route("Upload/{id:int}")]
-        //[HttpPost]
-        //[DisableRequestSizeLimit]
-        //// [RequestFormLimits(ValueLengthLimit = int.MaxValue, MultipartBodyLengthLimit = long.MaxValue)]
-        //[RequestFormLimits(MultipartBodyLengthLimit = long.MaxValue)]
-        //public async Task<IActionResult> Upload([FromForm] string path, IList<IFormFile> uploadFiles, [FromForm] string? data, [FromForm] string action, int id)
+        //// Processing the Upload operation.
+        //[Route("Upload")]
+        //public IActionResult Upload([FromForm] string path, IList<IFormFile> uploadFiles, [FromForm] Syncfusion.EJ2.FileManager.Base.FileManagerDirectoryContent data, [FromForm] string action)
         //{
-        //    this.operation.RootFolder(Path.Combine(basePath, root, id.ToString()));
+
         //    //foreach (var file in uploadFiles)
         //    //{
         //    //    Message m = await _ts.uploadFile(_db.dbName, file.OpenReadStream(), file.FileName);
@@ -178,39 +179,16 @@ namespace TelegramDownloader.Controllers
         //    return Content("");
         //}
 
-
-        //[Route("Upload/{id:int}")]
-        //[HttpPost]
-        //[DisableRequestSizeLimit]
-        //// [RequestFormLimits(ValueLengthLimit = int.MaxValue, MultipartBodyLengthLimit = long.MaxValue)]
-        //[RequestFormLimits(MultipartBodyLengthLimit = long.MaxValue)]
-        //public async Task<IActionResult> Upload([FromForm] string path, Stream uploadFiles, [FromForm] string? data, [FromForm] string action, int id)
-        //{
-        //    this.operation.RootFolder(Path.Combine(basePath, root, id.ToString()));
-        //    FileManagerResponse uploadResponse;
-
-        //    // uploadResponse = operation.Upload(Path.Combine(basePath, root, path), uploadFiles, action, null);
-        //    //if (uploadResponse.Error != null)
-        //    //{
-        //    //    Response.Clear();
-        //    //    Response.ContentType = "application/json; charset=utf-8";
-        //    //    Response.StatusCode = Convert.ToInt32(uploadResponse.Error.Code);
-        //    //    Response.HttpContext.Features.Get<IHttpResponseFeature>().ReasonPhrase = uploadResponse.Error.Message;
-        //    //}
-        //    return Content("");
-        //}
-
-
         [Route("Upload")]
         [HttpPost]
         [DisableRequestSizeLimit]
         // [RequestFormLimits(ValueLengthLimit = int.MaxValue, MultipartBodyLengthLimit = long.MaxValue)]
         [RequestFormLimits(MultipartBodyLengthLimit = long.MaxValue)]
-        public async Task<IActionResult> Upload([FromForm] string path, IFormFile file, [FromForm] string? data, [FromForm] string action, [FromForm] int id)
+        public async Task<IActionResult> Upload([FromForm] string path, IFormFile file, [FromForm] string? data, [FromForm] string action, [FromForm] long id)
         {
             IList<IFormFile> lfile = new List<IFormFile>();
             lfile.Add(file);
-            this.operation.RootFolder(Path.Combine(basePath, root, id.ToString()));
+            this.operation.RootFolder(Path.Combine(basePath, root));
             FileManagerResponse uploadResponse;
 
             uploadResponse = operation.Upload(Path.Combine(basePath, root, path), lfile, action, 0, null);
@@ -224,10 +202,14 @@ namespace TelegramDownloader.Controllers
             return Content("");
         }
 
-        [Route("GetImage/{id:int}")]
-        public async Task<IActionResult> GetImage(string path, int id)
+        /// <summary>
+        /// Get an image from local storage
+        /// </summary>
+        [HttpGet]
+        [Route("GetImage")]
+        [ProducesResponseType(typeof(FileResult), 200)]
+        public async Task<IActionResult> GetImage(string path)
         {
-            this.operation.RootFolder(Path.Combine(basePath, root, id.ToString()));
             //Invoking GetImage operation with the required parameters.
             // path - Current path of the image file; Id - Image file id;
             //var file = await _fs.getImage(path);

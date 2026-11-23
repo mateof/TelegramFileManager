@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using Syncfusion.Blazor.FileManager;
 using TelegramDownloader.Data;
 using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
@@ -7,6 +6,7 @@ using TelegramDownloader.Models.Api;
 using TelegramDownloader.Services;
 using TelegramDownloader.Services.Api;
 using TelegramDownloader.Services.Upload;
+using TelegramDownloader.Models.FileSystem;
 
 namespace TelegramDownloader.Controllers.Api.V1
 {
@@ -156,7 +156,7 @@ namespace TelegramDownloader.Controllers.Api.V1
                     ? request.ChannelId
                     : DbService.SHARED_DB_NAME;
 
-                var contents = new List<FileManagerDirectoryContent>();
+                var contents = new List<FsEntry>();
                 var skipped = new List<string>();
 
                 foreach (var id in request.FileIds)
@@ -166,7 +166,7 @@ namespace TelegramDownloader.Controllers.Api.V1
                         : await _db.getFileById(dbName, id, request.SharedCollectionId);
 
                     if (entry == null) skipped.Add(id);
-                    else contents.Add(entry.toFileManagerContent());
+                    else contents.Add(entry.ToFsEntry());
                 }
 
                 if (contents.Count == 0)
@@ -691,9 +691,9 @@ namespace TelegramDownloader.Controllers.Api.V1
         /// Resolves the requested local paths the way the upload does; shared by
         /// the upload and its preview so both see the same items.
         /// </summary>
-        private static (List<FileManagerDirectoryContent> Contents, List<string> Missing) BuildLocalContents(IEnumerable<string> relativePaths)
+        private static (List<FsEntry> Contents, List<string> Missing) BuildLocalContents(IEnumerable<string> relativePaths)
         {
-            var contents = new List<FileManagerDirectoryContent>();
+            var contents = new List<FsEntry>();
             var missing = new List<string>();
             foreach (var relative in relativePaths)
             {
@@ -704,7 +704,7 @@ namespace TelegramDownloader.Controllers.Api.V1
             return (contents, missing);
         }
 
-        private static FileManagerDirectoryContent? BuildLocalContent(string relativePath)
+        private static FsEntry? BuildLocalContent(string relativePath)
         {
             if (string.IsNullOrWhiteSpace(relativePath)) return null;
 
@@ -722,7 +722,7 @@ namespace TelegramDownloader.Controllers.Api.V1
             if (System.IO.File.Exists(absolute))
             {
                 var info = new System.IO.FileInfo(absolute);
-                return new FileManagerDirectoryContent
+                return new FsEntry
                 {
                     Name = name,
                     IsFile = true,
@@ -737,7 +737,7 @@ namespace TelegramDownloader.Controllers.Api.V1
             if (Directory.Exists(absolute))
             {
                 var info = new DirectoryInfo(absolute);
-                return new FileManagerDirectoryContent
+                return new FsEntry
                 {
                     Name = name,
                     IsFile = false,

@@ -524,6 +524,33 @@
                 </div>
             </div>
 
+            <!-- Web Interface Section -->
+            <div class="config-section">
+                <div class="config-section-header">
+                    <i class="bi bi-window-stack"></i>
+                    <span>Web Interface</span>
+                </div>
+                <div class="config-section-body">
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-stars"></i>
+                                Open the new interface by default
+                            </div>
+                            <div class="config-item-description">
+                                Browsers that open the server address go to the new web interface (<a href="/app/">/app</a>) instead of this one.
+                                This interface keeps working: open <code>/?ui=classic</code> (or "Classic UI" in the new interface) and that browser keeps getting it.
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <input type="checkbox" class="form-check-input config-switch"
+                                   checked="@(WebUiMode.Normalize(Model!.DefaultWebUi) == WebUiMode.App)"
+                                   @onchange="@(e => Model!.DefaultWebUi = e.Value is true ? WebUiMode.App : WebUiMode.Classic)" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- File Manager Section -->
             <div class="config-section">
                 <div class="config-section-header">

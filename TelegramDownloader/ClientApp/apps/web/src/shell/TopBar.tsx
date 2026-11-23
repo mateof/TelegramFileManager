@@ -283,7 +283,7 @@ function UserMenu() {
         <DropdownMenuItem icon={<LayoutGrid />} onSelect={() => navigate('/apps')}>
           {t('Apps')}
         </DropdownMenuItem>
-        <DropdownMenuItem icon={<Undo2 />} onSelect={() => window.location.assign('/')}>
+        <DropdownMenuItem icon={<Undo2 />} onSelect={() => window.location.assign('/?ui=classic')}>
           {t('Classic UI')}
         </DropdownMenuItem>
         {canSignOut && (
@@ -314,7 +314,7 @@ export function TopBar() {
         <NotificationsBell />
         <ThemeToggle />
         <a
-          href="/"
+          href="/?ui=classic"
           className="hidden h-8 items-center rounded-lg px-2.5 text-xs font-medium text-fg-muted transition-colors hover:bg-surface-2 hover:text-fg xl:flex"
         >
           {t('Classic UI')}

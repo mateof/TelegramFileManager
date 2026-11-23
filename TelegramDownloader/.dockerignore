@@ -28,3 +28,20 @@ README.md
 !.git/config
 !.git/packed-refs
 !.git/refs/heads/**
+# Web app (ClientApp): dependencies and tool output are rebuilt in the image
+# (node_modules is already excluded above for every folder). Source folders
+# that the generic rules above would drop (a "charts" component folder, the
+# committed Vite .env) are kept.
+!ClientApp/apps/*/src/**/charts
+!ClientApp/packages/*/src/**/charts
+!ClientApp/apps/*/.env
+ClientApp/**/dist
+ClientApp/**/coverage
+ClientApp/**/.vite
+ClientApp/**/*.tsbuildinfo
+ClientApp/**/.env.local
+ClientApp/**/.env.*.local
+# A local build of the web app (or the "not built" placeholder copied there at
+# startup) must not reach the image: the webapp stage builds it.
+# Resources/app-not-built.html is still part of the context.
+wwwroot/app/*

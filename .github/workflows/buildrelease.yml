@@ -91,6 +91,21 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
+      - name: '🔧 Setup Node 22'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: TelegramDownloader/ClientApp/package-lock.json
+
+      - name: '🌐 Build the web app (once for every platform)'
+        working-directory: TelegramDownloader/ClientApp
+        run: |
+          npm ci --no-audit --no-fund
+          # Writes TelegramDownloader/wwwroot/app; every dotnet publish below
+          # copies it into <publish>/wwwroot/app (IncludeWebAppInPublish target)
+          npm run build
+
       - name: '🔨 Build all server platforms'
         run: |
           VERSION=${{ steps.version.outputs.version }}
@@ -106,6 +121,16 @@ jobs:
               -p:PublishSingleFile=true \
               -p:Version=$VERSION \
               --self-contained
+          done
+
+      - name: '🔍 Check the web app is in every platform'
+        run: |
+          for dir in bin/server-*; do
+            if [ ! -f "$dir/wwwroot/app/index.html" ] || [ -z "$(ls -A "$dir/wwwroot/app/assets" 2>/dev/null)" ]; then
+              echo "❌ $dir/wwwroot/app is missing the web app build"
+              exit 1
+            fi
+            echo "✅ $dir/wwwroot/app ($(find "$dir/wwwroot/app" -type f | wc -l) files)"
           done
 
       - name: '📦 Create server ZIP archives'

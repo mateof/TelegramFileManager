@@ -149,6 +149,13 @@ namespace TelegramDownloader.Models.Api
         public bool HasFileManagerVirtualScroll { get; set; }
 
         /// <summary>
+        /// Interface a browser gets at <c>/</c>: <c>classic</c> (Blazor UI) or
+        /// <c>app</c> (redirected to the web app at <c>/app/</c>). A browser can
+        /// still open the classic UI with <c>/?ui=classic</c>.
+        /// </summary>
+        public string DefaultWebUi { get; set; } = WebUiMode.Classic;
+
+        /// <summary>
         /// API key for apps, masked (<c>****</c> plus the last 4 characters);
         /// null when none is set. Set it with <c>mobileApiKey</c> in the PATCH body.
         /// </summary>
@@ -217,6 +224,7 @@ namespace TelegramDownloader.Models.Api
             MultiConnectionMinFileSizeMB = c.MultiConnectionMinFileSizeMB,
             UseMobileFileManagerAlways = c.UseMobileFileManagerAlways,
             HasFileManagerVirtualScroll = c.hasFileManagerVirtualScroll,
+            DefaultWebUi = WebUiMode.Normalize(c.DefaultWebUi),
             MobileApiKey = MaskSecret(c.MobileApiKey),
             MobileApiKeySet = !string.IsNullOrEmpty(c.MobileApiKey) || !string.IsNullOrEmpty(GeneralConfigStatic.tlconfig?.mobile_api_key),
             WebDavUser = c.WebDavUser,
@@ -267,6 +275,9 @@ namespace TelegramDownloader.Models.Api
 
         public bool? UseMobileFileManagerAlways { get; set; }
         public bool? HasFileManagerVirtualScroll { get; set; }
+
+        /// <summary>Interface a browser gets at <c>/</c>: <c>classic</c> or <c>app</c>.</summary>
+        public string? DefaultWebUi { get; set; }
 
         /// <summary>New API key for apps. Omit to keep, empty string to remove (falls back to config.json).</summary>
         public string? MobileApiKey { get; set; }

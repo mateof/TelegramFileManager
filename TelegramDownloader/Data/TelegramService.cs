@@ -1,11 +1,6 @@
 #nullable disable
-using BlazorBootstrap;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Forms;
-using Syncfusion.Blazor.Inputs;
-using Syncfusion.Blazor.Kanban.Internal;
-using Syncfusion.Blazor.Schedule;
-using Syncfusion.Blazor.Sparkline.Internal;
 using System.Collections.Generic;
 using System.Reflection.Metadata;
 using System.Runtime.CompilerServices;
@@ -1409,13 +1404,13 @@ namespace TelegramDownloader.Data
             return cm;
         }
 
-        public async Task<GridDataProviderResult<ChatMessages>> getPaginatedMessages(long id, int page, int size, Boolean onlyFiles = false)
+        public async Task<PagedResult<ChatMessages>> getPaginatedMessages(long id, int page, int size, Boolean onlyFiles = false)
         {
             List<ChatMessages> cm = new List<ChatMessages>();
             InputPeer peer = chats.chats[id];
 
             var messages = await client.Messages_GetHistory(peer, add_offset: (page - 1) * 100, limit: size);
-            if (messages.Messages.Length == 0) return await Task.FromResult(new GridDataProviderResult<ChatMessages> { Data = cm, TotalCount = messages.Count });
+            if (messages.Messages.Length == 0) return await Task.FromResult(new PagedResult<ChatMessages> { Items = cm, TotalCount = messages.Count });
             foreach (MessageBase msgBase in messages.Messages)
             {
                 if (msgBase is Message msg)
@@ -1442,7 +1437,7 @@ namespace TelegramDownloader.Data
 
                 }
             }
-            return await Task.FromResult(new GridDataProviderResult<ChatMessages> { Data = cm, TotalCount = messages.Count });
+            return await Task.FromResult(new PagedResult<ChatMessages> { Items = cm, TotalCount = messages.Count });
         }
 
         public async Task<List<ChatMessages>> getAllFileMessages(long id, int lastId = 0)
