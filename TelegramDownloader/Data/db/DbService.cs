@@ -717,6 +717,22 @@ namespace TelegramDownloader.Data.db
             return null;
         }
 
+        /// <summary>
+        /// Inserts many entries in one round trip. Ordered, so documents land in
+        /// the given order and an error stops at the failing one, like a loop of
+        /// <see cref="createEntry"/> calls would.
+        /// </summary>
+        public async Task createEntries(string dbName, IReadOnlyList<BsonFileManagerModel> files, string collectionName = "directory")
+        {
+            if (files == null || files.Count == 0)
+                return;
+            if (collectionName == null)
+                collectionName = "directory";
+            _logger.LogDebug("Creating {Count} entries - DbName: {DbName}", files.Count, dbName);
+            await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName)
+                .InsertManyAsync(files, new InsertManyOptions { IsOrdered = true });
+        }
+
         public async Task<BsonFileManagerModel> getRootFolder(string dbName, string collectionName = "directory")
         {
             if (collectionName == null)

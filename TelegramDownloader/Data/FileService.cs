@@ -1791,65 +1791,43 @@ namespace TelegramDownloader.Data
             };
             try
             {
-                List<int> presentIds = await _db.getAllIdsFromChannel(channelId);
+                System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
+                // Load what is already indexed once, in parallel, and keep the ids
+                // in a set: the old List.Contains made the diff O(new x indexed).
+                Task<List<int>> presentIdsTask = _db.getAllIdsFromChannel(channelId);
+                Task<List<string>> fileNamesTask = _db.getAllFileNamesFromChannel(channelId);
+                Task<BsonFileManagerModel> rootFolderTask = _db.getRootFolder(channelId);
+                List<int> presentIdList = await presentIdsTask;
+                HashSet<int> presentIds = presentIdList.ToHashSet();
                 _logger.LogInformation($"Refresh channel with id: {channelId}");
 
                 // Use default options if none provided
                 refreshOptions ??= new RefreshChannelOptions();
 
-                List<TelegramChatDocuments> telegramChatDocuments = (await _ts.searchAllChannelFiles(Convert.ToInt64(channelId), (presentIds.Count > 0 && !force) ? presentIds.Max() : 0, refreshOptions)).Where(x => x.name != null).ToList();
+                int lastId = (presentIdList.Count > 0 && !force) ? presentIdList.Max() : 0;
+                List<TelegramChatDocuments> telegramChatDocuments = (await _ts.searchAllChannelFiles(Convert.ToInt64(channelId), lastId, refreshOptions)).Where(x => x.name != null).ToList();
                 _logger.LogInformation($"Get the telegram files in: {(DateTime.Now - init).TotalSeconds} seconds  for channel id:{channelId}");
-                List<string> fileNames = await _db.getAllFileNamesFromChannel(channelId);
-                var nameCount = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-                foreach (string name in fileNames)
+                long telegramMs = sw.ElapsedMilliseconds;
+                ChannelRefreshPlanner.AssignUniqueNames(await fileNamesTask, telegramChatDocuments);
+                List<TelegramChatDocuments> newDocs = ChannelRefreshPlanner.SelectNew(telegramChatDocuments, presentIds);
+                var rootFolder = await rootFolderTask;
+                long planMs = sw.ElapsedMilliseconds - telegramMs;
+
+                // One InsertMany per batch instead of one InsertOne per file.
+                // Counted per batch so a failure still reports what got in.
+                foreach (TelegramChatDocuments[] batch in newDocs.Chunk(ChannelRefreshPlanner.InsertBatchSize))
                 {
-                    nameCount[name] = 1;
-                }
-
-                foreach (var doc in telegramChatDocuments)
-                {
-                    var baseName = doc.name;
-                    var name = baseName;
-                    int count = 0;
-
-                    while (nameCount.ContainsKey(name))
+                    List<BsonFileManagerModel> models = batch.Select(tcd => ChannelRefreshPlanner.ToRootFileEntry(tcd, rootFolder.Id)).ToList();
+                    await _db.createEntries(channelId, models);
+                    foreach (TelegramChatDocuments tcd in batch)
                     {
-                        count++;
-                        name = $"{baseName}({count})";
-                    }
-
-                    doc.name = name;
-                    nameCount[name] = 1;
-                    if (count == 0)
-                        nameCount[baseName] = 1;
-                }
-            
-                var rootFolder = await _db.getRootFolder(channelId);
-                foreach (TelegramChatDocuments tcd in telegramChatDocuments)
-                {
-                    if (!presentIds.Contains(tcd.id))
-                    {
-                        BsonFileManagerModel model = new BsonFileManagerModel();
-                        model.Size = tcd.fileSize;
-                        model.MessageId = tcd.id;
-                        model.Name = tcd.name;
-                        model.IsFile = true;
-                        model.HasChild = false;
-                        model.DateCreated = tcd.creationDate;
-                        model.DateModified = tcd.modifiedDate;
-                        model.FilterPath = "/";
-                        model.FilterId = rootFolder.Id + "/";
-                        model.ParentId = rootFolder.Id;
-                        model.FilePath = "/" + tcd.name;
-                        model.Type = tcd.extension;
-                        model.isSplit = false;
-                        model.isEncrypted = false;
-                        await _db.createEntry(channelId, model);
                         totalNewMessages++;
                         result.Count(tcd.documentType);
                     }
                 }
+                _logger.LogDebug("Refresh {ChannelId} timings: telegram+load {TelegramMs} ms, diff {PlanMs} ms, insert {InsertMs} ms ({Count} new of {Scanned} scanned, {Indexed} already indexed)",
+                    channelId, telegramMs, planMs, sw.ElapsedMilliseconds - telegramMs - planMs, newDocs.Count, telegramChatDocuments.Count, presentIds.Count);
             }
             catch
             {

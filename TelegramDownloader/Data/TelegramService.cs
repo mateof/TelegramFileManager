@@ -1984,47 +1984,40 @@ namespace TelegramDownloader.Data
             _logger.LogInformation("Selected types: {Types}", options.GetSelectionSummary());
             _logger.LogInformation("═══════════════════════════════════════════════════════════════");
 
-            List<TelegramChatDocuments> telegramChatDocuments = new List<TelegramChatDocuments>();
             InputPeer peer = chats.chats[id];
 
-            int phaseNumber = 0;
-            int docsCount = 0, audioCount = 0, videoCount = 0, photosCount = 0;
-
-            // Search for documents (general files like PDF, ZIP, etc.)
+            // Each media filter is an independent paged Messages_Search, so the
+            // selected ones run concurrently (at most 4 requests in flight, each
+            // still paced by its own delay; FLOOD_WAIT is retried by WTelegram
+            // as before). Results are merged in the original phase order with
+            // the earlier phase winning a duplicate id, so the output is the
+            // same list the sequential scan produced.
+            var phases = new List<(string Label, Func<List<TelegramChatDocuments>, Task<int>> Run)>();
             if (options.IncludeDocuments)
-            {
-                phaseNumber++;
-                _logger.LogInformation("📁 Phase {Phase}: Searching for documents (PDF, ZIP, etc.)...", phaseNumber);
-                docsCount = await SearchDocuments(peer, lastId, telegramChatDocuments);
-                _logger.LogInformation("📁 Phase {Phase} complete: Found {Count} documents", phaseNumber, docsCount);
-            }
-
-            // Search for audio files
+                phases.Add(("📁 Documents (PDF, ZIP, etc.)", list => SearchDocuments(peer, lastId, list)));
             if (options.IncludeAudio)
-            {
-                phaseNumber++;
-                _logger.LogInformation("🎵 Phase {Phase}: Searching for audio files...", phaseNumber);
-                audioCount = await SearchAudio(peer, lastId, telegramChatDocuments);
-                _logger.LogInformation("🎵 Phase {Phase} complete: Found {Count} audio files", phaseNumber, audioCount);
-            }
-
-            // Search for video files
+                phases.Add(("🎵 Audio files", list => SearchAudio(peer, lastId, list)));
             if (options.IncludeVideo)
-            {
-                phaseNumber++;
-                _logger.LogInformation("🎬 Phase {Phase}: Searching for video files...", phaseNumber);
-                videoCount = await SearchVideo(peer, lastId, telegramChatDocuments);
-                _logger.LogInformation("🎬 Phase {Phase} complete: Found {Count} video files", phaseNumber, videoCount);
-            }
-
-            // Search for photos
+                phases.Add(("🎬 Video files", list => SearchVideo(peer, lastId, list)));
             if (options.IncludePhotos)
+                phases.Add(("🖼️ Photos", list => SearchPhotos(peer, lastId, list)));
+
+            var phaseResults = phases.Select(_ => new List<TelegramChatDocuments>()).ToArray();
+            await Task.WhenAll(phases.Select(async (phase, i) =>
             {
-                phaseNumber++;
-                _logger.LogInformation("🖼️ Phase {Phase}: Searching for photos...", phaseNumber);
-                photosCount = await SearchPhotos(peer, lastId, telegramChatDocuments);
-                _logger.LogInformation("🖼️ Phase {Phase} complete: Found {Count} photos", phaseNumber, photosCount);
-            }
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                _logger.LogInformation("Phase {Phase}: searching {Label}...", i + 1, phase.Label);
+                int found = await phase.Run(phaseResults[i]);
+                _logger.LogInformation("Phase {Phase} complete: {Label} found {Count} in {Ms} ms", i + 1, phase.Label, found, sw.ElapsedMilliseconds);
+            }));
+
+            List<TelegramChatDocuments> telegramChatDocuments = Services.ChannelRefreshPlanner.MergePhaseResults(phaseResults);
+            int phaseIndex = 0;
+            int CountFor(bool included) => included ? phaseResults[phaseIndex++].Count : 0;
+            int docsCount = CountFor(options.IncludeDocuments);
+            int audioCount = CountFor(options.IncludeAudio);
+            int videoCount = CountFor(options.IncludeVideo);
+            int photosCount = CountFor(options.IncludePhotos);
 
             var elapsed = DateTime.Now - startTime;
             _logger.LogInformation("═══════════════════════════════════════════════════════════════");
