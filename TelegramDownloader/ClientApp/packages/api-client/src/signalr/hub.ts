@@ -57,6 +57,10 @@ export class TypedHub<M extends HubMessageMap> {
       .withUrl(hubUrl(path, options.baseUrl), {
         accessTokenFactory: options.accessTokenFactory,
         withCredentials: true,
+        // The server's CSRF guard rejects cookie/LAN-authenticated POSTs under
+        // /hubs (negotiate, long polling, SSE sends) without this header. The
+        // WebSocket upgrade is a GET, so it does not need it.
+        headers: { 'X-Requested-With': 'tfm' },
         transport: HttpTransportType.WebSockets | HttpTransportType.ServerSentEvents | HttpTransportType.LongPolling
       })
       .withAutomaticReconnect({
