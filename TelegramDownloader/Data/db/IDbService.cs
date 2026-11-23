@@ -19,6 +19,7 @@ namespace TelegramDownloader.Data.db
         Task<BsonFileManagerModel> copyItem(string dbName, string sourceId, FileManagerDirectoryContent target, string targetPath, bool isFile, string collectionName = "directory");
         Task CreateDatabase(string dbName = "default", string collection = "directory", bool CreateDefaultEntry = true);
         Task<List<BsonFileManagerModel>> createEntry(string dbName, BsonFileManagerModel file, string collectionName = "directory", IClientSessionHandle? session = null);
+        Task createEntries(string dbName, IReadOnlyList<BsonFileManagerModel> files, string collectionName = "directory");
         Task<BsonFileManagerModel> getRootFolder(string dbName, string collectionName = "directory");
         Task createIndex(string dbName, string collectionName = "directory");
         Task deleteDatabase(string dbName = "default");
