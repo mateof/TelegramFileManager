@@ -1271,6 +1271,91 @@ namespace TelegramDownloader.Data
             return (total, totalSize);
         }
 
+        public async Task<UploadPreviewResult> PreviewUploadFromServer(string dbName, string currentPath, List<FileManagerDirectoryContent> files, bool findDuplicates = false, int maxItems = UploadPreviewPlanner.DefaultMaxItems, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(currentPath);
+            files ??= new List<FileManagerDirectoryContent>();
+            await EnsureChannelIndexes(dbName);
+
+            // Same index snapshot, local listing and path keys as UploadFileFromServer.
+            var source = new UploadPlanSource
+            {
+                LoadDestinationChildren = async (path, ct) => await _db.getDirectChildrenByFilePathPrefix(dbName, path),
+                ListLocalFolder = ListLocalFolderForUpload,
+                LocalFileLength = relative =>
+                {
+                    var info = new System.IO.FileInfo(LocalAbsolutePath(relative));
+                    return info.Exists ? info.Length : null;
+                }
+            };
+            var toUpload = new List<UploadPreviewItem>();
+            // Off the caller's thread: the walk touches the disk (Blazor circuit).
+            var result = await Task.Run(() => UploadPreviewPlanner.PlanAsync(currentPath, files, source, maxItems, toUpload, cancellationToken), cancellationToken);
+
+            // The upload looks the destination up the same way; when it is missing
+            // the entries are attached to the root folder.
+            result.TargetFolderExists = await _db.getParentDirectoryByPath(dbName, currentPath) != null;
+
+            if (findDuplicates)
+                await FindUploadDuplicates(dbName, result, toUpload, cancellationToken);
+            return result;
+        }
+
+        /// <summary>
+        /// Duplicate detection of the upload preview. Only local files whose size
+        /// equals the size of a channel file with a stored XXHash can match, so
+        /// only those are read and hashed (same stored format as CheckHash).
+        /// </summary>
+        private async Task FindUploadDuplicates(string dbName, UploadPreviewResult result, List<UploadPreviewItem> toUpload, CancellationToken cancellationToken)
+        {
+            result.DuplicateCheck = true;
+            var hashedSizes = await _db.GetHashedFileSizes(dbName, cancellationToken);
+            if (hashedSizes.Count == 0)
+                return;
+
+            var localHashes = new List<(UploadPreviewItem Item, string Hash)>();
+            foreach (var item in toUpload)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!hashedSizes.Contains(item.Size))
+                    continue;
+                var absolute = LocalAbsolutePath(item.LocalPath);
+                if (!File.Exists(absolute))
+                    continue;
+                var hash = await StoredXxHash.ComputeFileAsync(absolute, cancellationToken);
+                result.HashedFiles++;
+                result.HashedBytes += item.Size;
+                localHashes.Add((item, hash));
+            }
+            if (localHashes.Count == 0)
+                return;
+
+            var byHash = (await _db.GetFilesByXxHashes(dbName, localHashes.Select(x => x.Hash), cancellationToken))
+                .GroupBy(x => x.XXHash, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+
+            foreach (var (item, hash) in localHashes)
+            {
+                if (!byHash.TryGetValue(hash, out var sameHash))
+                    continue;
+                // "Elsewhere": the entry this upload replaces does not count.
+                var matches = sameHash
+                    .Where(m => m.Size == item.Size && m.FilePath != item.TargetPath)
+                    .Select(m => new UploadPreviewDuplicateMatch { Id = m.Id, FilePath = m.FilePath, Size = m.Size })
+                    .ToList();
+                if (matches.Count == 0)
+                    continue;
+                result.Duplicates.Add(new UploadPreviewDuplicate
+                {
+                    LocalPath = item.LocalPath,
+                    TargetPath = item.TargetPath,
+                    Size = item.Size,
+                    XxHash = hash,
+                    Matches = matches
+                });
+            }
+        }
+
         /// <summary>
         /// Creates a zero-byte file as an index-only node (no Telegram message),
         /// since Telegram cannot store empty files. Mirrors the FilterPath/FilterId/

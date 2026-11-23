@@ -42,6 +42,15 @@ namespace TelegramDownloader.Data
         Task UploadFileFromServer(string dbName, string currentPath, List<FileManagerDirectoryContent> files, InfoDownloadTaksModel dm = null);
         /// <summary>Queues a server-side upload batch and returns the internal id of the task it created.</summary>
         Task<string> AddUploadFileFromServer(string dbName, string currentPath, List<FileManagerDirectoryContent> files, InfoDownloadTaksModel idt = null);
+        /// <summary>
+        /// Dry run of <see cref="AddUploadFileFromServer"/>: what the upload of
+        /// <paramref name="files"/> into <paramref name="currentPath"/> would do,
+        /// with the same decisions, without sending anything. With
+        /// <paramref name="findDuplicates"/> it also reads (hashes) the local
+        /// files whose size matches a hashed channel file and reports those
+        /// whose content is already elsewhere in the channel.
+        /// </summary>
+        Task<TelegramDownloader.Services.Upload.UploadPreviewResult> PreviewUploadFromServer(string dbName, string currentPath, List<FileManagerDirectoryContent> files, bool findDuplicates = false, int maxItems = TelegramDownloader.Services.Upload.UploadPreviewPlanner.DefaultMaxItems, CancellationToken cancellationToken = default);
         Task CreateEmptyFile(string dbName, string currentPath, string fileName);
         Task refreshChannelFIles(string channelId, bool force = false, RefreshChannelOptions? refreshOptions = null);
         bool isChannelRefreshing(string channelId);

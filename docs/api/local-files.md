@@ -106,6 +106,11 @@ POST /api/v1/transfers/uploads
 This two-step (stage locally, then upload) avoids sending the bytes twice and
 gives you a managed, resumable, hub-tracked upload.
 
+To see first what that upload would do (new, replaced and skipped files, bytes
+to send, folders to create, optionally files whose content is already in the
+channel), send the same body to
+[`POST /api/v1/transfers/uploads/preview`](transfers.md#preview-an-upload-dry-run).
+
 ## Clear the streaming cache
 
 ```
