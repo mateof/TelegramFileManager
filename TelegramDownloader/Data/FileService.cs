@@ -1203,7 +1203,7 @@ namespace TelegramDownloader.Data
         //    }
         //}
 
-        public async Task AddUploadFileFromServer(string dbName, string currentPath, List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files, InfoDownloadTaksModel idt = null) // ItemsUploadedEventArgs<FileManagerDirectoryContent> args)
+        public async Task<string> AddUploadFileFromServer(string dbName, string currentPath, List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files, InfoDownloadTaksModel idt = null) // ItemsUploadedEventArgs<FileManagerDirectoryContent> args)
         {
             _logger.LogInformation("Adding upload task from server - DbName: {DbName}, Path: {Path}, FilesCount: {Count}",
                 dbName, currentPath, files.Count);
@@ -1243,6 +1243,7 @@ namespace TelegramDownloader.Data
 
             _tis.addToInfoDownloadTaskList(idt);
             _tis.CheckPendingUploadInfoTasks();
+            return idt._internalId;
         }
 
         private static (int total, long totalSize) CountUploadTotals(List<FileManagerDirectoryContent> files)
@@ -1518,8 +1519,8 @@ namespace TelegramDownloader.Data
                                     long chunkStart = (long)chunkIndex * chunkSizeBytes;
                                     long chunkLength = Math.Min(chunkSizeBytes, fileInfo.Length - chunkStart);
 
-                                    int attempts = 3;
-                                    int waitForNextAttempt = 1000;
+                                    int attempts = UploadRetryPolicy.MaxAttempts;
+                                    bool sent = false;
                                     UploadModel um = new UploadModel();
                                     um.tis = _tis;
                                     um.startDate = DateTime.Now;
@@ -1527,7 +1528,7 @@ namespace TelegramDownloader.Data
                                     um.chatName = _ts.getChatName(Convert.ToInt64(dbName));
                                     idt.addUpload(um);
 
-                                    while (attempts != 0 && um.state != StateTask.Canceled)
+                                    while (UploadRetryPolicy.ShouldAttempt(attempts, um.state))
                                     {
                                         try
                                         {
@@ -1537,6 +1538,7 @@ namespace TelegramDownloader.Data
                                                 string chunkFileName = $"({chunkIndex + 1} of {totalChunks}) - " + file.Name;
                                                 m = await _ts.uploadFile(dbName, chunkStream, chunkFileName, um: um, caption: getCaption(filePath));
                                             }
+                                            sent = true;
                                             attempts = 0;
                                             await wt.Sleep();
                                         }
@@ -1560,10 +1562,18 @@ namespace TelegramDownloader.Data
                                                 um.state = StateTask.Error;
                                                 throw;
                                             }
+                                            var retryDelay = UploadRetryPolicy.GetRetryDelay(e, UploadRetryPolicy.MaxAttempts - attempts, TimeSpan.FromSeconds(1), UploadRetryPolicy.MaxDelay);
                                             _logger.LogWarning("Retrying chunk upload in {DelayMs}ms - FileName: {FileName}, Chunk: {Chunk}",
-                                                waitForNextAttempt, file.Name, chunkIndex + 1);
-                                            await Task.Delay(waitForNextAttempt);
+                                                retryDelay.TotalMilliseconds, file.Name, chunkIndex + 1);
+                                            await Task.Delay(retryDelay);
                                         }
+                                    }
+
+                                    if (!sent)
+                                    {
+                                        // Canceled before a successful send: stop here (nothing to index).
+                                        um.SendNotification();
+                                        return;
                                     }
 
                                     model.ListMessageId.Add(m.ID);
@@ -1579,8 +1589,8 @@ namespace TelegramDownloader.Data
 
                                 foreach (string s in filesSplit)
                                 {
-                                    int attempts = 3;
-                                    int waitForNextAttempt = 1000;
+                                    int attempts = UploadRetryPolicy.MaxAttempts;
+                                    bool sent = false;
                                     UploadModel um = new UploadModel();
                                     um.tis = _tis;
                                     um.startDate = DateTime.Now;
@@ -1588,12 +1598,15 @@ namespace TelegramDownloader.Data
                                     um.chatName = _ts.getChatName(Convert.ToInt64(dbName));
                                     idt.addUpload(um);
 
-                                    while (attempts != 0 || um.state == StateTask.Canceled)
+                                    // Was "attempts != 0 || canceled": after a cancel that landed
+                                    // once the part was already sent, the loop uploaded it again.
+                                    while (UploadRetryPolicy.ShouldAttempt(attempts, um.state))
                                         try
                                         {
                                             wt = new WaitingTime();
                                             using (FileStream fs = new FileStream(s, FileMode.Open, FileAccess.Read, FileShare.Read))
                                                 m = await _ts.uploadFile(dbName, fs, $"({i} of {filesSplit.Count}) - " + file.Name, um: um, caption: getCaption(filePath));
+                                            sent = true;
                                             attempts = 0;
                                             await wt.Sleep();
                                         }
@@ -1617,9 +1630,17 @@ namespace TelegramDownloader.Data
                                                 um.state = StateTask.Error;
                                                 throw e;
                                             }
-                                            _logger.LogWarning("Retrying upload in {DelayMs}ms - FileName: {FileName}", waitForNextAttempt, file.Name);
-                                            await Task.Delay(waitForNextAttempt);
+                                            var retryDelay = UploadRetryPolicy.GetRetryDelay(e, UploadRetryPolicy.MaxAttempts - attempts, TimeSpan.FromSeconds(1), UploadRetryPolicy.MaxDelay);
+                                            _logger.LogWarning("Retrying upload in {DelayMs}ms - FileName: {FileName}", retryDelay.TotalMilliseconds, file.Name);
+                                            await Task.Delay(retryDelay);
                                         }
+
+                                    if (!sent)
+                                    {
+                                        // Canceled before a successful send: stop here (nothing to index).
+                                        um.SendNotification();
+                                        return;
+                                    }
 
                                     model.ListMessageId.Add(m.ID);
                                     File.Delete(s);
@@ -1631,8 +1652,8 @@ namespace TelegramDownloader.Data
                         else
                         {
 
-                            int attempts = 3;
-                            int waitForNextAttempt = 60000;
+                            int attempts = UploadRetryPolicy.MaxAttempts;
+                            bool sent = false;
                             UploadModel um = new UploadModel();
                             um.tis = _tis;
                             um.path = currentFilePath;
@@ -1640,7 +1661,9 @@ namespace TelegramDownloader.Data
                             // add upload to task list
                             idt.addUpload(um);
                             um.startDate = DateTime.Now;
-                            while (attempts != 0 || um.state == StateTask.Canceled)
+                            // Was "attempts != 0 || canceled": after a cancel that landed once
+                            // the file was already sent, the loop uploaded it again.
+                            while (UploadRetryPolicy.ShouldAttempt(attempts, um.state))
                                 try
                                 {
 
@@ -1668,6 +1691,7 @@ namespace TelegramDownloader.Data
                                         }
                                     }
 
+                                    sent = true;
                                     attempts = 0;
                                     await wt.Sleep(); // sleep 1 second to avoid 420 flood_wait_x
                                 }
@@ -1681,7 +1705,6 @@ namespace TelegramDownloader.Data
                                     _logger.LogError(e, "Exception sending file to Telegram - FileName: {FileName}, Attempt: {Attempt}, Remaining: {Remaining}",
                                         file.Name, 4 - attempts, attempts - 1);
                                     attempts--;
-                                    // waitForNextAttempt *= 2;
                                     if (attempts == 0 || um.state == StateTask.Canceled)
                                     {
                                         if (um.state == StateTask.Canceled)
@@ -1693,9 +1716,18 @@ namespace TelegramDownloader.Data
                                         um.state = StateTask.Error;
                                         throw e;
                                     }
-                                    _logger.LogWarning("Retrying upload in {DelayMs}ms - FileName: {FileName}", waitForNextAttempt, file.Name);
-                                    await Task.Delay(waitForNextAttempt);
+                                    // Telegram's FLOOD_WAIT when given, else 5 s, 10 s ... capped (was a fixed 60 s).
+                                    var retryDelay = UploadRetryPolicy.GetRetryDelay(e, UploadRetryPolicy.MaxAttempts - attempts);
+                                    _logger.LogWarning("Retrying upload in {DelayMs}ms - FileName: {FileName}", retryDelay.TotalMilliseconds, file.Name);
+                                    await Task.Delay(retryDelay);
                                 }
+
+                            if (!sent)
+                            {
+                                // Canceled before a successful send: stop here (nothing to index).
+                                um.SendNotification();
+                                return;
+                            }
 
                             model.MessageId = m.ID;
                         }
