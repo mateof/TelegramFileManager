@@ -393,7 +393,7 @@ namespace TelegramDownloader.Data
 
 
 
-                await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size);
+                await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size, filterIdHint: entry.FilterId);
             }
 
             var firstFile = args.Files.FirstOrDefault();
@@ -460,7 +460,7 @@ namespace TelegramDownloader.Data
 
 
 
-            await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size);
+            await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size, filterIdHint: entry.FilterId);
 
             await _db.checkAndSetDirectoryHasChild(dbName, parentId);
         }
@@ -497,7 +497,7 @@ namespace TelegramDownloader.Data
                     //if (item.IsFile)
                     //    await _db.subBytesToFolder(dbName, item.ParentId, item.Size);
                 }
-                await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size);
+                await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size, filterIdHint: entry.FilterId);
             }
             if (entry.IsFile)
                 if (entry.isSplit)
@@ -515,7 +515,7 @@ namespace TelegramDownloader.Data
                 }
 
             await _db.deleteEntry(dbName, entry.Id);
-            await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size);
+            await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size, filterIdHint: entry.FilterId);
         }
 
         public async Task<FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>> RenameFileOrFolder(string dbName, Syncfusion.Blazor.FileManager.FileManagerDirectoryContent file, string newName)
@@ -1423,11 +1423,25 @@ namespace TelegramDownloader.Data
             }
         }
 
-        public Task UploadFileFromServer(string dbName, string currentPath, List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files, InfoDownloadTaksModel dm = null) // ItemsUploadedEventArgs<FileManagerDirectoryContent> args)
+        public async Task UploadFileFromServer(string dbName, string currentPath, List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files, InfoDownloadTaksModel dm = null) // ItemsUploadedEventArgs<FileManagerDirectoryContent> args)
         {
+            await EnsureChannelIndexes(dbName);
             // Each run (first start or retry) gets a fresh view of the destination
             // index; it is shared by the recursive calls for the subfolders.
-            return UploadFileFromServer(dbName, currentPath, files, dm, new UploadDestinationCache(), isRoot: true);
+            await UploadFileFromServer(dbName, currentPath, files, dm, new UploadDestinationCache(), isRoot: true);
+        }
+
+        /// <summary>The indexes the upload lookups rely on; never fails the caller.</summary>
+        private async Task EnsureChannelIndexes(string dbName)
+        {
+            try
+            {
+                await _db.EnsureIndexes(dbName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not ensure the indexes of channel {DbName}", dbName);
+            }
         }
 
         private async Task UploadFileFromServer(string dbName, string currentPath, List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files, InfoDownloadTaksModel dm, UploadDestinationCache cache, bool isRoot)
@@ -1788,7 +1802,7 @@ namespace TelegramDownloader.Data
                     }
                     if (file.IsFile)
                     {
-                        await _db.addBytesToFolder(dbName, model.ParentId, model.Size);
+                        await _db.addBytesToFolder(dbName, model.ParentId, model.Size, filterIdHint: model.FilterId);
                         if (idt != null) idt.AddOne(file.Size);
                     }
                     else
@@ -2088,7 +2102,7 @@ namespace TelegramDownloader.Data
                 await _db.createEntry(dbName, model);
                 _logger.LogDebug("Database entry created for file");
 
-                await _db.addBytesToFolder(dbName, model.ParentId, model.Size);
+                await _db.addBytesToFolder(dbName, model.ParentId, model.Size, filterIdHint: model.FilterId);
                 _logger.LogDebug("Folder size updated");
 
                 GC.Collect();
