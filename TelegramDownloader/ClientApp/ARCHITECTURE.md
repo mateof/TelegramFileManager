@@ -184,9 +184,9 @@ Prefer composing these over new primitives; if something is generic, add it to `
 - `@tfm/api-client/signalr`: `createTransfersConnection()`, `createEventsConnection()` →
   `TypedHub` with typed `on()`, `onStatus()`, endless reconnect (also of the first start), and typed
   hub methods. In the app, use `lib/realtime.ts` instead (it lazy-loads SignalR).
-- Provisional parts (aligned when the API agent's work is merged): `search.global` /
-  `GlobalSearchResultDto` (`GET /api/v1/search`), the `Metrics`/`LibraryScan` payloads and
-  `UnsubscribeMetrics` of `/hubs/events`.
+- Provisional parts (aligned when the API agent's work is merged): the `Metrics` payload and
+  `UnsubscribeMetrics` of `/hubs/events`. (`search.global` → `ApiGlobalSearchResultDto` and the
+  `LibraryScan` payload already follow the server.)
 
 ## 6. @tfm/file-manager
 
