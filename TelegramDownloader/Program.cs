@@ -209,6 +209,11 @@ builder.Services.AddSingleton<TelegramDownloader.Services.Api.QrLoginSessionMana
 builder.Services.AddScoped<TelegramDownloader.Services.Api.ChannelFolderResolver>();
 builder.Services.AddHostedService<TelegramDownloader.Services.Api.TransferBroadcastService>();
 
+// Application events hub (/hubs/events): notifications, refresh/import progress, session state, metrics
+builder.Services.AddSingleton<TelegramDownloader.Services.Api.ImportProgressTracker>();
+builder.Services.AddSingleton<TelegramDownloader.Hubs.EventsHubState>();
+builder.Services.AddHostedService<TelegramDownloader.Services.Api.EventsBroadcastService>();
+
 // Media library: identification through metadata providers, cached images, watch state
 builder.Services.AddHttpClient("library-provider", c => c.Timeout = TimeSpan.FromSeconds(30));
 builder.Services.AddHttpClient("library-images", c => c.Timeout = TimeSpan.FromSeconds(60));
@@ -406,6 +411,20 @@ app.UseCors("MobilePolicy");
 app.UseAuthentication();
 app.UseMiddleware<TelegramDownloader.Middleware.WebAccessMiddleware>();
 
+// New web app (React SPA) at /app: hashed assets are cached for a year,
+// index.html and the service worker are always revalidated.
+var spaRoot = Path.Combine(app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot"), "app");
+Directory.CreateDirectory(spaRoot);
+var spaStaticOptions = new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(spaRoot),
+    RequestPath = "/app",
+    ContentTypeProvider = extensionProvider,
+    OnPrepareResponse = ctx =>
+        ctx.Context.Response.Headers.CacheControl = TelegramDownloader.Services.Api.SpaCachePolicy.For(ctx.Context.Request.Path.Value)
+};
+app.UseStaticFiles(spaStaticOptions);
+
 app.UseStaticFiles();
 
 app.UseStaticFiles(new StaticFileOptions
@@ -451,10 +470,22 @@ app.MapControllers();
 // Live transfer progress for API clients (mobile apps, dashboards...)
 app.MapHub<TelegramDownloader.Hubs.TransferHub>("/hubs/transfers");
 
+// Application events (notifications, refresh/import progress, session state, metrics)
+app.MapHub<TelegramDownloader.Hubs.EventsHub>("/hubs/events");
+
 // Behind a proxy that does not forward WebSocket upgrades, SignalR falls back
 // to long polling; keep each poll below the usual 60 s proxy read timeout so
 // the fallback works instead of dropping the circuit every minute.
 app.MapBlazorHub(options => options.LongPolling.PollTimeout = TimeSpan.FromSeconds(45));
+// SPA deep links (dots included, e.g. /app/files/song.mp3) get index.html;
+// the literal "app" segment makes this fallback win over the Blazor one.
+// A missing hashed asset is a real 404, not the HTML shell.
+app.MapGet("/app/assets/{**path}", () => Results.NotFound());
+app.MapFallbackToFile("/app/{**path}", "index.html", new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(spaRoot),
+    OnPrepareResponse = ctx => ctx.Context.Response.Headers.CacheControl = TelegramDownloader.Services.Api.SpaCachePolicy.NoCache
+});
 app.MapFallbackToPage("/_Host");
 
 try

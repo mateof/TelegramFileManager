@@ -45,6 +45,44 @@ Progress of the first-run wizard (`currentStep` is `Complete`,
 session-bound endpoints answer `503 setup_required`; finish setup from the web UI
 at `/setup`.
 
+### Setup wizard (write)
+
+Works before MongoDB is configured, and **only while setup is incomplete**:
+once it is complete every endpoint below answers `409 conflict`, so it cannot
+be used to repoint a configured server.
+
+```
+POST /api/v1/system/setup/test-mongo     { "connectionString": "mongodb://mongo:27017" }
+POST /api/v1/system/setup/test-telegram  { "apiId": "12345", "apiHash": "0123…" }
+POST /api/v1/system/setup                { "mongoConnectionString": "…", "apiId": "…", "apiHash": "…" }
+POST /api/v1/system/setup/complete
+```
+
+- The two tests answer `{ success, error }` without saving anything (Telegram
+  credentials are only format-checked; Telegram is contacted at sign-in).
+- `POST /system/setup` does what the web wizard does: each part present is
+  tested, written to `Configuration/config.json` and applied (MongoDB reconnects
+  the database, log store and logger and loads the stored settings; Telegram
+  initialises the client). Either part can be sent alone. It returns the new
+  `SetupStatusDto`; a failing test answers `400` with the reason in
+  `error.detail`.
+- `complete` marks the wizard finished (`400 setup_required` if something is
+  missing). The server also marks it complete by itself as soon as a status read
+  (including the one at the end of `POST /system/setup`) finds everything
+  configured, so `complete` may answer `409`: treat it as success.
+
+### Maintenance
+
+| Endpoint | Effect |
+| --- | --- |
+| `POST /api/v1/system/restart` | Answers `202` and stops the process gracefully about a second later. It only comes back if something restarts it: the Docker restart policy (`restart: unless-stopped`), systemd, a Windows service… Started by hand, it just stops. Poll `/system/ping` to know when it is back. |
+| `GET /api/v1/system/image-cache` | `{ channelImages, thumbnails, sizeInBytes, sizeText }` of the channel avatar and thumbnail caches. |
+| `DELETE /api/v1/system/image-cache` | Empties both; images are downloaded again when next shown. |
+| `GET /api/v1/system/orphaned-favorites` | Ids of favourite channels the account can no longer reach (session required). |
+| `POST /api/v1/system/orphaned-favorites` | Removes them from the favourites and returns the ids removed. |
+| `GET /api/v1/system/ffmpeg` | `{ available, version, transcodingEnabled }` (cached 5 minutes, `?refresh=true` probes again). |
+| `GET /api/v1/system/version` | `{ currentVersion, isDevVersion, latestRelease, latestDev, hasNewRelease, hasNewDev }` from GitHub, cached 30 minutes (`?refresh=true`). Releases carry `version`, `name`, `url`, `publishedAt`, `prerelease` and `notes` (Markdown). |
+
 ### Metrics
 
 ```
@@ -129,6 +167,9 @@ Returns the full `AppConfigDto`. Highlights:
 | `libraryEnabled`, `libraryLanguage`, `libraryAutoScan`, `libraryIncludedChannels`, `libraryExcludedChannels`, `libraryWatchedThreshold` | Media library settings (see [library.md](library.md)). An empty `libraryIncludedChannels` means every indexed channel. |
 | `libraryFolderRules` | What a channel folder holds: `[{ channelId, path, kind }]` with `kind` `movie`, `series` or `ignore` (see [library.md](library.md#folder-rules)). PATCH replaces the whole list. |
 | `libraryProviders` | Metadata providers (`id`, `enabled`, `priority`, `hasKey`, `apiKeyMasked`). PATCH with `[{ id, enabled?, apiKey?, priority? }]`; omit `apiKey` to keep the current key, send `""` to clear it. |
+| `useMobileFileManagerAlways`, `hasFileManagerVirtualScroll` | Web UI file manager options. |
+| `mobileApiKey`, `mobileApiKeySet` | API key for apps, **masked** on read (`****` + last 4 characters). PATCH `mobileApiKey` with a new key (8+ characters) or `""` to remove it (then `config.json` applies). The new key is enforced from the next request on. |
+| `webDavUser`, `webDavPasswordSet` | WebDAV credentials. The password is **write-only**: PATCH `webDavPassword` to set it (`""` clears it); reads only say whether one is set. |
 
 <a id="streaming"></a>
 

@@ -1,3 +1,4 @@
+using MongoDB.Driver;
 using Syncfusion.Blazor.FileManager;
 using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
@@ -51,7 +52,17 @@ namespace TelegramDownloader.Services.Api
 
             var folderPath = NormalizeFolderPath(path);
             if (folderPath == "/")
-                return await _db.getRootFolder(channelId, collectionId ?? "directory");
+            {
+                var root = await _db.getRootFolder(channelId, collectionId ?? "directory");
+                if (root != null || collectionId == null) return root;
+
+                // A collection made from a sub-folder share keeps that folder's
+                // name on its root document instead of "Files".
+                return await _db.getDatabase(channelId)
+                    .GetCollection<BsonFileManagerModel>(collectionId)
+                    .Find(x => !x.IsFile && (x.ParentId == "" || x.ParentId == null) && (x.FilePath == "" || x.FilePath == null))
+                    .FirstOrDefaultAsync();
+            }
 
             // A folder's own FilePath has no trailing slash.
             return await _db.getFileByPath(channelId, folderPath.TrimEnd('/'), collectionId ?? "directory");
