@@ -206,7 +206,7 @@ export function ChannelList({ collapsed = false, onNavigate }: ChannelListProps)
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div className="flex min-h-56 flex-1 flex-col">
       <div className="flex items-center justify-between px-4 pb-1.5 pt-3">
         <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">{t('Channels')}</span>
         {channels.data && <span className="text-[11px] text-fg-subtle">{channels.data.length}</span>}
@@ -243,7 +243,7 @@ export function ChannelList({ collapsed = false, onNavigate }: ChannelListProps)
           </button>
         </Tooltip>
       </div>
-      <div role="tablist" aria-label={t('Channel filter')} className="flex gap-0.5 overflow-x-auto px-3 pb-2 [scrollbar-width:none]">
+      <div role="tablist" aria-label={t('Channel filter')} className="flex flex-wrap gap-0.5 px-3 pb-2">
         {tabs().map((tb) => (
           <button
             key={tb.id}

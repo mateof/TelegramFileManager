@@ -21,6 +21,8 @@ export interface NavItem {
   to: string;
   label: string;
   icon: LucideIcon;
+  /** Shorter label for the mobile bottom navigation. */
+  shortLabel?: string;
   /** Extra words for the command palette. */
   keywords?: string[];
 }
@@ -81,6 +83,6 @@ export function mobileNavItems(): NavItem[] {
     { id: 'channels', to: '/channels', label: t('Channels'), icon: FolderTree },
     { id: 'local', to: '/local', label: t('Local'), icon: HardDrive },
     { id: 'transfers', to: '/transfers', label: t('Transfers'), icon: ArrowDownUp },
-    { id: 'playlists', to: '/playlists', label: t('Playlists'), icon: ListMusic }
+    { id: 'playlists', to: '/playlists', label: t('Playlists'), shortLabel: t('Lists'), icon: ListMusic }
   ];
 }

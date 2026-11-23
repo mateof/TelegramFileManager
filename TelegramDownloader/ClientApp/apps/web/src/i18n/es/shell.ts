@@ -61,7 +61,8 @@ const shell: Record<string, string> = {
   'More appearance options...': 'Más opciones de apariencia...',
   'Language': 'Idioma',
   'Classic UI': 'Interfaz clásica',
-  'Sign out': 'Cerrar sesión'
+  'Sign out': 'Cerrar sesión',
+  Lists: 'Listas'
 };
 
 export default shell;

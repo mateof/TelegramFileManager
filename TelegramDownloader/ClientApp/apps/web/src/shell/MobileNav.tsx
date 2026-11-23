@@ -22,13 +22,13 @@ export function BottomNav() {
       {mobileNavItems().map((item) => {
         const Icon = item.icon;
         return (
-          <NavLink key={item.id} to={item.to} className={({ isActive }) => cn(tab, isActive && 'text-accent-400')}>
+          <NavLink key={item.id} to={item.to} aria-label={item.label} className={({ isActive }) => cn(tab, isActive && 'text-accent-400')}>
             {({ isActive }) => (
               <>
                 <span className={cn('flex h-7 w-12 items-center justify-center rounded-full transition-colors', isActive && 'bg-primary-soft')}>
                   <Icon className="size-5" />
                 </span>
-                {item.label}
+                <span className="max-w-full truncate px-0.5">{item.shortLabel ?? item.label}</span>
                 {item.id === 'transfers' && <CountBadge count={active} className="absolute right-[calc(50%-1.4rem)] top-1.5" />}
               </>
             )}

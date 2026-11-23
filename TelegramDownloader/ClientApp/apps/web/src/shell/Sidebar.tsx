@@ -70,7 +70,7 @@ export function Sidebar({ collapsed = false, inDrawer = false, onNavigate }: Sid
         )}
       </div>
 
-      <nav aria-label={t('Main navigation')} className={cn('flex shrink-0 flex-col gap-3 overflow-y-auto px-2 pb-2', inDrawer ? 'max-h-none' : 'max-h-[46%]')}>
+      <nav aria-label={t('Main navigation')} className="flex min-h-0 shrink flex-col gap-3 overflow-y-auto px-2 pb-2">
         {sections.map((section) => (
           <div key={section.id} className="flex flex-col gap-0.5">
             {!collapsed && (
