@@ -1,0 +1,35 @@
+/* Player-only animations (loaded with the lazy player chunk) */
+@keyframes tfm-eq {
+  0%,
+  100% {
+    transform: scaleY(0.3);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+[class*='tfm-eq'] {
+  transform-origin: bottom;
+}
+
+@keyframes tfm-ambient-drift {
+  0% {
+    transform: scale(1.25) rotate(0deg);
+  }
+  50% {
+    transform: scale(1.4) rotate(4deg);
+  }
+  100% {
+    transform: scale(1.25) rotate(0deg);
+  }
+}
+
+.tfm-player-ambient {
+  animation: tfm-ambient-drift 30s ease-in-out infinite;
+}
+
+[data-motion='reduced'] .tfm-player-ambient,
+[data-motion='reduced'] [class*='tfm-eq'] {
+  animation: none !important;
+}
