@@ -54,9 +54,12 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   ref
 ) {
   if (asChild) {
+    // Slottable keeps the icons: they are rendered inside the child element (e.g. a <Link>)
     return (
       <Slot.Root ref={ref} className={buttonClasses(variant, size, className)} {...props}>
-        {children}
+        {icon}
+        <Slot.Slottable>{children}</Slot.Slottable>
+        {iconRight}
       </Slot.Root>
     );
   }

@@ -47,9 +47,9 @@ export function Select<V extends string = string>({
         className={cn(FIELD, 'flex items-center justify-between gap-2 text-left', size === 'sm' ? 'h-8 px-2.5' : 'h-9.5 px-3', className)}
         {...aria}
       >
-        <SelectPrimitive.Value placeholder={placeholder} />
+        <SelectPrimitive.Value placeholder={placeholder} className="min-w-0 truncate" />
         <SelectPrimitive.Icon>
-          <ChevronDown className="size-4 text-fg-subtle" />
+          <ChevronDown className="size-4 shrink-0 text-fg-subtle" />
         </SelectPrimitive.Icon>
       </SelectPrimitive.Trigger>
       <SelectPrimitive.Portal>
