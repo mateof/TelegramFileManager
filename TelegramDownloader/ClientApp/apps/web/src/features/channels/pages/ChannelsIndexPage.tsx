@@ -16,7 +16,7 @@ export default function ChannelsIndexPage() {
   const channels = (data ?? [])
     .filter((c) => (scope === 'indexed' ? c.hasDatabase : true))
     .filter((c) => !q || c.name.toLocaleLowerCase().includes(q))
-    .sort((a, b) => Number(b.isFavorite) - Number(a.isFavorite) || Number(b.hasDatabase) - Number(a.hasDatabase) || a.name.localeCompare(b.name));
+    .sort((a, b) => Number(b.isFavorite) - Number(a.isFavorite) || Number(b.hasDatabase) - Number(a.hasDatabase) || a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
 
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-4 sm:p-6 lg:p-8">

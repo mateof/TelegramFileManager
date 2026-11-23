@@ -94,13 +94,13 @@ function Filters({ filters, onChange }: { filters: LogFilters; onChange: (f: Log
           value={filters.logger || ALL}
           onValueChange={(v) => set({ logger: v === ALL ? '' : v })}
           options={[{ value: ALL, label: t('All components') }, ...(loggers.data ?? []).map((l) => ({ value: l, label: shortLogger(l) }))]}
-          className="w-48"
+          className="w-56"
         />
         <Select
           value={filters.version || ALL}
           onValueChange={(v) => set({ version: v === ALL ? '' : v })}
           options={[{ value: ALL, label: t('All versions') }, ...(versions.data ?? []).map((v) => ({ value: v, label: v }))]}
-          className="w-36"
+          className="w-44"
         />
       </div>
       <div className="flex flex-wrap items-center gap-2 text-sm">

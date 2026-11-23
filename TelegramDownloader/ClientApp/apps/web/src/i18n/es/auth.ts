@@ -5,6 +5,7 @@ const auth: Record<string, string> = {
   'Login method': 'Método de inicio de sesión',
   'QR code': 'Código QR',
   'Phone number': 'Número de teléfono',
+  Phone: 'Teléfono',
   'Verification code': 'Código de verificación',
   'Telegram sent a code to your other sessions (or by SMS) for {phone}.': 'Telegram ha enviado un código a tus otras sesiones (o por SMS) para {phone}.',
   'Two-step verification password': 'Contraseña de verificación en dos pasos',

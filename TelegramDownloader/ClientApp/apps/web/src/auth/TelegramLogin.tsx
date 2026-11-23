@@ -29,7 +29,7 @@ export function TelegramLogin({ status }: { status: AuthStatusDto }) {
           onValueChange={setMethod}
           options={[
             { value: 'qr', label: t('QR code'), icon: <QrCode /> },
-            { value: 'phone', label: t('Phone number'), icon: <Phone /> }
+            { value: 'phone', label: t('Phone'), icon: <Phone /> }
           ]}
         />
         {method === 'qr' ? <QrLogin /> : <PhoneLogin initialStep={status.step} />}

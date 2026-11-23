@@ -68,9 +68,9 @@ export default function ChatPage() {
     <div className="flex h-full min-h-0 flex-col">
       <header className="glass z-10 flex flex-wrap items-center gap-3 border-b border-border px-4 py-3 sm:px-6">
         <Avatar src={api.channels.imageUrl(id)} name={name} size="md" square />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-40 flex-1">
           <h1 className="truncate text-lg font-semibold tracking-tight text-fg">{name}</h1>
-          <p className="text-xs text-fg-subtle">
+          <p className="truncate text-xs text-fg-subtle">
             {channel ? (
               <Link to={`/channels/${encodeURIComponent(id)}`} className="hover:text-fg-muted hover:underline">
                 {t('Open the file manager')}
