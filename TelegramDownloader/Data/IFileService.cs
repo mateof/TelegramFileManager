@@ -48,6 +48,10 @@ namespace TelegramDownloader.Data
         /// <summary>Atomically claims the channel and starts the refresh in the background; false if one is already running.</summary>
         bool tryStartChannelRefresh(string channelId, bool force, RefreshChannelOptions? refreshOptions, out Task refreshTask);
         ChannelRefreshResult? getLastRefreshResult(string channelId);
+        /// <summary>Live progress of the channel's running refresh; null when none runs.</summary>
+        ChannelRefreshProgressSnapshot? getChannelRefreshProgress(string channelId);
+        /// <summary>Asks the channel's running refresh to stop; false when none runs.</summary>
+        bool cancelChannelRefresh(string channelId);
         Task<int> PreloadFilesToTemp(string channelId, List<FileManagerDirectoryContent> items);
         Task DownloadPlaylistToLocal(PlaylistModel playlist, string destinationFolder);
     }

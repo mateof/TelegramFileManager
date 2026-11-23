@@ -1880,7 +1880,7 @@ namespace TelegramDownloader.Data
 
         public async Task refreshChannelFIles(string channelId, bool force = false, RefreshChannelOptions? refreshOptions = null)
         {
-            if (!refreshRegistry.TryBegin(channelId))
+            if (!refreshRegistry.TryBegin(channelId, out ChannelRefreshProgress progress))
             {
                 _logger.LogInformation("Refresh of channel {ChannelId} skipped: another refresh is already running", channelId);
                 _toastService.Notify(new ToastMessage
@@ -1893,113 +1893,120 @@ namespace TelegramDownloader.Data
                 });
                 return;
             }
-            await runChannelRefresh(channelId, force, refreshOptions);
+            await runChannelRefresh(channelId, force, refreshOptions, progress);
         }
 
         public bool tryStartChannelRefresh(string channelId, bool force, RefreshChannelOptions? refreshOptions, out Task refreshTask)
         {
-            if (!refreshRegistry.TryBegin(channelId))
+            if (!refreshRegistry.TryBegin(channelId, out ChannelRefreshProgress progress))
             {
                 refreshTask = Task.CompletedTask;
                 return false;
             }
             // Marked before returning, so a status poll right after sees it running.
-            refreshTask = Task.Run(() => runChannelRefresh(channelId, force, refreshOptions));
+            refreshTask = Task.Run(() => runChannelRefresh(channelId, force, refreshOptions, progress));
             return true;
         }
 
         // The caller must have claimed the channel in refreshRegistry; it is released here.
-        private async Task runChannelRefresh(string channelId, bool force, RefreshChannelOptions? refreshOptions)
+        private async Task runChannelRefresh(string channelId, bool force, RefreshChannelOptions? refreshOptions, ChannelRefreshProgress progress)
         {
-            int totalNewMessages = 0;
-            DateTime init = DateTime.Now;
-            ChannelRefreshResult result = new ChannelRefreshResult
-            {
-                ChannelId = channelId,
-                StartedAt = init
-            };
+            ChannelRefreshResult? result = null;
             try
             {
-                System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
-                // Load what is already indexed once, in parallel, and keep the ids
-                // in a set: the old List.Contains made the diff O(new x indexed).
-                Task<List<int>> presentIdsTask = _db.getAllIdsFromChannel(channelId);
-                Task<List<string>> fileNamesTask = _db.getAllFileNamesFromChannel(channelId);
-                Task<BsonFileManagerModel> rootFolderTask = _db.getRootFolder(channelId);
-                List<int> presentIdList = await presentIdsTask;
-                HashSet<int> presentIds = presentIdList.ToHashSet();
-                _logger.LogInformation($"Refresh channel with id: {channelId}");
-
                 // Use default options if none provided
                 refreshOptions ??= new RefreshChannelOptions();
+                _logger.LogInformation("Refresh channel {ChannelId} ({Types}, force {Force})", channelId, refreshOptions.GetSelectionSummary(), force);
 
-                int lastId = (presentIdList.Count > 0 && !force) ? presentIdList.Max() : 0;
-                List<TelegramChatDocuments> telegramChatDocuments = (await _ts.searchAllChannelFiles(Convert.ToInt64(channelId), lastId, refreshOptions)).Where(x => x.name != null).ToList();
-                _logger.LogInformation($"Get the telegram files in: {(DateTime.Now - init).TotalSeconds} seconds  for channel id:{channelId}");
-
-                long telegramMs = sw.ElapsedMilliseconds;
-                ChannelRefreshPlanner.AssignUniqueNames(await fileNamesTask, telegramChatDocuments);
-                List<TelegramChatDocuments> newDocs = ChannelRefreshPlanner.SelectNew(telegramChatDocuments, presentIds);
-                var rootFolder = await rootFolderTask;
-                long planMs = sw.ElapsedMilliseconds - telegramMs;
-
-                // One InsertMany per batch instead of one InsertOne per file.
-                // Counted per batch so a failure still reports what got in.
-                foreach (TelegramChatDocuments[] batch in newDocs.Chunk(ChannelRefreshPlanner.InsertBatchSize))
-                {
-                    List<BsonFileManagerModel> models = batch.Select(tcd => ChannelRefreshPlanner.ToRootFileEntry(tcd, rootFolder.Id)).ToList();
-                    await _db.createEntries(channelId, models);
-                    foreach (TelegramChatDocuments tcd in batch)
-                    {
-                        totalNewMessages++;
-                        result.Count(tcd.documentType);
-                    }
-                }
-                _logger.LogDebug("Refresh {ChannelId} timings: telegram+load {TelegramMs} ms, diff {PlanMs} ms, insert {InsertMs} ms ({Count} new of {Scanned} scanned, {Indexed} already indexed)",
-                    channelId, telegramMs, planMs, sw.ElapsedMilliseconds - telegramMs - planMs, newDocs.Count, telegramChatDocuments.Count, presentIds.Count);
-            }
-            catch
-            {
-                result.Failed = true;
-                throw;
+                // Never throws: a failure or a cancel is reported in the result.
+                result = await ChannelRefreshRunner.RunAsync(
+                    channelId,
+                    new ChannelRefreshBackend(channelId, _ts, _db),
+                    refreshOptions.SelectedFilters(),
+                    force,
+                    progress,
+                    _logger);
             }
             finally
             {
+                result ??= new ChannelRefreshResult
+                {
+                    ChannelId = channelId,
+                    StartedAt = progress.StartedAt,
+                    FinishedAt = DateTime.Now,
+                    Failed = true
+                };
+                // The result is published before the channel is released, so
+                // a client that sees "not running" can read it right away.
+                lastRefreshResults[channelId] = result;
                 // Without this, a scan that throws would leave the channel
                 // flagged as refreshing forever and a polling client would
-                // never stop waiting.
-                refreshRegistry.End(channelId);
-                result.FinishedAt = DateTime.Now;
-                lastRefreshResults[channelId] = result;
+                // never stop waiting. A cancel ends up here too.
+                refreshRegistry.End(channelId, progress);
             }
-            _logger.LogInformation($"Finish Refresh channel with id: {channelId} with {totalNewMessages} new files added.");
+            _logger.LogInformation("Finish refresh of channel {ChannelId}: {Total} new files added (canceled {Canceled}, failed {Failed})",
+                channelId, result.Total, result.Canceled, result.Failed);
 
             // Let the media library pick up the new files (it subscribes at startup)
-            try
+            if (result.Total > 0 || (!result.Failed && !result.Canceled))
             {
-                ChannelRefreshed?.Invoke(channelId);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "A channel refresh listener failed for {ChannelId}", channelId);
+                try
+                {
+                    ChannelRefreshed?.Invoke(channelId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "A channel refresh listener failed for {ChannelId}", channelId);
+                }
             }
 
-            // Fix for CS1739: Removed the invalid 'autoHide' parameter and replaced it with the correct property assignment.
-            ToastMessage tm = new ToastMessage
-            {
-                Type = ToastType.Success,
-                IconName = IconName.CheckCircle,
-                Title = "Refresh channel files",
-                Message = $"Files channel has been refreshed with {totalNewMessages} new files added.",
-                AutoHide = true
-                
-            };
+            ToastMessage tm;
+            if (result.Canceled)
+                tm = new ToastMessage
+                {
+                    Type = ToastType.Warning,
+                    IconName = IconName.XCircle,
+                    Title = "Refresh channel files",
+                    Message = $"Refresh canceled; {result.Total} new files were added before stopping.",
+                    AutoHide = true
+                };
+            else if (result.Failed)
+                tm = new ToastMessage
+                {
+                    Type = ToastType.Danger,
+                    IconName = IconName.ExclamationTriangle,
+                    Title = "Refresh channel files",
+                    Message = $"Refresh finished with errors; {result.Total} new files were added. Check the logs.",
+                    AutoHide = true
+                };
+            else
+                tm = new ToastMessage
+                {
+                    Type = ToastType.Success,
+                    IconName = IconName.CheckCircle,
+                    Title = "Refresh channel files",
+                    Message = $"Files channel has been refreshed with {result.Total} new files added.",
+                    AutoHide = true
+                };
             _toastService.Notify(tm);
         }
 
         public bool isChannelRefreshing(string channelId)
         {
             return refreshRegistry.IsRunning(channelId);
+        }
+
+        public ChannelRefreshProgressSnapshot? getChannelRefreshProgress(string channelId)
+        {
+            return refreshRegistry.Get(channelId)?.Snapshot();
+        }
+
+        public bool cancelChannelRefresh(string channelId)
+        {
+            bool requested = refreshRegistry.TryCancel(channelId);
+            if (requested)
+                _logger.LogInformation("Cancellation of the refresh of channel {ChannelId} requested", channelId);
+            return requested;
         }
 
         public ChannelRefreshResult? getLastRefreshResult(string channelId)
