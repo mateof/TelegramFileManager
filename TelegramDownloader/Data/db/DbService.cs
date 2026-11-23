@@ -1259,6 +1259,33 @@ namespace TelegramDownloader.Data.db
             _logger.LogInformation("Added track {FileName} to playlist {Id}", track.FileName, playlistId);
         }
 
+        public async Task AddTracksToPlaylist(string playlistId, List<PlaylistTrackModel> tracks)
+        {
+            if (tracks == null || tracks.Count == 0)
+                return;
+
+            var collection = getDatabase(CONFIG_DB_NAME).GetCollection<PlaylistModel>(PLAYLIST_COLLECTION);
+
+            var playlist = await GetPlaylistById(playlistId);
+            if (playlist == null)
+            {
+                _logger.LogWarning("Playlist {Id} not found when adding tracks", playlistId);
+                return;
+            }
+
+            var now = DateTime.Now;
+            PlaylistTrackMerger.AssignOrder(tracks, PlaylistTrackMerger.NextOrder(playlist.Tracks), now);
+
+            var filter = Builders<PlaylistModel>.Filter.Eq(x => x.Id, playlistId);
+            var update = Builders<PlaylistModel>.Update
+                .PushEach(x => x.Tracks, tracks)
+                .Set(x => x.DateModified, now);
+
+            await collection.UpdateOneAsync(filter, update);
+
+            _logger.LogInformation("Added {Count} tracks to playlist {Id}", tracks.Count, playlistId);
+        }
+
         public async Task RemoveTrackFromPlaylist(string playlistId, string fileId)
         {
             var collection = getDatabase(CONFIG_DB_NAME).GetCollection<PlaylistModel>(PLAYLIST_COLLECTION);

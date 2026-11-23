@@ -82,6 +82,11 @@ namespace TelegramDownloader.Data.db
         Task UpdatePlaylist(PlaylistModel playlist);
         Task DeletePlaylist(string id);
         Task AddTrackToPlaylist(string playlistId, PlaylistTrackModel track);
+        /// <summary>
+        /// Appends several tracks to a playlist in a single update. Order values continue
+        /// after the current tracks; callers are expected to have removed duplicates.
+        /// </summary>
+        Task AddTracksToPlaylist(string playlistId, List<PlaylistTrackModel> tracks);
         Task RemoveTrackFromPlaylist(string playlistId, string fileId);
         Task ReorderPlaylistTracks(string playlistId, List<string> orderedFileIds);
     }
