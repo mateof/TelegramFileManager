@@ -259,14 +259,31 @@ removes every finished entry, as it always did.
 ## Persisted transfers (survive restarts)
 
 When `enableTaskPersistence` is on (default), transfers are written to MongoDB.
-On startup the app reloads them and, if `autoResumeOnStartup` is on, resumes
-them from the last confirmed byte.
+Once the Telegram session is ready after a restart, records left `working` by
+the previous process are set back to `pending` and, if `autoResumeOnStartup`
+is on (default), every `pending`/`paused` transfer is queued again:
+
+- downloads continue the partial file from the last confirmed byte (split
+  files from the first unfinished part);
+- batch uploads are rebuilt from the selected items and skip the files already
+  in the destination; parts of a split file that already reached Telegram are
+  reused, not sent twice;
+- a task whose source is gone (local folder deleted, Telegram message deleted)
+  is marked `error` with the reason instead of blocking the queue.
+
+`error` tasks are not retried automatically; resume them by hand (same code
+path as the automatic resume):
 
 ```
-GET    /api/v1/transfers/persisted                 # list (paged)
-DELETE /api/v1/transfers/persisted/{internalId}    # forget one
-DELETE /api/v1/transfers/persisted                 # forget all
+GET    /api/v1/transfers/persisted                    # list (paged)
+POST   /api/v1/transfers/persisted/{internalId}/resume # resume / retry one
+DELETE /api/v1/transfers/persisted/{internalId}       # forget one
+DELETE /api/v1/transfers/persisted                    # forget all
 ```
+
+The resume answer says what happened: `resumed` (queued again), `action`
+(`ResumeDownload`, `ResumeSplitDownload`, `ResumeBatchUpload`, `Fail` or `Skip`)
+and a `message` (for instance "Already queued or running").
 
 ```json
 {

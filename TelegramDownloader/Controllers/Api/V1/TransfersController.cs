@@ -565,6 +565,51 @@ namespace TelegramDownloader.Controllers.Api.V1
             }
         }
 
+        /// <summary>Resumes or retries one persisted transfer.</summary>
+        /// <remarks>
+        /// Same code path as the automatic resume on startup: downloads continue
+        /// from the last confirmed byte, batch uploads skip the files already in
+        /// the destination, and a task whose source no longer exists is marked
+        /// as failed with the reason. A task that is already queued or running
+        /// is left alone.
+        /// </remarks>
+        [HttpPost("persisted/{internalId}/resume")]
+        [ProducesResponseType(typeof(ApiResult<TaskResumeResultDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> ResumePersisted(string internalId,
+            [FromServices] TelegramDownloader.Services.Transfers.TaskResumeCoordinator coordinator)
+        {
+            try
+            {
+                var result = await coordinator.ResumeAsync(internalId);
+                if (result.Action == TelegramDownloader.Services.Transfers.ResumeActionKind.Skip && result.Message == "Task not found")
+                    return NotFoundResult("No persisted task with that id", ApiErrorCodes.TaskNotFound);
+                return OkResult(new TaskResumeResultDto
+                {
+                    InternalId = result.InternalId,
+                    Resumed = result.Resumed,
+                    Action = result.Action.ToString(),
+                    Message = result.Message
+                }, result.Message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error resuming persisted task {InternalId}", internalId);
+                return ErrorResult("Could not resume the persisted task", ex);
+            }
+        }
+
+        /// <summary>Result of resuming a persisted transfer.</summary>
+        public class TaskResumeResultDto
+        {
+            public string InternalId { get; set; } = "";
+            /// <summary>True when the transfer was queued again.</summary>
+            public bool Resumed { get; set; }
+            /// <summary>Skip, Fail, ResumeDownload, ResumeSplitDownload or ResumeBatchUpload.</summary>
+            public string Action { get; set; } = "";
+            public string? Message { get; set; }
+        }
+
         /// <summary>Deletes one persisted transfer.</summary>
         [HttpDelete("persisted/{internalId}")]
         [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status200OK)]

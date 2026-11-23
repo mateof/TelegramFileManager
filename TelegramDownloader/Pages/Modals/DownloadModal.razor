@@ -3,9 +3,11 @@
 @using TelegramDownloader.Models
 @using TelegramDownloader.Services
 @using TelegramDownloader.Shared
+@using TelegramDownloader.Services.Transfers
 
 @inject ITelegramService ts
 @inject IFileService fs
+@inject ILogger<DownloadModal> Logger
 
 <div class="modal @ModalClass" tabindex="-1" role="dialog" style="display:@ModalDisplay">
     <div class="modal-dialog modal-dialog-centered" role="document">
@@ -126,9 +128,11 @@
         StateHasChanged();
     }
 
-    private async void Submit()
+    private void Submit()
     {
-        fs.DownloadFileFromChat(mc, model?.newName == "" ? null : model.newName, ddtree.selectedNode == null ? null : ddtree.selectedNode.FirstOrDefault());
+        // Runs in the background (the download is queued); failures are logged.
+        fs.DownloadFileFromChat(mc, model?.newName == "" ? null : model.newName, ddtree.selectedNode == null ? null : ddtree.selectedNode.FirstOrDefault())
+            .Observe(Logger, "download from chat");
         Close();
     }
 

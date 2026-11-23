@@ -608,7 +608,7 @@
         NavManager.NavigateTo(relativeUri);
     }
 
-    private async void Logout()
+    private async Task Logout()
     {
         try
         {
@@ -673,7 +673,7 @@
         sidebarCollapsed = !sidebarCollapsed;
     }
 
-    private async void OnNavMenuCollapseChanged(bool isCollapsed)
+    private async Task OnNavMenuCollapseChanged(bool isCollapsed)
     {
         try
         {

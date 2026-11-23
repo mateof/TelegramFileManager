@@ -8,7 +8,7 @@
 @inject ITaskPersistenceService taskPersistence
 @inject IDbService dbService
 @inject TransactionInfoService tis
-@inject IServiceProvider serviceProvider
+@inject TelegramDownloader.Services.Transfers.TaskResumeCoordinator resumeCoordinator
 @inject ILogger<PersistedTasksTable> logger
 
 <div class="persisted-tasks-header">
@@ -24,6 +24,10 @@
             </button>
         }
     </div>
+    @if (!string.IsNullOrEmpty(statusMessage))
+    {
+        <span class="text-muted small">@statusMessage</span>
+    }
     <div class="refresh-btn">
         <button class="btn btn-sm btn-outline-secondary" @onclick="RefreshData" title="Refresh">
             <i class="bi bi-arrow-clockwise @(isLoading ? "spin" : "")"></i>
@@ -112,11 +116,15 @@ else
                         </td>
                         <td>
                             <div class="action-buttons">
-                                @if (task.State != StateTask.Working && task.State != StateTask.Completed)
+                                @if (CanResume(task))
                                 {
-                                    <button class="action-btn resume" @onclick="() => ResumeTask(task)" title="Resume">
-                                        <i class="bi bi-play-fill"></i>
+                                    <button class="action-btn resume" @onclick="() => ResumeTask(task)" title="@(task.State == StateTask.Error ? "Retry" : "Resume")">
+                                        <i class="bi @(task.State == StateTask.Error ? "bi-arrow-clockwise" : "bi-play-fill")"></i>
                                     </button>
+                                }
+                                else if (resumeCoordinator.IsLive(task.InternalId))
+                                {
+                                    <span class="text-muted small" title="Queued or running now">running</span>
                                 }
                                 <button class="action-btn delete" @onclick="() => DeleteTask(task)" title="Delete">
                                     <i class="bi bi-trash3"></i>
@@ -159,6 +167,7 @@ else
     private Modal errorModal = default!;
     private ConfirmDialog confirmDialog = default!;
     private PersistedTaskModel? selectedErrorTask;
+    private string? statusMessage;
 #pragma warning disable CS0414 // Value assigned but never read
     private bool _disposed = false;
 #pragma warning restore CS0414
@@ -265,134 +274,49 @@ else
         }
     }
 
+    private bool CanResume(PersistedTaskModel task)
+    {
+        return TelegramDownloader.Services.Transfers.TransferResumePlanner.IsManuallyResumable(task.State)
+            && !resumeCoordinator.IsLive(task.InternalId);
+    }
+
+    // Same code path as the automatic resume on startup.
     private async Task ResumeTask(PersistedTaskModel task)
     {
         try
         {
             logger.LogInformation("Resuming task: {Name}, Type: {Type}", task.Name, task.Type);
-
-            using var scope = serviceProvider.CreateScope();
-            var fileService = scope.ServiceProvider.GetRequiredService<IFileService>();
-            var telegramService = scope.ServiceProvider.GetRequiredService<ITelegramService>();
-
-            if (task.Type == TaskType.Download)
-            {
-                await ResumeDownloadTask(task, fileService);
-            }
-            else if (task.Type == TaskType.Upload)
-            {
-                await ResumeUploadTask(task, telegramService);
-            }
-
-            // Remove from persisted tasks list after resuming
-            tasks.Remove(task);
-            selectedTasks.Remove(task.InternalId);
-            StateHasChanged();
+            var result = await resumeCoordinator.ResumeAsync(task.InternalId);
+            statusMessage = $"{result.Name ?? task.Name}: {result.Message}";
+            await RefreshData();
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Error resuming task {InternalId}", task.InternalId);
+            statusMessage = $"{task.Name}: {ex.Message}";
         }
-    }
-
-    private async Task ResumeDownloadTask(PersistedTaskModel task, IFileService fileService)
-    {
-        // Check if partial file exists
-        long resumeOffset = 0;
-        if (!string.IsNullOrEmpty(task.DestinationPath) && File.Exists(task.DestinationPath))
-        {
-            var fileInfo = new FileInfo(task.DestinationPath);
-            if (fileInfo.Length <= task.TransmittedBytes && fileInfo.Length > 0)
-            {
-                resumeOffset = fileInfo.Length;
-            }
-        }
-
-        var downloadModel = TaskPersistenceMapper.ToDownloadModel(task);
-        downloadModel.tis = tis;
-        downloadModel._transmitted = resumeOffset;
-        downloadModel._transmittedString = HelperService.SizeSuffix(resumeOffset);
-        downloadModel.progress = task.TotalSize > 0 ? (int)(resumeOffset * 100 / task.TotalSize) : 0;
-
-        // Set up persistence callback
-        downloadModel.OnProgressPersist = async (transmitted, progress, state) =>
-        {
-            await taskPersistence.UpdateProgress(task.InternalId, transmitted, progress, state);
-        };
-
-        // Handle completion
-        downloadModel.EventStatechanged += async (sender, args) =>
-        {
-            if (downloadModel.state == StateTask.Completed)
-            {
-                await taskPersistence.MarkCompleted(task.InternalId);
-            }
-        };
-
-        if (fileService is FileServiceV2 fsv2)
-        {
-            downloadModel.callbacks = new Callbacks();
-            downloadModel.callbacks.callback = async () =>
-            {
-                await fsv2.DownloadFileNowV2WithOffset(
-                    task.ChannelId,
-                    task.MessageId ?? (task.MessageIds?.FirstOrDefault() ?? 0),
-                    task.DestinationPath,
-                    downloadModel,
-                    resumeOffset);
-            };
-
-            tis.addToPendingDownloadList(downloadModel, atFirst: true, chekDownloads: true);
-        }
-    }
-
-    private async Task ResumeUploadTask(PersistedTaskModel task, ITelegramService telegramService)
-    {
-        if (!File.Exists(task.SourcePath))
-        {
-            await taskPersistence.MarkError(task.InternalId, $"Source file not found: {task.SourcePath}");
-            return;
-        }
-
-        var uploadModel = TaskPersistenceMapper.ToUploadModel(task);
-        uploadModel.tis = tis;
-        uploadModel._transmitted = 0;
-        uploadModel.progress = 0;
-        uploadModel.state = StateTask.Pending;
-
-        uploadModel.OnProgressPersist = async (transmitted, progress, state) =>
-        {
-            await taskPersistence.UpdateProgress(task.InternalId, transmitted, progress, state);
-        };
-
-        tis.addToUploadList(uploadModel);
-
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                using var fileStream = new FileStream(task.SourcePath, FileMode.Open, FileAccess.Read, FileShare.Read);
-                await telegramService.uploadFile(task.ChannelId, fileStream, task.Name, um: uploadModel);
-                await taskPersistence.MarkCompleted(task.InternalId);
-            }
-            catch (Exception ex)
-            {
-                uploadModel.state = StateTask.Error;
-                await taskPersistence.MarkError(task.InternalId, ex.Message);
-            }
-        });
     }
 
     private async Task ResumeSelected()
     {
         if (selectedTasks.Count == 0) return;
 
-        var tasksToResume = tasks.Where(t => selectedTasks.Contains(t.InternalId) && t.State != StateTask.Working).ToList();
-
+        var tasksToResume = tasks.Where(t => selectedTasks.Contains(t.InternalId) && CanResume(t)).ToList();
+        int resumed = 0;
         foreach (var task in tasksToResume)
         {
-            await ResumeTask(task);
+            try
+            {
+                var result = await resumeCoordinator.ResumeAsync(task.InternalId);
+                if (result.Resumed) resumed++;
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Error resuming task {InternalId}", task.InternalId);
+            }
         }
+        statusMessage = $"{resumed} of {tasksToResume.Count} task(s) queued again";
+        await RefreshData();
     }
 
     private async Task ShowError(PersistedTaskModel task)

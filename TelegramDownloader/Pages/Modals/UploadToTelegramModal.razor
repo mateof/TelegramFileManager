@@ -3,11 +3,13 @@
 @using TelegramDownloader.Models
 @using TelegramDownloader.Services
 @using TelegramDownloader.Shared
+@using TelegramDownloader.Services.Transfers
 @using TelegramDownloader.Services.Upload
 
 @inject IFileService fs
 @inject ITelegramService ts
 @inject IJSRuntime JSRuntime
+@inject ILogger<UploadToTelegramModal> Logger
 
 <style>
     /* Upload to Telegram Modal Overlay */
@@ -714,7 +716,10 @@
             await RunPreview();
             return;
         }
-        fs.AddUploadFileFromServer(id, ddtree.selectedNode == null ? null : ddtree.selectedNode.FirstOrDefault(), fileList);
+        // Not awaited so the modal closes at once (counting a large folder takes
+        // a while); a failure to queue the upload is logged instead of lost.
+        fs.AddUploadFileFromServer(id, ddtree.selectedNode == null ? null : ddtree.selectedNode.FirstOrDefault(), fileList)
+            .Observe(Logger, "queue upload from server");
         Close();
     }
 
