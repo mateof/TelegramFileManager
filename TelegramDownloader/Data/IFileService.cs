@@ -40,7 +40,8 @@ namespace TelegramDownloader.Data
         Task<FileManagerResponse<FileManagerDirectoryContent>> SearchAsync(string dbName, string path, string searchText, string? collectionId = null);
         Task UploadFile(string dbName, string currentPath, UploadFiles file);
         Task UploadFileFromServer(string dbName, string currentPath, List<FileManagerDirectoryContent> files, InfoDownloadTaksModel dm = null);
-        Task AddUploadFileFromServer(string dbName, string currentPath, List<FileManagerDirectoryContent> files, InfoDownloadTaksModel idt = null);
+        /// <summary>Queues a server-side upload batch and returns the internal id of the task it created.</summary>
+        Task<string> AddUploadFileFromServer(string dbName, string currentPath, List<FileManagerDirectoryContent> files, InfoDownloadTaksModel idt = null);
         Task CreateEmptyFile(string dbName, string currentPath, string fileName);
         Task refreshChannelFIles(string channelId, bool force = false, RefreshChannelOptions? refreshOptions = null);
         bool isChannelRefreshing(string channelId);

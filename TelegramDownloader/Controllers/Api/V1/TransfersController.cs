@@ -237,15 +237,16 @@ namespace TelegramDownloader.Controllers.Api.V1
                     return BadRequestResult("None of the supplied paths exist under the local root", ApiErrorCodes.FileNotFound);
 
                 var targetPath = ChannelFolderResolver.NormalizeFolderPath(request.TargetPath);
-                await _files.AddUploadFileFromServer(request.ChannelId, targetPath, contents);
+                // The id of the batch this request created; looking up the last
+                // upload task could return another request's task under concurrency.
+                var taskId = await _files.AddUploadFileFromServer(request.ChannelId, targetPath, contents);
 
-                var task = _tis.infoDownloadTaksModel.LastOrDefault(t => t.isUpload);
                 return Accepted(ApiResult<TransferAcceptedDto>.Ok(
                     new TransferAcceptedDto
                     {
                         Accepted = contents.Count,
                         Skipped = skipped,
-                        TaskId = task?._internalId
+                        TaskId = taskId
                     },
                     "Upload queued"));
             }

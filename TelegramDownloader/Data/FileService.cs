@@ -17,6 +17,7 @@ using System.Text.RegularExpressions;
 using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
 using TelegramDownloader.Services;
+using TelegramDownloader.Services.Upload;
 using TL;
 
 namespace TelegramDownloader.Data
@@ -1202,7 +1203,7 @@ namespace TelegramDownloader.Data
         //    }
         //}
 
-        public async Task AddUploadFileFromServer(string dbName, string currentPath, List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files, InfoDownloadTaksModel idt = null) // ItemsUploadedEventArgs<FileManagerDirectoryContent> args)
+        public async Task<string> AddUploadFileFromServer(string dbName, string currentPath, List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files, InfoDownloadTaksModel idt = null) // ItemsUploadedEventArgs<FileManagerDirectoryContent> args)
         {
             _logger.LogInformation("Adding upload task from server - DbName: {DbName}, Path: {Path}, FilesCount: {Count}",
                 dbName, currentPath, files.Count);
@@ -1219,31 +1220,13 @@ namespace TelegramDownloader.Data
             idt.executedSize = 0;
             idt.isUpload = true;
             idt.files = files;
-            
-            foreach (var file in files)
-            {
-                var filePath = file.IsFile ? file.FilterPath.Replace("\\", "/") + file.Name : file.FilterPath.Replace("\\", "/") + file.Name + "/";
-                string currentFilePath = System.IO.Path.Combine(LOCALDIR, filePath[0] == '/' ? filePath.Substring(1) : filePath).Replace("\\", "/");
 
-                var fileInfo = new System.IO.FileInfo(currentFilePath);
-                if (!file.IsFile)
-                {
-                    if (file.Name == "@eaDir") continue;
-                    var allFiles = new DirectoryInfo(currentFilePath).GetFiles("*.*", SearchOption.AllDirectories).Where(x => !x.Attributes.HasFlag(FileAttributes.Hidden) && !x.Attributes.HasFlag(FileAttributes.Directory) && !x.FullName.Contains("@eaDir") && x.Length > 0);
-                    idt.total += allFiles.Count();
-                    idt.totalSize += allFiles.Sum(x => x.Length);
-                }
-                else
-                {
-                    if (file.Size > 0)
-                    {
-                        idt.total++;
-                        idt.totalSize += fileInfo.Length;
-                    }
-                    
-                }
-
-            }
+            // Totals need a walk of every selected folder. Run it off the caller's
+            // thread (the Blazor modal fires this without awaiting, so the walk used
+            // to freeze the circuit) and read each tree once.
+            var (total, totalSize) = await Task.Run(() => CountUploadTotals(files));
+            idt.total += total;
+            idt.totalSize += totalSize;
             idt.callbacks = new Callbacks();
             idt.callbacks.callback = async () => await UploadFileFromServer(dbName, currentPath, files, idt);
 
@@ -1260,6 +1243,32 @@ namespace TelegramDownloader.Data
 
             _tis.addToInfoDownloadTaskList(idt);
             _tis.CheckPendingUploadInfoTasks();
+            return idt._internalId;
+        }
+
+        private static (int total, long totalSize) CountUploadTotals(List<FileManagerDirectoryContent> files)
+        {
+            int total = 0;
+            long totalSize = 0;
+            foreach (var file in files)
+            {
+                var filePath = file.IsFile ? file.FilterPath.Replace("\\", "/") + file.Name : file.FilterPath.Replace("\\", "/") + file.Name + "/";
+                string currentFilePath = System.IO.Path.Combine(LOCALDIR, filePath[0] == '/' ? filePath.Substring(1) : filePath).Replace("\\", "/");
+
+                if (!file.IsFile)
+                {
+                    if (file.Name == "@eaDir") continue;
+                    var totals = Services.Upload.FolderUploadPlanning.CountUploadableFiles(currentFilePath);
+                    total += totals.Count;
+                    totalSize += totals.Size;
+                }
+                else if (file.Size > 0)
+                {
+                    total++;
+                    totalSize += new System.IO.FileInfo(currentFilePath).Length;
+                }
+            }
+            return (total, totalSize);
         }
 
         /// <summary>
@@ -1414,7 +1423,14 @@ namespace TelegramDownloader.Data
             }
         }
 
-        public async Task UploadFileFromServer(string dbName, string currentPath, List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files, InfoDownloadTaksModel dm = null) // ItemsUploadedEventArgs<FileManagerDirectoryContent> args)
+        public Task UploadFileFromServer(string dbName, string currentPath, List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files, InfoDownloadTaksModel dm = null) // ItemsUploadedEventArgs<FileManagerDirectoryContent> args)
+        {
+            // Each run (first start or retry) gets a fresh view of the destination
+            // index; it is shared by the recursive calls for the subfolders.
+            return UploadFileFromServer(dbName, currentPath, files, dm, new UploadDestinationCache(), isRoot: true);
+        }
+
+        private async Task UploadFileFromServer(string dbName, string currentPath, List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files, InfoDownloadTaksModel dm, UploadDestinationCache cache, bool isRoot)
         {
             _logger.LogInformation("Starting upload from server - DbName: {DbName}, Path: {Path}, FilesCount: {Count}",
                 dbName, currentPath, files.Count);
@@ -1424,7 +1440,15 @@ namespace TelegramDownloader.Data
 
             try
             {
-                nm.sendEvent(new Notification($"Uploading files from folder {currentPath} to Telegram", "Telegram Upload", NotificationTypes.Info));
+                // One toast for the whole batch, not one per subfolder.
+                if (isRoot)
+                    nm.sendEvent(new Notification($"Uploading files from folder {currentPath} to Telegram", "Telegram Upload", NotificationTypes.Info));
+
+                // Read the existing entries of this destination folder once, instead
+                // of one index lookup per file further down.
+                if (currentPath != null && files.Count > 0 && !cache.IsFolderLoaded(currentPath))
+                    cache.LoadFolder(currentPath, await _db.getDirectChildrenByFilePathPrefix(dbName, currentPath));
+
                 foreach (var file in files)
                 {
 
@@ -1444,8 +1468,23 @@ namespace TelegramDownloader.Data
                             continue;
                         }
                         idt.currentUpload++;
-                        BsonFileManagerModel savedFile = await _db.getFileByPath(dbName, System.IO.Path.Combine(currentPath, file.Name));
-                        if (file.Size == 0 || (savedFile != null && savedFile.DateModified > file.DateModified))
+                        string entryPath = System.IO.Path.Combine(currentPath, file.Name);
+                        // Skip decision from the folder snapshot: empty files and files
+                        // already indexed with a newer date are not sent. This is the
+                        // path that used to cost one MongoDB round trip per file.
+                        if (FolderUploadPlanning.ShouldSkipFile(file.Size, file.DateModified, cache.Get(entryPath)))
+                        {
+                            if (idt != null) idt.AddOne(file.Size);
+                            continue;
+                        };
+                        // About to upload: re-read the entry so the decision and the
+                        // replacement of an older copy use the current index state.
+                        BsonFileManagerModel savedFile = await _db.getFileByPath(dbName, entryPath);
+                        if (savedFile == null)
+                            cache.Remove(entryPath);
+                        else
+                            cache.Set(entryPath, savedFile);
+                        if (FolderUploadPlanning.ShouldSkipFile(file.Size, file.DateModified, savedFile))
                         {
                             if (idt != null) idt.AddOne(file.Size);
                             continue;
@@ -1480,8 +1519,8 @@ namespace TelegramDownloader.Data
                                     long chunkStart = (long)chunkIndex * chunkSizeBytes;
                                     long chunkLength = Math.Min(chunkSizeBytes, fileInfo.Length - chunkStart);
 
-                                    int attempts = 3;
-                                    int waitForNextAttempt = 1000;
+                                    int attempts = UploadRetryPolicy.MaxAttempts;
+                                    bool sent = false;
                                     UploadModel um = new UploadModel();
                                     um.tis = _tis;
                                     um.startDate = DateTime.Now;
@@ -1489,7 +1528,7 @@ namespace TelegramDownloader.Data
                                     um.chatName = _ts.getChatName(Convert.ToInt64(dbName));
                                     idt.addUpload(um);
 
-                                    while (attempts != 0 && um.state != StateTask.Canceled)
+                                    while (UploadRetryPolicy.ShouldAttempt(attempts, um.state))
                                     {
                                         try
                                         {
@@ -1499,6 +1538,7 @@ namespace TelegramDownloader.Data
                                                 string chunkFileName = $"({chunkIndex + 1} of {totalChunks}) - " + file.Name;
                                                 m = await _ts.uploadFile(dbName, chunkStream, chunkFileName, um: um, caption: getCaption(filePath));
                                             }
+                                            sent = true;
                                             attempts = 0;
                                             await wt.Sleep();
                                         }
@@ -1522,10 +1562,18 @@ namespace TelegramDownloader.Data
                                                 um.state = StateTask.Error;
                                                 throw;
                                             }
+                                            var retryDelay = UploadRetryPolicy.GetRetryDelay(e, UploadRetryPolicy.MaxAttempts - attempts, TimeSpan.FromSeconds(1), UploadRetryPolicy.MaxDelay);
                                             _logger.LogWarning("Retrying chunk upload in {DelayMs}ms - FileName: {FileName}, Chunk: {Chunk}",
-                                                waitForNextAttempt, file.Name, chunkIndex + 1);
-                                            await Task.Delay(waitForNextAttempt);
+                                                retryDelay.TotalMilliseconds, file.Name, chunkIndex + 1);
+                                            await Task.Delay(retryDelay);
                                         }
+                                    }
+
+                                    if (!sent)
+                                    {
+                                        // Canceled before a successful send: stop here (nothing to index).
+                                        um.SendNotification();
+                                        return;
                                     }
 
                                     model.ListMessageId.Add(m.ID);
@@ -1541,8 +1589,8 @@ namespace TelegramDownloader.Data
 
                                 foreach (string s in filesSplit)
                                 {
-                                    int attempts = 3;
-                                    int waitForNextAttempt = 1000;
+                                    int attempts = UploadRetryPolicy.MaxAttempts;
+                                    bool sent = false;
                                     UploadModel um = new UploadModel();
                                     um.tis = _tis;
                                     um.startDate = DateTime.Now;
@@ -1550,12 +1598,15 @@ namespace TelegramDownloader.Data
                                     um.chatName = _ts.getChatName(Convert.ToInt64(dbName));
                                     idt.addUpload(um);
 
-                                    while (attempts != 0 || um.state == StateTask.Canceled)
+                                    // Was "attempts != 0 || canceled": after a cancel that landed
+                                    // once the part was already sent, the loop uploaded it again.
+                                    while (UploadRetryPolicy.ShouldAttempt(attempts, um.state))
                                         try
                                         {
                                             wt = new WaitingTime();
                                             using (FileStream fs = new FileStream(s, FileMode.Open, FileAccess.Read, FileShare.Read))
                                                 m = await _ts.uploadFile(dbName, fs, $"({i} of {filesSplit.Count}) - " + file.Name, um: um, caption: getCaption(filePath));
+                                            sent = true;
                                             attempts = 0;
                                             await wt.Sleep();
                                         }
@@ -1579,9 +1630,17 @@ namespace TelegramDownloader.Data
                                                 um.state = StateTask.Error;
                                                 throw e;
                                             }
-                                            _logger.LogWarning("Retrying upload in {DelayMs}ms - FileName: {FileName}", waitForNextAttempt, file.Name);
-                                            await Task.Delay(waitForNextAttempt);
+                                            var retryDelay = UploadRetryPolicy.GetRetryDelay(e, UploadRetryPolicy.MaxAttempts - attempts, TimeSpan.FromSeconds(1), UploadRetryPolicy.MaxDelay);
+                                            _logger.LogWarning("Retrying upload in {DelayMs}ms - FileName: {FileName}", retryDelay.TotalMilliseconds, file.Name);
+                                            await Task.Delay(retryDelay);
                                         }
+
+                                    if (!sent)
+                                    {
+                                        // Canceled before a successful send: stop here (nothing to index).
+                                        um.SendNotification();
+                                        return;
+                                    }
 
                                     model.ListMessageId.Add(m.ID);
                                     File.Delete(s);
@@ -1593,8 +1652,8 @@ namespace TelegramDownloader.Data
                         else
                         {
 
-                            int attempts = 3;
-                            int waitForNextAttempt = 60000;
+                            int attempts = UploadRetryPolicy.MaxAttempts;
+                            bool sent = false;
                             UploadModel um = new UploadModel();
                             um.tis = _tis;
                             um.path = currentFilePath;
@@ -1602,7 +1661,9 @@ namespace TelegramDownloader.Data
                             // add upload to task list
                             idt.addUpload(um);
                             um.startDate = DateTime.Now;
-                            while (attempts != 0 || um.state == StateTask.Canceled)
+                            // Was "attempts != 0 || canceled": after a cancel that landed once
+                            // the file was already sent, the loop uploaded it again.
+                            while (UploadRetryPolicy.ShouldAttempt(attempts, um.state))
                                 try
                                 {
 
@@ -1630,6 +1691,7 @@ namespace TelegramDownloader.Data
                                         }
                                     }
 
+                                    sent = true;
                                     attempts = 0;
                                     await wt.Sleep(); // sleep 1 second to avoid 420 flood_wait_x
                                 }
@@ -1643,7 +1705,6 @@ namespace TelegramDownloader.Data
                                     _logger.LogError(e, "Exception sending file to Telegram - FileName: {FileName}, Attempt: {Attempt}, Remaining: {Remaining}",
                                         file.Name, 4 - attempts, attempts - 1);
                                     attempts--;
-                                    // waitForNextAttempt *= 2;
                                     if (attempts == 0 || um.state == StateTask.Canceled)
                                     {
                                         if (um.state == StateTask.Canceled)
@@ -1655,9 +1716,18 @@ namespace TelegramDownloader.Data
                                         um.state = StateTask.Error;
                                         throw e;
                                     }
-                                    _logger.LogWarning("Retrying upload in {DelayMs}ms - FileName: {FileName}", waitForNextAttempt, file.Name);
-                                    await Task.Delay(waitForNextAttempt);
+                                    // Telegram's FLOOD_WAIT when given, else 5 s, 10 s ... capped (was a fixed 60 s).
+                                    var retryDelay = UploadRetryPolicy.GetRetryDelay(e, UploadRetryPolicy.MaxAttempts - attempts);
+                                    _logger.LogWarning("Retrying upload in {DelayMs}ms - FileName: {FileName}", retryDelay.TotalMilliseconds, file.Name);
+                                    await Task.Delay(retryDelay);
                                 }
+
+                            if (!sent)
+                            {
+                                // Canceled before a successful send: stop here (nothing to index).
+                                um.SendNotification();
+                                return;
+                            }
 
                             model.MessageId = m.ID;
                         }
@@ -1665,12 +1735,21 @@ namespace TelegramDownloader.Data
                         if (savedFile != null)
                         {
                             await itemDeleteAsync(dbName, savedFile.FilterPath, savedFile.Name, savedFile.ParentId, savedFile.FilePath);
+                            cache.Remove(entryPath);
+                            // Deleting may have reset the folder's HasChild flag.
+                            cache.InvalidateParent(currentPath);
                         }
                     }
-                    BsonFileManagerModel parent = await _db.getParentDirectoryByPath(dbName, currentPath);
+                    BsonFileManagerModel parent = currentPath == null ? null : cache.GetParent(currentPath);
                     if (parent == null)
                     {
-                        parent = await _db.getRootFolder(dbName);
+                        parent = await _db.getParentDirectoryByPath(dbName, currentPath);
+                        if (parent == null)
+                        {
+                            parent = await _db.getRootFolder(dbName);
+                        }
+                        if (currentPath != null && parent != null)
+                            cache.SetParent(currentPath, parent);
                     }
                     model.Name = file.IsFile ? fileInfo.Name : file.Name;
                     model.IsFile = file.IsFile;
@@ -1685,10 +1764,28 @@ namespace TelegramDownloader.Data
                     model.FilePath = System.IO.Path.Combine(currentPath, file.IsFile ? fileInfo.Name : file.Name);
                     model.Type = file.IsFile ? (fileInfo.Name.Split(".").LastOrDefault() != null ? "." + fileInfo.Name.Split(".").LastOrDefault() : GetMimeType(fileInfo.Name)) : "folder";
                     // if file or folder does not exist, it will be created
-                    if ((await _db.getFileByPath(dbName, System.IO.Path.Combine(currentPath, file.Name))) == null)
-                        await _db.createEntry(dbName, model);
+                    string modelKey = System.IO.Path.Combine(currentPath, file.Name);
+                    if (cache.Get(modelKey) == null)
+                    {
+                        try
+                        {
+                            await _db.createEntry(dbName, model);
+                            cache.Set(modelKey, model);
+                        }
+                        catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
+                        {
+                            // Created by someone else since the folder was read: same
+                            // outcome as the old "exists, do not create" check.
+                            var existing = await _db.getFileByPath(dbName, modelKey);
+                            if (existing != null)
+                                cache.Set(modelKey, existing);
+                        }
+                    }
                     if (!parent.HasChild)
+                    {
                         await _db.setDirectoryHasChild(dbName, parent.Id);
+                        parent.HasChild = true;
+                    }
                     if (file.IsFile)
                     {
                         await _db.addBytesToFolder(dbName, model.ParentId, model.Size);
@@ -1696,11 +1793,14 @@ namespace TelegramDownloader.Data
                     }
                     else
                     {
-                        await getFilesInDirectory(dbName, model.FilePath + "/", filePath, idt);
+                        await getFilesInDirectory(dbName, model.FilePath + "/", filePath, idt, cache);
                     }
 
 
-                    GC.Collect();
+                    // Only after an actual upload: a full blocking collection for every
+                    // folder of the tree adds latency without freeing upload buffers.
+                    if (file.IsFile)
+                        GC.Collect();
                 }
 
                 if (idt.files == files)
@@ -1708,7 +1808,8 @@ namespace TelegramDownloader.Data
                     idt.markAsCompleted();
                 }
 
-                nm.sendEvent(new Notification($"Upload files completed in {currentPath}", "Telegram Upload", NotificationTypes.Success));
+                if (isRoot)
+                    nm.sendEvent(new Notification($"Upload files completed in {currentPath}", "Telegram Upload", NotificationTypes.Success));
             }
             catch (Exception ex)
             {
@@ -1723,7 +1824,7 @@ namespace TelegramDownloader.Data
             }
         }
 
-        private async Task getFilesInDirectory(string dbName, string currentPath, string path, InfoDownloadTaksModel dm = null)
+        private async Task getFilesInDirectory(string dbName, string currentPath, string path, InfoDownloadTaksModel dm, UploadDestinationCache cache)
         {
             var operation = new PhysicalFileProvider();
             operation.RootFolder(Path.Combine(Environment.CurrentDirectory, FileService.RELATIVELOCALDIR));
@@ -1735,7 +1836,7 @@ namespace TelegramDownloader.Data
                 fileContents.Add(f);
             }
             files.Files = fileContents;
-            await UploadFileFromServer(dbName, currentPath, converToFMD(files.Files), dm);
+            await UploadFileFromServer(dbName, currentPath, converToFMD(files.Files), dm, cache, isRoot: false);
         }
 
         private List<FileManagerDirectoryContent> converToFMD(IEnumerable<Syncfusion.EJ2.FileManager.Base.FileManagerDirectoryContent> liste2j)
