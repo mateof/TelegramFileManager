@@ -11,6 +11,7 @@
 @inject ILogger<FileManager> Logger
 @inject IJSRuntime JSRuntime;
 @inject NavigationManager MyNavigationManager;
+@implements IDisposable
 
 <style>
     .e-filemanager .e-splitter {
@@ -59,6 +60,55 @@
     <Button Color="ButtonColor.Info" class="ms-3" @onclick="openWebDavInfo"><i class="bi bi-hdd-network"></i> WebDav</Button>
 
 </h3>
+
+@if (isRefreshing && refreshProgress != null)
+{
+    <div class="card mb-3">
+        <div class="card-body py-2 px-3">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <Spinner Type="SpinnerType.Border" Size="SpinnerSize.Small" />
+                <strong>@RefreshPhaseText</strong>
+                <small class="text-muted">since @refreshProgress.StartedAt.ToString("HH:mm:ss")</small>
+                <button class="btn btn-sm btn-outline-danger ms-auto" @onclick="cancelRefresh" disabled="@refreshProgress.CancelRequested">
+                    @if (refreshProgress.CancelRequested)
+                    {
+                        <span class="spinner-border spinner-border-sm me-1" role="status"></span><span>Canceling...</span>
+                    }
+                    else
+                    {
+                        <i class="bi bi-x-circle me-1"></i><span>Cancel</span>
+                    }
+                </button>
+            </div>
+            <div class="row g-2 mt-1">
+                @foreach (var f in refreshProgress.Filters)
+                {
+                    <div class="col-12 col-md-6 col-xl-3">
+                        <div class="d-flex justify-content-between small">
+                            <span><i class="bi @FilterIcon(f.Filter) me-1"></i>@FilterLabel(f.Filter)</span>
+                            <span class="text-muted">@FilterCountText(f)</span>
+                        </div>
+                        <div class="progress" style="height: 6px;" role="progressbar" aria-label="@FilterLabel(f.Filter)">
+                            <div class="progress-bar @(f.Done ? "bg-success" : "progress-bar-striped progress-bar-animated")" style="width: @(FilterPercent(f))%"></div>
+                        </div>
+                    </div>
+                }
+            </div>
+            @if (refreshProgress.Phase != RefreshPhase.Searching)
+            {
+                <div class="mt-2">
+                    <div class="d-flex justify-content-between small">
+                        <span><i class="bi bi-database-add me-1"></i>Indexing new files</span>
+                        <span class="text-muted">@refreshProgress.Indexed.ToString("N0") / @refreshProgress.NewFiles.ToString("N0")</span>
+                    </div>
+                    <div class="progress" style="height: 6px;" role="progressbar" aria-label="Indexing">
+                        <div class="progress-bar progress-bar-striped progress-bar-animated" style="width: @(IndexPercent)%"></div>
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+}
 
 <ul class="nav nav-tabs">
     <li class="nav-item">
@@ -210,6 +260,12 @@
 
     private string _previousId;
 
+    // Live refresh progress, polled from the service while a refresh of this
+    // channel runs (whoever started it: this page, another tab or the API).
+    private ChannelRefreshProgressSnapshot? refreshProgress;
+    private CancellationTokenSource? progressPollCts;
+    private static readonly TimeSpan ProgressPollInterval = TimeSpan.FromSeconds(1);
+
     protected override async Task OnParametersSetAsync()
     {
         if (_previousId != id)
@@ -225,6 +281,11 @@
         {
             isRefreshing = fs.isChannelRefreshing(id);
             showRefresh = !isRefreshing;
+            refreshProgress = isRefreshing ? fs.getChannelRefreshProgress(id) : null;
+            if (isRefreshing)
+                startProgressPolling();
+            else
+                stopProgressPolling();
             long channelId = Convert.ToInt64(id);
             chatName = ts.getChatName(channelId);
             isMyChannel = ts.isMyChat(channelId);
@@ -274,26 +335,134 @@
             return;
         }
 
+        // Runs in the background; the progress panel follows it and the
+        // confirmation modal closes right away.
+        if (!fs.tryStartChannelRefresh(id, false, refreshOptions, out Task refreshTask))
+        {
+            nm.sendMessage("Refresh channel files", "This channel is already being refreshed.", NotificationTypes.Warn);
+        }
+        else
+        {
+            _ = refreshTask.ContinueWith(
+                t => Logger.LogError(t.Exception, "Background refresh of channel {Id} failed", id),
+                TaskContinuationOptions.OnlyOnFaulted);
+        }
+
         isRefreshing = true;
         showRefresh = false;
+        refreshProgress = fs.getChannelRefreshProgress(id);
+        startProgressPolling();
         await InvokeAsync(StateHasChanged);
+    }
 
+    private void cancelRefresh()
+    {
+        if (fs.cancelChannelRefresh(id))
+            refreshProgress = fs.getChannelRefreshProgress(id) ?? refreshProgress;
+    }
+
+    private void startProgressPolling()
+    {
+        stopProgressPolling();
+        CancellationTokenSource cts = new CancellationTokenSource();
+        progressPollCts = cts;
+        _ = pollProgressAsync(id, cts.Token);
+    }
+
+    private void stopProgressPolling()
+    {
+        progressPollCts?.Cancel();
+        progressPollCts?.Dispose();
+        progressPollCts = null;
+    }
+
+    // Once a second at most: the counters move on every Telegram page, but
+    // re-rendering on each would flood the circuit for no visible benefit.
+    private async Task pollProgressAsync(string channelId, CancellationToken token)
+    {
         try
         {
-            await fs.refreshChannelFIles(id, refreshOptions: refreshOptions);
-
-            // Refresh the file manager to show updated data
-            if (fileManagerImpl != null)
+            using PeriodicTimer timer = new PeriodicTimer(ProgressPollInterval);
+            while (await timer.WaitForNextTickAsync(token))
             {
-                await fileManagerImpl.RefreshFileManager();
+                if (channelId != id) return;
+                ChannelRefreshProgressSnapshot? snapshot = fs.getChannelRefreshProgress(channelId);
+                if (snapshot != null)
+                {
+                    await InvokeAsync(() =>
+                    {
+                        refreshProgress = snapshot;
+                        StateHasChanged();
+                    });
+                    continue;
+                }
+
+                // Finished (or canceled): show the outcome in the file list.
+                await InvokeAsync(async () =>
+                {
+                    refreshProgress = null;
+                    isRefreshing = false;
+                    showRefresh = true;
+                    StateHasChanged();
+                    if (fileManagerImpl != null)
+                        await fileManagerImpl.RefreshFileManager();
+                });
+                return;
             }
         }
-        finally
+        catch (OperationCanceledException) { }
+        catch (ObjectDisposedException) { }
+        catch (Exception ex)
         {
-            isRefreshing = false;
-            showRefresh = true;
-            await InvokeAsync(StateHasChanged);
+            Logger.LogWarning(ex, "Polling the refresh progress of channel {Id} failed", channelId);
         }
+    }
+
+    private string RefreshPhaseText => refreshProgress?.Phase switch
+    {
+        RefreshPhase.Searching => "Refreshing: searching Telegram...",
+        RefreshPhase.Indexing => "Refreshing: indexing new files...",
+        _ => "Refreshing: finishing..."
+    };
+
+    private static string FilterLabel(RefreshFilter filter) => filter switch
+    {
+        RefreshFilter.Documents => "Documents",
+        RefreshFilter.Audio => "Audio",
+        RefreshFilter.Video => "Video",
+        _ => "Photos"
+    };
+
+    private static string FilterIcon(RefreshFilter filter) => filter switch
+    {
+        RefreshFilter.Documents => "bi-file-earmark-text",
+        RefreshFilter.Audio => "bi-music-note-beamed",
+        RefreshFilter.Video => "bi-camera-video",
+        _ => "bi-image"
+    };
+
+    private static string FilterCountText(RefreshFilterProgressSnapshot f)
+    {
+        if (f.Done) return $"{f.Fetched:N0} new messages read";
+        return f.Total.HasValue ? $"{f.Fetched:N0} / {f.Total.Value:N0}" : $"{f.Fetched:N0}";
+    }
+
+    // An incremental scan stops long before Telegram's channel-wide total, so a
+    // finished filter is shown full.
+    private static int FilterPercent(RefreshFilterProgressSnapshot f)
+    {
+        if (f.Done) return 100;
+        if (!f.Total.HasValue || f.Total.Value <= 0) return 0;
+        return (int)Math.Clamp(f.Fetched * 100L / f.Total.Value, 0, 100);
+    }
+
+    private int IndexPercent => refreshProgress == null || refreshProgress.NewFiles <= 0
+        ? (refreshProgress?.Phase == RefreshPhase.Done ? 100 : 0)
+        : (int)Math.Clamp(refreshProgress.Indexed * 100L / refreshProgress.NewFiles, 0, 100);
+
+    public void Dispose()
+    {
+        stopProgressPolling();
     }
 
     public async Task openDeleteChannelModal()

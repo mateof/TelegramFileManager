@@ -102,6 +102,30 @@ namespace TelegramDownloader.Data.db
             return client.GetDatabase(dbName);
         }
 
+        /// <summary>
+        /// Indexes of a channel collection, by name. Created idempotently (by
+        /// name) when the database is opened and before an upload or preview.
+        /// Besides the two original ones they back the lookups of the upload
+        /// path that used to scan the whole collection: children by
+        /// <c>ParentId</c>, entries by <c>FilterId</c>, an entry by
+        /// (<c>FilterPath</c>, <c>Name</c>), message ids (checked for every
+        /// replaced file) and <c>XXHash</c> (duplicate detection).
+        /// </summary>
+        private static readonly (string Name, IndexKeysDefinition<BsonFileManagerModel> Keys, bool Unique)[] ChannelIndexes =
+        {
+            ("uniquefile", Builders<BsonFileManagerModel>.IndexKeys.Ascending(x => x.FilePath), true),
+            ("uniquefilterpath", Builders<BsonFileManagerModel>.IndexKeys.Ascending(x => x.FilterPath), false),
+            ("parentid", Builders<BsonFileManagerModel>.IndexKeys.Ascending(x => x.ParentId), false),
+            ("filterid", Builders<BsonFileManagerModel>.IndexKeys.Ascending(x => x.FilterId), false),
+            ("filterpath_name", Builders<BsonFileManagerModel>.IndexKeys.Ascending(x => x.FilterPath).Ascending(x => x.Name), false),
+            ("messageid", Builders<BsonFileManagerModel>.IndexKeys.Ascending(x => x.MessageId), false),
+            ("listmessageid", Builders<BsonFileManagerModel>.IndexKeys.Ascending(x => x.ListMessageId), false),
+            ("xxhash", Builders<BsonFileManagerModel>.IndexKeys.Ascending(x => x.XXHash), false),
+        };
+
+        /// <summary>Channel collections whose indexes were already ensured by this process.</summary>
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, Lazy<Task>> _ensuredIndexes = new();
+
         public async Task createIndex(string dbName, string collectionName = "directory")
         {
             if (collectionName == null) collectionName = "directory";
@@ -109,22 +133,53 @@ namespace TelegramDownloader.Data.db
 
             var indexes = await collection.Indexes.ListAsync();
             var indexList = await indexes.ToListAsync();
+            var existing = new HashSet<string>(indexList.Select(i => i["name"].AsString));
 
-            bool existsFilePath = indexList.Any(i => i["name"] == "uniquefile");
-            bool existsFilterPath = indexList.Any(i => i["name"] == "uniquefilterpath");
+            foreach (var (name, keys, unique) in ChannelIndexes)
+            {
+                if (existing.Contains(name))
+                    continue;
+                try
+                {
+                    await collection.Indexes.CreateOneAsync(new CreateIndexModel<BsonFileManagerModel>(keys,
+                        new CreateIndexOptions { Unique = unique, Name = name }));
+                }
+                catch (MongoCommandException ex) when (!unique)
+                {
+                    // Same keys under another name (created by hand): the lookup is
+                    // indexed anyway, do not fail opening the channel for it.
+                    _logger.LogWarning(ex, "Could not create index {Index} on {DbName}.{Collection}", name, dbName, collectionName);
+                }
+            }
+        }
 
-            if (!existsFilePath)
+        /// <summary>
+        /// Runs <see cref="createIndex"/> once per channel collection and
+        /// process. Upload and preview call it so the indexes exist even for
+        /// channels never opened in the web UI (which creates them on open).
+        /// </summary>
+        public async Task EnsureIndexes(string dbName, string collectionName = "directory")
+        {
+            collectionName ??= "directory";
+            var key = dbName + "/" + collectionName;
+            var lazy = _ensuredIndexes.GetOrAdd(key, _ => new Lazy<Task>(() => createIndex(dbName, collectionName)));
+            try
             {
-                var options = new CreateIndexOptions() { Unique = true, Name = "uniquefile" };
-                var indexKeysDefinition = Builders<BsonFileManagerModel>.IndexKeys.Ascending(x => x.FilePath);
-                await collection.Indexes.CreateOneAsync(indexKeysDefinition, options);
+                await lazy.Value;
             }
-            if (!existsFilterPath)
+            catch
             {
-                var options2 = new CreateIndexOptions() { Unique = false, Name = "uniquefilterpath" };
-                var indexKeysDefinition2 = Builders<BsonFileManagerModel>.IndexKeys.Ascending(x => x.FilterPath);
-                await collection.Indexes.CreateOneAsync(indexKeysDefinition2, options2);
+                // A failed attempt is retried on the next call.
+                _ensuredIndexes.TryRemove(new KeyValuePair<string, Lazy<Task>>(key, lazy));
+                throw;
             }
+        }
+
+        private static void ForgetEnsuredIndexes(string dbName)
+        {
+            foreach (var key in _ensuredIndexes.Keys)
+                if (key.StartsWith(dbName + "/", StringComparison.Ordinal))
+                    _ensuredIndexes.TryRemove(key, out _);
         }
 
         public async Task CreateDatabase(string dbName = "default", string collection = "directory", bool CreateDefaultEntry = true)
@@ -153,6 +208,7 @@ namespace TelegramDownloader.Data.db
             if (dbName == null)
                 dbName = "default";
             await client.DropDatabaseAsync(dbName);
+            ForgetEnsuredIndexes(dbName);
             _logger.LogInformation("Database deleted - DbName: {DbName}", dbName);
         }
 
@@ -176,6 +232,7 @@ namespace TelegramDownloader.Data.db
                 dbName = "default";
                 
             var db = getDatabase(dbName);
+            ForgetEnsuredIndexes(dbName);
             if (session != null)
             {
                 await db.DropCollectionAsync(session, collection);
@@ -305,8 +362,15 @@ namespace TelegramDownloader.Data.db
                 collectionName = "directory";
             if (filterPath == "/")
                 return await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Eq(x => x.FilterPath, filterPath == "/" ? "" : filterPath))).FirstOrDefaultAsync();
-            else
-                return await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Where(x => (x.FilterId + x.Id.ToString() + "/") == filterPath))).FirstOrDefaultAsync();
+            // Was "FilterId + Id + '/' == filterPath", evaluated on every document.
+            // Only the last 24 characters can be the id, so look it up by _id.
+            var split = FolderAncestry.SplitFolderFilterIdPath(filterPath);
+            if (split == null)
+                return null;
+            var b = Builders<BsonFileManagerModel>.Filter;
+            return await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName)
+                .Find(b.Eq(x => x.Id, split.Value.Id) & b.Eq(x => x.FilterId, split.Value.FilterId))
+                .FirstOrDefaultAsync();
         }
 
         public async Task<BsonFileManagerModel> getParentDirectoryByPath(string dbName, string filterPath, string collectionName = "directory")
@@ -333,7 +397,20 @@ namespace TelegramDownloader.Data.db
                         return hit;
                 }
             }
-            return await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Where(x => x.FilterPath + x.Name + "/" == filterPath))).FirstOrDefaultAsync();
+            // Miss (folder not indexed under the usual FilePath, or not there at
+            // all): instead of the computed "FilterPath + Name + '/'" over every
+            // document, try every (FilterPath, Name) split of the path, which the
+            // {FilterPath, Name} index answers with point lookups.
+            var splits = FolderAncestry.FilterPathNameSplits(filterPath);
+            if (splits.Count == 0)
+                return null;
+            var fb = Builders<BsonFileManagerModel>.Filter;
+            var candidates = await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName)
+                .Find(fb.Or(splits.Select(sp => fb.Eq(x => x.FilterPath, sp.FilterPath) & fb.Eq(x => x.Name, sp.Name))))
+                .ToListAsync();
+            // More than one match only happens with duplicated data; pick one
+            // deterministically (oldest id).
+            return candidates.OrderBy(x => x.Id, StringComparer.Ordinal).FirstOrDefault();
         }
 
         public async Task<List<BsonFileManagerModel>> getDirectChildrenByFilePathPrefix(string dbName, string currentPath, string collectionName = "directory")
@@ -357,8 +434,14 @@ namespace TelegramDownloader.Data.db
         {
             if (collectionName == null)
                 collectionName = "directory";
-            var listFiles = await getAllFilesInDirectoryById(dbName, id, collectionName);
-            await setDirectoryHasChild(dbName, id, collectionName, listFiles.Count() > 0);
+            // Only whether a child exists matters: stop at the first one (indexed
+            // by ParentId) instead of loading every child of the folder.
+            bool hasChild = await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName)
+                .Find(Builders<BsonFileManagerModel>.Filter.Eq(x => x.ParentId, id))
+                .Limit(1)
+                .Project(x => x.Id)
+                .AnyAsync();
+            await setDirectoryHasChild(dbName, id, collectionName, hasChild);
         }
 
         public async Task<BsonFileManagerModel> getEntry(string dbName, string filterId, string name, string collectionName = "directory")
@@ -419,6 +502,29 @@ namespace TelegramDownloader.Data.db
                 .Find(filter).ToListAsync(cancellationToken);
         }
 
+        public async Task<HashSet<long>> GetHashedFileSizes(string dbName, CancellationToken cancellationToken = default, string collectionName = "directory")
+        {
+            collectionName ??= "directory";
+            var b = Builders<BsonFileManagerModel>.Filter;
+            var filter = b.Eq(x => x.IsFile, true) & b.Type(x => x.XXHash, BsonType.String) & b.Ne(x => x.XXHash, "");
+            var sizes = await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName)
+                .Distinct(x => x.Size, filter, cancellationToken: cancellationToken)
+                .ToListAsync(cancellationToken);
+            return new HashSet<long>(sizes);
+        }
+
+        public async Task<List<BsonFileManagerModel>> GetFilesByXxHashes(string dbName, IEnumerable<string> hashes, CancellationToken cancellationToken = default, string collectionName = "directory")
+        {
+            collectionName ??= "directory";
+            var list = hashes?.Where(h => !string.IsNullOrEmpty(h)).Distinct(StringComparer.Ordinal).ToList() ?? new List<string>();
+            if (list.Count == 0)
+                return new List<BsonFileManagerModel>();
+            var b = Builders<BsonFileManagerModel>.Filter;
+            return await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName)
+                .Find(b.In(x => x.XXHash, list) & b.Eq(x => x.IsFile, true))
+                .ToListAsync(cancellationToken);
+        }
+
         public async Task<BsonFileManagerModel> getFileByPath(string dbName, string path, string collectionName = "directory")
         {
             if (collectionName == null)
@@ -448,8 +554,13 @@ namespace TelegramDownloader.Data.db
         {
             if (collectionName == null)
                 collectionName = "directory";
-            var result = await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Eq(x => x.FilterId, path) | Builders<BsonFileManagerModel>.Filter.Where(x => x.FilterId + x.Id.ToString() + "/" == path))).ToListAsync();
-            return result;
+            var b = Builders<BsonFileManagerModel>.Filter;
+            var filter = b.Eq(x => x.FilterId, path);
+            // The folder itself: was "FilterId + Id + '/' == path" on every document.
+            var self = FolderAncestry.SplitFolderFilterIdPath(path);
+            if (self != null)
+                filter |= b.Eq(x => x.Id, self.Value.Id) & b.Eq(x => x.FilterId, self.Value.FilterId);
+            return await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).Find(filter).ToListAsync();
         }
 
         public async Task<List<BsonFileManagerModel>> getAllChildFilesInDirectory(string dbName, string path, string collectionName = "directory")
@@ -480,8 +591,13 @@ namespace TelegramDownloader.Data.db
         {
             if (collectionName == null)
                 collectionName = "directory";
-            var result = await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Where(x => x.FilterId == path || x.FilePath + "/" == path || x.FilterPath == path))).ToListAsync();
-            return result;
+            // "FilePath + '/' == path" forced a scan of the channel on every
+            // listing; it is the same as FilePath == path without its last slash.
+            var b = Builders<BsonFileManagerModel>.Filter;
+            var filter = b.Eq(x => x.FilterId, path) | b.Eq(x => x.FilterPath, path);
+            if (path != null && path.EndsWith('/'))
+                filter |= b.Eq(x => x.FilePath, path.Substring(0, path.Length - 1));
+            return await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).Find(filter).ToListAsync();
         }
 
         public async Task<List<BsonFileManagerModel>> getAllFolders(string dbName, string? parentId = null, string collectionName = "directory")
@@ -639,51 +755,104 @@ namespace TelegramDownloader.Data.db
         }
 
 
-        private async Task<List<string>> getParentFolders(string dbName, string folderId, string collectionName = "directory")
+        /// <summary>
+        /// Ids of <paramref name="folderId"/> and all its ancestors, the folder
+        /// first: the same list the old loop built with one query per level.
+        /// The candidates come from <c>FilterId</c> (the folder's own, or the
+        /// <paramref name="filterIdHint"/> of an entry inside it) and the chain
+        /// is confirmed with their <c>ParentId</c>s, read in a single indexed
+        /// query. Only when <c>FilterId</c> is stale (left by an old move bug)
+        /// does it fall back to the per-level walk for the missing part.
+        /// </summary>
+        private async Task<List<string>> getParentFolders(string dbName, string folderId, string collectionName = "directory", string? filterIdHint = null)
         {
             if (collectionName == null)
                 collectionName = "directory";
-            List<string> folders = new List<string>();
-            while (!string.IsNullOrEmpty(folderId))
-            {
-                folders.Add(folderId);
-                folderId = (await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Where(x => x.Id == folderId))).FirstOrDefaultAsync()).ParentId;
+            var folders = new List<string>();
+            if (string.IsNullOrEmpty(folderId))
+                return folders;
+            var collection = getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName);
 
+            string? hint = filterIdHint;
+            if (hint == null || !FolderAncestry.ParseFilterId(hint).Contains(folderId))
+            {
+                // No usable hint: the folder's own FilterId lists its ancestors.
+                var folder = await collection.Find(Builders<BsonFileManagerModel>.Filter.Eq(x => x.Id, folderId))
+                    .Project(x => new { x.Id, x.ParentId, x.FilterId })
+                    .FirstOrDefaultAsync();
+                if (folder == null)
+                    throw new InvalidOperationException($"Folder {folderId} not found in {dbName}");
+                hint = folder.FilterId;
+            }
+
+            var candidates = FolderAncestry.CandidateIds(folderId, hint);
+            var docs = await collection.Find(Builders<BsonFileManagerModel>.Filter.In(x => x.Id, candidates))
+                .Project(x => new { x.Id, x.ParentId })
+                .ToListAsync();
+            var parentById = new Dictionary<string, string?>(StringComparer.Ordinal);
+            foreach (var d in docs)
+                parentById.TryAdd(d.Id, d.ParentId);
+
+            var resolved = FolderAncestry.ResolveChain(folderId, parentById);
+            folders.AddRange(resolved.Chain);
+
+            // Stale FilterId: finish the walk the old way from where it broke.
+            var next = resolved.MissingId;
+            var seen = new HashSet<string>(folders, StringComparer.Ordinal);
+            while (!string.IsNullOrEmpty(next) && seen.Add(next))
+            {
+                folders.Add(next);
+                var doc = await collection.Find(Builders<BsonFileManagerModel>.Filter.Eq(x => x.Id, next))
+                    .Project(x => new { x.Id, x.ParentId })
+                    .FirstOrDefaultAsync();
+                if (doc == null)
+                    throw new InvalidOperationException($"Folder {next} not found in {dbName}");
+                next = doc.ParentId;
             }
             return folders;
         }
 
         /// <summary>
-        /// add bytes to folder
+        /// Adds <paramref name="bytes"/> to the size of a folder and all its
+        /// ancestors with one <c>UpdateMany</c> + <c>$inc</c>.
         /// </summary>
-        /// <param name="dbName"></param>
-        /// <param name="folderId"></param>
-        /// <param name="bytes"></param>
-        /// <param name="collectionName"></param>
-        /// <returns></returns>
-        public async Task addBytesToFolder(string dbName, string folderId, long bytes, string collectionName = "directory")
+        /// <param name="dbName">Channel database.</param>
+        /// <param name="folderId">Folder that received the bytes.</param>
+        /// <param name="bytes">Bytes to add.</param>
+        /// <param name="collectionName">Collection, <c>directory</c> by default.</param>
+        /// <param name="filterIdHint">
+        /// Optional <c>FilterId</c> of the entry just added to the folder
+        /// (<c>folder.FilterId + folderId + "/"</c>); saves reading the folder.
+        /// </param>
+        public async Task addBytesToFolder(string dbName, string folderId, long bytes, string collectionName = "directory", string? filterIdHint = null)
         {
             if (collectionName == null)
                 collectionName = "directory";
-            List<string> folders = await getParentFolders(dbName, folderId, collectionName);
+            List<string> folders = await getParentFolders(dbName, folderId, collectionName, filterIdHint);
+            if (folders.Count == 0)
+                return;
             var update = new UpdateDefinitionBuilder<BsonFileManagerModel>().Inc(n => n.Size, bytes);
-            await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).UpdateManyAsync(Builders<BsonFileManagerModel>.Filter.Where(x => folders.Contains(x.Id) && !x.IsFile), update);
+            await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).UpdateManyAsync(FolderAncestry.AncestorUpdateFilter(folders), update);
         }
+
         /// <summary>
-        /// substract bytes to folder
+        /// Subtracts <paramref name="bytes"/> from the size of a folder and all
+        /// its ancestors with one <c>UpdateMany</c> + <c>$inc</c>.
         /// </summary>
-        /// <param name="dbName"></param>
-        /// <param name="folderId"></param>
-        /// <param name="bytes"></param>
-        /// <param name="collectionName"></param>
-        /// <returns></returns>
-        public async Task subBytesToFolder(string dbName, string folderId, long bytes, string collectionName = "directory")
+        /// <param name="dbName">Channel database.</param>
+        /// <param name="folderId">Folder that lost the bytes.</param>
+        /// <param name="bytes">Bytes to subtract.</param>
+        /// <param name="collectionName">Collection, <c>directory</c> by default.</param>
+        /// <param name="filterIdHint">Optional <c>FilterId</c> of the removed entry.</param>
+        public async Task subBytesToFolder(string dbName, string folderId, long bytes, string collectionName = "directory", string? filterIdHint = null)
         {
             if (collectionName == null)
                 collectionName = "directory";
-            List<string> folders = await getParentFolders(dbName, folderId, collectionName);
+            List<string> folders = await getParentFolders(dbName, folderId, collectionName, filterIdHint);
+            if (folders.Count == 0)
+                return;
             var update = new UpdateDefinitionBuilder<BsonFileManagerModel>().Inc(n => n.Size, -bytes);
-            await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).UpdateManyAsync(Builders<BsonFileManagerModel>.Filter.Where(x => folders.Contains(x.Id) && !x.IsFile), update);
+            await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).UpdateManyAsync(FolderAncestry.AncestorUpdateFilter(folders), update);
         }
 
         public void updateAllPathFiles(string dbName, string oldPath, string newPath, string collectionName = "directory")

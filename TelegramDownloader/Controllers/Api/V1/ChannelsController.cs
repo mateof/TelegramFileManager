@@ -505,9 +505,46 @@ namespace TelegramDownloader.Controllers.Api.V1
         }
 
         /// <summary>Tells whether a background refresh is running for a channel.</summary>
+        /// <remarks>Kept for compatibility; <c>GET .../refresh/progress</c> gives the details.</remarks>
         [HttpGet("{id}/refresh")]
         [ProducesResponseType(typeof(ApiResult<bool>), StatusCodes.Status200OK)]
         public IActionResult RefreshStatus(string id) => OkResult(_files.isChannelRefreshing(id));
+
+        /// <summary>Live progress of the channel's running refresh.</summary>
+        /// <remarks>
+        /// Answers <c>data: null</c> when no refresh is running. While one runs:
+        /// <c>phase</c> is <c>searching</c> (paging Telegram, per-type counters
+        /// in <c>filters</c>; <c>total</c> is what Telegram reports for the whole
+        /// channel and an incremental scan stops early), then <c>indexing</c>
+        /// (<c>indexed</c> of <c>newFiles</c> written), then briefly
+        /// <c>done</c>. Poll it about once a second at most.
+        /// </remarks>
+        [HttpGet("{id}/refresh/progress")]
+        [ProducesResponseType(typeof(ApiResult<ApiChannelRefreshProgressDto>), StatusCodes.Status200OK)]
+        public IActionResult RefreshProgress(string id)
+        {
+            ChannelRefreshProgressSnapshot? progress = _files.getChannelRefreshProgress(id);
+            return OkResult(progress == null ? null : ApiChannelRefreshProgressDto.From(progress));
+        }
+
+        /// <summary>Cancels the channel's running refresh.</summary>
+        /// <remarks>
+        /// The refresh stops after the Telegram page or insert batch in flight
+        /// (usually well under a few seconds); until then
+        /// <c>GET /api/v1/channels/{id}/refresh</c> still answers true. Files
+        /// already written stay in the index, which remains consistent, and the
+        /// result (<c>GET .../refresh/result</c>) reports <c>canceled: true</c>
+        /// with the counts of what got in. 404 when nothing is running.
+        /// </remarks>
+        [HttpDelete("{id}/refresh")]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status202Accepted)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status404NotFound)]
+        public IActionResult CancelRefresh(string id)
+        {
+            if (!_files.cancelChannelRefresh(id))
+                return NotFoundResult("No refresh is running for this channel");
+            return Accepted(ApiResult.Done("Refresh cancellation requested"));
+        }
 
         /// <summary>What the last finished refresh added, broken down by media type.</summary>
         /// <remarks>

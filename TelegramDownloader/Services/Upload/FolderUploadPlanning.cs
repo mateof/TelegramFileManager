@@ -3,6 +3,19 @@ using TelegramDownloader.Models;
 
 namespace TelegramDownloader.Services.Upload
 {
+    /// <summary>What the upload does with one local file.</summary>
+    public enum UploadFileAction
+    {
+        /// <summary>Not in the destination folder: uploaded and indexed.</summary>
+        New,
+        /// <summary>An older copy is indexed at the same path: uploaded, then the old entry is deleted.</summary>
+        Replace,
+        /// <summary>Empty file: never sent (Telegram cannot store it).</summary>
+        SkipEmpty,
+        /// <summary>The indexed copy is newer than the local file: kept, nothing sent.</summary>
+        SkipNewerInChannel
+    }
+
     /// <summary>Number and total size of the files a folder upload will send.</summary>
     public readonly record struct UploadTotals(int Count, long Size);
 
@@ -48,7 +61,50 @@ namespace TelegramDownloader.Services.Upload
         /// modification date than the local copy is kept as is.
         /// </summary>
         public static bool ShouldSkipFile(long localSize, DateTime localModified, BsonFileManagerModel? existing)
-            => localSize == 0 || (existing != null && existing.DateModified > localModified);
+            => IsSkip(DecideFile(localSize, localModified, existing));
+
+        /// <summary>
+        /// The single decision rule for a local file, shared by the real upload
+        /// and the preview: empty files are skipped, a file indexed with a
+        /// newer modification date is kept, an older indexed copy is replaced,
+        /// anything else is new.
+        /// </summary>
+        public static UploadFileAction DecideFile(long localSize, DateTime localModified, BsonFileManagerModel? existing)
+        {
+            if (localSize == 0)
+                return UploadFileAction.SkipEmpty;
+            if (existing == null)
+                return UploadFileAction.New;
+            return existing.DateModified > localModified
+                ? UploadFileAction.SkipNewerInChannel
+                : UploadFileAction.Replace;
+        }
+
+        /// <summary>True for the actions that send nothing.</summary>
+        public static bool IsSkip(UploadFileAction action)
+            => action is UploadFileAction.SkipEmpty or UploadFileAction.SkipNewerInChannel;
+
+        /// <summary>A folder entry is created only when the path is not indexed yet.</summary>
+        public static bool FolderNeedsCreate(BsonFileManagerModel? existing) => existing == null;
+
+        /// <summary>
+        /// Index path (<c>FilePath</c>) of a child of the destination folder
+        /// <paramref name="currentPath"/>; the key every existence check uses.
+        /// </summary>
+        public static string EntryPath(string currentPath, string name) => Path.Combine(currentPath, name);
+
+        /// <summary>Destination folder path used for the contents of a child folder.</summary>
+        public static string ChildFolderPath(string currentPath, string name) => EntryPath(currentPath, name) + "/";
+
+        /// <summary>
+        /// Path of a local item relative to the server local root, with forward
+        /// slashes; folders end with a slash.
+        /// </summary>
+        public static string LocalRelativePath(string? filterPath, string name, bool isFile)
+        {
+            var fp = (filterPath ?? string.Empty).Replace("\\", "/");
+            return isFile ? fp + name : fp + name + "/";
+        }
 
         /// <summary>
         /// Prefix shared by the index paths of the direct children of

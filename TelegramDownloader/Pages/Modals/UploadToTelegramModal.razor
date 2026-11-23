@@ -4,6 +4,7 @@
 @using TelegramDownloader.Services
 @using TelegramDownloader.Shared
 @using TelegramDownloader.Services.Transfers
+@using TelegramDownloader.Services.Upload
 
 @inject IFileService fs
 @inject ITelegramService ts
@@ -283,6 +284,115 @@
         box-shadow: none;
     }
 
+    /* Upload preview (dry run) */
+    .upload-options {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.6rem;
+        margin-top: 0.25rem;
+        margin-bottom: 1rem;
+        font-size: 0.85rem;
+        color: rgba(255, 255, 255, 0.85);
+    }
+
+    .upload-options input {
+        margin-top: 0.2rem;
+        accent-color: #e94560;
+    }
+
+    .upload-options small {
+        display: block;
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 0.75rem;
+    }
+
+    .upload-preview {
+        background: rgba(0, 0, 0, 0.2);
+        border: 1px solid rgba(233, 69, 96, 0.25);
+        border-radius: 0.75rem;
+        padding: 1rem;
+        margin-bottom: 0.5rem;
+        max-height: 260px;
+        overflow-y: auto;
+    }
+
+    .upload-preview-title {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.85rem;
+        color: rgba(255, 255, 255, 0.7);
+        margin-bottom: 0.75rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    .upload-preview-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.5rem;
+    }
+
+    .upload-preview-stat {
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 0.5rem;
+        padding: 0.5rem 0.75rem;
+    }
+
+    .upload-preview-stat .value {
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: #fff;
+    }
+
+    .upload-preview-stat .label {
+        font-size: 0.72rem;
+        color: rgba(255, 255, 255, 0.55);
+    }
+
+    .upload-preview-stat.accent .value {
+        color: #e94560;
+    }
+
+    .upload-preview-note {
+        margin-top: 0.75rem;
+        font-size: 0.78rem;
+        color: rgba(255, 255, 255, 0.6);
+    }
+
+    .upload-preview-note.warn {
+        color: #f5b971;
+    }
+
+    .upload-preview-dup {
+        font-size: 0.78rem;
+        color: rgba(255, 255, 255, 0.8);
+        padding: 0.35rem 0;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .upload-preview-dup span {
+        color: rgba(255, 255, 255, 0.5);
+    }
+
+    .upload-btn-secondary {
+        background: rgba(233, 69, 96, 0.12);
+        border: 1px solid rgba(233, 69, 96, 0.4);
+        color: #fff;
+    }
+
+    .upload-btn-secondary:hover {
+        background: rgba(233, 69, 96, 0.22);
+    }
+
+    .upload-btn-secondary:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
     /* Responsive */
     @@media (max-width: 576px) {
         .upload-modal-container {
@@ -384,8 +494,80 @@
                         <i class="bi bi-folder-fill"></i>
                         Destination Folder
                     </label>
-                    <TelegramDownloader.Shared.Ddtree idTree="tltree" id="@id" folderType="telegram" @ref="ddtree"></TelegramDownloader.Shared.Ddtree>
+                    <TelegramDownloader.Shared.Ddtree idTree="tltree" id="@id" folderType="telegram" @ref="ddtree" selectedNodeChanged="OnTargetChanged"></TelegramDownloader.Shared.Ddtree>
                 </div>
+
+                <label class="upload-options">
+                    <input type="checkbox" checked="@findDuplicates" @onchange="OnFindDuplicatesChanged" />
+                    <span>
+                        Find duplicates by content
+                        <small>Reads and hashes the local files whose size matches a hashed file in the channel. Slower on large folders.</small>
+                    </span>
+                </label>
+
+                @if (previewError != null)
+                {
+                    <div class="upload-preview-note warn"><i class="bi bi-exclamation-triangle"></i> @previewError</div>
+                }
+
+                @if (preview != null && IsPreviewCurrent())
+                {
+                    <div class="upload-preview">
+                        <div class="upload-preview-title">
+                            <i class="bi bi-clipboard-check"></i> Upload summary for <strong>@preview.TargetPath</strong>
+                        </div>
+                        <div class="upload-preview-grid">
+                            <div class="upload-preview-stat accent">
+                                <div class="value">@preview.FilesToUpload</div>
+                                <div class="label">files to upload &middot; @FormatSize(preview.BytesToUpload)</div>
+                            </div>
+                            <div class="upload-preview-stat">
+                                <div class="value">@preview.NewFiles</div>
+                                <div class="label">new</div>
+                            </div>
+                            <div class="upload-preview-stat">
+                                <div class="value">@preview.ReplacedFiles</div>
+                                <div class="label">replace an older copy</div>
+                            </div>
+                            <div class="upload-preview-stat">
+                                <div class="value">@preview.SkippedFiles</div>
+                                <div class="label">skipped (@preview.SkippedNewerInChannel newer in channel, @preview.SkippedEmpty empty)</div>
+                            </div>
+                            <div class="upload-preview-stat">
+                                <div class="value">@preview.FoldersToCreate</div>
+                                <div class="label">folders to create</div>
+                            </div>
+                            <div class="upload-preview-stat">
+                                <div class="value">@preview.ExistingFolders</div>
+                                <div class="label">existing folders</div>
+                            </div>
+                        </div>
+                        @if (!preview.TargetFolderExists)
+                        {
+                            <div class="upload-preview-note warn">The destination folder is not in the channel index: entries will be attached to the channel root.</div>
+                        }
+                        @if (preview.DuplicateCheck)
+                        {
+                            <div class="upload-preview-note">
+                                Duplicate check read @preview.HashedFiles file(s), @FormatSize(preview.HashedBytes).
+                                @if (preview.Duplicates.Count == 0)
+                                {
+                                    <span>No duplicates found.</span>
+                                }
+                            </div>
+                            @foreach (var dup in preview.Duplicates.Take(10))
+                            {
+                                <div class="upload-preview-dup" title="@dup.LocalPath">
+                                    <i class="bi bi-files"></i> @dup.LocalPath <span>already at @string.Join(", ", dup.Matches.Select(m => m.FilePath))</span>
+                                </div>
+                            }
+                            @if (preview.Duplicates.Count > 10)
+                            {
+                                <div class="upload-preview-note">... and @(preview.Duplicates.Count - 10) more duplicates</div>
+                            }
+                        }
+                    </div>
+                }
             }
         </div>
 
@@ -394,9 +576,13 @@
                 <i class="bi bi-x"></i>
                 Cancel
             </button>
-            <button class="upload-btn upload-btn-submit" @onclick="Submit" disabled="@(fileList == null || fileList.Count == 0)">
+            <button class="upload-btn upload-btn-secondary" @onclick="RunPreview" disabled="@(fileList == null || fileList.Count == 0 || previewing)">
+                <i class="bi @(previewing ? "bi-hourglass-split" : "bi-eye")"></i>
+                @(previewing ? "Checking..." : "Preview")
+            </button>
+            <button class="upload-btn upload-btn-submit" @onclick="Submit" disabled="@(fileList == null || fileList.Count == 0 || previewing)">
                 <i class="bi bi-cloud-upload"></i>
-                Upload
+                @(IsPreviewCurrent() ? "Confirm upload" : "Upload")
             </button>
         </div>
     </div>
@@ -413,6 +599,16 @@
     public string filePath { get; set; }
     public List<FileManagerDirectoryContent> fileList { get; set; }
 
+    // Dry run shown before confirming: same planner as the upload itself.
+    private UploadPreviewResult? preview;
+    private string? previewTarget;
+    private bool previewDuplicates;
+    private bool findDuplicates;
+    private bool previewing;
+    private string? previewError;
+    private bool previewFailed;
+    private CancellationTokenSource? previewCts;
+
     protected override async Task OnInitializedAsync()
     {
         model ??= new();
@@ -427,14 +623,82 @@
     public void Open(List<FileManagerDirectoryContent> files)
     {
         fileList = files;
+        ResetPreview();
         isVisible = true;
         StateHasChanged();
     }
 
     public void Close()
     {
+        previewCts?.Cancel();
+        ResetPreview();
         isVisible = false;
         StateHasChanged();
+    }
+
+    // A summary is only valid for the folder it was computed for.
+    private void OnTargetChanged(List<string> _) => StateHasChanged();
+
+    private string? SelectedTarget() => ddtree?.selectedNode?.FirstOrDefault();
+
+    private bool IsPreviewCurrent()
+        => (preview != null || previewFailed) && previewTarget == SelectedTarget() && previewDuplicates == findDuplicates;
+
+    private void ResetPreview()
+    {
+        preview = null;
+        previewTarget = null;
+        previewError = null;
+        previewFailed = false;
+        previewing = false;
+    }
+
+    private void OnFindDuplicatesChanged(Microsoft.AspNetCore.Components.ChangeEventArgs e)
+    {
+        findDuplicates = e.Value is bool b && b;
+        preview = null;
+    }
+
+    private async Task RunPreview()
+    {
+        var target = SelectedTarget();
+        previewError = null;
+        previewFailed = false;
+        if (string.IsNullOrEmpty(target))
+        {
+            preview = null;
+            previewError = "Select a destination folder first.";
+            return;
+        }
+        previewCts?.Cancel();
+        previewCts = new CancellationTokenSource();
+        var token = previewCts.Token;
+        previewing = true;
+        StateHasChanged();
+        try
+        {
+            var result = await fs.PreviewUploadFromServer(id, target, fileList, findDuplicates, 0, token);
+            if (token.IsCancellationRequested) return;
+            preview = result;
+            previewTarget = target;
+            previewDuplicates = findDuplicates;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            preview = null;
+            previewError = "Could not compute the upload summary: " + ex.Message + " You can still confirm the upload.";
+            previewFailed = true;
+            previewTarget = target;
+            previewDuplicates = findDuplicates;
+        }
+        finally
+        {
+            previewing = false;
+            StateHasChanged();
+        }
     }
 
     private void OnOverlayClick()
@@ -442,8 +706,16 @@
         Close();
     }
 
-    private void Submit()
+    private async Task Submit()
     {
+        // First click shows what will happen; the second one confirms it.
+        if (!IsPreviewCurrent())
+        {
+            // Shows the summary (or why it could not be computed, in which case
+            // the next click uploads anyway); never uploads on this click.
+            await RunPreview();
+            return;
+        }
         // Not awaited so the modal closes at once (counting a large folder takes
         // a while); a failure to queue the upload is logged instead of lost.
         fs.AddUploadFileFromServer(id, ddtree.selectedNode == null ? null : ddtree.selectedNode.FirstOrDefault(), fileList)

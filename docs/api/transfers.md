@@ -150,6 +150,73 @@ POST /api/v1/transfers/uploads
 The whole request becomes one **batch task** (visible under `tasks`), which
 spawns one upload per file. Returns `202` with the `taskId`.
 
+### Preview an upload (dry run)
+
+```
+POST /api/v1/transfers/uploads/preview
+{
+  "channelId": "1290586824",
+  "localPaths": ["music/album1", "music/single.mp3"],
+  "targetPath": "/music/",
+  "findDuplicates": false,     // optional: also look for the same content elsewhere in the channel
+  "maxItems": 500              // optional: cap of `items` (0..5000)
+}
+```
+
+Same body as the upload, nothing is sent or queued and no Telegram session is
+needed. The decisions come from the same planner the upload runs, so the
+preview cannot disagree with what the upload would do against the same index:
+
+| Action | Rule |
+| --- | --- |
+| `new` | Not indexed at that path: uploaded. |
+| `replace` | Indexed with an older or equal date: uploaded, then the old entry is deleted. |
+| `skip-empty` | Empty file: never sent. |
+| `skip-newer` | Indexed with a newer date than the local file: kept, nothing sent. |
+| `create-folder` / `existing-folder` | Folder entry created or reused. |
+
+```jsonc
+{
+  "success": true,
+  "data": {
+    "targetPath": "/music/",
+    "targetFolderExists": true,        // false: entries go under the channel root, as the upload does
+    "newFiles": 12, "newBytes": 734003200,
+    "replacedFiles": 1, "replacedBytes": 8388608,
+    "filesToUpload": 13, "bytesToUpload": 742391808,
+    "skippedFiles": 3, "skippedEmpty": 1, "skippedNewerInChannel": 2, "skippedBytes": 20971520,
+    "foldersToCreate": 2, "existingFolders": 1,
+    "duplicateCheck": false, "hashedFiles": 0, "hashedBytes": 0,
+    "duplicates": [],
+    "items": [
+      { "localPath": "/music/album1/", "targetPath": "/music/album1", "isFile": false, "size": 0, "action": "existing-folder", "existingDateModified": null },
+      { "localPath": "/music/album1/01.flac", "targetPath": "/music/album1/01.flac", "isFile": true, "size": 41943040, "action": "new", "existingDateModified": null }
+    ],
+    "itemsTruncated": false,
+    "missingLocalPaths": []
+  }
+}
+```
+
+The counters always cover the whole tree; `items` is cut at `maxItems`
+(`itemsTruncated: true`).
+
+**Duplicates by content.** With `findDuplicates: true` the server reads and
+hashes the local files that would be uploaded **and** whose size equals the size
+of some channel file with a stored hash (`hashedFiles`/`hashedBytes` say how
+much it read). Each hit in `duplicates` lists the channel files with the same
+XXHash and size at another path:
+
+```jsonc
+{ "localPath": "/music/single.mp3", "targetPath": "/music/single.mp3", "size": 5242880,
+  "xxHash": "9A3F0C1B2D4E5F60",
+  "matches": [ { "id": "665f…", "filePath": "/old/single.mp3", "size": 5242880 } ] }
+```
+
+Only files uploaded with **CheckHash** enabled carry a hash, so channels filled
+another way report no duplicates. The preview does not skip anything: it is
+information for deciding whether to upload.
+
 ### Download media from raw messages
 
 ```

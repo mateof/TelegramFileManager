@@ -23,6 +23,7 @@ namespace TelegramDownloader.Controllers.Mobile
             "playlist.bulkAdd",      // POST /api/mobile/playlists/{id}/tracks/bulk
             "search.global",         // GET  /api/mobile/search
             "channels.refresh",      // POST /api/v1/channels/{id}/refresh
+            "channels.refreshProgress", // GET  /api/v1/channels/{id}/refresh/progress, DELETE /api/v1/channels/{id}/refresh
             "stream.localTranscode", // GET  /api/mobile/stream/local/transcoded
         };
 
@@ -39,6 +40,7 @@ namespace TelegramDownloader.Controllers.Mobile
         /// - `playlist.bulkAdd`: POST /api/mobile/playlists/{id}/tracks/bulk
         /// - `search.global`: GET /api/mobile/search
         /// - `channels.refresh`: POST /api/v1/channels/{id}/refresh
+        /// - `channels.refreshProgress`: GET /api/v1/channels/{id}/refresh/progress y DELETE /api/v1/channels/{id}/refresh (cancelar)
         /// - `stream.localTranscode`: GET /api/mobile/stream/local/transcoded
         ///
         /// Los servidores antiguos no tienen este endpoint: un **404** debe interpretarse

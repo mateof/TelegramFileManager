@@ -74,6 +74,50 @@ namespace TelegramDownloader.Services
             return docs.Where(d => !presentIds.Contains(d.id)).ToList();
         }
 
+        /// <summary>
+        /// The message id a filter's search stops at (exclusive): its stored
+        /// high-water mark, or 0 (scan everything) when the filter has no mark
+        /// yet or the refresh is forced.
+        /// </summary>
+        public static int ScanFloor(RefreshFilter filter, IReadOnlyDictionary<RefreshFilter, int> marks, bool force)
+        {
+            if (force) return 0;
+            return marks.TryGetValue(filter, out int mark) && mark > 0 ? mark : 0;
+        }
+
+        /// <summary>The selected filters that will be scanned from the very first message.</summary>
+        public static List<RefreshFilter> FiltersNeedingFullScan(IEnumerable<RefreshFilter> selected, IReadOnlyDictionary<RefreshFilter, int> marks, bool force)
+        {
+            return selected.Where(f => ScanFloor(f, marks, force) == 0).ToList();
+        }
+
+        /// <summary>
+        /// The new high-water mark of a filter whose search ran to completion
+        /// down to <paramref name="floor"/>.
+        /// </summary>
+        /// <remarks>
+        /// A mark M promises "every message of this filter with id &lt;= M is in
+        /// the index". Walking the scanned ids upwards from the floor, the mark
+        /// follows them while each one is indexed and stops at the first that
+        /// is not (failed insert, canceled before its batch), so the next
+        /// refresh reaches that message again. It never moves past a gap. Only
+        /// call this for a search that finished: a search cut short has not
+        /// seen the oldest messages above the floor, so its mark must stay.
+        /// </remarks>
+        /// <param name="floor">Where the search stopped: the previous mark, or 0 for a full scan.</param>
+        /// <param name="scannedIds">The ids the search returned (any order).</param>
+        /// <param name="isIndexed">True when the id is in the index now (already present or inserted by this run).</param>
+        public static int AdvanceMark(int floor, IEnumerable<int> scannedIds, Func<int, bool> isIndexed)
+        {
+            int mark = floor;
+            foreach (int id in scannedIds.Where(id => id > floor).Distinct().OrderBy(id => id))
+            {
+                if (!isIndexed(id)) break;
+                mark = id;
+            }
+            return mark;
+        }
+
         /// <summary>The directory entry a refresh writes for a message at the channel root.</summary>
         public static BsonFileManagerModel ToRootFileEntry(TelegramChatDocuments tcd, string rootFolderId)
         {

@@ -199,7 +199,78 @@ Poll the state with:
 GET /api/v1/channels/{id}/refresh      -> true | false
 ```
 
-and watch `/hubs/transfers` for the download/index activity it generates.
+(kept for compatibility; the progress endpoint below has the details) and watch
+`/hubs/transfers` for the download/index activity it generates.
+
+### Incremental scans (per media type)
+
+Each media type (`documents`, `audio`, `video`, `photos`) keeps its own
+high-water mark in the channel database (collection `refresh_marks`): the
+highest message id up to which *every* message of that type is known to be in
+the index. A normal refresh only asks Telegram for messages above the mark of
+each selected type, so:
+
+- a type selected for the first time (for example photos on a channel that was
+  only ever refreshed for audio) is scanned in full once, then incrementally;
+- a message that failed to index, or that was not reached because the refresh
+  was canceled, is picked up by the next refresh: the mark never moves past a
+  message that is not in the index;
+- channels indexed before this existed have no marks, so their first refresh
+  after the upgrade scans every selected type in full once (files already
+  indexed are skipped, nothing is duplicated).
+
+`force: true` keeps its meaning: the selected types are rescanned in full and
+their marks recomputed. Deleting or importing the channel database drops the
+marks with it.
+
+### Live progress
+
+```
+GET /api/v1/channels/{id}/refresh/progress
+```
+
+`data: null` when no refresh is running. While one runs:
+
+```json
+{
+  "running": true,
+  "phase": "searching",
+  "startedAt": "2026-08-31T16:38:02",
+  "filters": [
+    { "type": "documents", "fetched": 400, "total": 1250, "done": false },
+    { "type": "audio", "fetched": 12, "total": 8031, "done": true }
+  ],
+  "newFiles": 0,
+  "indexed": 0,
+  "cancelRequested": false
+}
+```
+
+- `phase`: `searching` (paging Telegram), `indexing` (writing the new files),
+  then briefly `done` before the run is released.
+- `filters` lists the selected types. `fetched` is the number of messages read
+  so far; `total` is what Telegram reports for the whole channel (`null` until
+  the first page arrives). An incremental scan stops at the mark, so it often
+  ends (`done: true`) far below `total`.
+- `newFiles` is known once the search is over; `indexed` counts the new files
+  written so far.
+- Poll about once a second at most.
+
+### Cancel
+
+```
+DELETE /api/v1/channels/{id}/refresh
+```
+
+- `202 Accepted` when a cancel was requested, `404 not_found` when nothing runs.
+- The refresh stops after the Telegram page or insert batch in flight (usually
+  within a few seconds); until then `GET .../refresh` still answers `true` and
+  `.../refresh/progress` shows `cancelRequested: true`. A new refresh can only
+  start once it has stopped.
+- Canceled while searching Telegram: nothing is indexed. Canceled while
+  indexing: the batches already written stay (1000 files each) and the index is
+  consistent. Either way the result reports `canceled: true` with the counts of
+  what got in, and the per-type marks only cover what is actually indexed.
 
 ### What the scan added
 
@@ -215,6 +286,7 @@ GET /api/v1/channels/{id}/refresh/result
   "startedAt": "2026-08-31T16:38:02Z",
   "finishedAt": "2026-08-31T16:40:57Z",
   "failed": false,
+  "canceled": false,
   "photos": 0,
   "videos": 12,
   "audios": 3,
@@ -227,6 +299,10 @@ GET /api/v1/channels/{id}/refresh/result
   started — the result is a report on this run, not history.
 - `failed: true` means the scan threw; the counts are what it managed to index
   before giving up.
+- `failed: true` is also set when one media type's search failed: the other
+  types are still indexed, the failed one keeps its mark and is retried next time.
+- `canceled: true` means the refresh was canceled (see above); the counts are
+  what was indexed before it stopped.
 - A scan that found nothing new answers with every count at `0`, not `null`.
 
 ## Message history

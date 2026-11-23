@@ -6,6 +6,7 @@ using TelegramDownloader.Models;
 using TelegramDownloader.Models.Api;
 using TelegramDownloader.Services;
 using TelegramDownloader.Services.Api;
+using TelegramDownloader.Services.Upload;
 
 namespace TelegramDownloader.Controllers.Api.V1
 {
@@ -223,15 +224,7 @@ namespace TelegramDownloader.Controllers.Api.V1
 
             try
             {
-                var contents = new List<FileManagerDirectoryContent>();
-                var skipped = new List<string>();
-
-                foreach (var relative in request.LocalPaths)
-                {
-                    var content = BuildLocalContent(relative);
-                    if (content == null) skipped.Add(relative);
-                    else contents.Add(content);
-                }
+                var (contents, skipped) = BuildLocalContents(request.LocalPaths);
 
                 if (contents.Count == 0)
                     return BadRequestResult("None of the supplied paths exist under the local root", ApiErrorCodes.FileNotFound);
@@ -254,6 +247,50 @@ namespace TelegramDownloader.Controllers.Api.V1
             {
                 _logger.LogError(ex, "Error queuing an upload to channel {ChannelId}", request.ChannelId);
                 return ErrorResult("Could not queue the upload", ex);
+            }
+        }
+
+        /// <summary>Dry run of an upload: what <c>POST /transfers/uploads</c> would do.</summary>
+        /// <remarks>
+        /// Takes the same body as the upload and applies the very same decisions
+        /// (shared planner) without sending anything: files that are new, files
+        /// that replace an older indexed copy, files skipped (empty, or a newer
+        /// copy already indexed), bytes to send and folders to create. With
+        /// <c>findDuplicates</c> it also reports files to upload whose content
+        /// (same stored XXHash and size) already exists elsewhere in the channel;
+        /// that option reads the matching local files from disk. Nothing is
+        /// queued and no Telegram session is needed.
+        /// </remarks>
+        [HttpPost("uploads/preview")]
+        [ProducesResponseType(typeof(ApiResult<UploadPreviewResult>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> PreviewUpload([FromBody] UploadPreviewRequest request, CancellationToken cancellationToken)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.ChannelId))
+                return BadRequestResult("A channel id is required");
+            if (request.LocalPaths == null || request.LocalPaths.Count == 0)
+                return BadRequestResult("At least one local path is required");
+
+            try
+            {
+                var (contents, missing) = BuildLocalContents(request.LocalPaths);
+                if (contents.Count == 0)
+                    return BadRequestResult("None of the supplied paths exist under the local root", ApiErrorCodes.FileNotFound);
+
+                var targetPath = ChannelFolderResolver.NormalizeFolderPath(request.TargetPath);
+                int maxItems = Math.Clamp(request.MaxItems ?? UploadPreviewPlanner.DefaultMaxItems, 0, 5000);
+                var preview = await _files.PreviewUploadFromServer(request.ChannelId, targetPath, contents, request.FindDuplicates, maxItems, cancellationToken);
+                preview.MissingLocalPaths = missing;
+                return OkResult(preview);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return StatusCode(499);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error previewing an upload to channel {ChannelId}", request.ChannelId);
+                return ErrorResult("Could not preview the upload", ex);
             }
         }
 
@@ -612,6 +649,23 @@ namespace TelegramDownloader.Controllers.Api.V1
         /// the server local root. Returns null when the path escapes the root or
         /// does not exist.
         /// </summary>
+        /// <summary>
+        /// Resolves the requested local paths the way the upload does; shared by
+        /// the upload and its preview so both see the same items.
+        /// </summary>
+        private static (List<FileManagerDirectoryContent> Contents, List<string> Missing) BuildLocalContents(IEnumerable<string> relativePaths)
+        {
+            var contents = new List<FileManagerDirectoryContent>();
+            var missing = new List<string>();
+            foreach (var relative in relativePaths)
+            {
+                var content = BuildLocalContent(relative);
+                if (content == null) missing.Add(relative);
+                else contents.Add(content);
+            }
+            return (contents, missing);
+        }
+
         private static FileManagerDirectoryContent? BuildLocalContent(string relativePath)
         {
             if (string.IsNullOrWhiteSpace(relativePath)) return null;
