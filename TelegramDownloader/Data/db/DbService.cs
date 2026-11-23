@@ -315,8 +315,34 @@ namespace TelegramDownloader.Data.db
                 collectionName = "directory";
             if (filterPath == "/")
                 return await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Eq(x => x.FilterPath, filterPath == "/" ? "" : filterPath))).FirstOrDefaultAsync();
-            else
-                return await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Where(x => x.FilterPath + x.Name + "/" == filterPath))).FirstOrDefaultAsync();
+
+            // Fast path: the folder "/a/b/" is normally stored with FilePath "/a/b",
+            // and FilePath has a unique index. The computed predicate below cannot
+            // use any index and scans the whole channel, so try the indexed lookup
+            // first and accept it only when it satisfies that same predicate.
+            if (filterPath != null)
+            {
+                string candidatePath = filterPath.TrimEnd('/');
+                if (candidatePath.Length > 0)
+                {
+                    var hit = await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName)
+                        .Find(Builders<BsonFileManagerModel>.Filter.Eq(x => x.FilePath, candidatePath))
+                        .FirstOrDefaultAsync();
+                    if (hit != null && hit.FilterPath != null && hit.Name != null
+                        && hit.FilterPath + hit.Name + "/" == filterPath)
+                        return hit;
+                }
+            }
+            return await (await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).FindAsync(Builders<BsonFileManagerModel>.Filter.Where(x => x.FilterPath + x.Name + "/" == filterPath))).FirstOrDefaultAsync();
+        }
+
+        public async Task<List<BsonFileManagerModel>> getDirectChildrenByFilePathPrefix(string dbName, string currentPath, string collectionName = "directory")
+        {
+            if (collectionName == null)
+                collectionName = "directory";
+            var filter = Builders<BsonFileManagerModel>.Filter.Regex(x => x.FilePath,
+                new MongoDB.Bson.BsonRegularExpression(TelegramDownloader.Services.Upload.FolderUploadPlanning.DirectChildrenRegex(currentPath)));
+            return await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName).Find(filter).ToListAsync();
         }
 
         public async Task setDirectoryHasChild(string dbName, string id, string collectionName = "directory", bool hasChild = true)

@@ -46,6 +46,8 @@ namespace TelegramDownloader.Data.db
         Task<List<BsonFileManagerModel>> getShareFolder(string dbName, string bsonId, string collectionName = "directory");
         Task<BsonFileManagerModel> getParentDirectory(string dbName, string filterPath, string collectionName = "directory");
         Task<BsonFileManagerModel> getParentDirectoryByPath(string dbName, string filterPath, string collectionName = "directory");
+        /// <summary>Entries whose FilePath is a direct child of <paramref name="currentPath"/> (one indexed query).</summary>
+        Task<List<BsonFileManagerModel>> getDirectChildrenByFilePathPrefix(string dbName, string currentPath, string collectionName = "directory");
         Task<GeneralConfig> LoadConfig();
         Task resetDatabase(string dbName = "default");
         Task resetCollection(string dbName = "default", string collection = "directory", IClientSessionHandle? session = null);
