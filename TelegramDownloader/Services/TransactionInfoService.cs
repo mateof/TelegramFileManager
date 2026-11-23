@@ -12,7 +12,17 @@ namespace TelegramDownloader.Services
     {
 
 
-        public bool isPauseDownloads = false;
+        // Locking: each group of lists has its own monitor. Sections guarded by
+        // them never await and never call back into a model (callbacks that
+        // start transfers run after the lock is released), so a plain lock is
+        // enough. Readers - the UI, the API - only ever see copies taken under
+        // the lock, so enumerating them can never hit "collection was modified".
+        private readonly object _downloadLock = new object();
+        private readonly object _uploadLock = new object();
+        private readonly object _taskLock = new object();
+
+        private volatile bool _isPauseDownloads = false;
+        public bool isPauseDownloads { get => _isPauseDownloads; set => _isPauseDownloads = value; }
         public event EventHandler<EventArgs> EventChanged;
         /// <summary>
         /// Aggregated, throttled event raised whenever any transaction changes:
@@ -24,31 +34,44 @@ namespace TelegramDownloader.Services
         public event EventHandler TaskEventChanged;
         public event EventHandler HistorykEventChanged;
         public event EventHandler<SpeedHistoryEventArgs> NewSpeedHistoryPoint;
-        public List<DownloadModel> downloadModels = new List<DownloadModel>();
-        public List<DownloadModel> pendingDownloadModels = new List<DownloadModel>();
-        public List<UploadModel> uploadModels = new List<UploadModel>();
-        public List<UploadModel> pendingUploadModels = new List<UploadModel>();
-        public List<InfoDownloadTaksModel> infoDownloadTaksModel = new List<InfoDownloadTaksModel>();
+
+        private readonly List<DownloadModel> _downloadModels = new List<DownloadModel>();
+        private readonly List<DownloadModel> _pendingDownloadModels = new List<DownloadModel>();
+        private readonly List<UploadModel> _uploadModels = new List<UploadModel>();
+        private readonly List<UploadModel> _pendingUploadModels = new List<UploadModel>();
+        private readonly List<InfoDownloadTaksModel> _infoDownloadTaksModel = new List<InfoDownloadTaksModel>();
+
+        /// <summary>Snapshot of the active (and finished) downloads.</summary>
+        public List<DownloadModel> downloadModels { get { lock (_downloadLock) return _downloadModels.ToList(); } }
+        /// <summary>Snapshot of the queued downloads.</summary>
+        public List<DownloadModel> pendingDownloadModels { get { lock (_downloadLock) return _pendingDownloadModels.ToList(); } }
+        /// <summary>Snapshot of the active (and finished) uploads.</summary>
+        public List<UploadModel> uploadModels { get { lock (_uploadLock) return _uploadModels.ToList(); } }
+        /// <summary>Snapshot of the queued uploads.</summary>
+        public List<UploadModel> pendingUploadModels { get { lock (_uploadLock) return _pendingUploadModels.ToList(); } }
+        /// <summary>Snapshot of the batch tasks.</summary>
+        public List<InfoDownloadTaksModel> infoDownloadTaksModel { get { lock (_taskLock) return _infoDownloadTaksModel.ToList(); } }
+
         public String downloadSpeed = "0 KB/s";
         public String uploadSpeed = "0 KB/s";
-        public long bytesUploaded = 0;
-        public long bytesDownloaded = 0;
+        private long _bytesUploaded = 0;
+        private long _bytesDownloaded = 0;
+        public long bytesUploaded => Interlocked.Read(ref _bytesUploaded);
+        public long bytesDownloaded => Interlocked.Read(ref _bytesDownloaded);
         public List<SpeedHistory> downloadSpeedsHistory { get; set; } = new List<SpeedHistory>();
         public List<SpeedHistory> uploadSpeedsHistory { get; set; } = new List<SpeedHistory>();
         private readonly object _speedHistoryLock = new object();
         private int speedHistoryCount = 0;
 
-        private static Mutex PendingDownloadMutex = new Mutex();
-        private static Mutex PendingUploadMutex = new Mutex();
-        private static Mutex PendingUploadInfoTaskMutex = new Mutex();
-        private static Mutex DownloadBytesMutex = new Mutex();
-        private static Mutex UploadBytesMutex = new Mutex();
-
         public static int MAX_SPEED_HISTORY_SECONDS = 600; // 10 minutes
         public static int INTERVAL_SPEED_HISTORY_SECONDS = 3;
 
         private Timer aTimer;
+        private readonly object _timerLock = new object();
         private readonly ILogger<IFileService> _logger;
+
+        /// <summary>Logger shared with the transfer models, which have no DI.</summary>
+        public ILogger Logger => _logger;
 
         // Throttling for TransactionsChanged: progress callbacks fire per network
         // chunk, so raise at most once per interval with a guaranteed trailing raise.
@@ -159,14 +182,6 @@ namespace TelegramDownloader.Services
         {
             if (!(isDownloading() || isUploading()))
             {
-                //if (!isDownloading())
-                //{
-                //    resetDownloadBytes();
-                //}
-                //if (!isUploading())
-                //{
-                //    resetUploadBytes();
-                //}
                 stopTimer();
                 return false;
             }
@@ -176,77 +191,176 @@ namespace TelegramDownloader.Services
 
         public bool isFileDownloaded(String path)
         {
-            return downloadModels.Any(x => x.path == path && x.state == StateTask.Working || x.state == StateTask.Pending || x.state == StateTask.Paused);
+            lock (_downloadLock)
+                return _downloadModels.Any(x => x.path == path && x.state == StateTask.Working || x.state == StateTask.Pending || x.state == StateTask.Paused);
         }
 
         public bool isUploading()
         {
-            return uploadModels.Any(x => x.state == StateTask.Working);
+            lock (_uploadLock)
+                return _uploadModels.Any(x => x.state == StateTask.Working);
         }
 
         public bool isSplitting()
         {
-            return uploadModels.Any(x => x.state == StateTask.Working && (x is SplitModel || x.action == "Splitting"));
+            lock (_uploadLock)
+                return _uploadModels.Any(x => x.state == StateTask.Working && (x is SplitModel || x.action == "Splitting"));
         }
 
         public bool isCalculatingHash()
         {
-            return uploadModels.Any(x => x.state == StateTask.Working && (x is Md5Model || x is XxHashModel || x.action == "MD5 Calc" || x.action == "XxHash Calc"));
+            lock (_uploadLock)
+                return _uploadModels.Any(x => x.state == StateTask.Working && (x is Md5Model || x is XxHashModel || x.action == "MD5 Calc" || x.action == "XxHash Calc"));
         }
 
         public bool isRealUploading()
         {
-            return uploadModels.Any(x => x.state == StateTask.Working && x.action == "Upload");
+            lock (_uploadLock)
+                return _uploadModels.Any(x => x.state == StateTask.Working && x.action == "Upload");
         }
 
         public bool isDownloading()
         {
-            return downloadModels.Any(x => x.state == StateTask.Working);
+            lock (_downloadLock)
+                return _downloadModels.Any(x => x.state == StateTask.Working);
+        }
+
+        /// <summary>
+        /// True when a transfer with this persistence id is in memory and still
+        /// queued or running, i.e. resuming it again would run it twice.
+        /// </summary>
+        public bool IsLive(string internalId)
+        {
+            if (string.IsNullOrEmpty(internalId))
+                return false;
+            if (_liveJobs.ContainsKey(internalId))
+                return true;
+            static bool active(StateTask s) => s == StateTask.Working || s == StateTask.Pending;
+            lock (_downloadLock)
+            {
+                if (_pendingDownloadModels.Any(d => d._internalId == internalId))
+                    return true;
+                if (_downloadModels.Any(d => d._internalId == internalId && (active(d.state) || d.IsRunning)))
+                    return true;
+            }
+            lock (_uploadLock)
+            {
+                if (_uploadModels.Any(u => u._internalId == internalId && active(u.state)))
+                    return true;
+            }
+            lock (_taskLock)
+            {
+                if (_infoDownloadTaksModel.Any(t => t._internalId == internalId && (active(t.state) || t.IsRunning)))
+                    return true;
+            }
+            return false;
+        }
+
+        // Persisted jobs that run as several in-memory models (a split download
+        // runs one model per part), registered while their loop is active.
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _liveJobs = new System.Collections.Concurrent.ConcurrentDictionary<string, byte>();
+
+        /// <summary>Marks a multi-model job as running; false when it already is.</summary>
+        public bool TryRegisterJob(string internalId) => _liveJobs.TryAdd(internalId, 0);
+
+        public void UnregisterJob(string internalId) => _liveJobs.TryRemove(internalId, out _);
+
+        /// <summary>
+        /// True when a queued or running download writes to <paramref name="path"/>:
+        /// two downloads into one file would corrupt it.
+        /// </summary>
+        public bool IsDestinationBusy(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+                return false;
+            string target = normalizePath(path);
+            lock (_downloadLock)
+            {
+                return _pendingDownloadModels.Any(d => normalizePath(d.path) == target)
+                    || _downloadModels.Any(d => (d.state == StateTask.Working || d.IsRunning) && normalizePath(d.path) == target);
+            }
+        }
+
+        private static string normalizePath(string path)
+        {
+            if (string.IsNullOrEmpty(path))
+                return path;
+            try
+            {
+                path = Path.GetFullPath(path);
+            }
+            catch
+            {
+            }
+            path = path.Replace('\\', '/');
+            return OperatingSystem.IsWindows() ? path.ToLowerInvariant() : path;
+        }
+
+        /// <summary>The in-memory download with this persistence id, if any.</summary>
+        public DownloadModel FindDownload(string internalId)
+        {
+            lock (_downloadLock)
+                return _pendingDownloadModels.FirstOrDefault(d => d._internalId == internalId)
+                    ?? _downloadModels.FirstOrDefault(d => d._internalId == internalId);
+        }
+
+        /// <summary>The in-memory batch task with this persistence id, if any.</summary>
+        public InfoDownloadTaksModel FindTask(string internalId)
+        {
+            lock (_taskLock)
+                return _infoDownloadTaksModel.FirstOrDefault(t => t._internalId == internalId);
         }
 
         public void startTimer()
         {
-            if (aTimer == null || !aTimer.Enabled)
+            lock (_timerLock)
             {
-                if (aTimer != null)
+                if (aTimer == null)
                 {
-                    aTimer.Start();
-                    return;
+                    aTimer = new Timer(1000);
+                    aTimer.Elapsed += OnTimedEvent;
+                    aTimer.AutoReset = true;
                 }
-                aTimer = new Timer(1000);
-                aTimer.Elapsed += OnTimedEvent;
-                aTimer.AutoReset = true;
-                aTimer.Enabled = true;
+                if (!aTimer.Enabled)
+                    aTimer.Start();
             }
         }
 
         public void stopTimer()
         {
-            if (aTimer != null && aTimer.Enabled && canStopTimer())
+            lock (_timerLock)
             {
+                if (aTimer == null || !aTimer.Enabled || !canStopTimer())
+                    return;
                 aTimer.Stop();
-                resetUploadBytes();
-                resetDownloadBytes();
             }
+            resetUploadBytes();
+            resetDownloadBytes();
         }
 
         private void OnTimedEvent(Object source, ElapsedEventArgs e)
         {
-            //_logger.LogInformation("El evento Elapsed se disparó a las {0:HH:mm:ss.fff}", e.SignalTime);
-            //_logger.LogInformation("Upload: {0}, download: {1}", bytesUploaded, bytesDownloaded);
-            if (bytesDownloaded > 0)
-                setDownloadSpeed(HelperService.SizeSuffixPerTime(bytesDownloaded));
-            if (bytesUploaded > 0)
-                setUploadSpeed(HelperService.SizeSuffixPerTime(bytesUploaded));
-            if (speedHistoryCount++ >= INTERVAL_SPEED_HISTORY_SECONDS)
+            try
             {
-                speedHistoryCount = 0;
-                setHistorySpeed();
+                long downloaded = bytesDownloaded;
+                long uploaded = bytesUploaded;
+                if (downloaded > 0)
+                    setDownloadSpeed(HelperService.SizeSuffixPerTime(downloaded));
+                if (uploaded > 0)
+                    setUploadSpeed(HelperService.SizeSuffixPerTime(uploaded));
+                if (speedHistoryCount++ >= INTERVAL_SPEED_HISTORY_SECONDS)
+                {
+                    speedHistoryCount = 0;
+                    setHistorySpeed();
+                }
+                resetDownloadBytes();
+                resetUploadBytes();
             }
-            resetDownloadBytes();
-            resetUploadBytes();
-            if (!aTimer.Enabled)
-                stopTimer();
+            catch (Exception ex)
+            {
+                // A timer callback that throws would take the process down.
+                _logger.LogWarning(ex, "Error updating the transfer speed");
+            }
         }
 
         private bool canStopTimer()
@@ -260,8 +374,12 @@ namespace TelegramDownloader.Services
         private void setHistorySpeed()
         {
             DateTime now = DateTime.Now;
-            var activeDownloads = downloadModels.Where(x => x.state == StateTask.Working).Select(x => x.name).ToList();
-            var activeUploads = uploadModels.Where(x => x.state == StateTask.Working).Select(x => x.name).ToList();
+            List<string> activeDownloads;
+            List<string> activeUploads;
+            lock (_downloadLock)
+                activeDownloads = _downloadModels.Where(x => x.state == StateTask.Working).Select(x => x.name).ToList();
+            lock (_uploadLock)
+                activeUploads = _uploadModels.Where(x => x.state == StateTask.Working).Select(x => x.name).ToList();
 
             var newDownloadPoint = new SpeedHistory() { time = now, speed = bytesDownloaded, speedString = downloadSpeed, activeFiles = activeDownloads };
             var newUploadPoint = new SpeedHistory() { time = now, speed = bytesUploaded, speedString = uploadSpeed, activeFiles = activeUploads };
@@ -297,36 +415,32 @@ namespace TelegramDownloader.Services
             }
         }
 
-        public async Task addDownloadBytes(long bytes)
+        public Task addDownloadBytes(long bytes)
         {
-            DownloadBytesMutex.WaitOne();
-            bytesDownloaded += bytes;
-            DownloadBytesMutex.ReleaseMutex();
+            Interlocked.Add(ref _bytesDownloaded, bytes);
+            return Task.CompletedTask;
         }
 
-        public async Task addUploadBytes(long bytes)
+        public Task addUploadBytes(long bytes)
         {
-            UploadBytesMutex.WaitOne();
-            bytesUploaded += bytes;
-            UploadBytesMutex.ReleaseMutex();
+            Interlocked.Add(ref _bytesUploaded, bytes);
+            return Task.CompletedTask;
         }
 
-        public async Task resetDownloadBytes()
+        public Task resetDownloadBytes()
         {
-            DownloadBytesMutex.WaitOne();
-            bytesDownloaded = 0;
+            Interlocked.Exchange(ref _bytesDownloaded, 0);
             if (!isDownloading())
                 setDownloadSpeed("0 KB/s");
-            DownloadBytesMutex.ReleaseMutex();
+            return Task.CompletedTask;
         }
 
-        public async Task resetUploadBytes()
+        public Task resetUploadBytes()
         {
-            UploadBytesMutex.WaitOne();
-            bytesUploaded = 0;
+            Interlocked.Exchange(ref _bytesUploaded, 0);
             if (!isUploading())
                 setUploadSpeed("0 KB/s");
-            UploadBytesMutex.ReleaseMutex();
+            return Task.CompletedTask;
         }
 
         public void setDownloadSpeed(String speed)
@@ -337,316 +451,366 @@ namespace TelegramDownloader.Services
 
         public void setUploadSpeed(String speed)
         {
-            //_logger.LogInformation("Set bytes speed upload {0}", speed);
             uploadSpeed = speed;
             TaskEventChanged?.Invoke(null, EventArgs.Empty);
         }
 
-        public void addToDownloadList(DownloadModel downloadModel)
+        private void raiseListChanged()
         {
-            PendingDownloadMutex.WaitOne(10000);
-            // Check if already exists to avoid duplicate key errors in UI
-            if (downloadModels.Any(d => d._internalId == downloadModel._internalId))
-            {
-                PendingDownloadMutex.ReleaseMutex();
-                _logger.LogDebug("Download already in list, skipping - Name: {Name}, InternalId: {Id}",
-                    downloadModel.name, downloadModel._internalId);
-                return;
-            }
-
-            _logger.LogInformation("Adding to download list - Name: {Name}, Size: {SizeMB:F2}MB",
-                downloadModel.name, downloadModel._size / (1024.0 * 1024.0));
-            downloadModels.Insert(0, downloadModel);
-            PendingDownloadMutex.ReleaseMutex();
-            hookModel(downloadModel);
             EventChanged?.Invoke(this, new EventArgs());
             TaskEventChanged?.Invoke(null, EventArgs.Empty);
             NotifyTransactionsChanged();
         }
 
+        public void addToDownloadList(DownloadModel downloadModel)
+        {
+            lock (_downloadLock)
+            {
+                // Check if already exists to avoid duplicate key errors in UI
+                if (_downloadModels.Any(d => d._internalId == downloadModel._internalId))
+                {
+                    _logger.LogDebug("Download already in list, skipping - Name: {Name}, InternalId: {Id}",
+                        downloadModel.name, downloadModel._internalId);
+                    return;
+                }
+                _downloadModels.Insert(0, downloadModel);
+            }
+            _logger.LogInformation("Adding to download list - Name: {Name}, Size: {SizeMB:F2}MB",
+                downloadModel.name, downloadModel._size / (1024.0 * 1024.0));
+            hookModel(downloadModel);
+            raiseListChanged();
+        }
+
         public void addToPendingDownloadList(DownloadModel downloadModel, bool atFirst = false, bool chekDownloads = true)
         {
-            PendingDownloadMutex.WaitOne(10000);
-            // Check if already exists to avoid duplicate key errors in UI
-            if (pendingDownloadModels.Any(d => d._internalId == downloadModel._internalId))
+            bool added = false;
+            int count;
+            lock (_downloadLock)
             {
-                PendingDownloadMutex.ReleaseMutex();
+                // Check if already exists to avoid duplicate key errors in UI
+                if (!_pendingDownloadModels.Any(d => d._internalId == downloadModel._internalId))
+                {
+                    if (atFirst)
+                        _pendingDownloadModels.Insert(0, downloadModel);
+                    else
+                        _pendingDownloadModels.Add(downloadModel);
+                    added = true;
+                }
+                count = _pendingDownloadModels.Count;
+            }
+            if (added)
+            {
+                _logger.LogDebug("Adding to pending download list - Name: {Name}, AtFirst: {AtFirst}, PendingCount: {Count}",
+                    downloadModel.name, atFirst, count);
+                hookModel(downloadModel);
+                NotifyTransactionsChanged();
+            }
+            else
+            {
                 _logger.LogDebug("Download already in pending list, skipping - Name: {Name}, InternalId: {Id}",
                     downloadModel.name, downloadModel._internalId);
-                if (chekDownloads)
-                    CheckPendingDownloads();
-                return;
             }
-
-            _logger.LogDebug("Adding to pending download list - Name: {Name}, AtFirst: {AtFirst}, PendingCount: {Count}",
-                downloadModel.name, atFirst, pendingDownloadModels.Count + 1);
-            if (atFirst)
-                pendingDownloadModels.Insert(0, downloadModel);
-            else
-                pendingDownloadModels.Add(downloadModel);
-            PendingDownloadMutex.ReleaseMutex();
-            hookModel(downloadModel);
-            NotifyTransactionsChanged();
             if (chekDownloads)
                 CheckPendingDownloads();
         }
 
         public void PauseDownloads()
         {
-            _logger.LogInformation("Pausing all downloads - ActiveCount: {Count}", downloadModels.Where(x => x.state == StateTask.Working).Count());
-            PendingDownloadMutex.WaitOne(10000);
-            isPauseDownloads = true;
-            foreach (DownloadModel dm in downloadModels.Where(x => x.state == StateTask.Working).ToList())
+            List<DownloadModel> paused;
+            lock (_downloadLock)
             {
-                pendingDownloadModels.Insert(0, dm);
-                dm.Pause();
+                isPauseDownloads = true;
+                paused = _downloadModels.Where(x => x.state == StateTask.Working).ToList();
+                foreach (DownloadModel dm in paused)
+                {
+                    if (!_pendingDownloadModels.Contains(dm))
+                        _pendingDownloadModels.Insert(0, dm);
+                }
             }
-            PendingDownloadMutex.ReleaseMutex();
+            _logger.LogInformation("Pausing all downloads - ActiveCount: {Count}", paused.Count);
+            foreach (DownloadModel dm in paused)
+                dm.Pause();
             TaskEventChanged?.Invoke(null, EventArgs.Empty);
             NotifyTransactionsChanged();
         }
 
         public void PlayDownloads()
         {
-            _logger.LogInformation("Resuming downloads - PendingCount: {Count}", pendingDownloadModels.Count);
-            PendingDownloadMutex.WaitOne(10000);
+            _logger.LogInformation("Resuming downloads - PendingCount: {Count}", getTotalDownloads(true));
             isPauseDownloads = false;
-            PendingDownloadMutex.ReleaseMutex();
             CheckPendingDownloads();
         }
 
         public void StopDownloads()
         {
-            _logger.LogInformation("Stopping all downloads - ActiveCount: {Active}, PendingCount: {Pending}",
-                downloadModels.Where(x => x.state == StateTask.Working).Count(), pendingDownloadModels.Count);
-            PendingDownloadMutex.WaitOne(10000);
-            isPauseDownloads = true;
-            foreach (DownloadModel dm in downloadModels.Where(x => x.state == StateTask.Working).ToList())
+            List<DownloadModel> working;
+            int pending;
+            lock (_downloadLock)
             {
-                dm.Pause();
+                isPauseDownloads = true;
+                working = _downloadModels.Where(x => x.state == StateTask.Working).ToList();
+                pending = _pendingDownloadModels.Count;
+                _pendingDownloadModels.Clear();
             }
-            pendingDownloadModels.Clear();
-            PendingDownloadMutex.ReleaseMutex();
+            _logger.LogInformation("Stopping all downloads - ActiveCount: {Active}, PendingCount: {Pending}", working.Count, pending);
+            foreach (DownloadModel dm in working)
+                dm.Pause();
             TaskEventChanged?.Invoke(null, EventArgs.Empty);
             NotifyTransactionsChanged();
         }
 
-        public async Task CheckPendingDownloads()
+        /// <summary>
+        /// Starts queued downloads while there are free slots. The models are
+        /// moved under the lock but started after releasing it, so a transfer
+        /// callback never runs while the list lock is held. (This used to block
+        /// the calling thread - often a Telegram progress callback - for 500 ms.)
+        /// </summary>
+        public Task CheckPendingDownloads()
         {
-            Thread.Sleep(500);
-            PendingDownloadMutex.WaitOne();
-            while (downloadModels.Where(x => x.state == StateTask.Working).Count() < GeneralConfigStatic.config.MaxSimultaneousDownloads
-                && pendingDownloadModels.Count() > 0
-                && !isPauseDownloads)
+            List<DownloadModel> toStart = new List<DownloadModel>();
+            lock (_downloadLock)
             {
-                DownloadModel dm = pendingDownloadModels.FirstOrDefault();
-                downloadModels.Insert(0, dm);
-                pendingDownloadModels.Remove(dm);
+                int max = GeneralConfigStatic.config?.MaxSimultaneousDownloads ?? 1;
+                int working = _downloadModels.Count(x => x.state == StateTask.Working);
+                while (working < max && _pendingDownloadModels.Count > 0 && !isPauseDownloads)
+                {
+                    DownloadModel dm = _pendingDownloadModels[0];
+                    _pendingDownloadModels.RemoveAt(0);
+                    _downloadModels.Remove(dm);
+                    _downloadModels.Insert(0, dm);
+                    // Canceled while queued: listed as canceled, never started.
+                    if (dm.state == StateTask.Canceled)
+                        continue;
+                    // Counted as working right away: RetryCallback sets the state.
+                    working++;
+                    toStart.Add(dm);
+                }
+            }
+            foreach (DownloadModel dm in toStart)
+            {
                 hookModel(dm);
                 startTimer();
-                dm.RetryCallback();
+                try
+                {
+                    dm.RetryCallback();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Could not start download {Name}", dm.name);
+                }
             }
-            PendingDownloadMutex.ReleaseMutex();
-            EventChanged?.Invoke(this, new EventArgs());
-            TaskEventChanged?.Invoke(null, EventArgs.Empty);
-            NotifyTransactionsChanged();
+            raiseListChanged();
+            return Task.CompletedTask;
         }
 
-        public async Task CheckPendingUploadInfoTasks()
+        /// <summary>
+        /// Starts the oldest pending batch task when no batch is running (batch
+        /// tasks run one at a time).
+        /// </summary>
+        public Task CheckPendingUploadInfoTasks()
         {
-            PendingUploadInfoTaskMutex.WaitOne();
-            while (infoDownloadTaksModel.Where(x => x.state == StateTask.Working).Count() < 1
-                && infoDownloadTaksModel.Where(x => x.state == StateTask.Pending).Count() > 0)
+            InfoDownloadTaksModel toStart = null;
+            lock (_taskLock)
             {
-                InfoDownloadTaksModel idt = infoDownloadTaksModel.Where(x => x.state == StateTask.Pending).OrderBy(x => x.creationDate).FirstOrDefault();
-                idt.state = StateTask.Working;
-                hookModel(idt);
-                startTimer();
-                idt.RetryCallback();
+                if (!_infoDownloadTaksModel.Any(x => x.state == StateTask.Working))
+                {
+                    toStart = _infoDownloadTaksModel.Where(x => x.state == StateTask.Pending).OrderBy(x => x.creationDate).FirstOrDefault();
+                    if (toStart != null)
+                        toStart.state = StateTask.Working;
+                }
             }
-            PendingUploadInfoTaskMutex.ReleaseMutex();
-            EventChanged?.Invoke(this, new EventArgs());
-            TaskEventChanged?.Invoke(null, EventArgs.Empty);
-            NotifyTransactionsChanged();
+            if (toStart != null)
+            {
+                hookModel(toStart);
+                startTimer();
+                try
+                {
+                    toStart.RetryCallback();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Could not start task {Id}", toStart._internalId);
+                }
+            }
+            raiseListChanged();
+            return Task.CompletedTask;
         }
 
         public void addToUploadList(UploadModel uploadModel)
         {
-            // Check if already exists to avoid duplicate key errors in UI
-            if (uploadModels.Any(u => u._internalId == uploadModel._internalId))
+            lock (_uploadLock)
             {
-                _logger.LogDebug("Upload already in list, skipping - Name: {Name}, InternalId: {Id}",
-                    uploadModel.name, uploadModel._internalId);
-                return;
+                // Check if already exists to avoid duplicate key errors in UI
+                if (_uploadModels.Any(u => u._internalId == uploadModel._internalId))
+                {
+                    _logger.LogDebug("Upload already in list, skipping - Name: {Name}, InternalId: {Id}",
+                        uploadModel.name, uploadModel._internalId);
+                    return;
+                }
+                _uploadModels.Insert(0, uploadModel);
             }
-
             _logger.LogInformation("Adding to upload list - Name: {Name}, Size: {SizeMB:F2}MB",
                 uploadModel.name, uploadModel._size / (1024.0 * 1024.0));
-            uploadModels.Insert(0, uploadModel);
             hookModel(uploadModel);
-            EventChanged?.Invoke(this, new EventArgs());
-            TaskEventChanged?.Invoke(null, EventArgs.Empty);
-            NotifyTransactionsChanged();
+            raiseListChanged();
         }
 
         public void deleteUploadInList(UploadModel uploadModel)
         {
-            uploadModels.Remove(uploadModel);
+            lock (_uploadLock)
+                _uploadModels.Remove(uploadModel);
             unhookModel(uploadModel);
-            EventChanged?.Invoke(this, new EventArgs());
-            TaskEventChanged?.Invoke(null, EventArgs.Empty);
-            NotifyTransactionsChanged();
+            raiseListChanged();
         }
 
         public void addToInfoDownloadTaskList(InfoDownloadTaksModel infoDownloadModel)
         {
-            PendingUploadInfoTaskMutex.WaitOne();
-            infoDownloadTaksModel.Add(infoDownloadModel);
-            PendingUploadInfoTaskMutex.ReleaseMutex();
+            lock (_taskLock)
+            {
+                if (!_infoDownloadTaksModel.Contains(infoDownloadModel))
+                    _infoDownloadTaksModel.Add(infoDownloadModel);
+            }
             hookModel(infoDownloadModel);
             NotifyTransactionsChanged();
             CheckPendingUploadInfoTasks();
         }
 
+        private static List<T> page<T>(List<T> source, int pageNumber, int pageSize)
+        {
+            if (source.Count == 0 || source.Count < pageNumber * pageSize)
+                return source;
+            return source.Skip(pageNumber * pageSize).Take(pageSize).ToList();
+        }
 
         public List<DownloadModel> GetDownloadModels(int pageNumber, int pageSize, bool isPending = false)
         {
-            if (isPending)
-            {
-                if (pendingDownloadModels.Count() == 0 || pendingDownloadModels.Count() < (pageNumber) * pageSize)
-                    return pendingDownloadModels;
-                return pendingDownloadModels.Skip(pageNumber * pageSize).Take(pageSize).ToList();
-            }
-            if (downloadModels.Count() == 0 || downloadModels.Count() < (pageNumber) * pageSize)
-                return downloadModels;
-            return downloadModels.Skip(pageNumber * pageSize).Take(pageSize).ToList(); //.GetRange(pageNumber * pageSize, pageSize);
+            return page(isPending ? pendingDownloadModels : downloadModels, pageNumber, pageSize);
         }
 
         public int getTotalDownloads(bool isPending = false)
         {
-            return isPending ? pendingDownloadModels.Count() : downloadModels.Count();
+            lock (_downloadLock)
+                return isPending ? _pendingDownloadModels.Count : _downloadModels.Count;
         }
 
         public List<UploadModel> GetUploadModels(int pageNumber, int pageSize, bool isPending = false)
         {
-            var sourceList = isPending ? pendingUploadModels : uploadModels;
-            if (sourceList.Count() == 0 || sourceList.Count() < (pageNumber) * pageSize)
-                return sourceList;
-            return sourceList.Skip(pageNumber * pageSize).Take(pageSize).ToList();
+            return page(isPending ? pendingUploadModels : uploadModels, pageNumber, pageSize);
         }
 
         public int getTotalUploads(bool isPending = false)
         {
-            return isPending ? pendingUploadModels.Count() : uploadModels.Count();
+            lock (_uploadLock)
+                return isPending ? _pendingUploadModels.Count : _uploadModels.Count;
         }
 
         public void addToPendingUploadList(UploadModel uploadModel)
         {
-            PendingUploadMutex.WaitOne();
-            // Check if already exists to avoid duplicate key errors in UI
-            if (pendingUploadModels.Any(u => u._internalId == uploadModel._internalId))
+            lock (_uploadLock)
             {
-                PendingUploadMutex.ReleaseMutex();
-                _logger.LogDebug("Upload already in pending list, skipping - Name: {Name}, InternalId: {Id}",
-                    uploadModel.name, uploadModel._internalId);
-                return;
+                // Check if already exists to avoid duplicate key errors in UI
+                if (_pendingUploadModels.Any(u => u._internalId == uploadModel._internalId))
+                {
+                    _logger.LogDebug("Upload already in pending list, skipping - Name: {Name}, InternalId: {Id}",
+                        uploadModel.name, uploadModel._internalId);
+                    return;
+                }
+                _pendingUploadModels.Add(uploadModel);
             }
-
-            pendingUploadModels.Add(uploadModel);
-            PendingUploadMutex.ReleaseMutex();
             hookModel(uploadModel);
-            EventChanged?.Invoke(this, new EventArgs());
-            TaskEventChanged?.Invoke(null, EventArgs.Empty);
-            NotifyTransactionsChanged();
+            raiseListChanged();
         }
 
         public void deletePendingUploadInList(UploadModel uploadModel)
         {
-            PendingUploadMutex.WaitOne();
-            pendingUploadModels.Remove(uploadModel);
-            PendingUploadMutex.ReleaseMutex();
-            if (!uploadModels.Contains(uploadModel))
+            bool stillListed;
+            lock (_uploadLock)
+            {
+                _pendingUploadModels.Remove(uploadModel);
+                stillListed = _uploadModels.Contains(uploadModel);
+            }
+            if (!stillListed)
                 unhookModel(uploadModel);
-            EventChanged?.Invoke(this, new EventArgs());
-            TaskEventChanged?.Invoke(null, EventArgs.Empty);
-            NotifyTransactionsChanged();
+            raiseListChanged();
         }
 
         public void deleteDownloadInList(DownloadModel downloadModel)
         {
-            PendingDownloadMutex.WaitOne();
-            downloadModels.Remove(downloadModel);
-            PendingDownloadMutex.ReleaseMutex();
+            bool stillPending;
+            lock (_downloadLock)
+            {
+                _downloadModels.Remove(downloadModel);
+                stillPending = _pendingDownloadModels.Contains(downloadModel);
+            }
             // A paused download is removed from the active list but stays in the
             // pending list, so keep it hooked in that case.
-            if (!pendingDownloadModels.Contains(downloadModel))
+            if (!stillPending)
                 unhookModel(downloadModel);
-            EventChanged?.Invoke(this, new EventArgs());
-            TaskEventChanged?.Invoke(null, EventArgs.Empty);
-            NotifyTransactionsChanged();
+            raiseListChanged();
         }
 
         public void deletePendingDownloadInList(DownloadModel downloadModel)
         {
-            PendingDownloadMutex.WaitOne();
-            pendingDownloadModels.Remove(downloadModel);
-            PendingDownloadMutex.ReleaseMutex();
-            if (!downloadModels.Contains(downloadModel))
+            bool stillListed;
+            lock (_downloadLock)
+            {
+                _pendingDownloadModels.Remove(downloadModel);
+                stillListed = _downloadModels.Contains(downloadModel);
+            }
+            if (!stillListed)
                 unhookModel(downloadModel);
-            EventChanged?.Invoke(this, new EventArgs());
-            TaskEventChanged?.Invoke(null, EventArgs.Empty);
-            NotifyTransactionsChanged();
+            raiseListChanged();
         }
 
         public void ClearPendingDownloads()
         {
-            _logger.LogInformation("Clearing all pending downloads - Count: {Count}", pendingDownloadModels.Count);
-            PendingDownloadMutex.WaitOne();
-            List<DownloadModel> removed = pendingDownloadModels.ToList();
-            pendingDownloadModels.Clear();
-            PendingDownloadMutex.ReleaseMutex();
-            foreach (DownloadModel dm in removed.Where(x => !downloadModels.Contains(x)))
+            List<DownloadModel> removed;
+            List<DownloadModel> active;
+            lock (_downloadLock)
+            {
+                removed = _pendingDownloadModels.ToList();
+                _pendingDownloadModels.Clear();
+                active = _downloadModels.ToList();
+            }
+            _logger.LogInformation("Clearing all pending downloads - Count: {Count}", removed.Count);
+            foreach (DownloadModel dm in removed.Where(x => !active.Contains(x)))
                 unhookModel(dm);
-            EventChanged?.Invoke(this, new EventArgs());
-            TaskEventChanged?.Invoke(null, EventArgs.Empty);
-            NotifyTransactionsChanged();
+            raiseListChanged();
         }
 
         public void ClearPendingUploads()
         {
-            _logger.LogInformation("Clearing all pending uploads - Count: {Count}", pendingUploadModels.Count);
-            PendingUploadMutex.WaitOne();
-            List<UploadModel> removed = pendingUploadModels.ToList();
-            pendingUploadModels.Clear();
-            PendingUploadMutex.ReleaseMutex();
-            foreach (UploadModel um in removed.Where(x => !uploadModels.Contains(x)))
+            List<UploadModel> removed;
+            List<UploadModel> active;
+            lock (_uploadLock)
+            {
+                removed = _pendingUploadModels.ToList();
+                _pendingUploadModels.Clear();
+                active = _uploadModels.ToList();
+            }
+            _logger.LogInformation("Clearing all pending uploads - Count: {Count}", removed.Count);
+            foreach (UploadModel um in removed.Where(x => !active.Contains(x)))
                 unhookModel(um);
-            EventChanged?.Invoke(this, new EventArgs());
-            TaskEventChanged?.Invoke(null, EventArgs.Empty);
-            NotifyTransactionsChanged();
+            raiseListChanged();
         }
 
         public void deleteInfoDownloadTaskFromList(InfoDownloadTaksModel idt)
         {
-            PendingUploadInfoTaskMutex.WaitOne();
-            infoDownloadTaksModel.Remove(idt);
-            PendingUploadInfoTaskMutex.ReleaseMutex();
+            lock (_taskLock)
+                _infoDownloadTaksModel.Remove(idt);
             unhookModel(idt);
-            EventChanged?.Invoke(this, new EventArgs());
-            TaskEventChanged?.Invoke(null, EventArgs.Empty);
-            NotifyTransactionsChanged();
+            raiseListChanged();
         }
 
         public List<InfoDownloadTaksModel> getInfoDownloadTaksModel(int pageNumber, int pageSize)
         {
-            if (infoDownloadTaksModel.Count() == 0 || infoDownloadTaksModel.Count() < (pageNumber) * pageSize)
-                return infoDownloadTaksModel.OrderBy(x => x.creationDate).ToList();
-            return infoDownloadTaksModel.OrderBy(x => x.creationDate).Skip(pageNumber * pageSize).Take(pageSize).ToList();
+            return page(infoDownloadTaksModel.OrderBy(x => x.creationDate).ToList(), pageNumber, pageSize);
         }
 
         public int getTotalTasks()
         {
-            return infoDownloadTaksModel.Count();
+            lock (_taskLock)
+                return _infoDownloadTaksModel.Count;
         }
 
         /// <summary>
@@ -661,8 +825,12 @@ namespace TelegramDownloader.Services
 
         public void clearUploadCompleted(IReadOnlyCollection<StateTask>? states = null)
         {
-            List<UploadModel> removed = uploadModels.Where(x => isClearable(x.state, states)).ToList();
-            uploadModels.RemoveAll(x => isClearable(x.state, states));
+            List<UploadModel> removed;
+            lock (_uploadLock)
+            {
+                removed = _uploadModels.Where(x => isClearable(x.state, states)).ToList();
+                _uploadModels.RemoveAll(x => removed.Contains(x));
+            }
             foreach (UploadModel um in removed)
                 unhookModel(um);
             EventChanged?.Invoke(this, new EventArgs());
@@ -671,11 +839,15 @@ namespace TelegramDownloader.Services
 
         public void clearDownloadCompleted(IReadOnlyCollection<StateTask>? states = null)
         {
-            PendingDownloadMutex.WaitOne();
-            List<DownloadModel> removed = downloadModels.Where(x => isClearable(x.state, states)).ToList();
-            downloadModels.RemoveAll(x => isClearable(x.state, states));
-            PendingDownloadMutex.ReleaseMutex();
-            foreach (DownloadModel dm in removed.Where(x => !pendingDownloadModels.Contains(x)))
+            List<DownloadModel> removed;
+            List<DownloadModel> pending;
+            lock (_downloadLock)
+            {
+                removed = _downloadModels.Where(x => isClearable(x.state, states) && !x.IsRunning).ToList();
+                _downloadModels.RemoveAll(x => removed.Contains(x));
+                pending = _pendingDownloadModels.ToList();
+            }
+            foreach (DownloadModel dm in removed.Where(x => !pending.Contains(x)))
                 unhookModel(dm);
             EventChanged?.Invoke(this, new EventArgs());
             NotifyTransactionsChanged();
@@ -683,15 +855,17 @@ namespace TelegramDownloader.Services
 
         public void clearTasksCompleted(IReadOnlyCollection<StateTask>? states = null)
         {
-            List<InfoDownloadTaksModel> removed = infoDownloadTaksModel.Where(x => isClearable(x.state, states)).ToList();
-            infoDownloadTaksModel.RemoveAll(x => isClearable(x.state, states));
+            List<InfoDownloadTaksModel> removed;
+            lock (_taskLock)
+            {
+                removed = _infoDownloadTaksModel.Where(x => isClearable(x.state, states) && !x.IsRunning).ToList();
+                _infoDownloadTaksModel.RemoveAll(x => removed.Contains(x));
+            }
             foreach (InfoDownloadTaksModel idt in removed)
                 unhookModel(idt);
             EventChanged?.Invoke(this, new EventArgs());
             NotifyTransactionsChanged();
         }
-
-
     }
 
     public class SpeedHistory
