@@ -22,6 +22,8 @@ Phase 5 already prepared the ground:
 `grep -rn Syncfusion --include=*.cs TelegramDownloader` outside `Pages/` and `Shared/`
 returns only `Controllers/Legacy/*` and the license/registration lines of `Program.cs`.
 
+The service layer no longer uses Blazor.Bootstrap either (see [section 2](#2-remove-the-blazorbootstrap-leaks-from-the-service-layer--done)).
+
 ---
 
 ## 1. Before you start: what the new web app must cover
@@ -65,8 +67,9 @@ Do not remove Blazor until every line is ticked (and tested on desktop and phone
       cancel, retry, clear states) with live progress.
 - [ ] Configuration (`/config`, every setting of `GeneralConfig`), logs (`/logs`, `/loglist`),
       system info and speed chart, database maintenance.
-- [ ] Notifications/toasts that the Blazor UI shows today (via `NotificationModel` events and
-      Blazor.Bootstrap `ToastService`) are delivered on `/hubs/events`.
+- [ ] Notifications/toasts that the Blazor UI shows today (the `NotificationModel` events, already
+      delivered on `/hubs/events` as `Notification`) are shown by the new web app. The Blazor pages still
+      call Blazor.Bootstrap `ToastService` directly in some modals; those go away with the pages.
 - [ ] Links to the sister apps (TFM Player, Android, Android TV).
 
 Also check that no external client (TFM Player, Android apps, Kodi `.strm` files, bookmarks)
@@ -75,16 +78,18 @@ uses a Blazor page URL; the media and stream URLs (`/api/file/GetFile*`, `/api/f
 
 ---
 
-## 2. Remove the Blazor.Bootstrap leaks from the service layer
+## 2. Remove the Blazor.Bootstrap leaks from the service layer — done
 
-These are the only service-layer dependencies on Blazor.Bootstrap left. Fix them first, in
-their own commit, while both UIs still exist:
+**Status: done** (both UIs still exist). The service layer no longer uses Blazor.Bootstrap:
 
-| Where | What | Replace with |
+| Where | What it was | What it is now |
 |---|---|---|
-| `Data/FileService.cs` (`_toastService`, constructor parameter, 5 `Notify` calls), `Data/FileServiceV2.cs` (constructor) | `BlazorBootstrap.ToastService` / `ToastMessage` / `ToastType` | `NotificationModel.sendEvent(new Notification(...))` (already relayed to `/hubs/events`) |
-| `Data/ITelegramService.cs`, `Data/TelegramService.cs` (`getPaginatedMessages`) | `BlazorBootstrap.GridDataProviderResult<ChatMessages>` | an own `PagedResult<T> { Data, TotalCount }` (only `Pages/FileGrid.razor` calls it) |
-| `Models/DownloadModel.cs` | `using BlazorBootstrap;` | remove the using (check it still builds) |
+| `Data/FileService.cs` (5 `Notify` calls, `_toastService`, constructor), `Data/FileServiceV2.cs` (constructor) | `BlazorBootstrap.ToastService` / `ToastMessage` / `ToastType` | `NotificationModel.sendEvent(...)` with the messages built by `Data/FileServiceNotifications.cs` (same level, title and text; sent *forced*, so they show even with notifications off, like the old toasts). The Blazor `ToastNotify` shows them and `EventsBroadcastService` forwards them on `/hubs/events` as `Notification` — before, the new web app never received them. Tests: `Test/FileServiceNotificationsTest.cs`. |
+| `Data/ITelegramService.cs`, `Data/TelegramService.cs` (`getPaginatedMessages`) | `BlazorBootstrap.GridDataProviderResult<ChatMessages>` | `Models/PagedResult<T> { Items, TotalCount }`. No caller uses it today (`Pages/FileGrid.razor` builds its grid result from `getAllMediaMessages`); a Blazor caller must build the `GridDataProviderResult` in the component. |
+| `Models/DownloadModel.cs` | `using BlazorBootstrap;` | removed (unused) |
+
+`grep -rn BlazorBootstrap --include=*.cs TelegramDownloader` outside `Pages/`, `Shared/` and
+`Partials/` returns only `builder.Services.AddBlazorBootstrap();` in `Program.cs`.
 
 `IFileService.UploadFile(..., IBrowserFile)` uses `Microsoft.AspNetCore.Components.Forms`,
 which belongs to the ASP.NET Core shared framework (no package). Only the Blazor channel file

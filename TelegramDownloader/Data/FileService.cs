@@ -1,5 +1,4 @@
 #nullable disable
-using BlazorBootstrap;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.StaticFiles;
 using MongoDB.Driver;
@@ -242,8 +241,10 @@ namespace TelegramDownloader.Data
         protected IDbService _db { get; set; }
         protected ILogger<IFileService> _logger { get; set; }
         protected TransactionInfoService _tis { get; set; }
-        protected ToastService _toastService { get; set;  }
         protected ITaskPersistenceService _persistence { get; set; }
+
+        // User-facing messages: shown by the Blazor ToastNotify and forwarded on /hubs/events.
+        private static readonly NotificationModel notifier = new NotificationModel();
 
         // The refresh is fire-and-forget, so the outcome is kept here for the
         // client that started it to read once the scan is done. In memory only:
@@ -254,12 +255,11 @@ namespace TelegramDownloader.Data
         const int MaxSize = 1024 * 1024 * 1000; // 1GB
 
 
-        public FileService(ITelegramService ts, IDbService db, ILogger<IFileService> logger, TransactionInfoService tis, ToastService toastService, ITaskPersistenceService persistence)
+        public FileService(ITelegramService ts, IDbService db, ILogger<IFileService> logger, TransactionInfoService tis, ITaskPersistenceService persistence)
         {
             _ts = ts;
             _db = db;
             _tis = tis;
-            _toastService = toastService;
             _logger = logger;
             _persistence = persistence;
             createTempFolder();
@@ -1032,14 +1032,14 @@ namespace TelegramDownloader.Data
                     try
                     {
                         await _ts.joinChatInvitationHash(sfm.invitation.invitationHash);
-                        _toastService.Notify(new(ToastType.Success, "Join chat", $"Joined to chat"));
+                        notifier.sendEvent(FileServiceNotifications.JoinedChat());
                     }
                     catch (Exception ex)
                     {
-                        _toastService.Notify(new(ToastType.Danger, $"Error: {ex.Message}."));
+                        notifier.sendEvent(FileServiceNotifications.JoinChatFailed(ex));
                     }
                 else
-                    _toastService.Notify(new(ToastType.Info, "You were already joined the chat"));
+                    notifier.sendEvent(FileServiceNotifications.AlreadyJoinedChat());
                     
                 BsonSharedInfoModel bsi = new BsonSharedInfoModel();
                 bsi.ChannelId = sfm.id;
@@ -2024,14 +2024,7 @@ namespace TelegramDownloader.Data
             if (!refreshRegistry.TryBegin(channelId, out ChannelRefreshProgress progress))
             {
                 _logger.LogInformation("Refresh of channel {ChannelId} skipped: another refresh is already running", channelId);
-                _toastService.Notify(new ToastMessage
-                {
-                    Type = ToastType.Warning,
-                    IconName = IconName.ExclamationTriangle,
-                    Title = "Refresh channel files",
-                    Message = "This channel is already being refreshed.",
-                    AutoHide = true
-                });
+                notifier.sendEvent(FileServiceNotifications.RefreshAlreadyRunning());
                 return;
             }
             await runChannelRefresh(channelId, force, refreshOptions, progress);
@@ -2110,35 +2103,7 @@ namespace TelegramDownloader.Data
                 }
             }
 
-            ToastMessage tm;
-            if (result.Canceled)
-                tm = new ToastMessage
-                {
-                    Type = ToastType.Warning,
-                    IconName = IconName.XCircle,
-                    Title = "Refresh channel files",
-                    Message = $"Refresh canceled; {result.Total} new files were added before stopping.",
-                    AutoHide = true
-                };
-            else if (result.Failed)
-                tm = new ToastMessage
-                {
-                    Type = ToastType.Danger,
-                    IconName = IconName.ExclamationTriangle,
-                    Title = "Refresh channel files",
-                    Message = $"Refresh finished with errors; {result.Total} new files were added. Check the logs.",
-                    AutoHide = true
-                };
-            else
-                tm = new ToastMessage
-                {
-                    Type = ToastType.Success,
-                    IconName = IconName.CheckCircle,
-                    Title = "Refresh channel files",
-                    Message = $"Files channel has been refreshed with {result.Total} new files added.",
-                    AutoHide = true
-                };
-            _toastService.Notify(tm);
+            notifier.sendEvent(FileServiceNotifications.RefreshFinished(result));
         }
 
         public bool isChannelRefreshing(string channelId)

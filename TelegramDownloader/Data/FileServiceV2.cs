@@ -1,5 +1,4 @@
 #nullable disable
-using BlazorBootstrap;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.StaticFiles;
 using MongoDB.Driver;
@@ -27,9 +26,8 @@ namespace TelegramDownloader.Data
         IDbService db,
         ILogger<IFileService> logger,
         TransactionInfoService tis,
-        ToastService toastService,
         ITaskPersistenceService persistence
-    ) : base(ts, db, logger, tis, toastService, persistence)
+    ) : base(ts, db, logger, tis, persistence)
         {
         }
 
