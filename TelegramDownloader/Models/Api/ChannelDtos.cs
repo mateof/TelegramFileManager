@@ -85,6 +85,9 @@ namespace TelegramDownloader.Models.Api
         /// <summary>The scan threw; the counts are what it managed before failing.</summary>
         public bool Failed { get; set; }
 
+        /// <summary>The refresh was canceled; the counts are what was indexed before it stopped.</summary>
+        public bool Canceled { get; set; }
+
         public int Photos { get; set; }
         public int Videos { get; set; }
         public int Audios { get; set; }
@@ -97,11 +100,72 @@ namespace TelegramDownloader.Models.Api
             StartedAt = r.StartedAt,
             FinishedAt = r.FinishedAt,
             Failed = r.Failed,
+            Canceled = r.Canceled,
             Photos = r.Photos,
             Videos = r.Videos,
             Audios = r.Audios,
             Documents = r.Documents,
             Total = r.Total
+        };
+    }
+
+    /// <summary>Live counters of one media filter of a running refresh.</summary>
+    public class ApiChannelRefreshFilterProgressDto
+    {
+        /// <summary>documents, audio, video or photos.</summary>
+        public string Type { get; set; } = string.Empty;
+
+        /// <summary>Messages read from Telegram so far.</summary>
+        public int Fetched { get; set; }
+
+        /// <summary>
+        /// Messages of this type in the whole channel as Telegram reports it;
+        /// null until the first page arrives. An incremental scan stops at the
+        /// last indexed message, so it usually ends well below this.
+        /// </summary>
+        public int? Total { get; set; }
+
+        /// <summary>The search of this type is over.</summary>
+        public bool Done { get; set; }
+    }
+
+    /// <summary>Live progress of a running channel refresh.</summary>
+    public class ApiChannelRefreshProgressDto
+    {
+        /// <summary>Always true (the endpoint answers <c>data: null</c> when nothing runs).</summary>
+        public bool Running { get; set; } = true;
+
+        /// <summary>searching (Telegram), indexing (writing the new files) or done.</summary>
+        public string Phase { get; set; } = string.Empty;
+
+        public DateTime StartedAt { get; set; }
+
+        public List<ApiChannelRefreshFilterProgressDto> Filters { get; set; } = new();
+
+        /// <summary>Files found that were not indexed yet (known once the search is over).</summary>
+        public int NewFiles { get; set; }
+
+        /// <summary>New files written to the index so far.</summary>
+        public int Indexed { get; set; }
+
+        /// <summary>A cancel was requested; the refresh stops after the page or batch in flight.</summary>
+        public bool CancelRequested { get; set; }
+
+        public static ApiChannelRefreshProgressDto From(ChannelRefreshProgressSnapshot s) => new ApiChannelRefreshProgressDto
+        {
+            Running = true,
+            Phase = s.Phase.ToKey(),
+            StartedAt = s.StartedAt,
+            Filters = s.Filters.Select(f => new ApiChannelRefreshFilterProgressDto
+            {
+                Type = f.Filter.ToKey(),
+                Fetched = f.Fetched,
+                Total = f.Total,
+                Done = f.Done
+            }).ToList(),
+            NewFiles = s.NewFiles,
+            Indexed = s.Indexed,
+            CancelRequested = s.CancelRequested
         };
     }
 

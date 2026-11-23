@@ -149,7 +149,7 @@ namespace Test
         {
             Assert.That(MobileInfoController.Features, Is.EquivalentTo(new[]
             {
-                "playlist.bulkAdd", "search.global", "channels.refresh", "stream.localTranscode"
+                "playlist.bulkAdd", "search.global", "channels.refresh", "channels.refreshProgress", "stream.localTranscode"
             }));
         }
     }

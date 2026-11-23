@@ -49,6 +49,8 @@ namespace TelegramDownloader.Data
         Task sendVerificationCode(string vc);
         Task<Message> uploadFile(string chatId, Stream file, string fileName, string mimeType = null, UploadModel um = null, string caption = null);
         Task<List<TelegramChatDocuments>> searchAllChannelFiles(long id, int lastId, Models.RefreshChannelOptions? options = null);
+        /// <summary>One media filter of a channel refresh: messages newer than <paramref name="floor"/> (all when 0), newest first; cancellable between pages.</summary>
+        Task<IReadOnlyList<TelegramChatDocuments>> searchChannelFilter(long id, Models.RefreshFilter filter, int floor, Models.RefreshFilterProgress progress, CancellationToken cancellationToken);
         bool isMyChat(long id);
         bool isChannelOwner(long id);
         Task<TL.Channel?> CreateChannel(string title, string about);

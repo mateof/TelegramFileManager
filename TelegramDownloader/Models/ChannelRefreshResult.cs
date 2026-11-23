@@ -14,6 +14,12 @@ namespace TelegramDownloader.Models
         /// <summary>The scan threw; the counts below are what it managed before failing.</summary>
         public bool Failed { get; set; }
 
+        /// <summary>
+        /// The refresh was canceled. Batches written before the cancel stay in
+        /// the index; the counts below are exactly those.
+        /// </summary>
+        public bool Canceled { get; set; }
+
         public int Photos { get; set; }
         public int Videos { get; set; }
         public int Audios { get; set; }
