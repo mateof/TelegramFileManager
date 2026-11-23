@@ -26,7 +26,7 @@ const transfers: Record<string, string> = {
   'Finished': 'Terminadas',
   'Completed': 'Completada',
   'Failed': 'Con error',
-  'Cancelled': 'Cancelada',
+  'Cancelled': 'Cancelado',
   'Pause all': 'Pausar todo',
   'Resume all': 'Reanudar todo',
   'Stop all': 'Detener todo',

@@ -75,7 +75,7 @@ const library: Record<string, string> = {
 
   // home
   'Featured': 'Destacado',
-  'Resume': 'Continuar',
+  'Resume': 'Reanudar',
   'More info': 'Más información',
   'Continue watching': 'Seguir viendo',
   'Recently added': 'Añadido recientemente',
