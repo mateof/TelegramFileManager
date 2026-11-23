@@ -156,6 +156,12 @@ namespace TelegramDownloader.Models
         /// <summary>Ids of channels the user chose to hide from the channel lists.</summary>
         public List<long> HiddenChannels { get; set; } = new List<long>();
 
+        /// <summary>
+        /// Interface a browser gets at <c>/</c>: <c>classic</c> (Blazor) or
+        /// <c>app</c> (redirect to the web app at <c>/app/</c>). See <see cref="WebUiMode"/>.
+        /// </summary>
+        public string DefaultWebUi { get; set; } = WebUiMode.Classic;
+
         // API / WebDAV credentials, managed from the Config page and persisted in
         // MongoDB. When set here they take precedence over the equivalents in
         // config.json (TLConfig), so they can be changed from the UI without

@@ -168,6 +168,7 @@ Returns the full `AppConfigDto`. Highlights:
 | `libraryFolderRules` | What a channel folder holds: `[{ channelId, path, kind }]` with `kind` `movie`, `series` or `ignore` (see [library.md](library.md#folder-rules)). PATCH replaces the whole list. |
 | `libraryProviders` | Metadata providers (`id`, `enabled`, `priority`, `hasKey`, `apiKeyMasked`). PATCH with `[{ id, enabled?, apiKey?, priority? }]`; omit `apiKey` to keep the current key, send `""` to clear it. |
 | `useMobileFileManagerAlways`, `hasFileManagerVirtualScroll` | Web UI file manager options. |
+| `defaultWebUi` | `classic` (default) or `app`: with `app`, a browser opening `/` is redirected to the web app at `/app/` (other classic pages are not). `/?ui=classic` opens the classic UI and remembers it for that browser (cookie `tfm_ui`); `/?ui=app` clears that. Any other value is a `400`. |
 | `mobileApiKey`, `mobileApiKeySet` | API key for apps, **masked** on read (`****` + last 4 characters). PATCH `mobileApiKey` with a new key (8+ characters) or `""` to remove it (then `config.json` applies). The new key is enforced from the next request on. |
 | `webDavUser`, `webDavPasswordSet` | WebDAV credentials. The password is **write-only**: PATCH `webDavPassword` to set it (`""` clears it); reads only say whether one is set. |
 

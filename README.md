@@ -111,9 +111,61 @@ services:
 
 Details: [docs/api/authentication.md](docs/api/authentication.md#web-session).
 
+## Web interface (`/app`)
+
+Besides the classic interface at `/`, the server ships a new web interface at
+**`http://<server>:<port>/app/`**: a React app built on the REST API v1, made for desktop
+and mobile (themes, command palette with `Ctrl/Cmd+K`, touch layout with a bottom
+navigation bar). Both interfaces work over the same Telegram session and settings, and you
+can switch between them at any time:
+
+- From the classic interface: the **New interface** button in the side menu (also in the
+  mobile menu), or the banner shown until you choose "Don't show again".
+- From the new one: **Classic UI** in the top bar or the user menu.
+- **Default interface** (Config → Web Interface → *Open the new interface by default*, or
+  `defaultWebUi` in `PATCH /api/v1/config`): when enabled, a browser opening `/` is sent to
+  `/app/`. Only the root is redirected (links to classic pages keep working).
+  `/?ui=classic` opens the classic interface and keeps it at `/` for that browser (cookie
+  `tfm_ui`); `/?ui=app` undoes that.
+
+Access works the same way for both interfaces (see [Security](#security)):
+
+- **No password** (default): open to anyone who can reach the server, as before.
+- **Web password** (Config → Web Security, or the first screen of `/app` while none is set):
+  browsers sign in at `/app/login` and get a session cookie (`HttpOnly`, `SameSite=Strict`;
+  "remember me" keeps it for 30 days, otherwise it expires after 12 h idle). The classic
+  interface sends you there too.
+- **No password on the local network** (optional, only while a password is set): devices that
+  connect *directly* from a private/loopback address to a local host name (IP, `localhost`,
+  `nas`, `*.local`…) get in without it. Anything that arrives through a reverse proxy always
+  needs the password.
+- The apps (Android, Android TV, TFM Player) keep using the **API key**.
+
+The Docker images and the release ZIPs include the built web app. Running from source
+without building it shows a short "web app not built" page at `/app`.
+
 ## Compile
 
 > dotnet publish -c Release --output ./MyTargetFolder .\TelegramDownloader.csproj
+
+That builds the server only (no Node needed). To include the web app (`/app`) you need
+**Node.js 22+**; either let the publish build it:
+
+> dotnet publish -c Release -p:BuildWebApp=true --output ./MyTargetFolder .\TelegramDownloader.csproj
+
+or build it yourself first (the next `dotnet publish` copies it into the output):
+
+```bash
+cd TelegramDownloader/ClientApp
+npm ci
+npm run build        # typecheck + build into TelegramDownloader/wwwroot/app
+```
+
+`dotnet build` / `dotnet run` never run npm, so they stay fast; `dotnet run` serves whatever
+is in `wwwroot/app`. For front-end work use `npm run dev` (Vite at
+`http://localhost:5173/app/`, proxying the API to the running server); see
+[`TelegramDownloader/ClientApp/README.md`](TelegramDownloader/ClientApp/README.md).
+Docker builds the web app in its own stage (`docker build ./TelegramDownloader`).
 
 ## Usage
 

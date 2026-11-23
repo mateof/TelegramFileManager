@@ -23,7 +23,7 @@ export function PlaceholderPage({ title, description, icon, details }: Placehold
           title={t('This section is being built')}
           description={t('Use the classic interface meanwhile.')}
           action={
-            <a href="/" className="text-sm font-medium text-accent-400 hover:text-accent-300">
+            <a href="/?ui=classic" className="text-sm font-medium text-accent-400 hover:text-accent-300">
               {t('Open the classic interface')}
             </a>
           }

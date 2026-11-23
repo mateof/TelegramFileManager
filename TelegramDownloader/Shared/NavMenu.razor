@@ -421,6 +421,45 @@
         transform: scale(1.2);
     }
 
+    /* New web interface button */
+    .sidebar-newui {
+        padding: 0 0.75rem 0.75rem;
+    }
+
+    .sidebar-newui-btn {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        width: 100%;
+        padding: 0.5rem 0.75rem;
+        border-radius: 0.5rem;
+        border: 1px solid rgba(233, 69, 96, 0.35);
+        background: linear-gradient(135deg, rgba(233, 69, 96, 0.18) 0%, rgba(15, 52, 96, 0.35) 100%);
+        color: white;
+        font-size: 0.85rem;
+        font-weight: 500;
+        text-decoration: none;
+        transition: all 0.2s ease;
+    }
+
+    .sidebar-newui-btn:hover,
+    .sidebar-newui-btn:focus-visible {
+        color: white;
+        border-color: rgba(233, 69, 96, 0.6);
+        background: linear-gradient(135deg, rgba(233, 69, 96, 0.3) 0%, rgba(15, 52, 96, 0.5) 100%);
+        box-shadow: 0 0 0 1px rgba(233, 69, 96, 0.2), 0 4px 12px rgba(233, 69, 96, 0.15);
+    }
+
+    .sidebar-newui-btn .bi-stars {
+        color: #e94560;
+    }
+
+    .sidebar-newui-arrow {
+        margin-left: auto;
+        font-size: 0.75rem;
+        opacity: 0.6;
+    }
+
     /* Folder Group Styles */
     .folder-group {
         margin-bottom: 0.5rem;
@@ -568,6 +607,15 @@
             <button class="sidebar-action-btn" @onclick="OpenLocalFiles" title="Local Files">
                 <i class="bi bi-folder2-open"></i>
             </button>
+        </div>
+
+        <!-- New web interface at /app (target=_top: a full page load, not a Blazor route) -->
+        <div class="sidebar-newui">
+            <a class="sidebar-newui-btn" href="/app/" target="_top" title="Open the new web interface">
+                <i class="bi bi-stars"></i>
+                <span>New interface</span>
+                <i class="bi bi-arrow-up-right sidebar-newui-arrow"></i>
+            </a>
         </div>
 
         <!-- Search -->

@@ -1,0 +1,62 @@
+name: Web App CI
+
+# Checks of the React web app (TelegramDownloader/ClientApp, served at /app):
+# typecheck, lint, unit tests and the production build (with its chunk-cycle
+# and initial-size budget check).
+
+on:
+  push:
+    paths:
+      - 'TelegramDownloader/ClientApp/**'
+      - '.github/workflows/web-app.yml'
+  pull_request:
+    paths:
+      - 'TelegramDownloader/ClientApp/**'
+      - '.github/workflows/web-app.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: web-app-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Typecheck, lint, test, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: TelegramDownloader/ClientApp
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: TelegramDownloader/ClientApp/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-app
+          path: TelegramDownloader/wwwroot/app
+          retention-days: 7

@@ -96,6 +96,13 @@ namespace TelegramDownloader.Controllers.Api.V1
 
                 if (request.UseMobileFileManagerAlways.HasValue) c.UseMobileFileManagerAlways = request.UseMobileFileManagerAlways.Value;
                 if (request.HasFileManagerVirtualScroll.HasValue) c.hasFileManagerVirtualScroll = request.HasFileManagerVirtualScroll.Value;
+                if (request.DefaultWebUi != null)
+                {
+                    var ui = request.DefaultWebUi.Trim();
+                    if (!WebUiMode.IsValid(ui))
+                        return BadRequestResult("defaultWebUi must be classic or app");
+                    c.DefaultWebUi = WebUiMode.Normalize(ui);
+                }
                 if (request.MobileApiKey != null)
                 {
                     var key = request.MobileApiKey.Trim();

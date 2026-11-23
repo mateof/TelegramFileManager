@@ -410,6 +410,9 @@ app.UseCors("MobilePolicy");
 // too; wwwroot assets and the /app shell are classified as public.
 app.UseAuthentication();
 app.UseMiddleware<TelegramDownloader.Middleware.WebAccessMiddleware>();
+// "Default web interface" setting: a browser opening / goes to /app/ when it
+// is "app" (escape hatch /?ui=classic, remembered in the tfm_ui cookie).
+app.UseMiddleware<TelegramDownloader.Middleware.DefaultWebUiMiddleware>();
 
 // New web app (React SPA) at /app: hashed assets are cached for a year,
 // index.html and the service worker are always revalidated.
