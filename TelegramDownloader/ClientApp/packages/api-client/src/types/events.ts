@@ -1,6 +1,8 @@
 // Payloads of the /hubs/events SignalR hub (application-wide realtime events).
 // PROVISIONAL where marked: the hub is written by the API agent in parallel; align at merge.
 import type { ApiChannelRefreshProgressDto, ApiChannelRefreshResultDto } from './channels';
+import type { ApiLibraryScanStateDto } from './library';
+import type { SystemMetricsDto } from './system';
 
 export type NotificationLevel = 'info' | 'success' | 'warning' | 'error';
 
@@ -40,11 +42,15 @@ export interface AuthStateEvent {
   telegramLoggedIn: boolean;
 }
 
-/** `Metrics`: system metrics, pushed after invoking `SubscribeMetrics`. PROVISIONAL shape. */
-export type MetricsEvent = Record<string, unknown>;
+/** `Metrics`: a `SystemMetricsDto` every 2 seconds, only after invoking `SubscribeMetrics`. */
+export type MetricsEvent = SystemMetricsDto;
 
-/** `LibraryScan`: progress/result of a media library scan. PROVISIONAL shape. */
-export type LibraryScanEvent = Record<string, unknown>;
+/** `LibraryScan`: every second while a library scan runs, once when it ends (`running: false`). */
+export interface LibraryScanEvent {
+  running: boolean;
+  /** Same payload as `GET /api/v1/library/scan`. */
+  progress?: ApiLibraryScanStateDto | null;
+}
 
 /** Message name → payload of every server → client message of /hubs/events. */
 export interface EventsHubMessages {

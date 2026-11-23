@@ -109,3 +109,66 @@ export interface DeleteLogsQuery {
   /** Keep the entries of the last N days (default 30). */
   daysToKeep?: number;
 }
+
+/** Image cache usage (`GET/DELETE /api/v1/system/image-cache`). */
+export interface ImageCacheInfoDto {
+  channelImages: number;
+  thumbnails: number;
+  sizeInBytes: number;
+  sizeText: string;
+}
+
+/** FFmpeg availability (`GET /api/v1/system/ffmpeg`). */
+export interface FfmpegInfoDto {
+  available: boolean;
+  /** e.g. `6.1.1`; null when FFmpeg is missing. */
+  version: string | null;
+  /** Current value of `enableVideoTranscoding`. */
+  transcodingEnabled: boolean;
+}
+
+/** A GitHub release. */
+export interface ReleaseDto {
+  version: string;
+  name: string | null;
+  url: string | null;
+  /** ISO date. */
+  publishedAt: string;
+  prerelease: boolean;
+  /** Release notes (Markdown). */
+  notes: string | null;
+}
+
+/** Current version and the latest GitHub release / dev build (`GET /api/v1/system/version`). */
+export interface VersionCheckDto {
+  currentVersion: string;
+  isDevVersion: boolean;
+  latestRelease: ReleaseDto | null;
+  latestDev: ReleaseDto | null;
+  hasNewRelease: boolean;
+  hasNewDev: boolean;
+}
+
+/** Outcome of a setup test (`POST /api/v1/system/setup/test-*`). */
+export interface SetupTestResultDto {
+  success: boolean;
+  error: string | null;
+}
+
+/** Body of `POST /api/v1/system/setup/test-mongo`. */
+export interface TestMongoRequest {
+  connectionString: string;
+}
+
+/** Body of `POST /api/v1/system/setup/test-telegram`. */
+export interface TestTelegramRequest {
+  apiId: string;
+  apiHash: string;
+}
+
+/** Body of `POST /api/v1/system/setup`: send either part or both. */
+export interface SaveSetupRequest {
+  mongoConnectionString?: string | null;
+  apiId?: string | null;
+  apiHash?: string | null;
+}

@@ -2,8 +2,11 @@
 localStorage.setItem('tfm.web.language', 'en');
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup } from '@testing-library/react';
+import { cleanup, configure } from '@testing-library/react';
 import { afterEach } from 'vitest';
+
+// Lazy chunks load slowly when every test file runs in parallel: be patient in findBy*/waitFor
+configure({ asyncUtilTimeout: 4000 });
 
 // Vitest runs without globals, so Testing Library can't unmount on its own
 afterEach(() => cleanup());

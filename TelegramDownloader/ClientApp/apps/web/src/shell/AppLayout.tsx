@@ -1,6 +1,7 @@
 import { cn, Spinner } from '@tfm/ui';
 import { Suspense } from 'react';
 import { Outlet, useNavigation } from 'react-router';
+import { ChannelCommands } from '@/features/maintenance/ChannelCommands';
 import { PlayerSlot } from '@/features/player/PlayerSlot';
 import { t } from '@/i18n';
 import { useUi } from '@/stores/ui';
@@ -78,6 +79,7 @@ export function AppLayout() {
 
       <MobileDrawer />
       <CommandPaletteHost />
+      <ChannelCommands />
     </div>
   );
 }
