@@ -83,7 +83,7 @@ namespace Test
             TransactionInfoService tis = new TransactionInfoService(
                 NullLogger<IFileService>.Instance);
             foreach (StateTask s in states)
-                tis.uploadModels.Add(new UploadModel { state = s, name = s.ToString() });
+                tis.addToUploadList(new UploadModel { state = s, name = s.ToString() });
             return tis;
         }
 

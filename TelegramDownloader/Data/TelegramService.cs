@@ -32,11 +32,23 @@ namespace TelegramDownloader.Data
         private static WTelegram.Client client = null;
         private static Messages_Chats chats = null;
         private static List<ChatViewBase> favouriteChannels = new List<ChatViewBase>();
-        private static Mutex mut = new Mutex();
+        // Guards client creation; the guarded sections are synchronous.
+        private static readonly object clientInitLock = new object();
         private ILogger<IFileService> _logger { get; set; }
 
         // Event that fires when user successfully logs in
         public static event EventHandler OnUserLoggedIn;
+
+        // Completed the first time a login finishes (session restored on startup
+        // or interactive login), after the chats are loaded: from then on the
+        // channels can be resolved and transfers can run.
+        private static readonly TaskCompletionSource sessionReady = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>
+        /// Completes once the Telegram session is usable (logged in and chats
+        /// loaded). Never faults; it simply stays pending until a login happens.
+        /// </summary>
+        public static Task WhenSessionReady => sessionReady.Task;
 
 
         public TelegramService(TransactionInfoService tis, IDbService db, ILogger<IFileService> logger, ITaskPersistenceService persistence)
@@ -46,7 +58,7 @@ namespace TelegramDownloader.Data
             _logger = logger;
             _persistence = persistence;
             // createDownloadFolder();
-            mut.WaitOne();
+            Monitor.Enter(clientInitLock);
             try
             {
                 if (client == null && HasValidCredentials())
@@ -81,7 +93,7 @@ namespace TelegramDownloader.Data
             }
             finally
             {
-                mut.ReleaseMutex();
+                Monitor.Exit(clientInitLock);
             }
         }
 
@@ -112,7 +124,7 @@ namespace TelegramDownloader.Data
                 return;
             }
 
-            mut.WaitOne();
+            Monitor.Enter(clientInitLock);
             try
             {
                 if (client == null) // Double-check after acquiring lock
@@ -146,7 +158,7 @@ namespace TelegramDownloader.Data
             }
             finally
             {
-                mut.ReleaseMutex();
+                Monitor.Exit(clientInitLock);
             }
         }
 
@@ -498,7 +510,10 @@ namespace TelegramDownloader.Data
             long nextBlock = -1;
             object progressLock = new object();
             using CancellationTokenSource cts = new CancellationTokenSource();
-            dest.SetLength(size);
+            // Parts of a split file share one destination: write this part after
+            // the bytes already in the file (the stream position), not at 0.
+            long baseOffset = dest.Position;
+            dest.SetLength(baseOffset + size);
             var handle = dest.SafeFileHandle;
             DateTime started = DateTime.Now;
 
@@ -537,7 +552,7 @@ namespace TelegramDownloader.Data
                             throw new InvalidOperationException($"Unexpected {resp?.GetType().Name} from Upload_GetFile (CDN-served files are not supported)");
                         if (part.bytes.Length < expected)
                             throw new InvalidOperationException($"Short chunk at offset {offset}: {part.bytes.Length} < {expected}");
-                        RandomAccess.Write(handle, part.bytes.AsSpan(0, expected), offset);
+                        RandomAccess.Write(handle, part.bytes.AsSpan(0, expected), baseOffset + offset);
                         ReportBytes(expected);
                         return;
                     }
@@ -696,7 +711,9 @@ namespace TelegramDownloader.Data
             }
             _logger.LogInformation("Login successful - User: {UserId}, Premium: {IsPremium}", client.User.id, isPremium);
 
-            // Fire the login event to notify subscribers (like TaskResumeService)
+            sessionReady.TrySetResult();
+
+            // Fire the login event to notify subscribers
             try
             {
                 OnUserLoggedIn?.Invoke(this, EventArgs.Empty);
@@ -1212,39 +1229,21 @@ namespace TelegramDownloader.Data
             um._transmitted = 0;
             _tis.addToUploadList(um);
 
-            // Persist the upload task
-            try
-            {
-                um.OnProgressPersist = async (transmitted, progress, state) =>
-                {
-                    await _persistence.UpdateProgress(um._internalId, transmitted, progress, state);
-                };
-                await _persistence.PersistUpload(um, chatId, um.path);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to persist upload task - continuing without persistence");
-            }
-
+            // Not persisted here: this is one Telegram message (a file or one
+            // part of a split file). The batch task that calls it persists the
+            // resumable state - resuming a single message on its own used to send
+            // an unindexed copy to the channel.
             try
             {
                 ApplyConfiguredParallelTransfers(client);
                 var inputFile = await client.UploadFileAsync(file, fileName, um.ProgressCallback);
                 var result = await client.SendMediaAsync(peer, caption ?? fileName, inputFile, mimeType);
                 _logger.LogInformation("File upload completed - FileName: {FileName}, MessageId: {MessageId}", fileName, result.id);
-
-                // Mark task as completed
-                await _persistence.MarkCompleted(um._internalId);
-
                 return result;
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "File upload failed - FileName: {FileName}, ChatId: {ChatId}", fileName, chatId);
-
-                // Mark task as error
-                await _persistence.MarkError(um._internalId, ex.Message);
-
                 throw;
             }
         }
@@ -1265,7 +1264,8 @@ namespace TelegramDownloader.Data
             //var mm = await client.Messages_GetMessages(ids.ToArray());
             var mm = await client.GetMessages(peer, ids.ToArray());
             // var mm = await client.Messages_GetHistory(peer, limit: 1);
-            return (Message)mm.Messages.FirstOrDefault();
+            // A deleted message comes back as MessageEmpty: report it as null.
+            return mm.Messages.FirstOrDefault() as Message;
             //var i = await client.Messages_GetHistory(peer, min_id: idMessage, max_id: idMessage, limit: 1);
             //var ms = await client.GetMessages(peer, ids.ToArray());
             //Message m = (Message)ms.Messages.FirstOrDefault();
@@ -1840,6 +1840,11 @@ namespace TelegramDownloader.Data
                 };
 
                 _logger.LogInformation("Resuming download from offset {Offset} of {TotalSize} bytes", currentOffset, totalSize);
+                if (currentOffset >= totalSize)
+                {
+                    model.ProgressCallback(totalSize, totalSize);
+                    return targetStream;
+                }
 
                 while (currentOffset < totalSize)
                 {
@@ -1885,7 +1890,8 @@ namespace TelegramDownloader.Data
 
                         await targetStream.WriteAsync(fileBytes, 0, fileBytes.Length);
                         currentOffset += fileBytes.Length;
-                        model._transmitted = currentOffset;
+                        // ProgressCallback updates _transmitted itself (and counts the
+                        // speed from the previous value).
                         model.ProgressCallback(currentOffset, totalSize);
                         continue;
                     }

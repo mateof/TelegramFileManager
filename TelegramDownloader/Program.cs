@@ -167,12 +167,13 @@ builder.Services.AddSingleton<TelegramDownloader.Services.WebDavLockManager>();
 
 // Task persistence services
 builder.Services.AddSingleton<ITaskPersistenceService, TaskPersistenceService>();
+// Single code path for resuming persisted transfers (startup and the UI/API).
+builder.Services.AddSingleton<TelegramDownloader.Services.Transfers.TaskResumeCoordinator>();
+// Waits for TelegramService.WhenSessionReady, so registration order does not matter.
 builder.Services.AddHostedService<TaskResumeService>();
 
 // Restore a previously authorized Telegram session on startup so the API and
-// WebDAV work after a restart without opening the web UI first. Registered
-// after TaskResumeService so its OnUserLoggedIn subscription exists when the
-// restore completes.
+// WebDAV work after a restart without opening the web UI first.
 builder.Services.AddHostedService<TelegramSessionRestoreService>();
 
 // Log query service - only if MongoDB is available

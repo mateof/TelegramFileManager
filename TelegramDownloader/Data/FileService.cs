@@ -16,6 +16,7 @@ using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
+using TelegramDownloader.Models.Persistence;
 using TelegramDownloader.Services;
 using TelegramDownloader.Services.Upload;
 using TL;
@@ -1519,6 +1520,14 @@ namespace TelegramDownloader.Data
                                     long chunkStart = (long)chunkIndex * chunkSizeBytes;
                                     long chunkLength = Math.Min(chunkSizeBytes, fileInfo.Length - chunkStart);
 
+                                    // Sent by a previous run of this task (resume): reuse it.
+                                    int? sentPart = idt.TryGetUploadedPart(fileInfo, UploadedPartMode.Memory, chunkSizeBytes, chunkIndex);
+                                    if (sentPart != null)
+                                    {
+                                        model.ListMessageId.Add(sentPart.Value);
+                                        continue;
+                                    }
+
                                     int attempts = UploadRetryPolicy.MaxAttempts;
                                     bool sent = false;
                                     UploadModel um = new UploadModel();
@@ -1577,6 +1586,7 @@ namespace TelegramDownloader.Data
                                     }
 
                                     model.ListMessageId.Add(m.ID);
+                                    await idt.RecordUploadedPartAsync(fileInfo, UploadedPartMode.Memory, chunkSizeBytes, chunkIndex, m.ID);
                                 }
 
                                 _logger.LogInformation("Memory-based split upload completed for {FileName} - {TotalChunks} chunks", file.Name, totalChunks);
@@ -1589,6 +1599,16 @@ namespace TelegramDownloader.Data
 
                                 foreach (string s in filesSplit)
                                 {
+                                    // Sent by a previous run of this task (resume): reuse it.
+                                    int? sentPart = idt.TryGetUploadedPart(fileInfo, UploadedPartMode.Disk, MaxSize, i - 1);
+                                    if (sentPart != null)
+                                    {
+                                        model.ListMessageId.Add(sentPart.Value);
+                                        File.Delete(s);
+                                        i++;
+                                        continue;
+                                    }
+
                                     int attempts = UploadRetryPolicy.MaxAttempts;
                                     bool sent = false;
                                     UploadModel um = new UploadModel();
@@ -1643,6 +1663,7 @@ namespace TelegramDownloader.Data
                                     }
 
                                     model.ListMessageId.Add(m.ID);
+                                    await idt.RecordUploadedPartAsync(fileInfo, UploadedPartMode.Disk, MaxSize, i - 1, m.ID);
                                     File.Delete(s);
                                     i++;
                                 }
@@ -1652,8 +1673,10 @@ namespace TelegramDownloader.Data
                         else
                         {
 
-                            int attempts = UploadRetryPolicy.MaxAttempts;
-                            bool sent = false;
+                            // Sent by a previous run of this task but not indexed yet (resume).
+                            int? sentMessage = idt.TryGetUploadedPart(fileInfo, UploadedPartMode.Single, fileInfo.Length, 0);
+                            int attempts = sentMessage != null ? 0 : UploadRetryPolicy.MaxAttempts;
+                            bool sent = sentMessage != null;
                             UploadModel um = new UploadModel();
                             um.tis = _tis;
                             um.path = currentFilePath;
@@ -1661,6 +1684,11 @@ namespace TelegramDownloader.Data
                             // add upload to task list
                             idt.addUpload(um);
                             um.startDate = DateTime.Now;
+                            if (sentMessage != null)
+                            {
+                                um.name = file.Name;
+                                um.SetState(StateTask.Completed);
+                            }
                             // Was "attempts != 0 || canceled": after a cancel that landed once
                             // the file was already sent, the loop uploaded it again.
                             while (UploadRetryPolicy.ShouldAttempt(attempts, um.state))
@@ -1729,7 +1757,9 @@ namespace TelegramDownloader.Data
                                 return;
                             }
 
-                            model.MessageId = m.ID;
+                            if (sentMessage == null)
+                                await idt.RecordUploadedPartAsync(fileInfo, UploadedPartMode.Single, fileInfo.Length, 0, m.ID);
+                            model.MessageId = sentMessage ?? m.ID;
                         }
                         // delete previous file, when the new modified date file is newest
                         if (savedFile != null)
