@@ -51,6 +51,10 @@ namespace TelegramDownloader.Data.db
         Task resetCollection(string dbName = "default", string collection = "directory", IClientSessionHandle? session = null);
         Task SaveConfig(GeneralConfig gc);
         Task<List<BsonFileManagerModel>> Search(string dbName, string path, string searchText, string collectionName = "directory");
+        /// <summary>Id, name and type of every file (not folders) of a channel, for the in-memory search index.</summary>
+        Task<List<ChannelFileNameEntry>> GetFileNameEntries(string dbName, CancellationToken cancellationToken = default, string collectionName = "directory");
+        /// <summary>Full documents for the given ids (one $in query). Unknown ids are ignored.</summary>
+        Task<List<BsonFileManagerModel>> GetFilesByIds(string dbName, IEnumerable<string> ids, CancellationToken cancellationToken = default, string collectionName = "directory");
         Task setDirectoryHasChild(string dbName, string id, string collectionName = "directory", bool hasChild = true);
         Task subBytesToFolder(string dbName, string folderId, long bytes, string collectionName = "directory");
         Task<BsonFileManagerModel> toBasonFile(string Path, string FolderName, FileManagerDirectoryContent ParentFolder);

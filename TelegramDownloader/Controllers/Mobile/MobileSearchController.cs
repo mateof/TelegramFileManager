@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using TelegramDownloader.Data;
 using TelegramDownloader.Data.db;
 using TelegramDownloader.Models.Mobile;
+using TelegramDownloader.Services.Mobile;
 
 namespace TelegramDownloader.Controllers.Mobile
 {
@@ -24,12 +25,14 @@ namespace TelegramDownloader.Controllers.Mobile
 
         private readonly IDbService _db;
         private readonly ITelegramService _ts;
+        private readonly ChannelSearchIndex _index;
         private readonly ILogger<MobileSearchController> _logger;
 
-        public MobileSearchController(IDbService db, ITelegramService ts, ILogger<MobileSearchController> logger)
+        public MobileSearchController(IDbService db, ITelegramService ts, ChannelSearchIndex index, ILogger<MobileSearchController> logger)
         {
             _db = db;
             _ts = ts;
+            _index = index;
             _logger = logger;
         }
 
@@ -132,6 +135,7 @@ namespace TelegramDownloader.Controllers.Mobile
             var dbNames = await _db.GetAllChannelDatabaseNames();
             var names = await GetChannelNames();
             var found = new ConcurrentBag<ChannelSearchGroupDto>();
+            var anyChannelHasMore = 0;
 
             await Parallel.ForEachAsync(dbNames,
                 new ParallelOptions { MaxDegreeOfParallelism = MaxChannelParallelism, CancellationToken = ct },
@@ -140,7 +144,12 @@ namespace TelegramDownloader.Controllers.Mobile
                     if (!long.TryParse(dbName, out var channelId)) return;
                     try
                     {
-                        var matches = await _db.Search(dbName, "", query);
+                        // Names are matched in memory; only the matched documents are read from Mongo.
+                        var match = await _index.SearchAsync(dbName, query, audioOnly, limit, token);
+                        if (match.Ids.Count == 0) return;
+                        if (match.HasMore) Interlocked.Exchange(ref anyChannelHasMore, 1);
+
+                        var matches = await _db.GetFilesByIds(dbName, match.Ids, token);
                         var files = matches
                             .Where(m => m.IsFile)
                             .Select(m => ChannelFileDto.FromBsonFileManagerModel(m, channelId, baseUrl))
@@ -162,7 +171,9 @@ namespace TelegramDownloader.Controllers.Mobile
                     }
                 });
 
-            return CapGroups(found, limit);
+            var (capped, truncated) = CapGroups(found, limit);
+            // A channel with more than `limit` matches means the overall total exceeded it too.
+            return (capped, truncated || anyChannelHasMore == 1);
         }
 
         /// <summary>

@@ -360,6 +360,39 @@ namespace TelegramDownloader.Data.db
             return files.ToList();
         }
 
+        public async Task<List<ChannelFileNameEntry>> GetFileNameEntries(string dbName, CancellationToken cancellationToken = default, string collectionName = "directory")
+        {
+            if (collectionName == null)
+                collectionName = "directory";
+            var collection = getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName);
+            var result = new List<ChannelFileNameEntry>();
+            using var cursor = await collection
+                .Find(x => x.IsFile, new FindOptions { BatchSize = 5000 })
+                .Project(x => new { x.Id, x.Name, x.Type })
+                .ToCursorAsync(cancellationToken);
+            while (await cursor.MoveNextAsync(cancellationToken))
+            {
+                foreach (var f in cursor.Current)
+                {
+                    if (f.Id == null || f.Name == null) continue;
+                    result.Add(new ChannelFileNameEntry(f.Id, f.Name, f.Type));
+                }
+            }
+            return result;
+        }
+
+        public async Task<List<BsonFileManagerModel>> GetFilesByIds(string dbName, IEnumerable<string> ids, CancellationToken cancellationToken = default, string collectionName = "directory")
+        {
+            if (collectionName == null)
+                collectionName = "directory";
+            var idList = ids?.Distinct().ToList() ?? new List<string>();
+            if (idList.Count == 0)
+                return new List<BsonFileManagerModel>();
+            var filter = Builders<BsonFileManagerModel>.Filter.In(x => x.Id, idList);
+            return await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName)
+                .Find(filter).ToListAsync(cancellationToken);
+        }
+
         public async Task<BsonFileManagerModel> getFileByPath(string dbName, string path, string collectionName = "directory")
         {
             if (collectionName == null)
