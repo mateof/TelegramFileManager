@@ -1,11 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
-using Syncfusion.Blazor.FileManager;
 using TelegramDownloader.Data;
 using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
 using TelegramDownloader.Models.Api;
 using TelegramDownloader.Services;
 using TelegramDownloader.Services.Api;
+using TelegramDownloader.Models.FileSystem;
 
 namespace TelegramDownloader.Controllers.Api.V1
 {
@@ -404,7 +404,7 @@ namespace TelegramDownloader.Controllers.Api.V1
                 await using (var fs = System.IO.File.Create(Path.Combine(stagingAbsolute, safeName)))
                     await file.CopyToAsync(fs);
 
-                var content = new FileManagerDirectoryContent
+                var content = new FsEntry
                 {
                     Name = safeName,
                     IsFile = true,
@@ -413,7 +413,7 @@ namespace TelegramDownloader.Controllers.Api.V1
                     Type = Path.GetExtension(safeName)
                 };
 
-                await _files.AddUploadFileFromServer(channelId, folder, new List<FileManagerDirectoryContent> { content });
+                await _files.AddUploadFileFromServer(channelId, folder, new List<FsEntry> { content });
                 return Accepted(ApiResult.Done($"Upload of {safeName} started"));
             }
             catch (Exception ex)
@@ -441,7 +441,7 @@ namespace TelegramDownloader.Controllers.Api.V1
 
             try
             {
-                var contents = new List<FileManagerDirectoryContent>();
+                var contents = new List<FsEntry>();
                 var skipped = new List<string>();
                 foreach (var id in request.FileIds.Distinct())
                 {

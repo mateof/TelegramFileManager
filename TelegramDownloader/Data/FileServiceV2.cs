@@ -4,11 +4,7 @@ using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.StaticFiles;
 using MongoDB.Driver;
 using Newtonsoft.Json;
-using Syncfusion.Blazor.FileManager;
-using Syncfusion.Blazor.Inputs;
 
-using Syncfusion.EJ2.FileManager.PhysicalFileProvider;
-using Syncfusion.EJ2.Linq;
 using System.Dynamic;
 using System.IO.Compression;
 using System.IO.Hashing;
@@ -20,6 +16,7 @@ using TelegramDownloader.Models.Persistence;
 using TelegramDownloader.Services;
 using TelegramDownloader.Services.Transfers;
 using TL;
+using TelegramDownloader.Models.FileSystem;
 
 namespace TelegramDownloader.Data
 {
@@ -36,12 +33,12 @@ namespace TelegramDownloader.Data
         {
         }
 
-        public override async Task downloadFile(string dbName, List<FileManagerDirectoryContent> files, string targetPath, string? collectionId = null, string? channelId = null)
+        public override async Task downloadFile(string dbName, List<FsEntry> files, string targetPath, string? collectionId = null, string? channelId = null)
         {
             NotificationModel nm = new NotificationModel();
             try
             {
-                foreach (FileManagerDirectoryContent file in files)
+                foreach (FsEntry file in files)
                 {
                     _logger.LogInformation($"Download files to {targetPath} :: {file.Name}");
                 }
@@ -64,7 +61,7 @@ namespace TelegramDownloader.Data
                         var filesInDir = collectionId == null ? await _db.getAllFilesInDirectoryPath(dbName, itemFile.FilterPath == "" ? "/" : itemFile.FilterPath + itemFile.Name + "/") : await _db.getAllFilesInDirectoryPath(dbName, itemFile.FilterPath == "" ? "/" : itemFile.FilterPath + itemFile.Name + "/", collectionId);
                         if (filesInDir.Count() > 0)
                         {
-                            await downloadFile(dbName, filesInDir.Select(x => x.toFileManagerContent()).ToList(), System.IO.Path.Combine(currentTargetPath, itemFile.Name).Replace("\\", "/"), collectionId, channelId);
+                            await downloadFile(dbName, filesInDir.Select(x => x.ToFsEntry()).ToList(), System.IO.Path.Combine(currentTargetPath, itemFile.Name).Replace("\\", "/"), collectionId, channelId);
                         }
 
                     }
@@ -100,7 +97,7 @@ namespace TelegramDownloader.Data
 
         }
 
-        public async Task downloadSplitFilesV2(FileManagerDirectoryContent itemFile, BsonFileManagerModel file, string currentFilePath, string dbName)
+        public async Task downloadSplitFilesV2(FsEntry itemFile, BsonFileManagerModel file, string currentFilePath, string dbName)
         {
             await DownloadSplitFileAsync(dbName, file, Path.Combine(currentFilePath, itemFile.Name));
         }
@@ -399,7 +396,7 @@ namespace TelegramDownloader.Data
             return parallel * 1024L * 1024L;
         }
 
-        public override async Task<int> PreloadFilesToTemp(string channelId, List<FileManagerDirectoryContent> items)
+        public override async Task<int> PreloadFilesToTemp(string channelId, List<FsEntry> items)
         {
             _logger.LogInformation("Starting preload files to temp V2 - ChannelId: {ChannelId}, ItemsCount: {Count}", channelId, items.Count);
             NotificationModel nm = new NotificationModel();
@@ -473,7 +470,7 @@ namespace TelegramDownloader.Data
             return preloadedCount;
         }
 
-        private async Task CollectFilesForPreloadV2(string channelId, List<FileManagerDirectoryContent> items, List<BsonFileManagerModel> filesToPreload)
+        private async Task CollectFilesForPreloadV2(string channelId, List<FsEntry> items, List<BsonFileManagerModel> filesToPreload)
         {
             foreach (var item in items)
             {

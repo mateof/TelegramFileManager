@@ -2,13 +2,11 @@
 using MongoDB.Bson;
 using TelegramDownloader.Models;
 using TelegramDownloader.Models.Persistence;
-using Syncfusion.Blazor.FileManager;
 using System.Text.RegularExpressions;
 using MongoDB.Driver.Linq;
 using System.Collections;
-using Syncfusion.Blazor.PivotView;
 using Microsoft.Extensions.Options;
-using Syncfusion.EJ2.Layouts;
+using TelegramDownloader.Models.FileSystem;
 
 namespace TelegramDownloader.Data.db
 {
@@ -753,7 +751,7 @@ namespace TelegramDownloader.Data.db
             return result != null;
         }
 
-        public async Task<BsonFileManagerModel> copyItem(string dbName, string sourceId, Syncfusion.Blazor.FileManager.FileManagerDirectoryContent target, string targetPath, bool isFile, string collectionName = "directory")
+        public async Task<BsonFileManagerModel> copyItem(string dbName, string sourceId, FsEntry target, string targetPath, bool isFile, string collectionName = "directory")
         {
             if (collectionName == null)
                 collectionName = "directory";
@@ -956,7 +954,7 @@ namespace TelegramDownloader.Data.db
 
 
 
-        public async Task<BsonFileManagerModel> toBasonFile(string Path, string FolderName, FileManagerDirectoryContent ParentFolder)
+        public async Task<BsonFileManagerModel> toBasonFile(string Path, string FolderName, FsEntry ParentFolder)
         {
             return new BsonFileManagerModel(Path, FolderName, ParentFolder);
         }

@@ -1,9 +1,8 @@
 #nullable disable
 using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.Bson;
-using Syncfusion.Blazor.FileManager;
 using TelegramDownloader.Data.db;
-using Syncfusion.EJ2.Linq;
+using TelegramDownloader.Models.FileSystem;
 using TL;
 using System.Text.Json.Serialization;
 using TelegramDownloader.Data;
@@ -63,7 +62,7 @@ namespace TelegramDownloader.Models
 
         }
 
-        public BsonFileManagerModel(string Path,string FolderName, FileManagerDirectoryContent parent)
+        public BsonFileManagerModel(string Path,string FolderName, FsEntry parent)
         {
             this.ParentId = parent.Id;
             this.CaseSensitive = false;
@@ -86,39 +85,10 @@ namespace TelegramDownloader.Models
             this.Type = "folder";
         }
 
-        public BsonFileManagerModel(Syncfusion.EJ2.FileManager.Base.FileManagerDirectoryContent fm)
+        /// <summary>The entry as the service layer exchanges it.</summary>
+        public FsEntry ToFsEntry()
         {
-            this.ParentId = fm.Data.FirstOrDefault()?.Id;
-            this.CaseSensitive = fm.CaseSensitive;
-            this.Name = fm.Name;
-            this.FilePath = fm.Path;
-            this.FilterId = fm.FilterId ?? (string.IsNullOrEmpty(fm.TargetData.FilterId) ? String.Concat(fm.TargetData.Id, "/") : String.Concat(System.IO.Path.Combine(fm.TargetData.FilterId, fm.TargetData.Id), "/"));
-            this.FilterPath = fm.FilterPath ?? (string.IsNullOrEmpty(fm.TargetData.FilterId) ? "/" : String.Concat(fm.TargetData.FilterPath, fm.TargetData.Name, "/"));
-            this.ShowHiddenItems = fm.ShowHiddenItems;
-            this.IsFile = fm.IsFile;
-            this.HasChild = true;
-            this.Size = fm.Size;
-            this.Type = fm.Type ?? "folder";
-        }
-
-        public BsonFileManagerModel(FileManagerDirectoryContent fm)
-        {
-            this.ParentId = fm.Data.FirstOrDefault()?.Id;
-            this.CaseSensitive = fm.CaseSensitive;
-            this.Name = fm.Name;
-            this.FilePath = fm.Path;
-            this.FilterId = fm.FilterId ?? (string.IsNullOrEmpty(fm.TargetData.FilterId) ? String.Concat(fm.TargetData.Id, "/") : String.Concat(System.IO.Path.Combine(fm.TargetData.FilterId, fm.TargetData.Id), "/"));
-            this.FilterPath = fm.FilterPath ?? (string.IsNullOrEmpty(fm.TargetData.FilterId) ? "/" : String.Concat(fm.TargetData.FilterPath, fm.TargetData.Name, "/"));
-            this.ShowHiddenItems = fm.ShowHiddenItems;
-            this.IsFile = fm.IsFile;
-            this.HasChild = true;
-            this.Size = fm.Size;
-            this.Type = fm.Type ?? "folder";
-        }
-
-        public Syncfusion.EJ2.FileManager.Base.FileManagerDirectoryContent toEJ2FileManagerContent()
-        {
-            return new Syncfusion.EJ2.FileManager.Base.FileManagerDirectoryContent()
+            return new FsEntry()
             {
                 Id = this.Id,
                 CaseSensitive = this.CaseSensitive,
@@ -136,29 +106,10 @@ namespace TelegramDownloader.Models
             };
         }
 
-        public FileManagerDirectoryContent toFileManagerContent()
+        /// <summary>The reduced shape copy/move operations answer with.</summary>
+        public FsEntry ToFsEntryInCopy()
         {
-            return new FileManagerDirectoryContent()
-            {
-                Id = this.Id,
-                CaseSensitive = this.CaseSensitive,
-                DateCreated = this.DateCreated,
-                DateModified = this.DateModified,
-                FilterId = this.FilterId,
-                FilterPath = this.FilterPath,
-                HasChild = this.HasChild,
-                IsFile = this.IsFile,
-                Name = this.Name,
-                ParentId = this.ParentId,
-                ShowHiddenItems = this.ShowHiddenItems,
-                Size = this.Size,
-                Type = this.Type
-            };
-        }
-
-        public FileManagerDirectoryContent toFileManagerContentInCopy()
-        {
-            return new FileManagerDirectoryContent()
+            return new FsEntry()
             {
                 DateCreated = this.DateCreated,
                 DateModified = this.DateModified,
@@ -168,21 +119,6 @@ namespace TelegramDownloader.Models
                 Size = this.Size,
                 Type = this.Type,
                 PreviousName = this.Name
-            };
-        }
-
-        public FileDetails toFileDetails()
-        {
-            return new FileDetails()
-            {
-                IsFile = this.IsFile,
-                Name = this.Name,
-                Size = this.Size.ToString(),
-                MultipleFiles = this.HasChild,
-                Created = this.DateCreated.ToLongDateString(),
-                Modified = this.DateModified.ToLongDateString(),
-                Location = this.FilterPath
-
             };
         }
     }

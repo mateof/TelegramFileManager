@@ -1,7 +1,7 @@
 ﻿using MongoDB.Driver;
-using Syncfusion.Blazor.FileManager;
 using TelegramDownloader.Models;
 using TelegramDownloader.Models.Persistence;
+using TelegramDownloader.Models.FileSystem;
 
 namespace TelegramDownloader.Data.db
 {
@@ -16,7 +16,7 @@ namespace TelegramDownloader.Data.db
         Task DeleteSharedInfo(string id, string dbName = DbService.SHARED_DB_NAME, string collection = "info");
         Task addBytesToFolder(string dbName, string folderId, long bytes, string collectionName = "directory", string? filterIdHint = null);
         Task checkAndSetDirectoryHasChild(string dbName, string id, string collectionName = "directory");
-        Task<BsonFileManagerModel> copyItem(string dbName, string sourceId, FileManagerDirectoryContent target, string targetPath, bool isFile, string collectionName = "directory");
+        Task<BsonFileManagerModel> copyItem(string dbName, string sourceId, FsEntry target, string targetPath, bool isFile, string collectionName = "directory");
         Task CreateDatabase(string dbName = "default", string collection = "directory", bool CreateDefaultEntry = true);
         Task<List<BsonFileManagerModel>> createEntry(string dbName, BsonFileManagerModel file, string collectionName = "directory", IClientSessionHandle? session = null);
         Task createEntries(string dbName, IReadOnlyList<BsonFileManagerModel> files, string collectionName = "directory");
@@ -69,7 +69,7 @@ namespace TelegramDownloader.Data.db
         Task<List<BsonFileManagerModel>> GetFilesByIds(string dbName, IEnumerable<string> ids, CancellationToken cancellationToken = default, string collectionName = "directory");
         Task setDirectoryHasChild(string dbName, string id, string collectionName = "directory", bool hasChild = true);
         Task subBytesToFolder(string dbName, string folderId, long bytes, string collectionName = "directory", string? filterIdHint = null);
-        Task<BsonFileManagerModel> toBasonFile(string Path, string FolderName, FileManagerDirectoryContent ParentFolder);
+        Task<BsonFileManagerModel> toBasonFile(string Path, string FolderName, FsEntry ParentFolder);
         void updateAllPathFiles(string dbName, string oldPath, string newPath, string collectionName = "directory");
         Task<BsonFileManagerModel> updateName(string dbName, string id, string newName, string oldName, bool isFile, string filePath, string collectionName = "directory");
 

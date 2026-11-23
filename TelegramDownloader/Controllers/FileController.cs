@@ -15,6 +15,7 @@ using System.Web;
 using TelegramDownloader.Data;
 using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
+using TelegramDownloader.Models.FileSystem;
 using TelegramDownloader.Services;
 using TL;
 
@@ -466,7 +467,7 @@ namespace TelegramDownloader.Controllers
                 if ((file == null) || (file != null && file.Length < dbFile.Size))
                 {
                     _logger.LogWarning("Stream Downloading file {fileName}", dbFile.Name);
-                    await _fs.downloadFile(idChannel, new List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> { dbFile.toFileManagerContent() }, path);
+                    await _fs.downloadFile(idChannel, new List<FsEntry> { dbFile.ToFsEntry() }, path);
                     Thread.Sleep(4000);
                     file = _fs.ExistFileIntempFolder(dbFile.Name);
                 }

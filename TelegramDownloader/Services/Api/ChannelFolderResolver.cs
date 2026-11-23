@@ -1,7 +1,7 @@
 using MongoDB.Driver;
-using Syncfusion.Blazor.FileManager;
 using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
+using TelegramDownloader.Models.FileSystem;
 
 namespace TelegramDownloader.Services.Api
 {
@@ -113,9 +113,9 @@ namespace TelegramDownloader.Services.Api
         }
 
         /// <summary>
-        /// Converts a stored entry into the Syncfusion shape the existing
+        /// Converts a stored entry into the <see cref="FsEntry"/> shape the
         /// <c>IFileService</c> mutation methods expect.
         /// </summary>
-        public static FileManagerDirectoryContent ToContent(BsonFileManagerModel m) => m.toFileManagerContent();
+        public static FsEntry ToContent(BsonFileManagerModel m) => m.ToFsEntry();
     }
 }

@@ -12,6 +12,7 @@ using System.Threading;
 using MongoDB.Bson.Serialization.Attributes;
 using TelegramDownloader.Models.Persistence;
 using TelegramDownloader.Services.Transfers;
+using TelegramDownloader.Models.FileSystem;
 
 namespace TelegramDownloader.Models
 {
@@ -35,7 +36,7 @@ namespace TelegramDownloader.Models
         public string id {  get; set; }
         public string channelId { get; set; }
         public bool isUpload {  get; set; }
-        public List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files { get; set; }
+        public List<FsEntry> files { get; set; }
         public Callbacks callbacks { get; set; }
         public string fromPath { get; set; }
         public string toPath { get; set; }
@@ -45,7 +46,7 @@ namespace TelegramDownloader.Models
         public long totalSize { get; set; }
         public long executedSize { get; set; }
         public Thread thread { get; set; }
-        public Syncfusion.Blazor.FileManager.FileManagerDirectoryContent? file {  get; set; }
+        public FsEntry? file {  get; set; }
         public int progress { get; set; }
         public  TransactionInfoService tis { get; set; }
 
