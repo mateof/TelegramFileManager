@@ -41,6 +41,13 @@ namespace TelegramDownloader.Services
         public ChannelRefreshProgress? Get(string channelId) =>
             _running.TryGetValue(channelId, out ChannelRefreshProgress? progress) ? progress : null;
 
+        /// <summary>A snapshot of every refresh in flight, ordered by channel id.</summary>
+        public IReadOnlyList<ChannelRefreshProgressSnapshot> Snapshots() =>
+            _running.Values
+                .Select(p => p.Snapshot())
+                .OrderBy(s => s.ChannelId, StringComparer.Ordinal)
+                .ToList();
+
         /// <summary>
         /// Asks the running refresh to stop; false when nothing runs. The entry
         /// is released by the refresh itself once it has unwound (after the

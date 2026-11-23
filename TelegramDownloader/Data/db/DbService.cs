@@ -2,13 +2,11 @@
 using MongoDB.Bson;
 using TelegramDownloader.Models;
 using TelegramDownloader.Models.Persistence;
-using Syncfusion.Blazor.FileManager;
 using System.Text.RegularExpressions;
 using MongoDB.Driver.Linq;
 using System.Collections;
-using Syncfusion.Blazor.PivotView;
 using Microsoft.Extensions.Options;
-using Syncfusion.EJ2.Layouts;
+using TelegramDownloader.Models.FileSystem;
 
 namespace TelegramDownloader.Data.db
 {
@@ -292,6 +290,25 @@ namespace TelegramDownloader.Data.db
         public async Task<GeneralConfig> LoadConfig()
         {
             return await (await getDatabase(CONFIG_DB_NAME).GetCollection<GeneralConfig>("config").FindAsync(Builders<GeneralConfig>.Filter.Where(x => x.type == "general"))).FirstOrDefaultAsync() ?? new GeneralConfig();
+        }
+
+        // Web authentication lives in its own collection of the config database:
+        // the Config page and the v1 config endpoint save whole (often stale)
+        // GeneralConfig documents, which must never overwrite or clear the password.
+        private const string WEB_AUTH_COLLECTION = "webauth";
+
+        public async Task<WebAuthSettings?> LoadWebAuth()
+        {
+            return await (await getDatabase(CONFIG_DB_NAME).GetCollection<WebAuthSettings>(WEB_AUTH_COLLECTION)
+                .FindAsync(Builders<WebAuthSettings>.Filter.Eq(x => x.Id, WebAuthSettings.DocumentId))).FirstOrDefaultAsync();
+        }
+
+        public async Task SaveWebAuth(WebAuthSettings settings)
+        {
+            settings.Id = WebAuthSettings.DocumentId;
+            await getDatabase(CONFIG_DB_NAME).GetCollection<WebAuthSettings>(WEB_AUTH_COLLECTION)
+                .ReplaceOneAsync(Builders<WebAuthSettings>.Filter.Eq(x => x.Id, WebAuthSettings.DocumentId), settings,
+                    new ReplaceOptions { IsUpsert = true });
         }
 
         public async Task<List<BsonFileManagerModel>> getAllDatabaseData(string dbName, string collectionName = "directory")
@@ -734,7 +751,7 @@ namespace TelegramDownloader.Data.db
             return result != null;
         }
 
-        public async Task<BsonFileManagerModel> copyItem(string dbName, string sourceId, Syncfusion.Blazor.FileManager.FileManagerDirectoryContent target, string targetPath, bool isFile, string collectionName = "directory")
+        public async Task<BsonFileManagerModel> copyItem(string dbName, string sourceId, FsEntry target, string targetPath, bool isFile, string collectionName = "directory")
         {
             if (collectionName == null)
                 collectionName = "directory";
@@ -937,7 +954,7 @@ namespace TelegramDownloader.Data.db
 
 
 
-        public async Task<BsonFileManagerModel> toBasonFile(string Path, string FolderName, FileManagerDirectoryContent ParentFolder)
+        public async Task<BsonFileManagerModel> toBasonFile(string Path, string FolderName, FsEntry ParentFolder)
         {
             return new BsonFileManagerModel(Path, FolderName, ParentFolder);
         }

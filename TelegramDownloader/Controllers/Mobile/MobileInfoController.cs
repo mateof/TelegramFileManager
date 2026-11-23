@@ -25,6 +25,16 @@ namespace TelegramDownloader.Controllers.Mobile
             "channels.refresh",      // POST /api/v1/channels/{id}/refresh
             "channels.refreshProgress", // GET  /api/v1/channels/{id}/refresh/progress, DELETE /api/v1/channels/{id}/refresh
             "stream.localTranscode", // GET  /api/mobile/stream/local/transcoded
+            "events.hub",            // SignalR /hubs/events
+            "search.v1",             // GET  /api/v1/search
+            "files.thumbnails",      // GET  /api/v1/channels/{id}/messages/{messageId}/thumbnail
+            "files.content",         // GET  /api/v1/channels/{id}/files/{fileId}/content|stream
+            "files.preload",         // POST /api/v1/channels/{id}/files/preload
+            "local.copyMove",        // POST /api/v1/local/copy, /api/v1/local/move
+            "shares.browse",         // collectionId on /api/v1/channels/{id}/files, .tfm upload on /api/v1/shares/import
+            "setup.write",           // POST /api/v1/system/setup...
+            "transfers.remove",      // DELETE /api/v1/transfers/{id}
+            "system.admin",          // restart, image-cache, orphaned-favorites, ffmpeg, version
         };
 
         private static readonly string ServerVersion = ResolveServerVersion();
@@ -42,6 +52,16 @@ namespace TelegramDownloader.Controllers.Mobile
         /// - `channels.refresh`: POST /api/v1/channels/{id}/refresh
         /// - `channels.refreshProgress`: GET /api/v1/channels/{id}/refresh/progress y DELETE /api/v1/channels/{id}/refresh (cancelar)
         /// - `stream.localTranscode`: GET /api/mobile/stream/local/transcoded
+        /// - `events.hub`: hub SignalR /hubs/events (notificaciones, refrescos, importaciones, sesión, métricas)
+        /// - `search.v1`: GET /api/v1/search
+        /// - `files.thumbnails`: GET /api/v1/channels/{id}/messages/{messageId}/thumbnail
+        /// - `files.content`: GET /api/v1/channels/{id}/files/{fileId}/content y .../stream
+        /// - `files.preload`: POST /api/v1/channels/{id}/files/preload
+        /// - `local.copyMove`: POST /api/v1/local/copy y /api/v1/local/move
+        /// - `shares.browse`: `collectionId` en /api/v1/channels/{id}/files e importación de `.tfm` en POST /api/v1/shares/import
+        /// - `setup.write`: POST /api/v1/system/setup, /test-mongo, /test-telegram, /complete
+        /// - `transfers.remove`: DELETE /api/v1/transfers/{id}
+        /// - `system.admin`: /api/v1/system/restart, image-cache, orphaned-favorites, ffmpeg y version
         ///
         /// Los servidores antiguos no tienen este endpoint: un **404** debe interpretarse
         /// como "sin funcionalidades opcionales". No accede a base de datos.

@@ -70,7 +70,19 @@ server serves at **`/swagger/api-v1/swagger.json`** (browsable at
 | POST | `/api/v1/channels/{channelId}/files/move` | ✓ | Move within the channel. |
 | POST | `/api/v1/channels/{channelId}/files/upload` | ✓ | Direct multipart upload to Telegram. |
 | GET | `/api/v1/channels/{channelId}/files/export` | ✓ | Export the index (JSON). |
-| POST | `/api/v1/channels/{channelId}/files/import` | ✓ | Import an index. |
+| POST | `/api/v1/channels/{channelId}/files/import` | ✓ | Import an index (returns `importId`; progress on `/hubs/events`). |
+| POST | `/api/v1/channels/{channelId}/files/preload` | ✓ | Download files into the server cache ahead of playback. |
+| GET | `/api/v1/channels/{channelId}/files/{fileId}/content` | ✓ | The bytes (`disposition=inline\|attachment`, `collectionId`), range-capable. |
+| GET | `/api/v1/channels/{channelId}/files/{fileId}/stream` | ✓ | Video playback, transcoded to MP4 when needed. |
+| GET | `/api/v1/channels/{channelId}/messages/{messageId}/thumbnail` | ✓ | JPEG thumbnail of a photo/video message (cached). |
+
+Browse, search, details and stats accept `collectionId` to read a shared collection.
+
+### Search
+
+| Method | Path | Sess. | Description |
+| --- | --- | :---: | --- |
+| GET | `/api/v1/search` | | Global name search in every channel index and the local storage (`q`, `filter`, `scope`, `limit`). |
 
 ### Transfers
 
@@ -98,6 +110,7 @@ server serves at **`/swagger/api-v1/swagger.json`** (browsable at
 | GET | `/api/v1/transfers/persisted` | | List persisted transfers. |
 | DELETE | `/api/v1/transfers/persisted/{internalId}` | | Delete one persisted transfer. |
 | DELETE | `/api/v1/transfers/persisted` | | Delete all persisted transfers. |
+| DELETE | `/api/v1/transfers/{id}` | | Remove one finished/queued entry from the lists (409 while running). |
 
 ### Local files
 
@@ -112,6 +125,8 @@ server serves at **`/swagger/api-v1/swagger.json`** (browsable at
 | GET | `/api/v1/local/download` | | Download a local file (range-capable). |
 | POST | `/api/v1/local/upload` | | Store an uploaded file locally. |
 | POST | `/api/v1/local/cache/clear` | | Empty the streaming cache. |
+| POST | `/api/v1/local/copy` | | Copy entries into a folder (`overwrite`). |
+| POST | `/api/v1/local/move` | | Move entries into a folder (`overwrite`). |
 
 ### Playlists
 
@@ -134,7 +149,7 @@ server serves at **`/swagger/api-v1/swagger.json`** (browsable at
 | GET | `/api/v1/shares` | ✓ | List shared collections. |
 | GET | `/api/v1/shares/{id}` | ✓ | One shared collection. |
 | GET | `/api/v1/shares/export` | ✓ | Build a share payload. |
-| POST | `/api/v1/shares/import` | ✓ | Import a share. |
+| POST | `/api/v1/shares/import` | ✓ | Import a share (JSON or `.tfm` multipart; returns `importId`). |
 | DELETE | `/api/v1/shares/{id}` | ✓ | Delete a shared collection. |
 | POST | `/api/v1/shares/strm` | ✓ | Export `.strm` files. |
 
@@ -170,6 +185,7 @@ server serves at **`/swagger/api-v1/swagger.json`** (browsable at
 | POST | `/api/v1/library/items/{id}/watched` | | Mark an item (or a season) watched. |
 | DELETE | `/api/v1/library/items/{id}/watched` | | Mark an item (or a season) not watched. |
 | GET | `/api/v1/library/watch/history` | | Watched files, most recent first. |
+| GET | `/api/v1/library/channel-folders` | | Folder paths of a channel (`channelId`), for the folder rules picker. |
 
 ### Configuration
 
@@ -194,6 +210,17 @@ server serves at **`/swagger/api-v1/swagger.json`** (browsable at
 | GET | `/api/v1/system/databases/{channelId}/analysis` | | Folder-path integrity check. |
 | POST | `/api/v1/system/databases/{channelId}/repair` | | Repair folder paths. |
 | POST | `/api/v1/system/maintenance/cleanup-tasks` | | Drop stale persisted tasks. |
+| POST | `/api/v1/system/setup/test-mongo` | | Wizard: test a MongoDB connection (409 once set up). |
+| POST | `/api/v1/system/setup/test-telegram` | | Wizard: validate Telegram API id/hash (409 once set up). |
+| POST | `/api/v1/system/setup` | | Wizard: save MongoDB and/or Telegram settings (409 once set up). |
+| POST | `/api/v1/system/setup/complete` | | Wizard: mark the setup as finished (409 once set up). |
+| POST | `/api/v1/system/restart` | | Graceful stop; Docker/systemd restarts it. |
+| GET | `/api/v1/system/image-cache` | | Size of the avatar + thumbnail caches. |
+| DELETE | `/api/v1/system/image-cache` | | Empty them. |
+| GET | `/api/v1/system/orphaned-favorites` | ✓ | Favourite channels no longer reachable. |
+| POST | `/api/v1/system/orphaned-favorites` | ✓ | Remove them. |
+| GET | `/api/v1/system/ffmpeg` | | FFmpeg availability and version. |
+| GET | `/api/v1/system/version` | | Current version vs latest GitHub release/dev build. |
 
 ### SignalR hub `/hubs/transfers`
 
@@ -207,6 +234,20 @@ server serves at **`/swagger/api-v1/swagger.json`** (browsable at
 | Client → server | `GetSpeedHistory()` | → `SpeedHistoryDto` |
 | Client → server | `MuteSnapshots()` / `UnmuteSnapshots()` | – |
 | Client → server | `MuteSpeedHistory()` / `UnmuteSpeedHistory()` | – |
+
+### SignalR hub `/hubs/events`
+
+| Direction | Name | Payload |
+| --- | --- | --- |
+| Server → client | `Notification` | `NotificationEventDto` |
+| Server → client | `ChannelRefreshed` | `ChannelRefreshedEventDto` |
+| Server → client | `ChannelRefreshProgress` | `ChannelRefreshProgressEventDto` |
+| Server → client | `ImportProgress` | `ImportProgressEventDto` |
+| Server → client | `AuthState` | `AuthStateEventDto` |
+| Server → client | `LibraryScan` | `LibraryScanEventDto` |
+| Server → client | `Metrics` | `SystemMetricsDto` (subscribers only) |
+| Client → server | `GetAuthState()` | → `AuthStateEventDto` |
+| Client → server | `SubscribeMetrics()` / `UnsubscribeMetrics()` | – |
 
 ---
 
@@ -261,7 +302,11 @@ interface ApiFileDto {
   size: number; sizeText: string; type: string; category: string;
   dateCreated: string; dateModified: string;
   messageId?: number; isSplit: boolean; md5Hash?: string; xxHash?: string;
-  streamUrl?: string; downloadUrl?: string;
+  streamUrl?: string; downloadUrl?: string;          // legacy URLs, kept for old clients
+  contentUrl?: string;          // v1, inline, range-capable
+  contentDownloadUrl?: string;  // v1, Content-Disposition: attachment
+  playbackUrl?: string;         // v1, audio/video only (transcoding stream when needed)
+  thumbnailUrl?: string;        // v1, photos/videos backed by one message
 }
 interface ApiFolderContentsDto {
   channelId?: string; currentPath: string; currentFolderId?: string;
@@ -350,9 +395,14 @@ interface SharedCollectionDto { id: string; name?: string; description?: string;
 | `POST /local/folders` | `{ path: string; name: string }` |
 | `POST /local/rename` | `{ path: string; newName: string }` |
 | `POST /local/delete` | `{ paths: string[] }` |
+| `POST /local/copy` · `/local/move` | `{ paths: string[]; targetPath: string; overwrite?: boolean }` |
+| `POST …/files/preload` | `{ fileIds: string[] }` |
+| `POST /system/setup/test-mongo` | `{ connectionString: string }` |
+| `POST /system/setup/test-telegram` | `{ apiId: string; apiHash: string }` |
+| `POST /system/setup` | `{ mongoConnectionString?: string; apiId?: string; apiHash?: string }` |
 | `POST /playlists` · `PUT /playlists/{id}` | `PlaylistModel` |
 | `POST /playlists/{id}/tracks` | `PlaylistTrackModel` |
 | `PUT /playlists/{id}/tracks/order` | `string[]` (file ids in order) |
-| `POST /shares/import` | `{ share: ShareFilesModel }` |
+| `POST /shares/import` | `{ share: ShareFilesModel }` or multipart `file` (`.tfm`) |
 | `POST /shares/strm` | `{ path: string; host?: string; destinationFolder?: string }` |
 | `PATCH /config` | `UpdateConfigRequest` (all fields optional) |

@@ -1,0 +1,42 @@
+// Web login, password setup and Telegram login screens
+const auth: Record<string, string> = {
+  'Connect your Telegram account': 'Conecta tu cuenta de Telegram',
+  'The server uses your account to read and upload the files of your channels.': 'El servidor usa tu cuenta para leer y subir los ficheros de tus canales.',
+  'Login method': 'Método de inicio de sesión',
+  'QR code': 'Código QR',
+  'Phone number': 'Número de teléfono',
+  Phone: 'Teléfono',
+  'Verification code': 'Código de verificación',
+  'Telegram sent a code to your other sessions (or by SMS) for {phone}.': 'Telegram ha enviado un código a tus otras sesiones (o por SMS) para {phone}.',
+  'Two-step verification password': 'Contraseña de verificación en dos pasos',
+  'Your account has a cloud password. Enter it to finish.': 'Tu cuenta tiene contraseña en la nube. Escríbela para terminar.',
+  'International format, e.g. +34 600 000 000': 'Formato internacional, p. ej. +34 600 000 000',
+  'Send code': 'Enviar código',
+  'The QR session ended.': 'La sesión QR ha terminado.',
+  'Generate a new code': 'Generar un código nuevo',
+  'QR code to sign in with Telegram': 'Código QR para iniciar sesión con Telegram',
+  'Open Telegram on your phone.': 'Abre Telegram en tu móvil.',
+  'Go to Settings → Devices → Link Desktop Device.': 'Ve a Ajustes → Dispositivos → Vincular dispositivo de escritorio.',
+  'Point the camera at this code.': 'Apunta la cámara a este código.',
+  'Waiting for confirmation...': 'Esperando confirmación...',
+  'Hide password': 'Ocultar contraseña',
+  'Show password': 'Mostrar contraseña',
+  'Wrong password': 'Contraseña incorrecta',
+  'Too many attempts. Wait a moment and try again.': 'Demasiados intentos. Espera un momento y vuelve a probar.',
+  'Welcome back': 'Hola de nuevo',
+  'Enter the password of this server to continue.': 'Escribe la contraseña de este servidor para continuar.',
+  'Password': 'Contraseña',
+  'Keep me signed in on this device': 'Mantener la sesión iniciada en este dispositivo',
+  'Sign in': 'Iniciar sesión',
+  'Protect this server': 'Protege este servidor',
+  'Choose a password for the web interface. Apps keep using the API key.': 'Elige una contraseña para la interfaz web. Las apps siguen usando la API key.',
+  'New password': 'Contraseña nueva',
+  'Use at least {count} characters': 'Usa al menos {count} caracteres',
+  'Repeat the password': 'Repite la contraseña',
+  'The passwords do not match': 'Las contraseñas no coinciden',
+  'Save and continue': 'Guardar y continuar',
+  'You can allow access without password from the local network later, in Settings → Security.':
+    'Más adelante puedes permitir el acceso sin contraseña desde la red local, en Ajustes → Seguridad.'
+};
+
+export default auth;

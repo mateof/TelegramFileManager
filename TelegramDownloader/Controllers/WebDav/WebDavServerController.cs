@@ -3,13 +3,13 @@ using System.Text;
 
 using Microsoft.AspNetCore.Mvc;
 
-using Syncfusion.Blazor.FileManager;
 
 using TelegramDownloader.Data;
 using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
 using TelegramDownloader.Services;
 using TelegramDownloader.Services.Api;
+using TelegramDownloader.Models.FileSystem;
 
 namespace TelegramDownloader.Controllers.WebDav
 {
@@ -348,7 +348,7 @@ namespace TelegramDownloader.Controllers.WebDav
                     return StatusCode(existing != null ? StatusCodes.Status204NoContent : StatusCodes.Status201Created);
                 }
 
-                var content = new FileManagerDirectoryContent
+                var content = new FsEntry
                 {
                     Name = fileName,
                     IsFile = true,
@@ -360,7 +360,7 @@ namespace TelegramDownloader.Controllers.WebDav
                 // Pass our own task model so we can await THIS upload (no LastOrDefault race).
                 var task = new InfoDownloadTaksModel();
                 await _files.AddUploadFileFromServer(channel, folder,
-                    new List<FileManagerDirectoryContent> { content }, task);
+                    new List<FsEntry> { content }, task);
 
                 var terminal = await WaitForCompletionAsync(task, HttpContext.RequestAborted);
 

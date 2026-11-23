@@ -3,13 +3,14 @@
 @using TelegramDownloader.Models
 @using TelegramDownloader.Services
 @using TelegramDownloader.Shared
-@using TelegramDownloader.Services.Transfers
 @using TelegramDownloader.Services.Upload
+@using TelegramDownloader.Services.Transfers
 
 @inject IFileService fs
 @inject ITelegramService ts
 @inject IJSRuntime JSRuntime
 @inject ILogger<UploadToTelegramModal> Logger
+@using TelegramDownloader.Shared.SyncfusionAdapters
 
 <style>
     /* Upload to Telegram Modal Overlay */
@@ -677,7 +678,7 @@
         StateHasChanged();
         try
         {
-            var result = await fs.PreviewUploadFromServer(id, target, fileList, findDuplicates, 0, token);
+            var result = await fs.SfPreviewUploadFromServer(id, target, fileList, findDuplicates, 0, token);
             if (token.IsCancellationRequested) return;
             preview = result;
             previewTarget = target;
@@ -718,7 +719,7 @@
         }
         // Not awaited so the modal closes at once (counting a large folder takes
         // a while); a failure to queue the upload is logged instead of lost.
-        fs.AddUploadFileFromServer(id, ddtree.selectedNode == null ? null : ddtree.selectedNode.FirstOrDefault(), fileList)
+        fs.SfAddUploadFileFromServer(id, ddtree.selectedNode == null ? null : ddtree.selectedNode.FirstOrDefault(), fileList)
             .Observe(Logger, "queue upload from server");
         Close();
     }

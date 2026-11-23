@@ -1,5 +1,5 @@
-using Syncfusion.Blazor.FileManager;
 using TelegramDownloader.Models;
+using TelegramDownloader.Models.FileSystem;
 
 namespace TelegramDownloader.Services.Upload
 {
@@ -138,7 +138,7 @@ namespace TelegramDownloader.Services.Upload
         public required Func<string, CancellationToken, Task<IEnumerable<BsonFileManagerModel>>> LoadDestinationChildren { get; init; }
 
         /// <summary>Local content of a folder, relative path, as the upload lists it.</summary>
-        public required Func<string, List<FileManagerDirectoryContent>> ListLocalFolder { get; init; }
+        public required Func<string, List<FsEntry>> ListLocalFolder { get; init; }
 
         /// <summary>Real length of a local file (relative path), null when it is gone.</summary>
         public Func<string, long?>? LocalFileLength { get; init; }
@@ -164,7 +164,7 @@ namespace TelegramDownloader.Services.Upload
         /// <param name="cancellationToken">Stops the walk.</param>
         public static async Task<UploadPreviewResult> PlanAsync(
             string currentPath,
-            IReadOnlyList<FileManagerDirectoryContent> files,
+            IReadOnlyList<FsEntry> files,
             UploadPlanSource source,
             int maxItems = DefaultMaxItems,
             List<UploadPreviewItem>? filesToUpload = null,
@@ -179,7 +179,7 @@ namespace TelegramDownloader.Services.Upload
 
         private static async Task PlanFolder(
             string currentPath,
-            IReadOnlyList<FileManagerDirectoryContent> files,
+            IReadOnlyList<FsEntry> files,
             UploadPlanSource source,
             UploadDestinationCache cache,
             UploadPreviewResult result,

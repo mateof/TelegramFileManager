@@ -10,7 +10,10 @@ namespace TelegramDownloader.Controllers.Api.V1
     /// persistence and the WebDAV bridge.
     ///
     /// Settings are global and shared with the web UI: changing them here
-    /// changes them everywhere.
+    /// changes them everywhere. Secrets are never returned: the API key comes
+    /// back masked and the WebDAV password only as <c>webDavPasswordSet</c>.
+    /// Changing <c>mobileApiKey</c> takes effect on the next request, so the
+    /// caller must switch to the new key right away.
     /// </summary>
     [Route("api/v1/config")]
     [Tags("Configuration")]
@@ -90,6 +93,25 @@ namespace TelegramDownloader.Controllers.Api.V1
                 if (request.MultiConnectionPartSizeKB.HasValue) c.MultiConnectionPartSizeKB = request.MultiConnectionPartSizeKB.Value;
                 if (request.MultiConnectionBlockSizeMB.HasValue) c.MultiConnectionBlockSizeMB = Math.Clamp(request.MultiConnectionBlockSizeMB.Value, 1, 16);
                 if (request.MultiConnectionMinFileSizeMB.HasValue) c.MultiConnectionMinFileSizeMB = request.MultiConnectionMinFileSizeMB.Value;
+
+                if (request.UseMobileFileManagerAlways.HasValue) c.UseMobileFileManagerAlways = request.UseMobileFileManagerAlways.Value;
+                if (request.HasFileManagerVirtualScroll.HasValue) c.hasFileManagerVirtualScroll = request.HasFileManagerVirtualScroll.Value;
+                if (request.DefaultWebUi != null)
+                {
+                    var ui = request.DefaultWebUi.Trim();
+                    if (!WebUiMode.IsValid(ui))
+                        return BadRequestResult("defaultWebUi must be classic or app");
+                    c.DefaultWebUi = WebUiMode.Normalize(ui);
+                }
+                if (request.MobileApiKey != null)
+                {
+                    var key = request.MobileApiKey.Trim();
+                    if (key.Length > 0 && key.Length < 8)
+                        return BadRequestResult("mobileApiKey must have at least 8 characters");
+                    c.MobileApiKey = key.Length == 0 ? null : key;
+                }
+                if (request.WebDavUser != null) c.WebDavUser = string.IsNullOrWhiteSpace(request.WebDavUser) ? null : request.WebDavUser.Trim();
+                if (request.WebDavPassword != null) c.WebDavPassword = request.WebDavPassword.Length == 0 ? null : request.WebDavPassword;
 
                 if (request.LibraryEnabled.HasValue) c.LibraryEnabled = request.LibraryEnabled.Value;
                 if (request.LibraryLanguage != null) c.LibraryLanguage = string.IsNullOrWhiteSpace(request.LibraryLanguage) ? "en-US" : request.LibraryLanguage.Trim();

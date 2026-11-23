@@ -1,6 +1,7 @@
 #nullable disable
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
+using TelegramDownloader.Models.FileSystem;
 
 namespace TelegramDownloader.Models.Persistence
 {
@@ -81,7 +82,7 @@ namespace TelegramDownloader.Models.Persistence
 
     /// <summary>
     /// One item selected for a batch upload, enough to rebuild the
-    /// FileManagerDirectoryContent the upload pipeline takes.
+    /// FsEntry the upload pipeline takes.
     /// </summary>
     public class PersistedSourceItem
     {
@@ -249,7 +250,7 @@ namespace TelegramDownloader.Models.Persistence
                 CreationDate = idt.creationDate,
                 LastUpdated = DateTime.Now,
                 LastError = idt.LastError,
-                SourceItems = (idt.files ?? new List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>())
+                SourceItems = (idt.files ?? new List<FsEntry>())
                     .Select(f => new PersistedSourceItem
                     {
                         Name = f.Name,
@@ -265,10 +266,10 @@ namespace TelegramDownloader.Models.Persistence
         }
 
         /// <summary>Rebuilds the items of a batch upload.</summary>
-        public static List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> ToSourceContents(IEnumerable<PersistedSourceItem> items)
+        public static List<FsEntry> ToSourceContents(IEnumerable<PersistedSourceItem> items)
         {
             return (items ?? Enumerable.Empty<PersistedSourceItem>())
-                .Select(i => new Syncfusion.Blazor.FileManager.FileManagerDirectoryContent
+                .Select(i => new FsEntry
                 {
                     Name = i.Name,
                     FilterPath = i.FilterPath,

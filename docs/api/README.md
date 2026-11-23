@@ -14,6 +14,7 @@ This API lives side by side with the app's existing surfaces:
 | **API v1** (this document) | `/api/v1` | Full-featured, versioned API for app clients. |
 | Legacy mobile API | `/api/mobile` | The narrower API the current audio player uses. Untouched. |
 | Web UI | `/` | The Blazor Server application. |
+| New web app | `/app` | The React SPA (served from `wwwroot/app`, built from `ClientApp`). |
 
 ---
 
@@ -26,7 +27,8 @@ This API lives side by side with the app's existing surfaces:
 | [channels.md](channels.md) | Listing chats, folders, favourites, creating/leaving channels, indexing (refresh), message history, avatars, invitations. |
 | [files.md](files.md) | Browsing, searching, folder/rename/delete/copy/move, direct upload, export/import of a channel index. |
 | [transfers.md](transfers.md) | Downloads, uploads, message downloads, queue control, persisted tasks. The heart of the API. |
-| [signalr.md](signalr.md) | The `/hubs/transfers` real-time hub: messages, client methods, reconnection, sample clients. |
+| [signalr.md](signalr.md) | The `/hubs/transfers` and `/hubs/events` real-time hubs: messages, client methods, reconnection, sample clients. |
+| [search.md](search.md) | Global name search across every channel and the local storage. |
 | [local-files.md](local-files.md) | Browsing and managing the server's local storage, the streaming cache. |
 | [playlists.md](playlists.md) | Playlists mixing Telegram and local tracks, reordering, bulk download. |
 | [shares.md](shares.md) | Sharing a channel folder and importing a share, `.strm` export for media servers. |

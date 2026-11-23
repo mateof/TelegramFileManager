@@ -1,5 +1,4 @@
 using Microsoft.AspNetCore.Mvc;
-using Syncfusion.Blazor.FileManager;
 using TelegramDownloader.Data;
 using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
@@ -7,6 +6,7 @@ using TelegramDownloader.Models.Api;
 using TelegramDownloader.Services;
 using TelegramDownloader.Services.Api;
 using TelegramDownloader.Services.Upload;
+using TelegramDownloader.Models.FileSystem;
 
 namespace TelegramDownloader.Controllers.Api.V1
 {
@@ -156,7 +156,7 @@ namespace TelegramDownloader.Controllers.Api.V1
                     ? request.ChannelId
                     : DbService.SHARED_DB_NAME;
 
-                var contents = new List<FileManagerDirectoryContent>();
+                var contents = new List<FsEntry>();
                 var skipped = new List<string>();
 
                 foreach (var id in request.FileIds)
@@ -166,7 +166,7 @@ namespace TelegramDownloader.Controllers.Api.V1
                         : await _db.getFileById(dbName, id, request.SharedCollectionId);
 
                     if (entry == null) skipped.Add(id);
-                    else contents.Add(entry.toFileManagerContent());
+                    else contents.Add(entry.ToFsEntry());
                 }
 
                 if (contents.Count == 0)
@@ -439,6 +439,44 @@ namespace TelegramDownloader.Controllers.Api.V1
             return BadRequestResult("Only downloads and batch tasks can be retried", ApiErrorCodes.NotSupported);
         }
 
+        /// <summary>Removes one entry from the transfer lists ("remove from list").</summary>
+        /// <remarks>
+        /// For finished entries (completed, failed, cancelled), paused ones and
+        /// queued ones (which leave the queue without starting). A running
+        /// transfer answers <c>409</c>: cancel it first. Nothing is deleted
+        /// from disk or from Telegram, and persisted copies are not touched.
+        /// </remarks>
+        [HttpDelete("{id}")]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status409Conflict)]
+        public IActionResult Remove(string id)
+        {
+            if (!TransferSnapshotBuilder.TryFind(_tis, id, out var download, out var upload, out var task))
+                return NotFoundResult("Transfer not found", ApiErrorCodes.TaskNotFound);
+
+            var state = download?.state ?? upload?.state ?? task!.state;
+            if (!TransferSnapshotBuilder.CanRemove(state))
+                return ConflictResult("The transfer is running; cancel it before removing it");
+
+            if (download != null)
+            {
+                if (_tis.pendingDownloadModels.Contains(download)) _tis.deletePendingDownloadInList(download);
+                if (_tis.downloadModels.Contains(download)) _tis.deleteDownloadInList(download);
+            }
+            else if (upload != null)
+            {
+                if (_tis.pendingUploadModels.Contains(upload)) _tis.deletePendingUploadInList(upload);
+                if (_tis.uploadModels.Contains(upload)) _tis.deleteUploadInList(upload);
+            }
+            else
+            {
+                _tis.deleteInfoDownloadTaskFromList(task!);
+            }
+
+            return OkEmpty("Transfer removed from the list");
+        }
+
         /// <summary>Removes finished entries (completed, cancelled and failed) from a list.</summary>
         /// <param name="scope"><c>downloads</c>, <c>uploads</c>, <c>tasks</c> or <c>all</c>.</param>
         /// <param name="states">
@@ -653,9 +691,9 @@ namespace TelegramDownloader.Controllers.Api.V1
         /// Resolves the requested local paths the way the upload does; shared by
         /// the upload and its preview so both see the same items.
         /// </summary>
-        private static (List<FileManagerDirectoryContent> Contents, List<string> Missing) BuildLocalContents(IEnumerable<string> relativePaths)
+        private static (List<FsEntry> Contents, List<string> Missing) BuildLocalContents(IEnumerable<string> relativePaths)
         {
-            var contents = new List<FileManagerDirectoryContent>();
+            var contents = new List<FsEntry>();
             var missing = new List<string>();
             foreach (var relative in relativePaths)
             {
@@ -666,7 +704,7 @@ namespace TelegramDownloader.Controllers.Api.V1
             return (contents, missing);
         }
 
-        private static FileManagerDirectoryContent? BuildLocalContent(string relativePath)
+        private static FsEntry? BuildLocalContent(string relativePath)
         {
             if (string.IsNullOrWhiteSpace(relativePath)) return null;
 
@@ -684,7 +722,7 @@ namespace TelegramDownloader.Controllers.Api.V1
             if (System.IO.File.Exists(absolute))
             {
                 var info = new System.IO.FileInfo(absolute);
-                return new FileManagerDirectoryContent
+                return new FsEntry
                 {
                     Name = name,
                     IsFile = true,
@@ -699,7 +737,7 @@ namespace TelegramDownloader.Controllers.Api.V1
             if (Directory.Exists(absolute))
             {
                 var info = new DirectoryInfo(absolute);
-                return new FileManagerDirectoryContent
+                return new FsEntry
                 {
                     Name = name,
                     IsFile = false,

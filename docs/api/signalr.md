@@ -3,12 +3,16 @@
 Download and upload progress is streamed over a **SignalR hub** so clients never
 have to poll. This is the recommended way to keep a transfer screen live.
 
+Two hubs exist: `/hubs/transfers` (this first part) for transfers, and
+[`/hubs/events`](#application-events-hub-hubsevents) for notifications, refresh
+and import progress, session state, library scans and metrics.
+
 ```
 Hub URL: /hubs/transfers
 Protocol: SignalR (WebSockets, with automatic fallback to SSE / long polling)
 ```
 
-`GET /api/v1/system/info` returns the hub path in `transfersHubPath`, so a client
+`GET /api/v1/system/info` returns the hub paths in `transfersHubPath` and `eventsHubPath`, so a client
 can discover it instead of hard-coding.
 
 ## Authentication
@@ -24,6 +28,11 @@ custom header on the WebSocket handshake, so pass the key as the standard
 The official SignalR clients do this for you via the `accessTokenFactory`
 option (see the samples below). When no API key is configured on the server, the
 hub is open.
+
+Browsers of the web app connect with the session cookie instead (same origin;
+see [Web session](authentication.md#web-session)) and must send
+`X-Requested-With: tfm` through the `headers` option of `withUrl`, because the
+negotiate and long-polling requests are POSTs.
 
 ## Server → client messages
 
@@ -151,5 +160,105 @@ call `GetSnapshot()` after reconnecting.
 | A live transfers screen | The hub. |
 | A status badge in the background | `TransferSummary` on the hub (or `MuteSnapshots()` to reduce traffic). |
 | No WebSocket support at all (locked-down proxy) | SignalR falls back to SSE/long polling automatically; if even that is blocked, poll `GET /api/v1/transfers/summary`. |
+
+---
+
+# Application events hub (`/hubs/events`)
+
+A second hub carries everything that is not a transfer: the toasts of the web
+UI, channel refresh progress and results, import progress, the Telegram session
+state, the media library scan and, on demand, system metrics. The new web app
+(`/app`) uses it for its notifications and live badges.
+
+```
+Hub URL: /hubs/events
+Protocol: SignalR (WebSockets, with automatic fallback to SSE / long polling)
+Authentication: exactly like /hubs/transfers (same middleware, same API key / session)
+```
+
+All messages are sent to every connected client, except `Metrics` (subscribers
+only). Payloads are camelCase JSON.
+
+## Server → client messages
+
+| Message | Payload | When |
+| --- | --- | --- |
+| `Notification` | `NotificationEventDto` | Whenever the server raises a web UI toast (download started/completed, upload completed, preload, playlist download, errors...). Same filter as the web toasts: sent when `shouldNotify` is enabled in the configuration, or when the toast is forced. |
+| `ChannelRefreshed` | `ChannelRefreshedEventDto` | A channel refresh ended: success, cancel or failure (see `result.canceled` / `result.failed`). |
+| `ChannelRefreshProgress` | `ChannelRefreshProgressEventDto` | Every second while a refresh runs (at most 1/s per channel), and once on connect for each refresh in flight. |
+| `ImportProgress` | `ImportProgressEventDto` | Progress of an import started through `POST /api/v1/channels/{id}/files/import` (`kind: index`) or `POST /api/v1/shares/import` (`kind: share`). At most 4 per second per import; the first (`Starting`) and the last (`done: true`) are always sent. |
+| `AuthState` | `AuthStateEventDto` | On connect, and whenever the Telegram session state changes (sign-in is pushed immediately, sign-out within a second). |
+| `LibraryScan` | `LibraryScanEventDto` | Every second while a media library scan runs, once when it ends (`running: false`), and on connect when one is running. |
+| `Metrics` | `SystemMetricsDto` | Every 2 seconds, only to connections that called `SubscribeMetrics()`. One sample is sent right after subscribing. |
+
+```ts
+interface NotificationEventDto {
+  level: "info" | "success" | "warning" | "error";
+  title?: string;        // heading, when the server gave one
+  message: string;       // plain text (HTML is stripped)
+  at: string;            // ISO date, UTC
+}
+
+interface ChannelRefreshedEventDto {
+  channelId: string;
+  result: ApiChannelRefreshResultDto;   // = GET /api/v1/channels/{id}/refresh/result
+}
+
+interface ChannelRefreshProgressEventDto {
+  channelId: string;
+  progress: ApiChannelRefreshProgressDto; // = GET /api/v1/channels/{id}/refresh/progress
+}
+
+interface ImportProgressEventDto {
+  id: string;            // importId returned by the endpoint that started it
+  kind: "index" | "share";
+  percent: number;       // 0-100
+  message: string;       // "Starting", "120/480 items", "Completed", "Failed"
+  total: number;
+  completed: number;
+  done: boolean;         // last message of this import
+  error?: string;        // set when the import failed
+}
+
+interface AuthStateEventDto { telegramLoggedIn: boolean; }
+
+interface LibraryScanEventDto {
+  running: boolean;
+  progress?: ApiLibraryScanStateDto;    // = GET /api/v1/library/scan
+}
+```
+
+`SystemMetricsDto` is the payload of `GET /api/v1/system/metrics`.
+
+## Client → server methods
+
+| Method | Returns | Purpose |
+| --- | --- | --- |
+| `GetAuthState()` | `AuthStateEventDto` | Current Telegram session state on demand. |
+| `SubscribeMetrics()` | – | Start receiving `Metrics`. The server only samples CPU/memory/disk while at least one connection is subscribed. |
+| `UnsubscribeMetrics()` | – | Stop receiving `Metrics` (disconnecting does the same). |
+
+## Example
+
+```ts
+const events = new signalR.HubConnectionBuilder()
+  .withUrl(`${BASE}/hubs/events`, { accessTokenFactory: () => API_KEY })
+  .withAutomaticReconnect()
+  .build();
+
+events.on("Notification", (n) => toast(n.level, n.title, n.message));
+events.on("ChannelRefreshProgress", ({ channelId, progress }) => setRefreshing(channelId, progress));
+events.on("ChannelRefreshed", ({ channelId, result }) => refreshDone(channelId, result));
+events.on("ImportProgress", (p) => setImport(p.id, p));
+events.on("AuthState", ({ telegramLoggedIn }) => setLoggedIn(telegramLoggedIn));
+
+await events.start();
+// On the system page only:
+events.on("Metrics", (m) => chart.push(m));
+await events.invoke("SubscribeMetrics");
+```
+
+On reconnect the hub sends `AuthState` (and any running refresh/scan) again, so
+the client state is rebuilt without extra calls.
 
 Next: [local-files.md](local-files.md).

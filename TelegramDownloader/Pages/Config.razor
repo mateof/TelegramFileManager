@@ -13,6 +13,8 @@
 @inject ITelegramService ts
 @inject TelegramDownloader.Services.Library.LibraryScanService libraryScanService
 @inject ILibraryDbService libraryDb
+@inject TelegramDownloader.Services.WebAuth.IWebAuthService WebAuth
+@inject IJSRuntime JS
 @using TelegramDownloader.Shared
 
 <style>
@@ -517,6 +519,33 @@
                         </div>
                         <div class="config-item-control">
                             <InputCheckbox @bind-Value="Model!.CheckHash" class="form-check-input config-switch" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Web Interface Section -->
+            <div class="config-section">
+                <div class="config-section-header">
+                    <i class="bi bi-window-stack"></i>
+                    <span>Web Interface</span>
+                </div>
+                <div class="config-section-body">
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-stars"></i>
+                                Open the new interface by default
+                            </div>
+                            <div class="config-item-description">
+                                Browsers that open the server address go to the new web interface (<a href="/app/">/app</a>) instead of this one.
+                                This interface keeps working: open <code>/?ui=classic</code> (or "Classic UI" in the new interface) and that browser keeps getting it.
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <input type="checkbox" class="form-check-input config-switch"
+                                   checked="@(WebUiMode.Normalize(Model!.DefaultWebUi) == WebUiMode.App)"
+                                   @onchange="@(e => Model!.DefaultWebUi = e.Value is true ? WebUiMode.App : WebUiMode.Classic)" />
                         </div>
                     </div>
                 </div>
@@ -1040,6 +1069,111 @@
                 </div>
             </div>
 
+            <!-- Web Security Section (saved on its own, not with the Save button) -->
+            <div class="config-section">
+                <div class="config-section-header">
+                    <i class="bi bi-shield-check"></i>
+                    <span>Web Security</span>
+                </div>
+                <div class="config-section-body">
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi @(WebAuth.PasswordSet ? "bi-lock-fill" : "bi-unlock")"></i>
+                                Web password
+                                <span class="badge @(WebAuth.PasswordSet ? "bg-success" : "bg-secondary") ms-2">@(WebAuth.PasswordSet ? "On" : "Off")</span>
+                            </div>
+                            <div class="config-item-description">
+                                @if (WebAuth.PasswordSet)
+                                {
+                                    <span>The web UI, the API, the hubs and the media/file URLs need this password (or the API key, for the apps). Changing or removing it signs out every browser.</span>
+                                }
+                                else
+                                {
+                                    <span>Without a password anyone who can reach this server can use the web UI. Set one (at least 8 characters) before exposing it outside your network. The apps keep using the API key.</span>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (WebAuth.PasswordSet)
+                    {
+                        <div class="config-item">
+                            <div class="config-item-info">
+                                <div class="config-item-label">
+                                    <i class="bi bi-key"></i>
+                                    Current password
+                                </div>
+                                <div class="config-item-description">Required to change or remove the password.</div>
+                            </div>
+                            <div class="config-item-control">
+                                <input type="password" class="form-control" style="width: 220px;" autocomplete="current-password" @bind="webCurrentPassword" />
+                            </div>
+                        </div>
+                    }
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-key-fill"></i>
+                                @(WebAuth.PasswordSet ? "New password" : "Password")
+                            </div>
+                            <div class="config-item-description">Type it twice.</div>
+                        </div>
+                        <div class="config-item-control d-flex flex-column gap-2">
+                            <input type="password" class="form-control" style="width: 220px;" autocomplete="new-password" placeholder="New password" @bind="webNewPassword" />
+                            <input type="password" class="form-control" style="width: 220px;" autocomplete="new-password" placeholder="Repeat" @bind="webConfirmPassword" />
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            @if (!string.IsNullOrEmpty(webAuthError))
+                            {
+                                <div class="text-danger small"><i class="bi bi-exclamation-triangle"></i> @webAuthError</div>
+                            }
+                        </div>
+                        <div class="config-item-control d-flex gap-2">
+                            @if (WebAuth.PasswordSet)
+                            {
+                                <button type="button" class="btn btn-outline-primary btn-sm d-flex align-items-center gap-2" @onclick="ChangeWebPassword" disabled="@webAuthBusy">
+                                    <i class="bi bi-arrow-repeat"></i><span>Change</span>
+                                </button>
+                                <button type="button" class="btn btn-outline-danger btn-sm d-flex align-items-center gap-2" @onclick="RemoveWebPassword" disabled="@webAuthBusy">
+                                    <i class="bi bi-unlock"></i><span>Remove</span>
+                                </button>
+                            }
+                            else
+                            {
+                                <button type="button" class="btn btn-primary btn-sm d-flex align-items-center gap-2" @onclick="SetWebPassword" disabled="@webAuthBusy">
+                                    <i class="bi bi-lock"></i><span>Set password</span>
+                                </button>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-house-lock"></i>
+                                No password on the local network
+                            </div>
+                            <div class="config-item-description">
+                                Devices that connect <strong>directly</strong> from the local network (private or loopback address, using an IP, <code>localhost</code> or a local name such as <code>nas</code> or <code>*.local</code>) get in without the password.
+                                Requests that come through a reverse proxy always need it: the proxy itself sits on the local network, so otherwise internet traffic would look local too.
+                                @if (!WebAuth.PasswordSet)
+                                {
+                                    <span class="text-warning">Only applies once a password is set.</span>
+                                }
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <input type="checkbox" class="form-check-input config-switch" checked="@WebAuth.LanBypassEnabled" @onchange="ToggleLanBypass" disabled="@webAuthBusy" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- API & WebDAV Access Section -->
             <div class="config-section">
                 <div class="config-section-header">
@@ -1054,7 +1188,7 @@
                                 Mobile / v1 API Key
                             </div>
                             <div class="config-item-description">
-                                Required in the <code>X-Api-Key</code> header for <code>/api/mobile</code>, <code>/api/v1</code> and <code>/hubs</code>. Leave empty to disable authentication. Overrides <code>mobile_api_key</code> in config.json when set.
+                                Required in the <code>X-Api-Key</code> header for <code>/api/mobile</code>, <code>/api/v1</code> and <code>/hubs</code>. Leave empty to disable authentication. Overrides <code>mobile_api_key</code> in config.json when set. While a web password is set, the apps (Android, TV, TFM Player) can only connect with this key.
                             </div>
                         </div>
                         <div class="config-item-control">
@@ -1368,6 +1502,131 @@
         }
     }
     private bool _disposed = false;
+
+    // Web security (password of the web UI): saved immediately through the
+    // same service as /api/v1/web-auth, not with the Save button.
+    private string webCurrentPassword = string.Empty;
+    private string webNewPassword = string.Empty;
+    private string webConfirmPassword = string.Empty;
+    private string? webAuthError;
+    private bool webAuthBusy;
+
+    private bool CheckNewWebPassword()
+    {
+        if (webNewPassword != webConfirmPassword)
+        {
+            webAuthError = "The two passwords do not match.";
+            return false;
+        }
+        webAuthError = TelegramDownloader.Services.WebAuth.WebPasswordHasher.Validate(webNewPassword);
+        return webAuthError == null;
+    }
+
+    private void ClearWebPasswordFields()
+    {
+        webCurrentPassword = webNewPassword = webConfirmPassword = string.Empty;
+        webAuthError = null;
+    }
+
+    private async Task SetWebPassword()
+    {
+        if (!CheckNewWebPassword()) return;
+        webAuthBusy = true;
+        try
+        {
+            var password = webNewPassword;
+            var result = await WebAuth.SetupAsync(password);
+            if (!result.Succeeded)
+            {
+                webAuthError = result.Outcome == TelegramDownloader.Services.WebAuth.WebAuthOutcome.AlreadySet
+                    ? "A password is already set." : result.Message;
+                return;
+            }
+            ClearWebPasswordFields();
+            // Give this browser a session cookie so a reload does not ask for it.
+            await TelegramDownloader.Services.WebAuth.WebAuthBrowser.SignInAsync(JS, password);
+            toastService.Notify(new(ToastType.Success, "Web password set") { Title = "Web security", AutoHide = true });
+        }
+        catch (Exception ex)
+        {
+            webAuthError = "Could not save the password: " + ex.Message;
+        }
+        finally
+        {
+            webAuthBusy = false;
+        }
+    }
+
+    private async Task ChangeWebPassword()
+    {
+        if (!CheckNewWebPassword()) return;
+        webAuthBusy = true;
+        try
+        {
+            var password = webNewPassword;
+            var result = await WebAuth.ChangePasswordAsync(webCurrentPassword, password);
+            if (!result.Succeeded)
+            {
+                webAuthError = result.Outcome == TelegramDownloader.Services.WebAuth.WebAuthOutcome.InvalidCredentials
+                    ? "The current password is wrong." : result.Message ?? "Could not change the password.";
+                return;
+            }
+            ClearWebPasswordFields();
+            // Every session was signed out by the change, this one included.
+            await TelegramDownloader.Services.WebAuth.WebAuthBrowser.SignInAsync(JS, password);
+            toastService.Notify(new(ToastType.Success, "Web password changed") { Title = "Web security", AutoHide = true });
+        }
+        catch (Exception ex)
+        {
+            webAuthError = "Could not save the password: " + ex.Message;
+        }
+        finally
+        {
+            webAuthBusy = false;
+        }
+    }
+
+    private async Task RemoveWebPassword()
+    {
+        webAuthBusy = true;
+        try
+        {
+            var result = await WebAuth.RemovePasswordAsync(webCurrentPassword);
+            if (!result.Succeeded)
+            {
+                webAuthError = result.Outcome == TelegramDownloader.Services.WebAuth.WebAuthOutcome.InvalidCredentials
+                    ? "The current password is wrong." : "No password is set.";
+                return;
+            }
+            ClearWebPasswordFields();
+            toastService.Notify(new(ToastType.Warning, "Web password removed: the web UI is open") { Title = "Web security", AutoHide = true });
+        }
+        catch (Exception ex)
+        {
+            webAuthError = "Could not remove the password: " + ex.Message;
+        }
+        finally
+        {
+            webAuthBusy = false;
+        }
+    }
+
+    private async Task ToggleLanBypass(Microsoft.AspNetCore.Components.ChangeEventArgs e)
+    {
+        webAuthBusy = true;
+        try
+        {
+            await WebAuth.SetLanBypassAsync(e.Value is bool b && b);
+        }
+        catch (Exception ex)
+        {
+            webAuthError = "Could not save the setting: " + ex.Message;
+        }
+        finally
+        {
+            webAuthBusy = false;
+        }
+    }
     private bool isRestarting = false;
 
     // Task counters

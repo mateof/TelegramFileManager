@@ -158,7 +158,6 @@ builder.Services.AddSingleton<ITelegramService, TelegramService>();
 builder.Services.AddSingleton<IDbService, DbService>();
 builder.Services.AddTransient<IFileService, FileServiceV2>();
 builder.Services.AddSingleton<TransactionInfoService>();
-builder.Services.AddSingleton<FileManagerService>();
 builder.Services.AddSingleton<GHService>();
 
 // Progressive download service for streaming with background caching
@@ -194,11 +193,25 @@ builder.Services.AddBlazorBootstrap();
 // Add controllers for Mobile API and the modular v1 API
 builder.Services.AddControllers();
 
+// Web authentication: optional web password (cookie session), LAN bypass and
+// the single access policy enforced by WebAccessMiddleware.
+builder.Services.AddSingleton<TelegramDownloader.Services.WebAuth.IWebAuthService>(sp =>
+    new TelegramDownloader.Services.WebAuth.WebAuthService(
+        sp.GetRequiredService<IDbService>(),
+        sp.GetRequiredService<ILogger<TelegramDownloader.Services.WebAuth.WebAuthService>>()));
+TelegramDownloader.Services.WebAuth.WebAuthSession.AddWebAuthentication(builder.Services);
+TelegramDownloader.Services.WebAuth.InternalHttpClient.AddInternalHttpClient(builder.Services);
+
 // Modular v1 API: SignalR transfer hub + its supporting services
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<TelegramDownloader.Services.Api.QrLoginSessionManager>();
 builder.Services.AddScoped<TelegramDownloader.Services.Api.ChannelFolderResolver>();
 builder.Services.AddHostedService<TelegramDownloader.Services.Api.TransferBroadcastService>();
+
+// Application events hub (/hubs/events): notifications, refresh/import progress, session state, metrics
+builder.Services.AddSingleton<TelegramDownloader.Services.Api.ImportProgressTracker>();
+builder.Services.AddSingleton<TelegramDownloader.Hubs.EventsHubState>();
+builder.Services.AddHostedService<TelegramDownloader.Services.Api.EventsBroadcastService>();
 
 // Media library: identification through metadata providers, cached images, watch state
 builder.Services.AddHttpClient("library-provider", c => c.Timeout = TimeSpan.FromSeconds(30));
@@ -318,14 +331,35 @@ builder.Services.AddSwaggerGen(c =>
 
 var app = builder.Build();
 
+// Record the socket peer address and the proxy headers as they arrived, before
+// UseForwardedHeaders rewrites/removes them: the LAN bypass of the web password
+// must decide on the real TCP peer, never on a client-supplied header.
+app.UseMiddleware<TelegramDownloader.Middleware.ConnectionInfoCaptureMiddleware>();
+
 // Configure forwarded headers for reverse proxy support (HTTPS via nginx, traefik, etc.)
+// Only proxies listed in TrustedProxies (IPs/CIDRs; appsettings/env
+// "TrustedProxies" or config.json "trusted_proxies"; default: loopback and
+// private ranges) may rewrite the client address, scheme and host. Previously
+// every peer was trusted, so any client on the internet could forge
+// X-Forwarded-For (spoofing the IP in logs and in the login rate limiter) or
+// X-Forwarded-Proto/Host. Reverse proxies in Docker networks or on the LAN keep
+// working with the default.
 var forwardedHeadersOptions = new ForwardedHeadersOptions
 {
     ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost
 };
-// Clear default limits to accept forwarded headers from any proxy
-forwardedHeadersOptions.KnownNetworks.Clear();
-forwardedHeadersOptions.KnownProxies.Clear();
+{
+    var invalidProxies = new List<string>();
+    var trustedProxyList = TelegramDownloader.Services.WebAuth.NetworkRules.ReadTrustedProxyList(
+        app.Configuration, GeneralConfigStatic.tlconfig?.trusted_proxies);
+    var (trustedProxies, trustedNetworks) = TelegramDownloader.Services.WebAuth.NetworkRules.ParseTrustedProxies(trustedProxyList, invalidProxies);
+    forwardedHeadersOptions.KnownIPNetworks.Clear();
+    forwardedHeadersOptions.KnownProxies.Clear();
+    foreach (var proxy in trustedProxies) forwardedHeadersOptions.KnownProxies.Add(proxy);
+    foreach (var network in trustedNetworks) forwardedHeadersOptions.KnownIPNetworks.Add(network);
+    foreach (var bad in invalidProxies) Log.Warning("TrustedProxies: ignoring invalid entry {Entry}", bad);
+    Log.Information("Trusted reverse proxies: {Proxies}", string.Join(", ", trustedProxyList));
+}
 app.UseForwardedHeaders(forwardedHeadersOptions);
 
 // Load config from DB only if MongoDB is available
@@ -345,6 +379,10 @@ if (mongoAvailable)
     }
 }
 
+// Web password / LAN bypass (MongoDB, with a local copy so it fails closed
+// when the database is unreachable).
+await app.Services.GetRequiredService<TelegramDownloader.Services.WebAuth.IWebAuthService>().LoadAsync(mongoAvailable);
+
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
@@ -361,6 +399,42 @@ var compositeProvider = new CompositeFileProvider(wrProvider);
 var compositeProviderImg = new CompositeFileProvider(imgProvider);
 
 // app.UseHttpsRedirection();
+
+// CORS first so preflights are answered and 401s carry the CORS headers.
+app.UseCors("MobilePolicy");
+
+// Access gate (replaces the former ApiKeyMiddleware): web session cookie, API
+// key or LAN bypass, see WebAccessPolicy. It runs before every static file
+// provider because /local/** (user files) and /img/telegram/** are protected
+// too; wwwroot assets and the /app shell are classified as public.
+app.UseAuthentication();
+app.UseMiddleware<TelegramDownloader.Middleware.WebAccessMiddleware>();
+// "Default web interface" setting: a browser opening / goes to /app/ when it
+// is "app" (escape hatch /?ui=classic, remembered in the tfm_ui cookie).
+app.UseMiddleware<TelegramDownloader.Middleware.DefaultWebUiMiddleware>();
+
+// New web app (React SPA) at /app: hashed assets are cached for a year,
+// index.html and the service worker are always revalidated.
+var spaRoot = Path.Combine(app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot"), "app");
+Directory.CreateDirectory(spaRoot);
+// Builds without the web app (dotnet run without building ClientApp) get an
+// explanatory page instead of a 404. The real build replaces it; keeping it
+// out of wwwroot/app means building never leaves the repo dirty.
+var spaIndex = Path.Combine(spaRoot, "index.html");
+var spaPlaceholder = Path.Combine(app.Environment.ContentRootPath, "Resources", "app-not-built.html");
+if (!File.Exists(spaIndex) && File.Exists(spaPlaceholder))
+{
+    File.Copy(spaPlaceholder, spaIndex);
+}
+var spaStaticOptions = new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(spaRoot),
+    RequestPath = "/app",
+    ContentTypeProvider = extensionProvider,
+    OnPrepareResponse = ctx =>
+        ctx.Context.Response.Headers.CacheControl = TelegramDownloader.Services.Api.SpaCachePolicy.For(ctx.Context.Request.Path.Value)
+};
+app.UseStaticFiles(spaStaticOptions);
 
 app.UseStaticFiles();
 
@@ -401,22 +475,28 @@ app.UseSwaggerUI(c =>
     c.RoutePrefix = "api-docs";
 });
 
-// CORS must be before routing
-app.UseCors("MobilePolicy");
-
-// API Key authentication middleware for mobile endpoints
-app.UseMiddleware<TelegramDownloader.Middleware.ApiKeyMiddleware>();
-
 app.UseRouting();
 app.MapControllers();
 
 // Live transfer progress for API clients (mobile apps, dashboards...)
 app.MapHub<TelegramDownloader.Hubs.TransferHub>("/hubs/transfers");
 
+// Application events (notifications, refresh/import progress, session state, metrics)
+app.MapHub<TelegramDownloader.Hubs.EventsHub>("/hubs/events");
+
 // Behind a proxy that does not forward WebSocket upgrades, SignalR falls back
 // to long polling; keep each poll below the usual 60 s proxy read timeout so
 // the fallback works instead of dropping the circuit every minute.
 app.MapBlazorHub(options => options.LongPolling.PollTimeout = TimeSpan.FromSeconds(45));
+// SPA deep links (dots included, e.g. /app/files/song.mp3) get index.html;
+// the literal "app" segment makes this fallback win over the Blazor one.
+// A missing hashed asset is a real 404, not the HTML shell.
+app.MapGet("/app/assets/{**path}", () => Results.NotFound());
+app.MapFallbackToFile("/app/{**path}", "index.html", new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(spaRoot),
+    OnPrepareResponse = ctx => ctx.Context.Response.Headers.CacheControl = TelegramDownloader.Services.Api.SpaCachePolicy.NoCache
+});
 app.MapFallbackToPage("/_Host");
 
 try

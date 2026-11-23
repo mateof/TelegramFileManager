@@ -1,6 +1,7 @@
-using Syncfusion.Blazor.FileManager;
+using MongoDB.Driver;
 using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
+using TelegramDownloader.Models.FileSystem;
 
 namespace TelegramDownloader.Services.Api
 {
@@ -51,7 +52,17 @@ namespace TelegramDownloader.Services.Api
 
             var folderPath = NormalizeFolderPath(path);
             if (folderPath == "/")
-                return await _db.getRootFolder(channelId, collectionId ?? "directory");
+            {
+                var root = await _db.getRootFolder(channelId, collectionId ?? "directory");
+                if (root != null || collectionId == null) return root;
+
+                // A collection made from a sub-folder share keeps that folder's
+                // name on its root document instead of "Files".
+                return await _db.getDatabase(channelId)
+                    .GetCollection<BsonFileManagerModel>(collectionId)
+                    .Find(x => !x.IsFile && (x.ParentId == "" || x.ParentId == null) && (x.FilePath == "" || x.FilePath == null))
+                    .FirstOrDefaultAsync();
+            }
 
             // A folder's own FilePath has no trailing slash.
             return await _db.getFileByPath(channelId, folderPath.TrimEnd('/'), collectionId ?? "directory");
@@ -102,9 +113,9 @@ namespace TelegramDownloader.Services.Api
         }
 
         /// <summary>
-        /// Converts a stored entry into the Syncfusion shape the existing
+        /// Converts a stored entry into the <see cref="FsEntry"/> shape the
         /// <c>IFileService</c> mutation methods expect.
         /// </summary>
-        public static FileManagerDirectoryContent ToContent(BsonFileManagerModel m) => m.toFileManagerContent();
+        public static FsEntry ToContent(BsonFileManagerModel m) => m.ToFsEntry();
     }
 }

@@ -22,6 +22,11 @@ Two independent layers guard the API:
    an account whose channels and files we can act on?". See
    [authentication.md](authentication.md).
 
+When the web UI is protected with a password, browsers use a session cookie
+instead of the key, and the key also becomes required for the legacy media
+URLs (`/api/file/*`, `/local/**`, …). See
+[Web session](authentication.md#web-session).
+
 ### Configuring the API key
 
 The key is `mobile_api_key` in `Configuration/config.json` (or the
@@ -109,7 +114,7 @@ conventions (`404`, `409`, `503`…), but the code is the source of truth.
 
 | Code | Typical status | Meaning |
 | --- | --- | --- |
-| `unauthorized` | 401 | Missing or invalid API key. |
+| `unauthorized` | 401 | Missing or invalid API key (or, with a web password, no session cookie). |
 | `not_logged_in` | 401 | No Telegram session; sign in via `/api/v1/auth`. |
 | `setup_required` | 503 | The app has not finished first-run setup. |
 | `invalid_request` | 400 | Malformed body or query. |
@@ -125,6 +130,11 @@ conventions (`404`, `409`, `503`…), but the code is the source of truth.
 | `service_unavailable` | 503 | A dependency (MongoDB, log store) is not available. |
 | `library_disabled` | 503 | The media library is off in the settings (see [library.md](library.md)). |
 | `internal_error` | 500 | Unexpected server error; `error.detail` carries the exception message. |
+| `invalid_credentials` | 401 | Wrong web password ([Web session](authentication.md#web-session)). |
+| `too_many_attempts` | 429 | Too many wrong web passwords from this IP; see `Retry-After`. |
+| `password_already_set` / `password_not_set` | 409 | Web password setup/change in the wrong state. |
+| `weak_password` | 400 | Web password shorter than 8 characters. |
+| `csrf_header_missing` | 403 | Cookie/LAN authenticated state-changing request without `X-Requested-With: tfm`. |
 
 ## Paging and sorting
 

@@ -6,6 +6,7 @@ using TelegramDownloader.Models;
 using TelegramDownloader.Models.Persistence;
 using TelegramDownloader.Services;
 using TelegramDownloader.Services.Transfers;
+using TelegramDownloader.Models.FileSystem;
 
 namespace Test
 {
@@ -288,7 +289,7 @@ namespace Test
                 isUpload = true,
                 channelId = "123",
                 toPath = "/dest/",
-                files = new List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>
+                files = new List<FsEntry>
                 {
                     new() { Name = "a.bin", FilterPath = "/src/", IsFile = true, Size = 5 }
                 }
@@ -558,7 +559,7 @@ namespace Test
             channelId = "1",
             toPath = "/",
             total = 3,
-            files = new List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> { new() { Name = "a", FilterPath = "/", IsFile = true } }
+            files = new List<FsEntry> { new() { Name = "a", FilterPath = "/", IsFile = true } }
         };
 
         [Test]

@@ -7,6 +7,7 @@
 
 @inject IFileService fs
 @inject ITelegramService ts
+@using TelegramDownloader.Shared.SyncfusionAdapters
 
 <style>
     /* Download from Telegram Modal Overlay */
@@ -590,9 +591,9 @@
         }
 
         if (isShare)
-            fs.downloadFile(DbService.SHARED_DB_NAME, fileList.ToList(), ddtree.selectedNode == null ? null : ddtree.selectedNode.FirstOrDefault(), bsi.CollectionId, bsi.ChannelId);
+            fs.SfDownloadFile(DbService.SHARED_DB_NAME, fileList.ToList(), ddtree.selectedNode == null ? null : ddtree.selectedNode.FirstOrDefault(), bsi.CollectionId, bsi.ChannelId);
         else
-            fs.downloadFile(id, fileList.ToList(), ddtree.selectedNode == null ? null : ddtree.selectedNode.FirstOrDefault());
+            fs.SfDownloadFile(id, fileList.ToList(), ddtree.selectedNode == null ? null : ddtree.selectedNode.FirstOrDefault());
 
         Close();
     }

@@ -1,5 +1,6 @@
 ﻿@page "/tempfm/{id}"
-@inject HttpClient httpClient;
+@inject IHttpClientFactory HttpClientFactory
+@inject NavigationManager InternalBaseNav
 @using Syncfusion.Blazor.ImageEditor
 @using Syncfusion.Blazor.Inputs
 @using TelegramDownloader.Pages.Modals
@@ -21,7 +22,7 @@
 </ul>
 
 <SfFileManager ID="tempfm"  TValue="FileManagerDirectoryContent">
-    <FileManagerAjaxSettings  Url=@($"/api/temp/FileOperations/{id}")
+    <FileManagerAjaxSettings HttpClientInstance="@httpClient" Url=@($"/api/temp/FileOperations/{id}")
                              DownloadUrl=@($"/api/temp/Download/{id}" )
                              GetImageUrl=@($"/api/temp/GetImage/{id}")>
     </FileManagerAjaxSettings>
@@ -36,6 +37,17 @@
 
 
 @code {
+    // Server-side calls to this same server: they carry the internal token
+    // instead of the browser cookie (see Services/WebAuth/InternalHttpClient).
+    private HttpClient _internalHttpClient;
+    private HttpClient httpClient => _internalHttpClient ??= CreateInternalHttpClient();
+    private HttpClient CreateInternalHttpClient()
+    {
+        var client = HttpClientFactory.CreateClient(TelegramDownloader.Services.WebAuth.InternalHttpClient.Name);
+        client.BaseAddress = new Uri(InternalBaseNav.BaseUri);
+        return client;
+    }
+
 #pragma warning disable BL0005 // Setting component parameters from code for modal pattern
     [Parameter]
     public string id { get; set; }

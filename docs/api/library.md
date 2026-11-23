@@ -88,6 +88,13 @@ The body replaces the whole list. The Config page manages the same list with a
 single-choice channel selector and a folder picker that lists the first three
 levels of the channel (deeper folders are reached by searching).
 
+For a picker, list the folders of a channel (works with the library disabled):
+
+```
+GET /api/v1/library/channel-folders?channelId=1290586824
+-> ["/Cine/", "/Series/", "/Series/Drama/", …]
+```
+
 ## How files are identified
 
 For each video file the parser extracts a title, a year and, for series, season

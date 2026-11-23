@@ -1,5 +1,4 @@
 #nullable disable
-using BlazorBootstrap;
 using TelegramDownloader.Models;
 using TL;
 using WTelegram;
@@ -37,13 +36,15 @@ namespace TelegramDownloader.Data
         Task<ChatsWithFolders> getChatsWithFolders();
         Task PreloadChannelsAsync();
         Task<List<ChatMessages>> getAllMessages(long id, Boolean onlyFiles = false);
-        Task<GridDataProviderResult<ChatMessages>> getPaginatedMessages(long id, int page, int size, Boolean onlyFiles = false);
+        Task<PagedResult<ChatMessages>> getPaginatedMessages(long id, int page, int size, Boolean onlyFiles = false);
         Task<List<ChatMessages>> getAllMediaMessages(long id, Boolean onlyFiles = false);
         Task<List<ChatMessages>> getChatHistory(long id, int limit = 30, int addOffset = 0);
         string getChatName(long id);
         Task<Message> getMessageFile(string chatId, int idMessage);
         Task<string> getPhotoThumb(ChatBase chat);
         Task<string> downloadPhotoThumb(Photo thumb);
+        /// <summary>JPEG preview of a photo message (a small size) or of a video/document message (its embedded thumbnail); null when it has none.</summary>
+        Task<byte[]?> downloadMessageThumb(Message message);
         Task<byte[]?> DownloadChannelPhoto(long channelId);
         Task logOff();
         Task sendVerificationCode(string vc);

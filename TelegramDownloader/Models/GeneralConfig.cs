@@ -3,9 +3,7 @@
 using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.Bson;
 using TelegramDownloader.Data.db;
-using Syncfusion.Blazor.RichTextEditor;
 using Newtonsoft.Json;
-using Syncfusion.Blazor.Charts;
 using TelegramDownloader.Data;
 using System.Diagnostics;
 using TelegramDownloader.Services;
@@ -155,6 +153,12 @@ namespace TelegramDownloader.Models
         public List<long> FavouriteChannels { get; set; } = new List<long>();
         /// <summary>Ids of channels the user chose to hide from the channel lists.</summary>
         public List<long> HiddenChannels { get; set; } = new List<long>();
+
+        /// <summary>
+        /// Interface a browser gets at <c>/</c>: <c>classic</c> (Blazor) or
+        /// <c>app</c> (redirect to the web app at <c>/app/</c>). See <see cref="WebUiMode"/>.
+        /// </summary>
+        public string DefaultWebUi { get; set; } = WebUiMode.Classic;
 
         // API / WebDAV credentials, managed from the Config page and persisted in
         // MongoDB. When set here they take precedence over the equivalents in
@@ -323,5 +327,13 @@ namespace TelegramDownloader.Models
         /// sends credentials base64-encoded.
         /// </summary>
         public string? webdav_password { get; set; }
+
+        /// <summary>
+        /// Reverse proxies allowed to set X-Forwarded-For/Proto/Host (IPs or
+        /// CIDR ranges). Overridden by the <c>TrustedProxies</c> setting
+        /// (appsettings or environment variable). Default when both are empty:
+        /// loopback and private ranges.
+        /// </summary>
+        public List<string>? trusted_proxies { get; set; }
     }
 }

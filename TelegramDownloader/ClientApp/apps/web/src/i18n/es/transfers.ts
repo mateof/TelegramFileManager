@@ -1,0 +1,98 @@
+// Strings of the transfers feature (owned by that feature)
+const transfers: Record<string, string> = {
+  'Downloads, uploads and background tasks in real time.': 'Descargas, subidas y tareas en segundo plano en tiempo real.',
+  'Transfers': 'Transferencias',
+
+  // stats and chart
+  'Download speed': 'Velocidad de descarga',
+  'Upload speed': 'Velocidad de subida',
+  '{count} running': '{count} en curso',
+  'In the queue': 'En cola',
+  '{count} downloads': '{count} descargas',
+  '{count} uploads': '{count} subidas',
+  'Last {minutes} minutes': 'Últimos {minutes} minutos',
+  'Transfer speed over time': 'Velocidad de transferencia en el tiempo',
+  'Waiting for speed samples...': 'Esperando muestras de velocidad...',
+
+  // tabs and toolbar
+  'Saved': 'Guardadas',
+  'Filter by name': 'Filtrar por nombre',
+  'State': 'Estado',
+  'All': 'Todos',
+  'Running': 'En curso',
+  'Queued': 'En cola',
+  'Paused': 'En pausa',
+  'Finished': 'Terminadas',
+  'Completed': 'Completada',
+  'Failed': 'Con error',
+  'Cancelled': 'Cancelado',
+  'Pause all': 'Pausar todo',
+  'Resume all': 'Reanudar todo',
+  'Stop all': 'Detener todo',
+  'Clean up': 'Limpiar',
+  'Clear completed': 'Quitar las completadas',
+  'Clear failed': 'Quitar las fallidas',
+  'Clear cancelled': 'Quitar las canceladas',
+  'Clear every finished entry': 'Quitar todas las terminadas',
+  'Empty the queue': 'Vaciar la cola',
+  'Nothing matches the filter': 'Nada coincide con el filtro',
+  'Nothing here right now': 'Ahora mismo no hay nada',
+  'Transfers you start from the channels and local files show up here.':
+    'Aquí aparecen las transferencias que inicies desde los canales y los ficheros locales.',
+
+  // items and details
+  'Resume': 'Reanudar',
+  'Remove from the list': 'Quitar de la lista',
+  'Progress': 'Progreso',
+  '{done} of {total} files': '{done} de {total} ficheros',
+  '{time} left': 'quedan {time}',
+  'Folder task': 'Tarea de carpeta',
+  'Type': 'Tipo',
+  'Path': 'Ruta',
+  'Size': 'Tamaño',
+  'Transferred': 'Transferido',
+  'Files': 'Ficheros',
+  'Yes': 'Sí',
+  'Created': 'Creado',
+  'Started': 'Iniciada',
+  'Id': 'Id',
+
+  // actions
+  'Could not update "{name}"': 'No se pudo actualizar «{name}»',
+  'Could not update the downloads': 'No se pudieron actualizar las descargas',
+  'Stop every download?': '¿Detener todas las descargas?',
+  'The running downloads are cancelled and the queue is emptied.': 'Se cancelan las descargas en curso y se vacía la cola.',
+  'Downloads stopped': 'Descargas detenidas',
+  'Could not stop the downloads': 'No se pudieron detener las descargas',
+  'Could not clear the list': 'No se pudo limpiar la lista',
+  'Empty the queue?': '¿Vaciar la cola?',
+  'Queued transfers are removed; running ones keep going.': 'Se quitan las transferencias en cola; las que están en curso continúan.',
+  'Empty queue': 'Vaciar la cola',
+  'Could not empty the queue': 'No se pudo vaciar la cola',
+
+  // saved (persisted) tasks
+  '{count} saved tasks': '{count} tareas guardadas',
+  'No saved tasks': 'No hay tareas guardadas',
+  'Unfinished transfers are saved here so they can continue after a restart.':
+    'Las transferencias sin terminar se guardan aquí para continuar tras un reinicio.',
+  'Could not load the saved tasks': 'No se pudieron cargar las tareas guardadas',
+  '"{name}" queued again': '«{name}» vuelve a estar en cola',
+  'Nothing to resume': 'No hay nada que reanudar',
+  'Could not resume the task': 'No se pudo reanudar la tarea',
+  'Could not delete the task': 'No se pudo eliminar la tarea',
+  'Could not delete the tasks': 'No se pudieron eliminar las tareas',
+  'Forget': 'Olvidar',
+  'Forget all': 'Olvidar todas',
+  'Forget every saved task?': '¿Olvidar todas las tareas guardadas?',
+  'They will not be resumed after a restart. Running transfers are not stopped.':
+    'No se reanudarán tras un reinicio. Las transferencias en curso no se detienen.',
+  '{count} retries': '{count} reintentos',
+  'Downloads': 'Descargas',
+  'Uploads': 'Subidas',
+  'Download task': 'Descarga',
+  'Upload task': 'Subida',
+  'Source': 'Origen',
+  'Destination': 'Destino',
+};
+
+export default transfers;

@@ -1,0 +1,254 @@
+/*
+ * @tfm/ui styles. Import AFTER tailwindcss in the app stylesheet:
+ *
+ *   @import "tailwindcss";
+ *   @import "@tfm/ui/styles.css";
+ *
+ * The colour scales below are only the first-paint defaults (indigo on slate):
+ * ThemeController rewrites them on <html> at runtime.
+ */
+
+/* Let Tailwind see the classes used inside this package */
+@source "./";
+
+@custom-variant dark (&:where([data-scheme="dark"], [data-scheme="dark"] *));
+@custom-variant light (&:where([data-scheme="light"], [data-scheme="light"] *));
+
+@theme {
+  --font-sans: "Inter Variable", "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Accent scale (rewritten at runtime) */
+  --color-accent-50: #eef2ff;
+  --color-accent-100: #e0e7ff;
+  --color-accent-200: #c7d2fe;
+  --color-accent-300: #a5b4fc;
+  --color-accent-400: #818cf8;
+  --color-accent-500: #6366f1;
+  --color-accent-600: #4f46e5;
+  --color-accent-700: #4338ca;
+  --color-accent-800: #3730a3;
+  --color-accent-900: #312e81;
+  --color-accent-950: #1e1b4b;
+  --color-on-accent: #ffffff;
+
+  /* Background scale (rewritten at runtime; reversed in the light theme) */
+  --color-neutral-50: #f8fafc;
+  --color-neutral-100: #f1f5f9;
+  --color-neutral-200: #e2e8f0;
+  --color-neutral-300: #cbd5e1;
+  --color-neutral-400: #94a3b8;
+  --color-neutral-500: #64748b;
+  --color-neutral-600: #475569;
+  --color-neutral-700: #334155;
+  --color-neutral-800: #1e293b;
+  --color-neutral-900: #111827;
+  --color-neutral-950: #0b1120;
+
+  /* Semantic tokens: use these in components */
+  --color-bg: var(--color-neutral-950);
+  --color-surface: var(--color-neutral-900);
+  --color-surface-2: var(--color-neutral-800);
+  --color-surface-3: var(--color-neutral-700);
+  --color-border: color-mix(in oklab, var(--color-neutral-700) 70%, transparent);
+  --color-border-strong: var(--color-neutral-600);
+  --color-fg: var(--color-neutral-50);
+  --color-fg-muted: var(--color-neutral-400);
+  --color-fg-subtle: var(--color-neutral-500);
+  --color-primary: var(--color-accent-500);
+  --color-primary-hover: var(--color-accent-400);
+  --color-primary-soft: color-mix(in oklab, var(--color-accent-500) 16%, transparent);
+  --color-ring: var(--color-accent-400);
+  --color-danger: #ef4444;
+  --color-danger-soft: color-mix(in oklab, #ef4444 16%, transparent);
+  --color-warning: #f59e0b;
+  --color-warning-soft: color-mix(in oklab, #f59e0b 16%, transparent);
+  --color-success: #10b981;
+  --color-success-soft: color-mix(in oklab, #10b981 16%, transparent);
+  --color-info: #0ea5e9;
+  --color-info-soft: color-mix(in oklab, #0ea5e9 16%, transparent);
+
+  --shadow-soft: 0 1px 2px rgb(0 0 0 / 0.18), 0 4px 16px -4px rgb(0 0 0 / 0.25);
+  --shadow-elevated: 0 2px 6px rgb(0 0 0 / 0.2), 0 24px 48px -12px rgb(0 0 0 / 0.45);
+  --shadow-glow: 0 0 0 1px color-mix(in oklab, var(--color-accent-500) 40%, transparent), 0 8px 30px -6px color-mix(in oklab, var(--color-accent-500) 45%, transparent);
+
+  --radius-xl: 0.875rem;
+  --radius-2xl: 1.125rem;
+
+  --ease-spring: cubic-bezier(0.22, 1.25, 0.36, 1);
+  --ease-out-soft: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --animate-fade-in: fade-in 160ms var(--ease-out-soft);
+  --animate-fade-out: fade-out 120ms ease-in forwards;
+  --animate-scale-in: scale-in 180ms var(--ease-out-soft);
+  --animate-scale-out: scale-out 120ms ease-in forwards;
+  --animate-slide-in-right: slide-in-right 240ms var(--ease-out-soft);
+  --animate-slide-out-right: slide-out-right 180ms ease-in forwards;
+  --animate-slide-in-left: slide-in-left 240ms var(--ease-out-soft);
+  --animate-slide-out-left: slide-out-left 180ms ease-in forwards;
+  --animate-slide-in-bottom: slide-in-bottom 260ms var(--ease-out-soft);
+  --animate-slide-out-bottom: slide-out-bottom 180ms ease-in forwards;
+  --animate-pop-in: pop-in 160ms var(--ease-out-soft);
+  --animate-shimmer: shimmer 1.6s linear infinite;
+  --animate-progress: progress-indeterminate 1.2s ease-in-out infinite;
+
+  @keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+  @keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
+  @keyframes scale-in { from { opacity: 0; transform: scale(0.96) translateY(4px); } to { opacity: 1; transform: none; } }
+  @keyframes scale-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: scale(0.97); } }
+  @keyframes slide-in-right { from { transform: translateX(100%); } to { transform: none; } }
+  @keyframes slide-out-right { from { transform: none; } to { transform: translateX(100%); } }
+  @keyframes slide-in-left { from { transform: translateX(-100%); } to { transform: none; } }
+  @keyframes slide-out-left { from { transform: none; } to { transform: translateX(-100%); } }
+  @keyframes slide-in-bottom { from { transform: translateY(100%); } to { transform: none; } }
+  @keyframes slide-out-bottom { from { transform: none; } to { transform: translateY(100%); } }
+  @keyframes pop-in { from { opacity: 0; transform: scale(0.97) translateY(-2px); } to { opacity: 1; transform: none; } }
+  @keyframes progress-indeterminate { from { transform: translateX(-100%); } to { transform: translateX(300%); } }
+  @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+}
+
+/* First paint with `system` background on a light OS, before ThemeController runs */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --color-neutral-50: #0b1120;
+    --color-neutral-100: #111827;
+    --color-neutral-200: #1e293b;
+    --color-neutral-300: #334155;
+    --color-neutral-400: #475569;
+    --color-neutral-500: #64748b;
+    --color-neutral-600: #94a3b8;
+    --color-neutral-700: #cbd5e1;
+    --color-neutral-800: #e2e8f0;
+    --color-neutral-900: #f1f5f9;
+    --color-neutral-950: #f8fafc;
+    color-scheme: light;
+  }
+}
+
+:root {
+  color-scheme: dark;
+  --glass-alpha: 72%;
+  --glass-blur: 18px;
+  --row-h: 2.5rem;
+}
+
+:root[data-scheme="light"] {
+  --color-primary: var(--color-accent-600);
+  --color-primary-hover: var(--color-accent-500);
+  --color-surface: #ffffff;
+  --color-border: color-mix(in oklab, var(--color-neutral-700) 80%, transparent);
+  --shadow-soft: 0 1px 2px rgb(15 23 42 / 0.06), 0 4px 14px -4px rgb(15 23 42 / 0.1);
+  --shadow-elevated: 0 2px 6px rgb(15 23 42 / 0.06), 0 24px 48px -12px rgb(15 23 42 / 0.18);
+  --glass-alpha: 78%;
+}
+
+:root[data-theme="amoled"] {
+  --glass-alpha: 80%;
+}
+
+:root[data-glass="off"] {
+  --glass-alpha: 100%;
+  --glass-blur: 0px;
+}
+
+:root[data-density="compact"] {
+  --row-h: 2rem;
+}
+
+/* Frosted surface: translucent + blur (opaque when effects are off) */
+@utility glass {
+  background-color: color-mix(in oklab, var(--color-surface) var(--glass-alpha), transparent);
+  backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+}
+
+/* Stronger variant for overlays floating over content (menus, popovers) */
+@utility glass-strong {
+  background-color: color-mix(in oklab, var(--color-surface) calc(var(--glass-alpha) + 14%), transparent);
+  backdrop-filter: blur(calc(var(--glass-blur) + 6px)) saturate(160%);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) + 6px)) saturate(160%);
+}
+
+@utility focus-ring {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  &:focus-visible {
+    outline-color: var(--color-ring);
+  }
+}
+
+@layer base {
+  html,
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-fg);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  ::selection {
+    background: color-mix(in oklab, var(--color-accent-500) 35%, transparent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-ring);
+    outline-offset: 2px;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-neutral-700) transparent;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+}
+
+/* Ambient background: soft accent gradients behind everything */
+.tfm-ambient {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(60rem 40rem at 0% 0%, color-mix(in oklab, var(--color-accent-500) 16%, transparent), transparent 60%),
+    radial-gradient(50rem 36rem at 100% 0%, color-mix(in oklab, var(--color-accent-300) 10%, transparent), transparent 65%),
+    radial-gradient(70rem 40rem at 50% 110%, color-mix(in oklab, var(--color-accent-700) 14%, transparent), transparent 60%);
+  transition: opacity 400ms ease;
+}
+
+:root[data-ambient="off"] .tfm-ambient {
+  opacity: 0;
+}
+
+:root[data-theme="amoled"] .tfm-ambient {
+  opacity: 0.5;
+}
+
+/* Reduced motion: setting or OS preference (ThemeController sets data-motion) */
+:root[data-motion="reduced"] *,
+:root[data-motion="reduced"] *::before,
+:root[data-motion="reduced"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Sonner toasts follow the theme */
+[data-sonner-toaster] {
+  --normal-bg: color-mix(in oklab, var(--color-surface) 92%, transparent);
+  --normal-border: var(--color-border);
+  --normal-text: var(--color-fg);
+  --border-radius: var(--radius-xl);
+  font-family: var(--font-sans);
+}
+
+[data-sonner-toast] {
+  backdrop-filter: blur(var(--glass-blur));
+  box-shadow: var(--shadow-elevated) !important;
+}

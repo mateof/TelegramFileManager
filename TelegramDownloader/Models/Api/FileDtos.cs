@@ -1,5 +1,6 @@
 using TelegramDownloader.Data;
 using TelegramDownloader.Services;
+using TelegramDownloader.Services.Api;
 
 namespace TelegramDownloader.Models.Api
 {
@@ -49,7 +50,25 @@ namespace TelegramDownloader.Models.Api
         /// <summary>Absolute URL that downloads the whole file.</summary>
         public string? DownloadUrl { get; set; }
 
-        public static ApiFileDto FromBson(BsonFileManagerModel m, string channelId, string baseUrl)
+        /// <summary>
+        /// v1 URL of the bytes for inline viewing (<c>&lt;img&gt;</c>, PDF viewer,
+        /// <c>&lt;audio&gt;</c>), with HTTP range support.
+        /// </summary>
+        public string? ContentUrl { get; set; }
+
+        /// <summary>Same bytes as <see cref="ContentUrl"/> with <c>Content-Disposition: attachment</c>.</summary>
+        public string? ContentDownloadUrl { get; set; }
+
+        /// <summary>
+        /// v1 URL to hand to a media element (audio and video only). For video
+        /// formats browsers cannot play it points to the transcoding stream.
+        /// </summary>
+        public string? PlaybackUrl { get; set; }
+
+        /// <summary>v1 URL of a small JPEG preview (photos and videos backed by one message).</summary>
+        public string? ThumbnailUrl { get; set; }
+
+        public static ApiFileDto FromBson(BsonFileManagerModel m, string channelId, string baseUrl, string? collectionId = null)
         {
             var type = m.Type ?? string.Empty;
             var category = m.IsFile ? CategoryOf(type) : "Folder";
@@ -63,7 +82,7 @@ namespace TelegramDownloader.Models.Api
                     streamUrl = $"{baseUrl}/api/file/GetFileStreamCached/{channelId}/{m.Id}/{Uri.EscapeDataString(m.Name)}";
             }
 
-            return new ApiFileDto
+            var dto = new ApiFileDto
             {
                 Id = m.Id,
                 Name = m.Name,
@@ -84,6 +103,15 @@ namespace TelegramDownloader.Models.Api
                 StreamUrl = streamUrl,
                 DownloadUrl = downloadUrl
             };
+
+            MediaUrlBuilder.Apply(dto, baseUrl, channelId, collectionId);
+            if (!string.IsNullOrEmpty(collectionId) && dto.IsFile)
+            {
+                // The legacy endpoints only read channel indexes, not shared collections.
+                dto.StreamUrl = streamUrl != null ? dto.ContentUrl : null;
+                dto.DownloadUrl = dto.ContentDownloadUrl;
+            }
+            return dto;
         }
 
         public static ApiFileDto FromLocalFile(FileInfo file, string relativePath, string baseUrl)
@@ -110,7 +138,12 @@ namespace TelegramDownloader.Models.Api
                 DateCreated = file.CreationTimeUtc,
                 DateModified = file.LastWriteTimeUtc,
                 StreamUrl = streamUrl,
-                DownloadUrl = $"{baseUrl}/local/{EscapePath(relativePath)}"
+                DownloadUrl = $"{baseUrl}/local/{EscapePath(relativePath)}",
+                ContentUrl = MediaUrlBuilder.LocalContent(baseUrl, relativePath, attachment: false),
+                ContentDownloadUrl = MediaUrlBuilder.LocalContent(baseUrl, relativePath, attachment: true),
+                PlaybackUrl = category == "Audio" || category == "Video"
+                    ? MediaUrlBuilder.LocalContent(baseUrl, relativePath, attachment: false)
+                    : null
             };
         }
 
@@ -220,6 +253,14 @@ namespace TelegramDownloader.Models.Api
 
         /// <summary>Hide folders and return only files.</summary>
         public bool FilesOnly { get; set; }
+
+        /// <summary>
+        /// Browse an imported shared collection instead of the channel index.
+        /// The route <c>channelId</c> must then be the collection's channel
+        /// (<c>channelId</c> of <c>GET /api/v1/shares/{id}</c>), which is where
+        /// its Telegram messages live. Ignored by the local endpoints.
+        /// </summary>
+        public string? CollectionId { get; set; }
     }
 
     /// <summary>Body of <c>POST /api/v1/channels/{channelId}/files/folders</c>.</summary>
@@ -272,6 +313,26 @@ namespace TelegramDownloader.Models.Api
     public class LocalRenameRequest : LocalPathRequest
     {
         public string NewName { get; set; } = string.Empty;
+    }
+
+    /// <summary>Body of <c>POST /api/v1/local/copy</c> and <c>/local/move</c>.</summary>
+    public class LocalCopyMoveRequest
+    {
+        /// <summary>Files or folders to copy/move, relative to the local root.</summary>
+        public List<string> Paths { get; set; } = new();
+
+        /// <summary>Destination folder, relative to the local root. Created when missing.</summary>
+        public string TargetPath { get; set; } = string.Empty;
+
+        /// <summary>Replace entries with the same name in the destination; otherwise they are skipped.</summary>
+        public bool Overwrite { get; set; }
+    }
+
+    /// <summary>Body of <c>POST /api/v1/channels/{channelId}/files/preload</c>.</summary>
+    public class PreloadFilesRequest
+    {
+        /// <summary>File or folder ids; folders are expanded recursively.</summary>
+        public List<string> FileIds { get; set; } = new();
     }
 
     /// <summary>Body of <c>POST /api/v1/local/delete</c>.</summary>
