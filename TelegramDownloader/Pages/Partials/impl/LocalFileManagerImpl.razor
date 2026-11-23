@@ -4,7 +4,8 @@
 @using TelegramDownloader.Pages.Modals
 @using TelegramDownloader.Pages.Modals.InfoModals
 @using TelegramDownloader.Shared.MobileFileManager
-@inject HttpClient httpClient;
+@inject IHttpClientFactory HttpClientFactory
+@inject NavigationManager InternalBaseNav
 @inject IJSRuntime JSRuntime;
 @inject NavigationManager MyNavigationManager;
 @inject IFileService fs;
@@ -26,7 +27,7 @@
 @if (_viewportDetected && !string.IsNullOrEmpty(_baseUrl) && !_isMobileView)
 {
     <SfFileManager @ref="FileManager" ID="localfm" TValue="FileManagerDirectoryContent">
-        <FileManagerAjaxSettings Url="@FileOperationsUrl"
+        <FileManagerAjaxSettings HttpClientInstance="@httpClient" Url="@FileOperationsUrl"
                                  UploadUrl="@UploadUrl"
                                  DownloadUrl="@DownloadUrl"
                                  GetImageUrl="@GetImageUrl">
@@ -85,6 +86,17 @@
 
 
 @code {
+    // Server-side calls to this same server: they carry the internal token
+    // instead of the browser cookie (see Services/WebAuth/InternalHttpClient).
+    private HttpClient _internalHttpClient;
+    private HttpClient httpClient => _internalHttpClient ??= CreateInternalHttpClient();
+    private HttpClient CreateInternalHttpClient()
+    {
+        var client = HttpClientFactory.CreateClient(TelegramDownloader.Services.WebAuth.InternalHttpClient.Name);
+        client.BaseAddress = new Uri(InternalBaseNav.BaseUri);
+        return client;
+    }
+
 #nullable disable
 #pragma warning disable BL0005 // Setting component parameters from code for modal pattern
     const string param = "path";

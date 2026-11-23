@@ -25,6 +25,11 @@ The official SignalR clients do this for you via the `accessTokenFactory`
 option (see the samples below). When no API key is configured on the server, the
 hub is open.
 
+Browsers of the web app connect with the session cookie instead (same origin;
+see [Web session](authentication.md#web-session)) and must send
+`X-Requested-With: tfm` through the `headers` option of `withUrl`, because the
+negotiate and long-polling requests are POSTs.
+
 ## Server → client messages
 
 Subscribe to these. Every payload matches a REST DTO exactly, so the same render

@@ -1400,13 +1400,21 @@ namespace TelegramDownloader.Data
         /// </summary>
         private static string BuildStrmUrl(string host, string dbName, BsonFileManagerModel file)
         {
+            // Media servers (Emby, Kodi...) play these URLs without any session:
+            // when an API key is configured it goes in the URL, so the files keep
+            // playing once a web password protects the legacy endpoints.
+            var apiKey = TelegramDownloader.Middleware.WebAccessMiddleware.ConfiguredApiKey();
+            var keyQuery = string.IsNullOrEmpty(apiKey) ? string.Empty : "apiKey=" + Uri.EscapeDataString(apiKey);
+
             StreamingMode mode = GeneralConfigStatic.config.GetEffectiveStreamingMode();
             if (mode == StreamingMode.Preload || HelperService.bytesToMegaBytes(file.Size) < GeneralConfigStatic.config.MaxPreloadFileSizeInMb)
             {
-                return Path.Combine(host, "api/file/GetFileByTfmId", Uri.EscapeDataString(file.Name)).Replace("\\", "/") + $"?idChannel={dbName}&idFile={file.Id}";
+                return Path.Combine(host, "api/file/GetFileByTfmId", Uri.EscapeDataString(file.Name)).Replace("\\", "/") + $"?idChannel={dbName}&idFile={file.Id}"
+                    + (keyQuery.Length > 0 ? "&" + keyQuery : string.Empty);
             }
             string endpoint = mode == StreamingMode.ProgressiveCache ? "GetFileStreamCached" : "GetFileStream";
-            return Path.Combine(host, "api/file", endpoint, dbName, file.Id, "file" + file.Type).Replace("\\", "/");
+            return Path.Combine(host, "api/file", endpoint, dbName, file.Id, "file" + file.Type).Replace("\\", "/")
+                + (keyQuery.Length > 0 ? "?" + keyQuery : string.Empty);
         }
 
         public async Task<String> CreateStrmFiles(string path, string dbName, string host)
