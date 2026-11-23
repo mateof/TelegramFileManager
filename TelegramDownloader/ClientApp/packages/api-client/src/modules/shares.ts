@@ -8,6 +8,7 @@ import type {
   SharesListQuery
 } from '../types/shares';
 import type { ChannelId } from '../types/channels';
+import type { ImportStartedDto } from '../types/events';
 
 const BASE = '/api/v1/shares';
 const enc = encodeURIComponent;
@@ -24,7 +25,13 @@ export function createSharesApi(http: HttpClient) {
     export: (query: ShareExportQuery, signal?: AbortSignal) =>
       http.get<ShareFilesModel>(`${BASE}/export`, { query: { ...query }, signal }),
     /** POST /api/v1/shares/import (202): imports a payload from another instance in the background. */
-    import: (body: ImportSharedRequest) => http.post<void>(`${BASE}/import`, body),
+    import: (body: ImportSharedRequest) => http.post<ImportStartedDto>(`${BASE}/import`, body),
+    /** POST /api/v1/shares/import (multipart `file` = a `.tfm` file, 202); progress as `ImportProgress` (`kind: share`). */
+    importFile: (file: Blob, signal?: AbortSignal) => {
+      const form = new FormData();
+      form.append('file', file, typeof File !== 'undefined' && file instanceof File ? file.name : 'share.tfm');
+      return http.post<ImportStartedDto>(`${BASE}/import`, form, { signal });
+    },
     /** DELETE /api/v1/shares/{id} */
     delete: (id: string) => http.delete<void>(`${BASE}/${enc(id)}`),
     /**

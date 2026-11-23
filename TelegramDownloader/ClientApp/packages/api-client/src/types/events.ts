@@ -29,11 +29,22 @@ export interface ChannelRefreshProgressEvent {
 /** `ImportProgress`: progress of an import/export/maintenance job. */
 export interface ImportProgressEvent {
   id: string;
-  kind: string;
+  /** `index` (channel index import) or `share` (shared collection import). */
+  kind: 'index' | 'share' | (string & {});
   percent: number;
   message: string;
+  /** Items to import and imported so far. */
+  total?: number;
+  completed?: number;
   done: boolean;
   error?: string | null;
+}
+
+/** Answer of the endpoints that start an import (`POST .../files/import`, `POST /api/v1/shares/import`). */
+export interface ImportStartedDto {
+  /** Correlates the `ImportProgress` messages. */
+  importId: string;
+  kind: 'index' | 'share' | (string & {});
 }
 
 /** `AuthState`: the Telegram session logged in or out. */

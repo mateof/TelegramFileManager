@@ -3,6 +3,7 @@ import type {
   ApiFileDto,
   BrowseQuery,
   FolderContentsPage,
+  LocalCopyMoveRequest,
   LocalCreateFolderRequest,
   LocalDeleteRequest,
   LocalRenameRequest,
@@ -35,6 +36,12 @@ export function createLocalApi(http: HttpClient) {
     /** POST /api/v1/local/upload (multipart, 201): stores a browser file under `options.path`. */
     upload: (file: Blob, options: UploadFileOptions = {}, signal?: AbortSignal) =>
       http.post<ApiFileDto>(`${BASE}/upload`, uploadForm(file, options), { signal }),
+    /** POST /api/v1/local/copy: copies files/folders into `targetPath` (created when missing). */
+    copy: (body: LocalCopyMoveRequest) => http.post<TransferAcceptedDto>(`${BASE}/copy`, body),
+    /** POST /api/v1/local/move */
+    move: (body: LocalCopyMoveRequest) => http.post<TransferAcceptedDto>(`${BASE}/move`, body),
+    /** GET /api/v1/local/download?path=&disposition=inline: URL to view a local file in the browser. */
+    inlineUrl: (path: string) => http.url(`${BASE}/download`, { path, disposition: 'inline' }),
     /** POST /api/v1/local/cache/clear: empties the streaming/temporary cache. */
     clearCache: () => http.post<void>(`${BASE}/cache/clear`)
   };

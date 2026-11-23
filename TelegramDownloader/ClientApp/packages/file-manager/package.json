@@ -12,9 +12,12 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@tfm/ui": "*"
+    "@tanstack/react-virtual": "^3.14.28",
+    "@tfm/ui": "*",
+    "lucide-react": "^0.562.0"
   },
   "peerDependencies": {
+    "@tanstack/react-query": "^5.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   }
