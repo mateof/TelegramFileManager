@@ -209,6 +209,9 @@ builder.Services.AddSingleton<TelegramDownloader.Services.Library.LibraryImageSe
 builder.Services.AddSingleton<TelegramDownloader.Services.Library.LibraryScanService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TelegramDownloader.Services.Library.LibraryScanService>());
 builder.Services.AddSingleton<TelegramDownloader.Services.Library.LibraryService>();
+builder.Services.AddSingleton(sp => new TelegramDownloader.Services.Mobile.ChannelSearchIndex(
+    sp.GetRequiredService<IDbService>(),
+    sp.GetRequiredService<ILogger<TelegramDownloader.Services.Mobile.ChannelSearchIndex>>()));
 
 // CORS for PWA and mobile apps
 builder.Services.AddCors(options =>

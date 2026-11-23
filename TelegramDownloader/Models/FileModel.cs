@@ -17,6 +17,12 @@ namespace TelegramDownloader.Models
 
     }
 
+    /// <summary>
+    /// Minimal projection of a file document used to build the in-memory
+    /// search index of a channel (id, name and extension only).
+    /// </summary>
+    public sealed record ChannelFileNameEntry(string Id, string Name, string Type);
+
     public class FolderModel
     {
         public string Id { get; set; }

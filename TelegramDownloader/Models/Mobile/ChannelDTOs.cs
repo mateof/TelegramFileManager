@@ -161,7 +161,7 @@ namespace TelegramDownloader.Models.Mobile
             };
         }
 
-        private static bool IsAudioFile(string type)
+        public static bool IsAudioFile(string type)
         {
             var audioExtensions = new[] { ".mp3", ".ogg", ".flac", ".aac", ".wav", ".m4a", ".wma", ".opus" };
             return audioExtensions.Contains(type?.ToLowerInvariant());

@@ -360,6 +360,39 @@ namespace TelegramDownloader.Data.db
             return files.ToList();
         }
 
+        public async Task<List<ChannelFileNameEntry>> GetFileNameEntries(string dbName, CancellationToken cancellationToken = default, string collectionName = "directory")
+        {
+            if (collectionName == null)
+                collectionName = "directory";
+            var collection = getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName);
+            var result = new List<ChannelFileNameEntry>();
+            using var cursor = await collection
+                .Find(x => x.IsFile, new FindOptions { BatchSize = 5000 })
+                .Project(x => new { x.Id, x.Name, x.Type })
+                .ToCursorAsync(cancellationToken);
+            while (await cursor.MoveNextAsync(cancellationToken))
+            {
+                foreach (var f in cursor.Current)
+                {
+                    if (f.Id == null || f.Name == null) continue;
+                    result.Add(new ChannelFileNameEntry(f.Id, f.Name, f.Type));
+                }
+            }
+            return result;
+        }
+
+        public async Task<List<BsonFileManagerModel>> GetFilesByIds(string dbName, IEnumerable<string> ids, CancellationToken cancellationToken = default, string collectionName = "directory")
+        {
+            if (collectionName == null)
+                collectionName = "directory";
+            var idList = ids?.Distinct().ToList() ?? new List<string>();
+            if (idList.Count == 0)
+                return new List<BsonFileManagerModel>();
+            var filter = Builders<BsonFileManagerModel>.Filter.In(x => x.Id, idList);
+            return await getDatabase(dbName).GetCollection<BsonFileManagerModel>(collectionName)
+                .Find(filter).ToListAsync(cancellationToken);
+        }
+
         public async Task<BsonFileManagerModel> getFileByPath(string dbName, string path, string collectionName = "directory")
         {
             if (collectionName == null)
@@ -1257,6 +1290,33 @@ namespace TelegramDownloader.Data.db
             await collection.UpdateOneAsync(filter, update);
 
             _logger.LogInformation("Added track {FileName} to playlist {Id}", track.FileName, playlistId);
+        }
+
+        public async Task AddTracksToPlaylist(string playlistId, List<PlaylistTrackModel> tracks)
+        {
+            if (tracks == null || tracks.Count == 0)
+                return;
+
+            var collection = getDatabase(CONFIG_DB_NAME).GetCollection<PlaylistModel>(PLAYLIST_COLLECTION);
+
+            var playlist = await GetPlaylistById(playlistId);
+            if (playlist == null)
+            {
+                _logger.LogWarning("Playlist {Id} not found when adding tracks", playlistId);
+                return;
+            }
+
+            var now = DateTime.Now;
+            PlaylistTrackMerger.AssignOrder(tracks, PlaylistTrackMerger.NextOrder(playlist.Tracks), now);
+
+            var filter = Builders<PlaylistModel>.Filter.Eq(x => x.Id, playlistId);
+            var update = Builders<PlaylistModel>.Update
+                .PushEach(x => x.Tracks, tracks)
+                .Set(x => x.DateModified, now);
+
+            await collection.UpdateOneAsync(filter, update);
+
+            _logger.LogInformation("Added {Count} tracks to playlist {Id}", tracks.Count, playlistId);
         }
 
         public async Task RemoveTrackFromPlaylist(string playlistId, string fileId)

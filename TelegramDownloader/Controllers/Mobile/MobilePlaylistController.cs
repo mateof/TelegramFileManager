@@ -257,6 +257,85 @@ namespace TelegramDownloader.Controllers.Mobile
         }
 
         /// <summary>
+        /// Agregar varios tracks a una playlist en una sola operación
+        /// </summary>
+        /// <remarks>
+        /// Agrega hasta 5000 tracks al final de la playlist con una única escritura en base de datos.
+        /// Cada elemento tiene el mismo formato que en POST /api/mobile/playlists/{id}/tracks
+        /// (FileId, ChannelId y FileName obligatorios).
+        ///
+        /// **Duplicados:** se omiten (sin error) los tracks cuyo FileId ya existe en la playlist
+        /// y los repetidos dentro de la propia petición; se cuentan en `skipped`.
+        /// Los tracks agregados conservan el orden del array y continúan la numeración de `Order`.
+        ///
+        /// **Ejemplo:** `{ "tracks": [ { "fileId": "...", "channelId": "...", "fileName": "a.mp3" } ] }`
+        ///
+        /// Respuesta: `added` (agregados), `skipped` (omitidos) y `total` (tracks de la playlist tras la operación).
+        /// </remarks>
+        /// <param name="id">ID de la playlist</param>
+        /// <param name="request">Lista de tracks a agregar</param>
+        /// <returns>Resumen de tracks agregados y omitidos</returns>
+        [HttpPost("{id}/tracks/bulk")]
+        [ProducesResponseType(typeof(ApiResponse<BulkAddTracksResultDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResponse<BulkAddTracksResultDto>), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ApiResponse<BulkAddTracksResultDto>), StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> AddTracksBulk(string id, [FromBody] BulkAddTracksRequest? request)
+        {
+            try
+            {
+                var tracks = request?.Tracks;
+                if (tracks == null || tracks.Count == 0)
+                {
+                    return BadRequest(ApiResponse<BulkAddTracksResultDto>.Fail("At least one track is required"));
+                }
+                if (tracks.Count > BulkAddTracksRequest.MaxTracks)
+                {
+                    return BadRequest(ApiResponse<BulkAddTracksResultDto>.Fail(
+                        $"Too many tracks: maximum is {BulkAddTracksRequest.MaxTracks} per request"));
+                }
+                for (int i = 0; i < tracks.Count; i++)
+                {
+                    var t = tracks[i];
+                    if (t == null || string.IsNullOrWhiteSpace(t.FileId)
+                        || string.IsNullOrWhiteSpace(t.ChannelId) || string.IsNullOrWhiteSpace(t.FileName))
+                    {
+                        return BadRequest(ApiResponse<BulkAddTracksResultDto>.Fail(
+                            $"Invalid track at index {i}: fileId, channelId and fileName are required"));
+                    }
+                }
+
+                var playlist = await _db.GetPlaylistById(id);
+                if (playlist == null)
+                {
+                    return NotFound(ApiResponse<BulkAddTracksResultDto>.Fail("Playlist not found"));
+                }
+
+                var existing = playlist.Tracks ?? new List<PlaylistTrackModel>();
+                var toAdd = PlaylistTrackMerger.SelectNew(existing, tracks.Select(t => t.ToModel()), out var skipped);
+
+                if (toAdd.Count > 0)
+                {
+                    await _db.AddTracksToPlaylist(id, toAdd);
+                }
+
+                var result = new BulkAddTracksResultDto
+                {
+                    Added = toAdd.Count,
+                    Skipped = skipped,
+                    Total = existing.Count + toAdd.Count
+                };
+
+                return Ok(ApiResponse<BulkAddTracksResultDto>.Ok(result,
+                    $"{result.Added} tracks added, {result.Skipped} skipped"));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error adding tracks in bulk to playlist {Id}", id);
+                return StatusCode(500, ApiResponse<BulkAddTracksResultDto>.Fail("Error adding tracks"));
+            }
+        }
+
+        /// <summary>
         /// Eliminar track de una playlist
         /// </summary>
         /// <remarks>
