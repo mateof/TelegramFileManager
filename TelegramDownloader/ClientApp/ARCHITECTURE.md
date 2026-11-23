@@ -190,11 +190,22 @@ Prefer composing these over new primitives; if something is generic, add it to `
 
 ## 6. @tfm/file-manager
 
-Skeleton only for now: `src/types.ts` defines `FileSystemProvider` (the data adapter: `list`,
-`search?`, `createFolder?`, `rename?`, `move?`, `copy?`, `delete?`, `upload?`, `download?`,
-`previewUrl?`, `thumbnailUrl?` + `capabilities`), `FileEntry`, `Page`, `ListOptions`, `FileAction`
-(app-specific actions registry) and friends. The library must not import TFM code: TFM providers
-(channel, local, shared collection) live in the app's feature folders.
+Reusable file manager (see [packages/file-manager/README.md](packages/file-manager/README.md)):
+headless core (`useFileManager`, pure selection/history/clipboard/keyboard/upload-queue modules) +
+default UI (`<FileManager provider=... actions=... strings=.../>`), fed by a `FileSystemProvider`
+with capability flags and extended through the actions registry (`FileAction`). The library does
+not import TFM code. TFM providers and actions live in the app:
+
+- `features/files/`: shared by the three file manager features (no routes): DTO → entry mapping,
+  translated labels (`fileManagerStrings()`), XHR upload with progress, browser downloads, player /
+  viewer / playlist actions (`openMedia`, `mediaActions`), local folder picker, "download to the
+  server" dialog, import progress, `useRoutePath()` (the route splat is the folder path, so deep
+  links like `/channels/42/music/rock` and `/local/downloads` open that folder).
+- `features/channels/`: channel provider (`createChannelProvider`, also used read only for shared
+  collections with `collectionId`), TFM actions, header (refresh with live progress, export/import
+  index, WebDAV, statistics, delete index, link to the chat view).
+- `features/local/`: local files provider + "upload to Telegram" with the upload preview.
+- `features/shared/`: shared collections list/import and read-only browsing.
 
 ## 7. Performance budget
 

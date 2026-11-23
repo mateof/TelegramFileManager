@@ -41,6 +41,14 @@ export interface ApiFileDto {
   streamUrl: string | null;
   /** Absolute URL that downloads the whole file. */
   downloadUrl: string | null;
+  /** v1 URL of the bytes, inline (`/api/v1/channels/{c}/files/{id}/content`, or `/api/v1/local/download?...&disposition=inline`). */
+  contentUrl?: string | null;
+  /** Same as {@link contentUrl} with `disposition=attachment` (browser download). */
+  contentDownloadUrl?: string | null;
+  /** Audio/video: what to give a media element (the transcoding `stream` URL for formats browsers cannot play). */
+  playbackUrl?: string | null;
+  /** Photos and single-message videos: a small JPEG preview. */
+  thumbnailUrl?: string | null;
 }
 
 /** Listing of a folder plus navigation and aggregate information. */
@@ -98,6 +106,8 @@ export interface BrowseQuery extends PagedQuery {
   search?: string;
   /** Hide folders and return only files. */
   filesOnly?: boolean;
+  /** Read an imported shared collection instead of the channel's own index (channel listings only). */
+  collectionId?: string;
 }
 
 /** Query of `GET /api/v1/channels/{channelId}/files/search`: the text plus the browse options (`path` scopes the subtree). */
@@ -110,6 +120,7 @@ export interface FileSearchQuery extends BrowseQuery {
 export interface FolderStatsQuery {
   path?: string;
   folderId?: string;
+  collectionId?: string;
 }
 
 /** Body of `POST /api/v1/channels/{channelId}/files/folders`. */
@@ -159,6 +170,30 @@ export interface LocalRenameRequest extends LocalPathRequest {
 export interface LocalDeleteRequest {
   /** Paths relative to the local root. */
   paths: string[];
+}
+
+/** Body of `POST /api/v1/local/copy` and `/move`. */
+export interface LocalCopyMoveRequest {
+  /** Files or folders to copy/move, relative to the local root. */
+  paths: string[];
+  /** Destination folder, relative to the local root. Created when missing. */
+  targetPath: string;
+  /** Replace entries with the same name in the destination; otherwise they are skipped. */
+  overwrite?: boolean;
+}
+
+/** Body of `POST /api/v1/channels/{channelId}/files/preload`. */
+export interface PreloadFilesRequest {
+  /** File or folder ids; folders are expanded recursively. */
+  fileIds: string[];
+}
+
+/** Query of the `content` media URL. */
+export interface ContentUrlOptions {
+  /** `inline` (default) or `attachment` (browser download). */
+  disposition?: 'inline' | 'attachment';
+  /** Entry of an imported shared collection. */
+  collectionId?: string;
 }
 
 /** Options of the multipart upload endpoints (`file` part + optional `path` form field). */

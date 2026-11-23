@@ -4,17 +4,20 @@ import type {
   ApiFolderContentsDto,
   ApiFolderStatsDto,
   BrowseQuery,
+  ContentUrlOptions,
   CopyMoveRequest,
   CreateFolderRequest,
   FileIdsRequest,
   FileSearchQuery,
   FolderContentsPage,
   FolderStatsQuery,
+  PreloadFilesRequest,
   RenameRequest,
   UploadFileOptions
 } from '../types/files';
 import type { TransferAcceptedDto } from '../types/transfers';
 import type { ChannelId } from '../types/channels';
+import type { ImportStartedDto } from '../types/events';
 
 const enc = encodeURIComponent;
 const base = (channelId: ChannelId) => `/api/v1/channels/${enc(channelId)}/files`;
@@ -81,9 +84,17 @@ export function createFilesApi(http: HttpClient) {
       http.post<void>(`${base(channelId)}/upload`, uploadForm(file, options), { signal }),
     /** GET /api/v1/channels/{channelId}/files/export: the whole index as a JSON file download. */
     exportUrl: (channelId: ChannelId) => http.url(`${base(channelId)}/export`),
-    /** POST /api/v1/channels/{channelId}/files/import (multipart `file`, 202): imports an exported index. */
+    /** POST /api/v1/channels/{channelId}/files/import (multipart `file`, 202): imports an exported index; progress as `ImportProgress`. */
     import: (channelId: ChannelId, file: Blob, signal?: AbortSignal) =>
-      http.post<void>(`${base(channelId)}/import`, uploadForm(file, {}), { signal })
+      http.post<ImportStartedDto>(`${base(channelId)}/import`, uploadForm(file, {}), { signal }),
+    /** POST /api/v1/channels/{channelId}/files/preload (202): downloads files/folders into the streaming cache. */
+    preload: (channelId: ChannelId, body: PreloadFilesRequest) =>
+      http.post<TransferAcceptedDto>(`${base(channelId)}/preload`, body),
+    /** URL of GET /api/v1/channels/{channelId}/files/{fileId}/content (inline or attachment, Range-capable). */
+    contentUrl: (channelId: ChannelId, fileId: string, options: ContentUrlOptions = {}) =>
+      http.url(`${base(channelId)}/${enc(fileId)}/content`, { ...options }),
+    /** URL of GET /api/v1/channels/{channelId}/files/{fileId}/stream (video: native or transcoded). */
+    streamUrl: (channelId: ChannelId, fileId: string) => http.url(`${base(channelId)}/${enc(fileId)}/stream`)
   };
 }
 
