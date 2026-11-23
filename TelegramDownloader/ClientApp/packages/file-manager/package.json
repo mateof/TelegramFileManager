@@ -1,0 +1,21 @@
+{
+  "name": "@tfm/file-manager",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Reusable file manager: headless core (navigation, selection, clipboard, uploads...) + default UI on @tfm/ui, fed by a FileSystemProvider adapter",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@tfm/ui": "*"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}

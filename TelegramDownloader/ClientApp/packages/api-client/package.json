@@ -1,0 +1,18 @@
+{
+  "name": "@tfm/api-client",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Typed client for the TFM REST API v1 and its SignalR hubs",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./signalr": "./src/signalr/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@microsoft/signalr": "^10.0.0"
+  }
+}

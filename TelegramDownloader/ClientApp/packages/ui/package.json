@@ -1,0 +1,30 @@
+{
+  "name": "@tfm/ui",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "TFM design system: theme engine (CSS variables) and accessible components on Radix primitives",
+  "sideEffects": [
+    "*.css"
+  ],
+  "exports": {
+    ".": "./src/index.ts",
+    "./styles.css": "./src/styles.css"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "cmdk": "^1.1.1",
+    "lucide-react": "^0.562.0",
+    "radix-ui": "^1.4.3",
+    "sonner": "^2.0.7",
+    "tailwind-merge": "^3.4.0",
+    "zustand": "^5.0.9"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}
