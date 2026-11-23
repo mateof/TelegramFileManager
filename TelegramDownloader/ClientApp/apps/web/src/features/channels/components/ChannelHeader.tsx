@@ -129,12 +129,12 @@ export function ChannelHeader({ channelId, detail, loading }: { channelId: strin
 
       <div className="flex items-center gap-1">
         {indexed && !progress && (
-          <Button size="sm" variant="secondary" icon={<RefreshCw />} onClick={() => setRefreshOpen(true)} disabled={detail?.canRefresh === false}>
+          <Button size="sm" variant="secondary" icon={<RefreshCw />} onClick={() => setRefreshOpen(true)} disabled={detail?.canRefresh === false} aria-label={t('Refresh')} title={t('Refresh')}>
             <span className="hidden sm:inline">{t('Refresh')}</span>
           </Button>
         )}
         <Button size="sm" variant="ghost" icon={<MessageSquare />} asChild>
-          <Link to={`/chat/${channelId}`}>
+          <Link to={`/chat/${channelId}`} aria-label={t('Messages')} title={t('Messages')}>
             <span className="hidden sm:inline">{t('Messages')}</span>
           </Link>
         </Button>

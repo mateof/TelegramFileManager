@@ -238,12 +238,12 @@ function ResultGroup({ group, query }: { group: SearchGroup; query: string }) {
           <ChevronDown className={cn('ml-1 size-4 shrink-0 text-fg-subtle transition-transform', !open && '-rotate-90')} />
         </button>
         {audioCount > 0 && (
-          <Button size="sm" variant="soft" icon={<Play />} onClick={() => playFiles(group.files, group.channelId, group.title)}>
+          <Button size="sm" variant="soft" icon={<Play />} onClick={() => playFiles(group.files, group.channelId, group.title)} aria-label={t('Play {count}', { count: audioCount })}>
             <span className="hidden sm:inline">{t('Play {count}', { count: audioCount })}</span>
           </Button>
         )}
         <Button size="sm" variant="ghost" asChild>
-          <Link to={containingFolderRoute(group.channelId, '/')}>
+          <Link to={containingFolderRoute(group.channelId, '/')} aria-label={t('Open')}>
             <FolderOpen />
             <span className="hidden sm:inline">{t('Open')}</span>
           </Link>
@@ -294,7 +294,7 @@ function ResultRow({ file, group, query }: { file: ApiFileDto; group: SearchGrou
           <span className="block truncate text-sm text-fg">
             {highlightParts(file.name, query).map((p, i) =>
               p.match ? (
-                <mark key={i} className="rounded bg-primary-soft px-0.5 text-accent-200">
+                <mark key={i} className="rounded-sm bg-primary-soft text-accent-200">
                   {p.text}
                 </mark>
               ) : (

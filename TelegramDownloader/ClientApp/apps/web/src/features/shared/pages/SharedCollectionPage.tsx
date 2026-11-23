@@ -44,7 +44,7 @@ export default function SharedCollectionPage() {
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 items-center gap-3 border-b border-border px-3 py-2.5 sm:px-4">
         <Button size="sm" variant="ghost" icon={<ArrowLeft />} asChild>
-          <Link to="/shared">
+          <Link to="/shared" aria-label={t('Shared collections')}>
             <span className="hidden sm:inline">{t('Shared collections')}</span>
           </Link>
         </Button>
