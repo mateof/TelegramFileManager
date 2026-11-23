@@ -235,6 +235,24 @@ namespace TelegramDownloader.Models.Api
         public string? TargetPath { get; set; }
     }
 
+    /// <summary>
+    /// Body of <c>POST /api/v1/transfers/uploads/preview</c>: the upload body
+    /// plus the preview options.
+    /// </summary>
+    public class UploadPreviewRequest : StartUploadRequest
+    {
+        /// <summary>
+        /// Also look for files whose content is already in the channel at another
+        /// path. Reads (hashes) every local file to upload whose size matches a
+        /// channel file with a stored hash, so it can take a while on large trees.
+        /// Only files uploaded with <c>CheckHash</c> enabled have a stored hash.
+        /// </summary>
+        public bool FindDuplicates { get; set; }
+
+        /// <summary>Maximum number of per item decisions returned in <c>items</c> (default 500, max 5000).</summary>
+        public int? MaxItems { get; set; }
+    }
+
     /// <summary>Body of <c>POST /api/v1/transfers/messages</c>.</summary>
     public class DownloadMessagesRequest
     {
