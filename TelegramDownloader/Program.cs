@@ -415,6 +415,15 @@ app.UseMiddleware<TelegramDownloader.Middleware.WebAccessMiddleware>();
 // index.html and the service worker are always revalidated.
 var spaRoot = Path.Combine(app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot"), "app");
 Directory.CreateDirectory(spaRoot);
+// Builds without the web app (dotnet run without building ClientApp) get an
+// explanatory page instead of a 404. The real build replaces it; keeping it
+// out of wwwroot/app means building never leaves the repo dirty.
+var spaIndex = Path.Combine(spaRoot, "index.html");
+var spaPlaceholder = Path.Combine(app.Environment.ContentRootPath, "Resources", "app-not-built.html");
+if (!File.Exists(spaIndex) && File.Exists(spaPlaceholder))
+{
+    File.Copy(spaPlaceholder, spaIndex);
+}
 var spaStaticOptions = new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(spaRoot),

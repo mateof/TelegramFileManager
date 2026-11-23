@@ -47,4 +47,8 @@
     <Folder Include="wwwroot\local\temp\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Shown at /app when the web app was not built (copied to wwwroot/app/index.html at startup) -->
+    <None Update="Resources/app-not-built.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
