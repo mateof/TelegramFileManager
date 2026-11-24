@@ -9,6 +9,7 @@ import {
   formatRuntime,
   genreRows,
   imageAtSize,
+  imageSrcSet,
   isLibraryDisabled,
   matchesDecade,
   minutesLeft,
@@ -176,6 +177,13 @@ describe('misc helpers', () => {
     expect(imageAtSize('http://h/api/v1/library/images/abc?size=w342', 'w92')).toBe('http://h/api/v1/library/images/abc?size=w92');
     expect(imageAtSize('/img/k', 'w500')).toBe('/img/k?size=w500');
     expect(imageAtSize(null, 'w92')).toBeNull();
+  });
+
+  it('builds a 1x/2x srcset for a library image', () => {
+    expect(imageSrcSet('/api/v1/library/images/abc?size=w300', 'w300', 'w780')).toBe(
+      '/api/v1/library/images/abc?size=w300 1x, /api/v1/library/images/abc?size=w780 2x'
+    );
+    expect(imageSrcSet(undefined, 'w300', 'w780')).toBeUndefined();
   });
 
   it('describes a version from its file name', () => {

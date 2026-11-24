@@ -161,7 +161,46 @@ GET /api/v1/library/items
 
 `posterUrl` / `backdropUrl` point at this server, which downloads and caches the
 provider image on first request (`?size=` accepts `w92 w154 w185 w300 w342 w500
-w780 w1280 original`; non-TMDB sources ignore it).
+w780 w1280 original`; non-TMDB sources ignore it). See [Images](#images).
+
+### Images
+
+```
+GET /api/v1/library/images/{key}?size=w342
+```
+
+Every image URL in the library DTOs (`posterUrl`, `backdropUrl`, season
+`posterUrl`, episode `stillUrl`, candidate `posterUrl`) points here; `key` is
+the provider URL in base64url and only the known image hosts (TMDB, IMDb/Amazon,
+TheTVDB, over HTTPS) are accepted. Clients never talk to the provider.
+
+- **Sizes**: `w92 w154 w185 w300 w342 w500 w780 w1280 original` (default
+  `original`; anything else is `400`). Only TMDB images are resized; for other
+  sources every size is the same file. Pick the size the view needs (the web
+  app uses `w342` for grid posters, `w92` for the blurred placeholder, `w500`
+  for the detail poster, `w300`/`w780` for episode stills and `w1280` for
+  backdrops).
+- **Cache**: the first request downloads the image (one download per image even
+  when many clients ask at once, at most 6 downloads to the providers at the
+  same time, 60 s timeout, only `image/*` responses up to 25 MB) and stores it
+  in `datauser/library/images` (the persisted volume). Requests are answered
+  from disk afterwards. The folder is kept under 2 GB by deleting the least
+  recently served images. `GET/DELETE /api/v1/system/image-cache` report and
+  clear it (`libraryImages`).
+- **Prefetch**: when a scan ends, the posters of the items it touched are
+  downloaded in the background (`w342` and `w92`, three at a time), so the
+  grids open without waiting for the provider.
+- **HTTP caching**: `200` responses carry `Cache-Control: private,
+  max-age=31536000, immutable`, an `ETag` and `Last-Modified`; conditional
+  requests (`If-None-Match` / `If-Modified-Since`) get `304`. A URL never
+  changes content.
+- **Errors**: `400 invalid_request` (unknown key, host or size), `404
+  not_found` when the provider does not have it or cannot be reached right now
+  (the server waits 10 minutes before asking the provider again for that
+  image). Errors are `Cache-Control: no-store`, so the browser asks again.
+- **Auth**: like every `/api/v1` route (web session cookie, API key, LAN
+  bypass). The cookie makes it usable straight from `<img src>` in the web
+  app; other clients add `?apiKey=` or the `X-Api-Key` header.
 
 ### Item detail
 

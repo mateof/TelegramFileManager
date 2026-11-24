@@ -222,13 +222,20 @@ builder.Services.AddHostedService<TelegramDownloader.Services.Api.EventsBroadcas
 
 // Media library: identification through metadata providers, cached images, watch state
 builder.Services.AddHttpClient("library-provider", c => c.Timeout = TimeSpan.FromSeconds(30));
-builder.Services.AddHttpClient("library-images", c => c.Timeout = TimeSpan.FromSeconds(60));
+builder.Services.AddHttpClient("library-images", c =>
+{
+    c.Timeout = TimeSpan.FromSeconds(60);
+    c.DefaultRequestHeaders.UserAgent.ParseAdd("TelegramFileManager/1.0");
+    c.DefaultRequestHeaders.Accept.ParseAdd("image/webp,image/*;q=0.9");
+});
 builder.Services.AddSingleton<TelegramDownloader.Data.db.ILibraryDbService, TelegramDownloader.Data.db.LibraryDbService>();
 builder.Services.AddSingleton<TelegramDownloader.Services.Library.MetadataProviderRegistry>();
 builder.Services.AddSingleton<TelegramDownloader.Services.Library.IMetadataProviderSource>(sp => sp.GetRequiredService<TelegramDownloader.Services.Library.MetadataProviderRegistry>());
 builder.Services.AddSingleton<TelegramDownloader.Services.Library.LibraryImageService>();
 builder.Services.AddSingleton<TelegramDownloader.Services.Library.LibraryScanService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TelegramDownloader.Services.Library.LibraryScanService>());
+// Posters of the items a scan touched go to the image cache in the background
+builder.Services.AddHostedService<TelegramDownloader.Services.Library.LibraryImagePrefetcher>();
 builder.Services.AddSingleton<TelegramDownloader.Services.Library.LibraryService>();
 builder.Services.AddSingleton(sp => new TelegramDownloader.Services.Mobile.ChannelSearchIndex(
     sp.GetRequiredService<IDbService>(),

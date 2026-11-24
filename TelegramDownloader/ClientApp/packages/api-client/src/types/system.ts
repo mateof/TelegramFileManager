@@ -122,6 +122,8 @@ export interface DeleteLogsQuery {
 export interface ImageCacheInfoDto {
   channelImages: number;
   thumbnails: number;
+  /** Library posters, backdrops and stills (servers before the library image cache omit it). */
+  libraryImages?: number;
   sizeInBytes: number;
   sizeText: string;
 }

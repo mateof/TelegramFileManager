@@ -440,7 +440,7 @@ function EpisodeRow({ item, ep, isNext, onIdentifyFile }: { item: ApiLibraryItem
         className="relative w-full shrink-0 overflow-hidden rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring sm:w-56"
         aria-label={t('Play episode {code}', { code: episodeCode(ep.season, ep.number) })}
       >
-        <LibraryImage src={ep.stillUrl ?? item.backdropUrl} alt="" size="w300" className="aspect-video w-full" imgClassName="transition-transform duration-500 group-hover:scale-105" />
+        <LibraryImage src={ep.stillUrl ?? item.backdropUrl} alt="" size="w300" size2x="w780" className="aspect-video w-full" imgClassName="transition-transform duration-500 group-hover:scale-105" />
         <span className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/35">
           <span className="flex size-10 scale-90 items-center justify-center rounded-full bg-white/90 text-black opacity-0 shadow-elevated transition-all group-hover:scale-100 group-hover:opacity-100">
             <Play className="size-4 translate-x-px fill-current" />

@@ -158,7 +158,16 @@ function IdentifyBody({ target, onDone }: { target: IdentifyTarget; onDone: () =
                   )}
                 >
                   <span className="relative block h-21 w-14 shrink-0 overflow-hidden rounded-md bg-surface-3">
-                    {c.posterUrl && <img src={c.posterUrl} alt="" loading="lazy" className="size-full object-cover" />}
+                    {c.posterUrl && (
+                      <img
+                        src={c.posterUrl}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        onError={(e) => (e.currentTarget.style.visibility = 'hidden')}
+                        className="size-full object-cover"
+                      />
+                    )}
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="flex flex-wrap items-center gap-2">

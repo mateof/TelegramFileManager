@@ -76,8 +76,8 @@ POST /api/v1/system/setup/complete
 | Endpoint | Effect |
 | --- | --- |
 | `POST /api/v1/system/restart` | Answers `202` and stops the process gracefully about a second later. It only comes back if something restarts it: the Docker restart policy (`restart: unless-stopped`), systemd, a Windows service… Started by hand, it just stops. Poll `/system/ping` to know when it is back. |
-| `GET /api/v1/system/image-cache` | `{ channelImages, thumbnails, sizeInBytes, sizeText }` of the channel avatar and thumbnail caches. |
-| `DELETE /api/v1/system/image-cache` | Empties both; images are downloaded again when next shown. |
+| `GET /api/v1/system/image-cache` | `{ channelImages, thumbnails, libraryImages, sizeInBytes, sizeText }` of the channel avatar, thumbnail and library image (posters, backdrops, stills) caches. |
+| `DELETE /api/v1/system/image-cache` | Empties the three; images are downloaded again when next shown. |
 | `GET /api/v1/system/orphaned-favorites` | Ids of favourite channels the account can no longer reach (session required). |
 | `POST /api/v1/system/orphaned-favorites` | Removes them from the favourites and returns the ids removed. |
 | `GET /api/v1/system/ffmpeg` | `{ available, version, transcodingEnabled }` (cached 5 minutes, `?refresh=true` probes again). |

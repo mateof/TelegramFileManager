@@ -291,7 +291,7 @@ function StorageCard() {
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-fg">{t('Image cache')}</p>
           <p className="text-xs text-fg-muted">
-            {cache.data ? t('{channels} channel images · {thumbs} thumbnails · {size}', { channels: cache.data.channelImages, thumbs: cache.data.thumbnails, size: cache.data.sizeText }) : t('Loading...')}
+            {cache.data ? t('{channels} channel images · {thumbs} thumbnails · {covers} library images · {size}', { channels: cache.data.channelImages, thumbs: cache.data.thumbnails, covers: cache.data.libraryImages ?? 0, size: cache.data.sizeText }) : t('Loading...')}
           </p>
         </div>
         <Button size="sm" variant="outline" icon={<Trash2 />} loading={clearImages.isPending} disabled={!cache.data || cache.data.sizeInBytes === 0} onClick={() => clearImages.mutate()}>

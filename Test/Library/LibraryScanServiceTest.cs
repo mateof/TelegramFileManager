@@ -75,6 +75,23 @@ namespace Test.Library
         }
 
         [Test]
+        public async Task ScanFinishedReportsTheTouchedItems()
+        {
+            _db.AddChannelFile("100", "Interstellar (2014) 1080p.mkv");
+            IReadOnlyCollection<string>? reported = null;
+            _scan.ScanFinished += ids => reported = ids;
+
+            await Run();
+
+            var movie = _db.Items.Values.Single();
+            Assert.That(reported, Is.EquivalentTo(new[] { movie.Id }));
+
+            reported = null;
+            await Run();
+            Assert.That(reported, Is.Null, "an incremental scan with nothing new reports nothing");
+        }
+
+        [Test]
         public async Task OneSearchPerTitleNotPerFile()
         {
             _db.AddChannelFile("100", "Interstellar (2014) 1080p.mkv");

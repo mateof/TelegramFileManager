@@ -36,6 +36,13 @@ namespace TelegramDownloader.Services.Library
         }
 
         public LibraryScanState? Current { get; private set; }
+
+        /// <summary>
+        /// Raised when a scan ends (also when cancelled or failed) with the ids
+        /// of the items it created or linked files to. Used to prefetch their
+        /// posters; handlers must not block.
+        /// </summary>
+        public event Action<IReadOnlyCollection<string>>? ScanFinished;
         public bool IsRunning => Current?.Running == true;
 
         public static bool IsVideo(string? extension) =>
@@ -233,6 +240,17 @@ namespace TelegramDownloader.Services.Library
                 await _lib.SaveScanState(state);
                 _logger.LogInformation("Library scan finished: {Matched} matched, {Review} to review, {Unmatched} unmatched, {Failed} failed",
                     state.Matched, state.Review, state.Unmatched, state.Failed);
+                if (touched.Count > 0)
+                {
+                    try
+                    {
+                        ScanFinished?.Invoke(touched.ToList());
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "A scan-finished handler failed");
+                    }
+                }
             }
         }
 

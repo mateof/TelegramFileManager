@@ -153,7 +153,7 @@ export function settingDefs(): SettingDef[] {
     // channels
     { id: 'enableRefreshOwnChannels', section: 'channels', label: t('Refresh own channels'), description: t('Allow refreshing the data of channels where you are admin or owner. By default only channels you do not own can be refreshed (to sync changes made by others). A refresh downloads the metadata of every file again, which can take long on large channels.') },
     { id: 'showChannelImages', section: 'channels', label: t('Show channel images'), description: t('Show the channel avatars in the channel lists.'), keywords: 'avatar' },
-    { id: 'imageCache', section: 'channels', label: t('Image cache'), description: t('Channel avatars and thumbnails cached on the server. Clear it to free disk space or force a new download.') },
+    { id: 'imageCache', section: 'channels', label: t('Image cache'), description: t('Channel avatars, thumbnails and library covers cached on the server. Clear it to free disk space or force a new download.') },
     { id: 'showHiddenChannels', section: 'channels', label: t('Show hidden channels'), description: t('Show the channels you hid in the channel lists.') },
     { id: 'hiddenChannels', section: 'channels', label: t('Hidden channels'), description: t('Channels hidden from the lists. Unhide them here.'), keywords: 'unhide' },
 
