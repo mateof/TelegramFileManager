@@ -8,6 +8,8 @@ import { api, errorMessage } from '@/lib/api';
 import { queryKeys } from '@/lib/queryKeys';
 import { SettingRow, SettingsGroup } from '../components/SettingRow';
 import { MIN_WEB_PASSWORD, validateNewPassword } from '../model/configForm';
+import { passkeysQueryKey } from '../model/passkeys';
+import { PasskeysPanel } from './PasskeysPanel';
 
 function webAuthError(error: unknown): string {
   if (isApiError(error)) {
@@ -18,7 +20,7 @@ function webAuthError(error: unknown): string {
   return errorMessage(error);
 }
 
-function PasswordForm({ passwordSet }: { passwordSet: boolean }) {
+function PasswordForm({ passwordSet, passkeyCount }: { passwordSet: boolean; passkeyCount: number }) {
   const qc = useQueryClient();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
@@ -40,7 +42,13 @@ function PasswordForm({ passwordSet }: { passwordSet: boolean }) {
 
   const setPassword = useMutation({ mutationFn: () => api.webAuth.setup({ password: next }), onSuccess: () => done(t('Web password set')) });
   const change = useMutation({ mutationFn: () => api.webAuth.changePassword({ currentPassword: current, newPassword: next }), onSuccess: () => done(t('Password changed. Other browsers have been signed out.')) });
-  const remove = useMutation({ mutationFn: () => api.webAuth.removePassword({ currentPassword: current }), onSuccess: () => done(t('Web password removed')) });
+  const remove = useMutation({
+    mutationFn: () => api.webAuth.removePassword({ currentPassword: current }),
+    onSuccess: () => {
+      done(t('Web password removed'));
+      qc.removeQueries({ queryKey: passkeysQueryKey });
+    }
+  });
   const busy = setPassword.isPending || change.isPending || remove.isPending;
   const error = setPassword.error ?? change.error ?? remove.error;
 
@@ -92,7 +100,10 @@ function PasswordForm({ passwordSet }: { passwordSet: boolean }) {
               if (!current) return;
               const ok = await confirm({
                 title: t('Remove the web password?'),
-                description: t('Anyone who can reach this server will be able to use the web interface. Every browser is signed out.'),
+                description:
+                  passkeyCount > 0
+                    ? `${t('Anyone who can reach this server will be able to use the web interface. Every browser is signed out.')} ${t('Your {count} passkeys are removed too.', { count: passkeyCount })}`
+                    : t('Anyone who can reach this server will be able to use the web interface. Every browser is signed out.'),
                 destructive: true,
                 confirmLabel: t('Remove')
               });
@@ -146,8 +157,10 @@ export function SecuritySection() {
             ? t('The web interface, the API, the hubs and the media URLs need this password (or the API key, for the apps). Changing or removing it signs out every browser.')
             : t('Without a password anyone who can reach this server can use the web interface. Set one (at least 8 characters) before exposing it outside your network. The apps keep using the API key.')}
         </p>
-        <PasswordForm passwordSet={s.passwordSet} />
+        <PasswordForm passwordSet={s.passwordSet} passkeyCount={s.passkeyCount ?? 0} />
       </SettingsGroup>
+
+      {s.passwordSet && <PasskeysPanel />}
 
       <SettingsGroup title={t('Local network')} icon={<Network />}>
         <SettingRow

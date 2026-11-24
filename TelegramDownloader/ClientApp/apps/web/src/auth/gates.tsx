@@ -74,7 +74,7 @@ export function WebAuthGate({ children }: { children?: ReactNode }) {
   if (!status.data.authenticated) {
     return (
       <Suspense fallback={<SplashScreen />}>
-        <WebLoginScreen />
+        <WebLoginScreen passkeys={status.data.passkeysAvailable === true} />
       </Suspense>
     );
   }

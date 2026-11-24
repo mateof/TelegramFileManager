@@ -62,7 +62,10 @@ src/
 1. `WebAuthGate` reads `GET /api/v1/web-auth/status`:
    - no password and no LAN bypass → **set password** screen (`POST setup`, then auto login);
    - not authenticated → **login** (`POST login {password, remember}`; 401 `invalid_credentials`,
-     429 `too_many_attempts`);
+     429 `too_many_attempts`). With `passkeysAvailable` it also offers passkeys
+     (`auth/usePasskeyLogin.ts`): a conditional (autofill) request started on mount and a
+     "Sign in with a passkey" button; the WebAuthn helpers are `lib/webauthn.ts` + `lib/base64url.ts`
+     and passkeys are managed in Settings → Web security (`sections/PasskeysPanel.tsx`);
    - a 404 (server without web auth) is treated as "open" so older back-ends still work in dev.
    - Every 401 from any API call fires `apiEvents` → `unauthorized`; the gate re-checks the
      status and the login screen comes back. Features never handle 401.

@@ -1,12 +1,13 @@
 import { ApiErrorCodes, isApiError } from '@tfm/api-client';
 import { Button, Checkbox, Field, Input } from '@tfm/ui';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Eye, EyeOff, KeyRound, LogIn, ShieldCheck } from 'lucide-react';
+import { Eye, EyeOff, FingerprintPattern, KeyRound, LogIn, ShieldCheck } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { t } from '@/i18n';
 import { api, errorMessage } from '@/lib/api';
 import { queryKeys } from '@/lib/queryKeys';
 import { AuthShell } from './AuthShell';
+import { usePasskeyLogin } from './usePasskeyLogin';
 
 const MIN_PASSWORD_LENGTH = 8;
 
@@ -46,11 +47,16 @@ function loginError(error: unknown): string {
   return errorMessage(error);
 }
 
-/** Web password prompt (cookie session). */
-export function WebLoginScreen() {
+/**
+ * Web password prompt (cookie session). With `passkeys` (status
+ * `passkeysAvailable`) it also offers passkeys: in the password field's
+ * autofill (conditional mediation) and with a button.
+ */
+export function WebLoginScreen({ passkeys = false }: { passkeys?: boolean }) {
   const qc = useQueryClient();
   const [password, setPassword] = useState('');
   const [remember, setRemember] = useState(true);
+  const passkey = usePasskeyLogin({ available: passkeys, remember });
   const login = useMutation({
     mutationFn: () => api.webAuth.login({ password, remember }),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.webAuthStatus })
@@ -64,15 +70,42 @@ export function WebLoginScreen() {
   return (
     <AuthShell title={t('Welcome back')} subtitle={t('Enter the password of this server to continue.')}>
       <form onSubmit={submit} className="flex flex-col gap-4">
+        {/* Single-user server: a fixed user name helps password managers file the password (and its passkey) */}
+        <input type="text" name="username" autoComplete="username" value="TFM" readOnly hidden />
         <Field label={t('Password')} error={login.isError ? loginError(login.error) : undefined}>
           {({ id, describedBy, invalid }) => (
-            <PasswordInput id={id} value={password} onChange={setPassword} autoComplete="current-password" describedBy={describedBy} invalid={invalid} autoFocus />
+            <PasswordInput
+              id={id}
+              value={password}
+              onChange={setPassword}
+              autoComplete={passkey.supported ? 'current-password webauthn' : 'current-password'}
+              describedBy={describedBy}
+              invalid={invalid}
+              autoFocus
+            />
           )}
         </Field>
         <Checkbox label={t('Keep me signed in on this device')} checked={remember} onCheckedChange={(v) => setRemember(v === true)} />
-        <Button type="submit" size="lg" loading={login.isPending} disabled={!password} icon={<LogIn />}>
+        <Button type="submit" size="lg" loading={login.isPending} disabled={!password || passkey.busy} icon={<LogIn />}>
           {t('Sign in')}
         </Button>
+        {passkey.supported && (
+          <>
+            <div className="flex items-center gap-3 text-xs text-fg-subtle" aria-hidden>
+              <span className="h-px flex-1 bg-border" />
+              {t('or')}
+              <span className="h-px flex-1 bg-border" />
+            </div>
+            <Button type="button" size="lg" variant="secondary" loading={passkey.busy} disabled={login.isPending} icon={<FingerprintPattern />} onClick={() => void passkey.signIn()}>
+              {t('Sign in with a passkey')}
+            </Button>
+            {passkey.error && (
+              <p role="alert" className="text-sm text-danger">
+                {passkey.error}
+              </p>
+            )}
+          </>
+        )}
       </form>
     </AuthShell>
   );

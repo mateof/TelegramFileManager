@@ -71,6 +71,11 @@ export const ApiErrorCodes = {
   InternalError: 'internal_error',
   InvalidCredentials: 'invalid_credentials',
   TooManyAttempts: 'too_many_attempts',
+  SessionRequired: 'session_required',
+  PasskeyInvalid: 'passkey_invalid',
+  PasskeyChallengeInvalid: 'passkey_challenge_invalid',
+  PasskeyExists: 'passkey_exists',
+  PasskeyUnsupported: 'passkey_unsupported',
   /** Client side: the request never reached the server or the answer was not JSON. */
   NetworkError: 'network_error',
   /** Client side: the request was aborted through its AbortSignal. */
