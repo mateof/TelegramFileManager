@@ -31,6 +31,7 @@ import {
   ArrowUp,
   Bell,
   BellOff,
+  Download,
   Languages,
   LayoutGrid,
   LogOut,
@@ -50,6 +51,8 @@ import { api } from '@/lib/api';
 import { formatRelative } from '@/lib/format';
 import { queryKeys } from '@/lib/queryKeys';
 import { stopRealtime, useRealtime } from '@/lib/realtime';
+import { useInstallMode } from '@/pwa/install';
+import { installApp } from '@/pwa/installApp';
 import { useUi } from '@/stores/ui';
 
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform);
@@ -231,6 +234,7 @@ function UserMenu() {
     }
   });
   const canSignOut = webAuth.data ? webAuth.data.passwordSet && !webAuth.data.lanBypassActive : true;
+  const installMode = useInstallMode();
 
   return (
     <DropdownMenu>
@@ -283,6 +287,11 @@ function UserMenu() {
         <DropdownMenuItem icon={<LayoutGrid />} onSelect={() => navigate('/apps')}>
           {t('Apps')}
         </DropdownMenuItem>
+        {(installMode === 'prompt' || installMode === 'ios') && (
+          <DropdownMenuItem icon={<Download />} onSelect={() => void installApp(installMode)}>
+            {t('Install app')}
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem icon={<Undo2 />} onSelect={() => window.location.assign('/?ui=classic')}>
           {t('Classic UI')}
         </DropdownMenuItem>
@@ -302,7 +311,7 @@ function UserMenu() {
 export function TopBar() {
   const setMobileNavOpen = useUi((s) => s.setMobileNavOpen);
   return (
-    <header className="glass sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-border px-3 pt-[env(safe-area-inset-top)] sm:px-4">
+    <header className="glass sticky top-0 z-30 flex h-[calc(3.5rem+env(safe-area-inset-top))] shrink-0 items-center gap-2 border-b border-border px-3 pt-[env(safe-area-inset-top)] sm:px-4">
       <IconButton label={t('Open menu')} className="lg:hidden" onClick={() => setMobileNavOpen(true)}>
         <Menu />
       </IconButton>
