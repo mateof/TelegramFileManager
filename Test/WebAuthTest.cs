@@ -732,6 +732,11 @@ namespace Test
             public Task<WebAuthResult> ChangePasswordAsync(string? c, string? n) => throw new NotSupportedException();
             public Task<WebAuthResult> RemovePasswordAsync(string? c) => throw new NotSupportedException();
             public Task SetLanBypassAsync(bool enabled) => throw new NotSupportedException();
+            public IReadOnlyList<WebPasskey> Passkeys => Array.Empty<WebPasskey>();
+            public string? PasskeyUserHandle => null;
+            public string? PasskeyRpId => null;
+            public IReadOnlyList<string> PasskeyOrigins => Array.Empty<string>();
+            public Task<bool> UpdatePasskeysAsync(Func<WebAuthSettings, bool> change) => throw new NotSupportedException();
         }
 
         private static async Task<(Microsoft.AspNetCore.Http.HttpContext Ctx, bool NextCalled)> Run(

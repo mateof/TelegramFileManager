@@ -199,6 +199,7 @@ builder.Services.AddSingleton<TelegramDownloader.Services.WebAuth.IWebAuthServic
     new TelegramDownloader.Services.WebAuth.WebAuthService(
         sp.GetRequiredService<IDbService>(),
         sp.GetRequiredService<ILogger<TelegramDownloader.Services.WebAuth.WebAuthService>>()));
+builder.Services.AddSingleton<TelegramDownloader.Services.WebAuth.IPasskeyService, TelegramDownloader.Services.WebAuth.PasskeyService>();
 TelegramDownloader.Services.WebAuth.WebAuthSession.AddWebAuthentication(builder.Services);
 TelegramDownloader.Services.WebAuth.InternalHttpClient.AddInternalHttpClient(builder.Services);
 

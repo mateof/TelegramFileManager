@@ -104,6 +104,10 @@ services:
   (cookie session) or the API key. Optional "no password on the local network" for devices that
   connect directly from the LAN; requests through a reverse proxy always need the password.
   Forgot it? Start once with `TFM_RESET_WEB_PASSWORD=true`.
+- **Passkeys** (`/app` → Settings → Web security, while a password is set): sign in with
+  Bitwarden, 1Password, Windows Hello, Touch ID, a phone or a security key, also from the
+  browser's autofill. The password stays as the fallback. Needs HTTPS (or `localhost`) and a host
+  name (not an IP address); a passkey only works on the domain it was created on.
 - **API key** (Config → API & WebDAV Access): what the Android, TV and TFM Player apps use. While
   a web password is set it is the only way in for the apps.
 - **Reverse proxy**: only proxies in `TrustedProxies` (default: loopback and private ranges) may
@@ -134,7 +138,7 @@ Access works the same way for both interfaces (see [Security](#security)):
 - **Web password** (Config → Web Security, or the first screen of `/app` while none is set):
   browsers sign in at `/app/login` and get a session cookie (`HttpOnly`, `SameSite=Strict`;
   "remember me" keeps it for 30 days, otherwise it expires after 12 h idle). The classic
-  interface sends you there too.
+  interface sends you there too. Passkeys can be added as an extra way to sign in.
 - **No password on the local network** (optional, only while a password is set): devices that
   connect *directly* from a private/loopback address to a local host name (IP, `localhost`,
   `nas`, `*.local`…) get in without it. Anything that arrives through a reverse proxy always

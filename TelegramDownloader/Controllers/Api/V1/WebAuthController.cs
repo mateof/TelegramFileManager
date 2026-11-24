@@ -8,7 +8,8 @@ namespace TelegramDownloader.Controllers.Api.V1
 {
     /// <summary>
     /// Password protection of the web UI: status, first password, sign in/out,
-    /// password change/removal and the LAN bypass option.
+    /// password change/removal, the LAN bypass option and passkeys
+    /// (<c>WebAuthController.Passkeys.cs</c>).
     /// </summary>
     /// <remarks>
     /// These endpoints never need the API key nor a Telegram session. The
@@ -17,14 +18,16 @@ namespace TelegramDownloader.Controllers.Api.V1
     /// </remarks>
     [Route("api/v1/web-auth")]
     [Tags("Web session")]
-    public class WebAuthController : ApiV1ControllerBase
+    public partial class WebAuthController : ApiV1ControllerBase
     {
         private readonly IWebAuthService _auth;
+        private readonly IPasskeyService _passkeys;
         private readonly ILogger<WebAuthController> _logger;
 
-        public WebAuthController(IWebAuthService auth, ILogger<WebAuthController> logger)
+        public WebAuthController(IWebAuthService auth, IPasskeyService passkeys, ILogger<WebAuthController> logger)
         {
             _auth = auth;
+            _passkeys = passkeys;
             _logger = logger;
         }
 
@@ -220,12 +223,15 @@ namespace TelegramDownloader.Controllers.Api.V1
                 SecFetchSite = request.SecFetchSite
             });
 
+            var passkeyCount = _auth.PasswordSet ? _auth.Passkeys.Count : 0;
             return new WebAuthStatusDto
             {
                 PasswordSet = _auth.PasswordSet,
                 Authenticated = signedIn,
                 LanBypassEnabled = _auth.LanBypassEnabled,
-                LanBypassActive = lanActive
+                LanBypassActive = lanActive,
+                PasskeyCount = passkeyCount,
+                PasskeysAvailable = passkeyCount > 0 && RelyingParty().Supported
             };
         }
 

@@ -89,6 +89,12 @@ namespace TelegramDownloader.Models.Api
         public const string PasswordNotSet = "password_not_set";
         public const string WeakPassword = "weak_password";
         public const string CsrfHeaderMissing = "csrf_header_missing";
+        /// <summary>Needs a signed-in browser session (cookie), not the API key nor the LAN bypass.</summary>
+        public const string SessionRequired = "session_required";
+        public const string PasskeyInvalid = "passkey_invalid";
+        public const string PasskeyChallengeInvalid = "passkey_challenge_invalid";
+        public const string PasskeyExists = "passkey_exists";
+        public const string PasskeyUnsupported = "passkey_unsupported";
     }
 
     /// <summary>
