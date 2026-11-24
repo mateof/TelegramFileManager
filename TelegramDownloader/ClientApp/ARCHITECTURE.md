@@ -53,8 +53,11 @@ src/
     realtime.ts          SignalR hubs (lazy), notification store, hooks
     format.ts            formatBytes, formatRelative
   stores/ui.ts           layout state (sidebar collapsed, drawer, palette, channel tab)
+  pwa/                   installable app: install.ts (beforeinstallprompt, useInstallMode), register.ts
+                         (lazy SW registration), update.ts ("New version available" toast, update checks)
   i18n/                  t(), dictionaries per area in es/<area>.ts, coverage test
   features/<feature>/    one folder per feature (see below)
+sw/sw.ts                 the service worker (precached shell + offline navigations only; see the README)
 ```
 
 ### Auth flow

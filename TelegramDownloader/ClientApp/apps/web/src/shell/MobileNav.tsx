@@ -17,7 +17,7 @@ export function BottomNav() {
   return (
     <nav
       aria-label={t('Main navigation')}
-      className="glass z-30 flex h-16 shrink-0 items-stretch border-t border-border pb-[env(safe-area-inset-bottom)] lg:hidden"
+      className="glass z-30 flex h-[calc(4rem+env(safe-area-inset-bottom))] shrink-0 items-stretch border-t border-border pb-[env(safe-area-inset-bottom)] lg:hidden"
     >
       {mobileNavItems().map((item) => {
         const Icon = item.icon;

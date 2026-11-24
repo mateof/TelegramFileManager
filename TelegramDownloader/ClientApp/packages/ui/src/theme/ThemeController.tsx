@@ -52,14 +52,21 @@ function writePalette(root: HTMLElement, name: string, palette: Palette, remap?:
   }
 }
 
+/**
+ * The page may declare one theme-color per `prefers-color-scheme` (used before
+ * this runs); the chosen theme wins over the OS preference, so all of them get
+ * the colour of the theme actually shown.
+ */
 function setMetaThemeColor(color: string) {
-  let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
-  if (!meta) {
-    meta = document.createElement('meta');
+  const metas = document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]');
+  if (metas.length === 0) {
+    const meta = document.createElement('meta');
     meta.name = 'theme-color';
+    meta.content = color;
     document.head.appendChild(meta);
+    return;
   }
-  meta.content = color;
+  metas.forEach((meta) => (meta.content = color));
 }
 
 /**

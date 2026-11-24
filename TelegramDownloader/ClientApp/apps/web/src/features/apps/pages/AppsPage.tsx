@@ -6,6 +6,7 @@ import { t } from '@/i18n';
 import { api } from '@/lib/api';
 import { queryKeys } from '@/lib/queryKeys';
 import { PageHeader } from '@/shell/PageHeader';
+import { InstallCard } from '../InstallCard';
 import { SISTER_APPS } from '../links';
 
 interface SisterApp {
@@ -139,6 +140,8 @@ export default function AppsPage() {
         description={t('Take Telegram File Manager everywhere: the same server, on every screen.')}
         icon={<LayoutGrid />}
       />
+
+      <InstallCard />
 
       <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
         {apps().map((app) => (
