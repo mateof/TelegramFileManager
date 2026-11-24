@@ -190,6 +190,48 @@ frees the channel storage. Irreversible.
 
 `skipped` lists ids that could not be resolved or deleted.
 
+Telegram messages are deleted in batches of 100 (one call per batch), honouring
+`FLOOD_WAIT`. In channels where the account is not admin only the index entries are
+removed (the messages are not the account's to delete).
+
+### Delete with progress
+
+```
+POST /api/v1/channels/{channelId}/files/delete-operations
+{ "ids": ["694a…", "694b…"] }
+→ 202 { "data": { "operationId": "3f2c…" } }
+```
+
+Same effect, in the background. Follow it with `GET /api/v1/delete-operations/{operationId}`
+(about once a second) or the `DeleteProgress` message of `/hubs/events`; cancel it with
+`POST /api/v1/delete-operations/{operationId}/cancel` (it stops after the batch in flight; what
+was deleted stays deleted). `GET /api/v1/delete-operations` lists the running ones and those
+finished in the last 10 minutes. Advertised as `files.deleteOperations` in
+`GET /api/mobile/capabilities`.
+
+```ts
+interface ApiDeleteOperationDto {
+  id: string;
+  kind: "channel" | "local";
+  channelId?: string; channelName?: string;   // channel deletes
+  itemCount: number;                           // items selected
+  phase: "counting" | "deleting" | "waiting" | "done" | "failed" | "cancelled";
+  counted: boolean;                            // totals known
+  finished: boolean;
+  totalFiles: number; totalFolders: number; totalBytes: number;
+  processedFiles: number; processedFolders: number; processedBytes: number;
+  messagesDeleted: number;                     // Telegram messages deleted
+  indexOnly: boolean;                          // channel where the account cannot delete messages
+  currentItem?: string;
+  failedCount: number;
+  failed: { path: string; reason: string }[];  // first 100
+  waitUntil?: string;                          // phase "waiting": FLOOD_WAIT end (UTC)
+  cancelRequested: boolean;
+  error?: string;                              // phase "failed"
+  startedAt: string; finishedAt?: string;
+}
+```
+
 ## Copy / move
 
 ```

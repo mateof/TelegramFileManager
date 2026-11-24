@@ -73,6 +73,14 @@ POST /api/v1/local/delete    { "paths": ["music/a.mp3", "old-folder"] }   # recu
 ```
 
 `delete` returns `{ accepted, skipped }`. Names may not contain path separators.
+The local root itself cannot be deleted, and links (symlinks / junctions) inside a folder are
+removed as links, never followed.
+
+`POST /api/v1/local/delete-operations { "paths": [...] }` does the same in the background and
+answers `202 { operationId }`: it counts first, then deletes file by file and the folders
+bottom-up. Follow it with `GET /api/v1/delete-operations/{id}` or `DeleteProgress` on
+`/hubs/events` (see [files.md](files.md#delete-with-progress)), cancel it with
+`POST /api/v1/delete-operations/{id}/cancel`.
 Name clashes return `409 conflict`.
 
 ## Download a local file

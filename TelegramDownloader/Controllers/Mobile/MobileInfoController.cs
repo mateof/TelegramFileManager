@@ -36,6 +36,7 @@ namespace TelegramDownloader.Controllers.Mobile
             "transfers.remove",      // DELETE /api/v1/transfers/{id}
             "system.admin",          // restart, image-cache, orphaned-favorites, ffmpeg, version
             "webAuth.passkeys",      // /api/v1/web-auth/passkeys/** (passkey sign-in of the web app)
+            "files.deleteOperations", // POST /api/v1/channels/{id}/files/delete-operations, /api/v1/local/delete-operations, /api/v1/delete-operations
         };
 
         private static readonly string ServerVersion = ResolveServerVersion();
@@ -64,6 +65,8 @@ namespace TelegramDownloader.Controllers.Mobile
         /// - `transfers.remove`: DELETE /api/v1/transfers/{id}
         /// - `system.admin`: /api/v1/system/restart, image-cache, orphaned-favorites, ffmpeg y version
         /// - `webAuth.passkeys`: /api/v1/web-auth/passkeys/** (inicio de sesión con passkeys de la web)
+        /// - `files.deleteOperations`: borrados en segundo plano con progreso y cancelación: POST /api/v1/channels/{id}/files/delete-operations,
+        ///   POST /api/v1/local/delete-operations, GET /api/v1/delete-operations[/{id}], POST /api/v1/delete-operations/{id}/cancel y `DeleteProgress` en /hubs/events
         ///
         /// Los servidores antiguos no tienen este endpoint: un **404** debe interpretarse
         /// como "sin funcionalidades opcionales". No accede a base de datos.

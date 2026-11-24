@@ -1,6 +1,7 @@
 import { cn, Spinner } from '@tfm/ui';
 import { Suspense } from 'react';
 import { Outlet, useNavigation } from 'react-router';
+import { DeleteProgressHost } from '@/features/files/deletes/DeleteProgressHost';
 import { ChannelCommands } from '@/features/maintenance/ChannelCommands';
 import { PlayerSlot } from '@/features/player/PlayerSlot';
 import { t } from '@/i18n';
@@ -70,11 +71,15 @@ export function AppLayout() {
             loading ? 'scale-x-75 opacity-100' : 'scale-x-0 opacity-0'
           )}
         />
-        <main id="tfm-main" tabIndex={-1} className="flex min-h-0 flex-1 flex-col overflow-y-auto outline-none">
-          <Suspense fallback={<RouteFallback />}>
-            <Outlet />
-          </Suspense>
-        </main>
+        {/* The wrapper anchors the delete progress above the player and the bottom nav */}
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <main id="tfm-main" tabIndex={-1} className="flex min-h-0 flex-1 flex-col overflow-y-auto outline-none">
+            <Suspense fallback={<RouteFallback />}>
+              <Outlet />
+            </Suspense>
+          </main>
+          <DeleteProgressHost />
+        </div>
         <PlayerSlot />
         <BottomNav />
       </div>

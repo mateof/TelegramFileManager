@@ -15,6 +15,8 @@ namespace TelegramDownloader.Data
         bool checkChannelExist(string id);
         bool checkUserLogin();
         Task deleteFile(string chatId, int idMessage);
+        /// <summary>Deletes several messages of a chat in one call (at most 100 ids, Telegram's limit).</summary>
+        Task deleteFiles(string chatId, IReadOnlyList<int> idMessages);
         bool isInChat(long id);
         Task<InvitationInfo?> getInvitationHash(long id);
         Task joinChatInvitationHash(string? hash);

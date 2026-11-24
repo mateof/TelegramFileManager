@@ -35,7 +35,7 @@ export function reportSuccess(operation: FileOperation, entries: FileEntry[]): v
   const count = entries.length;
   if (operation === 'move') toast.success(t('{count} items moved', { count }));
   else if (operation === 'copy') toast.success(t('{count} items copied', { count }));
-  else if (operation === 'delete') toast.success(t('{count} items deleted', { count }));
+  // A delete reports its own outcome in the delete progress panel
 }
 
 /** The locale of dates in the file manager. */

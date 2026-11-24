@@ -3,6 +3,14 @@
 import type { PagedQuery } from '../http';
 
 /** Server identity and health, returned by `GET /api/v1/system/info`. */
+/** `GET /api/mobile/capabilities`: optional features of the server (404 on old servers: none). */
+export interface CapabilitiesDto {
+  apiVersion: number;
+  serverVersion: string;
+  /** Stable identifiers, e.g. `files.deleteOperations`, `events.hub`. */
+  features: string[];
+}
+
 export interface ServerInfoDto {
   product: string;
   version: string;

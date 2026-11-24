@@ -35,6 +35,12 @@ namespace TelegramDownloader.Data
         Task importSharedData(ShareFilesModel sfm, GenericNotificationProgressModel gnp);
         Task<FsListing> itemDeleteAsync(string dbName, FsDeleteRequest args);
         Task oneItemDeleteAsync(string dbName, FsEntry File);
+        /// <summary>
+        /// The shared channel delete (index entries in bulk, Telegram messages in batches of 100
+        /// when no other entry references them and the account may delete in the chat).
+        /// </summary>
+        Task<TelegramDownloader.Services.Deletes.ChannelDeleteResult> DeleteChannelEntriesAsync(string dbName, IReadOnlyList<BsonFileManagerModel> entries,
+            TelegramDownloader.Services.Deletes.DeleteOperation progress = null, CancellationToken cancellationToken = default);
         Task<FsListing> RenameFileOrFolder(string dbName, FsEntry file, string newName);
         Task<FsListing> SearchAsync(string dbName, string path, string searchText, string? collectionId = null);
         Task UploadFile(string dbName, string currentPath, Microsoft.AspNetCore.Components.Forms.IBrowserFile file);

@@ -1,6 +1,7 @@
 // Payloads of the /hubs/events SignalR hub (application-wide realtime events).
 // PROVISIONAL where marked: the hub is written by the API agent in parallel; align at merge.
 import type { ApiChannelRefreshProgressDto, ApiChannelRefreshResultDto } from './channels';
+import type { ApiDeleteOperationDto } from './deleteOperations';
 import type { ApiLibraryScanStateDto } from './library';
 import type { SystemMetricsDto } from './system';
 
@@ -66,6 +67,12 @@ export interface LibraryScanEvent {
   progress?: ApiLibraryScanStateDto | null;
 }
 
+/**
+ * `DeleteProgress`: a background delete (`POST .../files/delete-operations`, `POST /api/v1/local/delete-operations`).
+ * At most 4 per second per operation, always the final state (`finished: true`), and on connect for each running one.
+ */
+export type DeleteProgressEvent = ApiDeleteOperationDto;
+
 /** Message name → payload of every server → client message of /hubs/events. */
 export interface EventsHubMessages {
   Notification: EventNotification;
@@ -75,4 +82,5 @@ export interface EventsHubMessages {
   AuthState: AuthStateEvent;
   Metrics: MetricsEvent;
   LibraryScan: LibraryScanEvent;
+  DeleteProgress: DeleteProgressEvent;
 }

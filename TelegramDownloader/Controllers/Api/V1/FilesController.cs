@@ -5,6 +5,7 @@ using TelegramDownloader.Models;
 using TelegramDownloader.Models.Api;
 using TelegramDownloader.Services;
 using TelegramDownloader.Services.Api;
+using TelegramDownloader.Services.Deletes;
 using TelegramDownloader.Models.FileSystem;
 
 namespace TelegramDownloader.Controllers.Api.V1
@@ -279,31 +280,58 @@ namespace TelegramDownloader.Controllers.Api.V1
             if (request == null || request.Ids.Count == 0)
                 return BadRequestResult("At least one id is required");
 
-            var deleted = 0;
+            var ids = request.Ids.Where(i => !string.IsNullOrWhiteSpace(i)).Distinct(StringComparer.Ordinal).ToList();
             var skipped = new List<string>();
-
-            foreach (var id in request.Ids)
+            var deleted = 0;
+            try
             {
-                try
+                var entries = await _db.GetFilesByIds(channelId, ids);
+                var found = entries.Select(e => e.Id).ToHashSet(StringComparer.Ordinal);
+                skipped.AddRange(ids.Where(id => !found.Contains(id)));
+                if (entries.Count > 0)
                 {
-                    var entry = await _db.getFileById(channelId, id);
-                    if (entry == null)
-                    {
-                        skipped.Add(id);
-                        continue;
-                    }
-                    await _files.oneItemDeleteAsync(channelId, ChannelFolderResolver.ToContent(entry));
-                    deleted++;
+                    // The shared implementation: entries in bulk, Telegram messages in batches.
+                    var result = await _files.DeleteChannelEntriesAsync(channelId, entries);
+                    deleted = result.DeletedRootIds.Count;
+                    skipped.AddRange(result.FailedRootIds);
                 }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Could not delete {FileId} in channel {ChannelId}", id, channelId);
-                    skipped.Add(id);
-                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not delete entries in channel {ChannelId}", channelId);
+                skipped = ids;
+                deleted = 0;
             }
 
             return OkResult(new TransferAcceptedDto { Accepted = deleted, Skipped = skipped },
                 $"{deleted} entries deleted");
+        }
+
+        /// <summary>Starts deleting files and folders in the background, with live progress.</summary>
+        /// <remarks>
+        /// Same effect as <c>POST .../files/delete</c> (folders recursively; the
+        /// Telegram messages no other entry references are deleted, in batches of
+        /// 100, when the account may delete in the channel; otherwise only the
+        /// index entries go), but answers at once with an <c>operationId</c>.
+        /// Follow it with <c>GET /api/v1/delete-operations/{operationId}</c> or the
+        /// <c>DeleteProgress</c> message of <c>/hubs/events</c>, and cancel it with
+        /// <c>POST /api/v1/delete-operations/{operationId}/cancel</c>. Ids that do
+        /// not exist are reported as failed items (<c>Not found</c>).
+        /// </remarks>
+        /// <param name="channelId">Channel id.</param>
+        /// <param name="request">Ids of the entries to delete.</param>
+        /// <param name="operations">Delete operations service.</param>
+        [HttpPost("delete-operations")]
+        [ProducesResponseType(typeof(ApiResult<DeleteOperationStartedDto>), StatusCodes.Status202Accepted)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status400BadRequest)]
+        public IActionResult StartDeleteOperation(string channelId, [FromBody] FileIdsRequest request,
+            [FromServices] DeleteOperationService operations)
+        {
+            if (request == null || request.Ids == null || request.Ids.Count(i => !string.IsNullOrWhiteSpace(i)) == 0)
+                return BadRequestResult("At least one id is required");
+
+            var operation = operations.StartChannel(channelId, request.Ids);
+            return Accepted(ApiResult<DeleteOperationStartedDto>.Ok(new DeleteOperationStartedDto { OperationId = operation.Id }, "Delete started"));
         }
 
         /// <summary>Copies files and folders to another folder of the same channel.</summary>

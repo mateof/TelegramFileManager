@@ -190,6 +190,7 @@ only). Payloads are camelCase JSON.
 | `AuthState` | `AuthStateEventDto` | On connect, and whenever the Telegram session state changes (sign-in is pushed immediately, sign-out within a second). |
 | `LibraryScan` | `LibraryScanEventDto` | Every second while a media library scan runs, once when it ends (`running: false`), and on connect when one is running. |
 | `Metrics` | `SystemMetricsDto` | Every 2 seconds, only to connections that called `SubscribeMetrics()`. One sample is sent right after subscribing. |
+| `DeleteProgress` | `ApiDeleteOperationDto` | Progress of a background delete (`POST .../files/delete-operations`, `POST /api/v1/local/delete-operations`): at most 4 per second per operation, always the final state (`finished: true`), and on connect for each running one. Same shape as `GET /api/v1/delete-operations/{id}`. |
 
 ```ts
 interface NotificationEventDto {
