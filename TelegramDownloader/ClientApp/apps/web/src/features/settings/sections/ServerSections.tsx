@@ -6,6 +6,7 @@ import { useId } from 'react';
 import { t } from '@/i18n';
 import { api, errorMessage } from '@/lib/api';
 import { useRealtime } from '@/lib/realtime';
+import { useUi } from '@/stores/ui';
 import { CHUNK_SIZES_KB, maxMemorySplitGb, telegramMaxGb } from '../model/configForm';
 import { settingsKeys } from '../model/useSettingsForm';
 import { NumberRow, SettingRow, SettingsGroup, SwitchRow } from '../components/SettingRow';
@@ -218,11 +219,14 @@ export function UploadsSection({ form, values: v }: FormSectionProps) {
 }
 
 export function FileManagerSection({ form, values: v }: FormSectionProps) {
+  const singleClickFolders = useUi((s) => s.singleClickFolders);
+  const setSingleClickFolders = useUi((s) => s.setSingleClickFolders);
   return (
     <SettingsGroup title={t('File manager')} description={t('Options of the file manager of the web interface.')}>
       <SwitchRow id="useMobileFileManagerAlways" checked={v.useMobileFileManagerAlways} onChange={(b) => form.setField('useMobileFileManagerAlways', b)} />
       <SwitchRow id="hasFileManagerVirtualScroll" checked={v.hasFileManagerVirtualScroll} onChange={(b) => form.setField('hasFileManagerVirtualScroll', b)} />
       <SwitchRow id="shouldShowPaginatedFileChannel" checked={v.shouldShowPaginatedFileChannel} onChange={(b) => form.setField('shouldShowPaginatedFileChannel', b)} />
+      <SwitchRow id="singleClickFolders" checked={singleClickFolders} onChange={setSingleClickFolders} />
     </SettingsGroup>
   );
 }

@@ -13,6 +13,7 @@ import { fileManagerStrings } from '@/features/files/strings';
 import { useRoutePath } from '@/features/files/useRoutePath';
 import { getLanguage, t } from '@/i18n';
 import { api, errorMessage } from '@/lib/api';
+import { useUi } from '@/stores/ui';
 
 const strings = fileManagerStrings();
 
@@ -20,6 +21,7 @@ const strings = fileManagerStrings();
 export default function SharedCollectionPage() {
   const id = useParams()['id'] ?? '';
   const [path, setPath] = useRoutePath(`/shared/${id}`);
+  const singleClickFolders = useUi((s) => s.singleClickFolders);
   const { data: collection, isLoading, error } = useQuery({
     queryKey: ['shared', 'detail', id],
     queryFn: ({ signal }) => api.shares.get(id, signal),
@@ -60,6 +62,7 @@ export default function SharedCollectionPage() {
         <EmptyState icon={<AlertTriangle />} title={t('Could not open the collection')} description={errorMessage(error)} />
       ) : provider ? (
         <FileManager
+          singleClickFolders={singleClickFolders}
           key={provider.id}
           provider={provider}
           path={path}

@@ -10,6 +10,8 @@ const shell: Record<string, string> = {
   'Add to favourites': 'Añadir a favoritos',
   'Not in a folder': 'Sin carpeta',
   'Filter channels': 'Filtrar canales',
+  'Expand the channel list': 'Ampliar la lista de canales',
+  'Show the menu': 'Mostrar el menú',
   'Show all channels': 'Mostrar todos los canales',
   'Only favourites': 'Solo favoritos',
   'Channel filter': 'Filtro de canales',

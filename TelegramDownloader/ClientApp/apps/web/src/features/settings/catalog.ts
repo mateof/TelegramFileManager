@@ -145,6 +145,7 @@ export function settingDefs(): SettingDef[] {
     // file manager
     { id: 'useMobileFileManagerAlways', section: 'file-manager', label: t('Always use the touch file manager'), description: t('Use the mobile-optimised file manager also on desktop.') },
     { id: 'hasFileManagerVirtualScroll', section: 'file-manager', label: t('Virtual scroll'), description: t('Better performance with very large file lists.') },
+    { id: 'singleClickFolders', section: 'file-manager', label: t('Open folders with a single click'), description: t('With a mouse, one click opens a folder. Ctrl/Shift+click or the checkbox select it; files still open with a double click. Stored in this browser only.'), keywords: 'double click navigation' },
     { id: 'shouldShowPaginatedFileChannel', section: 'file-manager', label: t('Paginated file view'), description: t('Show channel files in pages instead of loading them all at once.') },
 
     // notifications

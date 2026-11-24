@@ -1,5 +1,5 @@
 import { cn, IconButton, Tooltip } from '@tfm/ui';
-import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { ChevronDown, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { NavLink } from 'react-router';
 import { t } from '@/i18n';
 import { useUi } from '@/stores/ui';
@@ -45,7 +45,13 @@ export interface SidebarProps {
 
 export function Sidebar({ collapsed = false, inDrawer = false, onNavigate }: SidebarProps) {
   const toggleSidebar = useUi((s) => s.toggleSidebar);
+  const foldedSections = useUi((s) => s.drawerCollapsedSections);
+  const toggleSection = useUi((s) => s.toggleDrawerSection);
+  const drawerChannelsExpanded = useUi((s) => s.drawerChannelsExpanded);
+  const setDrawerChannelsExpanded = useUi((s) => s.setDrawerChannelsExpanded);
   const sections = navSections();
+  // In the drawer the channel list can take the whole height (the pages stay one tap away)
+  const channelsOnly = inDrawer && drawerChannelsExpanded;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -70,21 +76,45 @@ export function Sidebar({ collapsed = false, inDrawer = false, onNavigate }: Sid
         )}
       </div>
 
-      <nav aria-label={t('Main navigation')} className="flex min-h-0 shrink flex-col gap-3 overflow-y-auto px-2 pb-2">
-        {sections.map((section) => (
-          <div key={section.id} className="flex flex-col gap-0.5">
-            {!collapsed && (
-              <span className="px-2.5 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">{section.label}</span>
-            )}
-            {section.items.map((item) => (
-              <NavEntry key={item.id} item={item} collapsed={collapsed} onNavigate={onNavigate} />
-            ))}
-          </div>
-        ))}
-      </nav>
+      {!channelsOnly && (
+        <>
+          <nav aria-label={t('Main navigation')} className={cn('flex min-h-0 shrink flex-col overflow-y-auto px-2 pb-2', inDrawer ? 'gap-1' : 'gap-3')}>
+            {sections.map((section) => {
+              // Sections fold in the drawer only (remembered), so the channels come up on a phone
+              const folded = inDrawer && foldedSections.includes(section.id);
+              return (
+                <div key={section.id} className="flex flex-col gap-0.5">
+                  {inDrawer ? (
+                    <button
+                      type="button"
+                      aria-expanded={!folded}
+                      onClick={() => toggleSection(section.id)}
+                      className="flex h-8 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle outline-none transition-colors hover:bg-surface-2 hover:text-fg focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <span className="min-w-0 flex-1 truncate text-left">{section.label}</span>
+                      {folded && <span className="font-normal normal-case tracking-normal">{section.items.length}</span>}
+                      <ChevronDown aria-hidden className={cn('size-3.5 shrink-0 transition-transform', folded && '-rotate-90')} />
+                    </button>
+                  ) : (
+                    !collapsed && (
+                      <span className="px-2.5 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">{section.label}</span>
+                    )
+                  )}
+                  {!folded && section.items.map((item) => <NavEntry key={item.id} item={item} collapsed={collapsed} onNavigate={onNavigate} />)}
+                </div>
+              );
+            })}
+          </nav>
 
-      <div className="mx-3 h-px shrink-0 bg-border" />
-      <ChannelList collapsed={collapsed} onNavigate={onNavigate} />
+          <div className="mx-3 h-px shrink-0 bg-border" />
+        </>
+      )}
+      <ChannelList
+        collapsed={collapsed}
+        onNavigate={onNavigate}
+        expanded={channelsOnly}
+        onExpandedChange={inDrawer ? setDrawerChannelsExpanded : undefined}
+      />
     </div>
   );
 }

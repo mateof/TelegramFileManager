@@ -1,5 +1,5 @@
 import { Button, cn, Dialog, DialogContent, Input, Sheet, SheetContent, useMediaQuery } from '@tfm/ui';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { isValidName } from '../core/paths';
 import { useFileManager, type FileManagerController, type UseFileManagerOptions } from '../hooks/useFileManager';
 import type { FileAction, FileEntry } from '../types';
@@ -29,6 +29,8 @@ export interface FileManagerViewProps {
   defaultShowDetails?: boolean;
   /** Small thumbnails in the list/details views (the grid always shows them). Default true. */
   thumbnails?: boolean;
+  /** With a mouse, open folders with a single click (Ctrl/Shift+click and the checkbox still select). Default true. */
+  singleClickFolders?: boolean;
   /** Content above the toolbar (page header...). */
   header?: ReactNode;
   /** Extra toolbar content (right side). */
@@ -97,6 +99,7 @@ export function FileManagerView({
   defaultShowTree = false,
   defaultShowDetails = false,
   thumbnails = true,
+  singleClickFolders = true,
   header,
   toolbarExtra,
   renderDetails,
@@ -113,6 +116,7 @@ export function FileManagerView({
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [fileInput, setFileInput] = useState<HTMLInputElement | null>(null);
   const [uploadTarget, setUploadTarget] = useState<string | undefined>(undefined);
+  const lastClick = useRef<{ entry: FileEntry; opened: boolean; at: number } | null>(null);
 
   // Ctrl+Shift+N from the keyboard handler of the controller
   const [seenNewFolderToken, setSeenNewFolderToken] = useState(fm.newFolderToken);
@@ -141,6 +145,11 @@ export function FileManagerView({
     locale,
     isMobile,
     thumbnails,
+    singleClickFolders,
+    rememberClick: (entry, opened) => {
+      lastClick.current = { entry, opened, at: Date.now() };
+    },
+    recentClick: (ms) => (lastClick.current && Date.now() - lastClick.current.at < ms ? lastClick.current : null),
     openDetails,
     requestNewFolder: () => setNewFolderOpen(true),
     requestUpload,

@@ -1,7 +1,7 @@
 import type { ApiChannelDto, ApiChannelFolderDto } from '@tfm/api-client';
-import { Avatar, Button, cn, EmptyState, Input, Skeleton, Tooltip } from '@tfm/ui';
+import { Avatar, Button, cn, EmptyState, IconButton, Input, Skeleton, Tooltip } from '@tfm/ui';
 import { useVirtualizer } from '@tanstack/react-virtual';
-import { ChevronRight, FolderTree, Search, Star, X } from 'lucide-react';
+import { ChevronRight, FolderTree, Maximize2, Minimize2, Search, Star, X } from 'lucide-react';
 import { memo, useDeferredValue, useMemo, useRef, useState } from 'react';
 import { NavLink } from 'react-router';
 import { t } from '@/i18n';
@@ -170,10 +170,14 @@ export interface ChannelListProps {
   collapsed?: boolean;
   /** Called after following a link (closes the mobile drawer). */
   onNavigate?: () => void;
+  /** The list fills the whole container (mobile drawer with the navigation hidden). */
+  expanded?: boolean;
+  /** Shows the expand / restore button (mobile drawer). */
+  onExpandedChange?: (expanded: boolean) => void;
 }
 
 /** Sidebar channel browser: tabs Mine / Favourites / Shared / All / Folders, search, favourite toggle. */
-export function ChannelList({ collapsed = false, onNavigate }: ChannelListProps) {
+export function ChannelList({ collapsed = false, onNavigate, expanded = false, onExpandedChange }: ChannelListProps) {
   const tab = useUi((s) => s.channelTab);
   const setTab = useUi((s) => s.setChannelTab);
   const favouritesOnly = useUi((s) => s.favouritesOnly);
@@ -207,9 +211,20 @@ export function ChannelList({ collapsed = false, onNavigate }: ChannelListProps)
 
   return (
     <div className="flex min-h-56 flex-1 flex-col">
-      <div className="flex items-center justify-between px-4 pb-1.5 pt-3">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">{t('Channels')}</span>
+      <div className={cn('flex items-center gap-2 px-4 pb-1.5', onExpandedChange ? 'pt-1.5' : 'pt-3')}>
+        <span className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">{t('Channels')}</span>
         {channels.data && <span className="text-[11px] text-fg-subtle">{channels.data.length}</span>}
+        {onExpandedChange && (
+          <IconButton
+            label={expanded ? t('Show the menu') : t('Expand the channel list')}
+            size="sm"
+            aria-pressed={expanded}
+            onClick={() => onExpandedChange(!expanded)}
+            className="-mr-2"
+          >
+            {expanded ? <Minimize2 /> : <Maximize2 />}
+          </IconButton>
+        )}
       </div>
       <div className="flex items-center gap-1.5 px-3 pb-2">
         <Input

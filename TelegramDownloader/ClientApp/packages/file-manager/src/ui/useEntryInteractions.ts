@@ -5,6 +5,8 @@ import { DRAG_MIME, useFileManagerUi } from './context';
 
 const LONG_PRESS_MS = 480;
 const MOVE_TOLERANCE = 10;
+/** Max time between the clicks of a double click that we tie to the entry of the first click. */
+const DOUBLE_CLICK_GUARD_MS = 600;
 
 /** DOM id of an entry element (aria-activedescendant). */
 export function entryDomId(providerId: string, id: string): string {
@@ -17,7 +19,9 @@ function hasFiles(e: DragEvent) {
 
 /**
  * Pointer, touch, keyboard-free and drag & drop behaviour of one entry:
- * - mouse: click selects (Ctrl/Cmd toggles, Shift ranges), double click opens;
+ * - mouse: click selects (Ctrl/Cmd toggles, Shift ranges), double click opens; with
+ *   `singleClickFolders` a plain click opens a folder. A double click always acts on the entry of its
+ *   first click, even if the list moved under the pointer (selection bar shown, folder opened);
  * - touch: tap opens, long press starts the selection mode, then taps toggle;
  * - drag: drags the selection; folders accept drops (move, Ctrl/Alt = copy) and OS files (upload).
  */
@@ -82,10 +86,25 @@ export function useEntryInteractions(entry: FileEntry): EntryInteractionProps {
         else fm.open(entry);
         return;
       }
-      fm.selection.dispatch({ type: 'click', id: entry.id, ctrl: e.ctrlKey || e.metaKey, shift: e.shiftKey });
+      const ctrl = e.ctrlKey || e.metaKey;
+      if (e.detail > 1) {
+        // Rest of a double click that landed elsewhere (or after opening a folder): ignore it
+        const first = ui.recentClick(DOUBLE_CLICK_GUARD_MS);
+        if (first && (first.opened || first.entry.id !== entry.id)) return;
+      }
+      if (ui.singleClickFolders && entry.kind === 'folder' && !ctrl && !e.shiftKey && !e.altKey) {
+        ui.rememberClick(entry, true);
+        fm.open(entry);
+        return;
+      }
+      if (e.detail <= 1) ui.rememberClick(entry, false);
+      fm.selection.dispatch({ type: 'click', id: entry.id, ctrl, shift: e.shiftKey });
     },
     onDoubleClick: () => {
-      if (pointerType.current !== 'touch' && !ui.isMobile) fm.open(entry);
+      if (pointerType.current === 'touch' || ui.isMobile) return;
+      const first = ui.recentClick(DOUBLE_CLICK_GUARD_MS);
+      if (first?.opened) return;
+      fm.open(first?.entry ?? entry);
     },
     onContextMenu: (e: MouseEvent) => {
       if (ui.isMobile) {
