@@ -155,11 +155,21 @@
   --row-h: 2rem;
 }
 
-/* Frosted surface: translucent + blur (opaque when effects are off) */
+/* Effects off: no filter at all (a 0 px blur still costs a layer). Outside the layers, so it wins over the utilities */
+:root[data-glass="off"] :is(.glass, .glass-strong) {
+  backdrop-filter: none;
+}
+
+/* Frosted surface: translucent + blur (opaque when effects are off).
+   The build adds the -webkit- prefix: a hand-written one makes the minifier drop the standard property. */
 @utility glass {
   background-color: color-mix(in oklab, var(--color-surface) var(--glass-alpha), transparent);
   backdrop-filter: blur(var(--glass-blur)) saturate(150%);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
+}
+
+/* Same surface without the blur, for rows that repeat down a list: one filter per row is slow on phones */
+@utility glass-flat {
+  background-color: color-mix(in oklab, var(--color-surface) var(--glass-alpha), transparent);
 }
 
 /* Stronger variant for overlays floating over content (menus, popovers) */
