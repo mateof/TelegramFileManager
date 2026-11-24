@@ -31,6 +31,8 @@ foreach(var mime in FileService.MIMETypesDictionary)
 {
     extensionProvider.Mappings.Add(mime);
 }
+// /app/manifest.webmanifest -> application/manifest+json (installable web app)
+TelegramDownloader.Services.Api.SpaHosting.AddContentTypes(extensionProvider);
 
 GeneralConfigStatic.loadDbConfig();
 
@@ -435,6 +437,19 @@ var spaStaticOptions = new StaticFileOptions
         ctx.Context.Response.Headers.CacheControl = TelegramDownloader.Services.Api.SpaCachePolicy.For(ctx.Context.Request.Path.Value)
 };
 app.UseStaticFiles(spaStaticOptions);
+// A file of the build that does not exist (hashed asset of an older deploy,
+// sw.js / manifest.webmanifest / icons while the app is not built) is a real
+// 404: the /app/{**path} fallback below must not answer it with index.html.
+app.Use((context, next) =>
+{
+    if (TelegramDownloader.Services.Api.SpaHosting.IsMissingAppFile(context.Request.Path.Value))
+    {
+        context.Response.StatusCode = StatusCodes.Status404NotFound;
+        context.Response.Headers.CacheControl = TelegramDownloader.Services.Api.SpaCachePolicy.NoCache;
+        return Task.CompletedTask;
+    }
+    return next(context);
+});
 
 app.UseStaticFiles();
 
@@ -490,8 +505,8 @@ app.MapHub<TelegramDownloader.Hubs.EventsHub>("/hubs/events");
 app.MapBlazorHub(options => options.LongPolling.PollTimeout = TimeSpan.FromSeconds(45));
 // SPA deep links (dots included, e.g. /app/files/song.mp3) get index.html;
 // the literal "app" segment makes this fallback win over the Blazor one.
-// A missing hashed asset is a real 404, not the HTML shell.
-app.MapGet("/app/assets/{**path}", () => Results.NotFound());
+// Missing build files (assets, sw.js, manifest, icons) were already answered
+// with a 404 right after the /app static files (SpaHosting.IsMissingAppFile).
 app.MapFallbackToFile("/app/{**path}", "index.html", new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(spaRoot),

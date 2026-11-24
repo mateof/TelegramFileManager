@@ -238,6 +238,28 @@ namespace Test
             Assert.That(WebAccessPolicy.Classify(path), Is.EqualTo(expected));
         }
 
+        // The browser fetches the manifest (and its icons) without credentials,
+        // and the service worker script must load before anyone signs in.
+        [TestCase("/app/manifest.webmanifest")]
+        [TestCase("/app/sw.js")]
+        [TestCase("/app/registerSW.js")]
+        [TestCase("/app/icons/icon-192.png")]
+        [TestCase("/app/icons/maskable-512.png")]
+        [TestCase("/app/icons/apple-touch-icon.png")]
+        [TestCase("/app/screenshots/wide.webp")]
+        [TestCase("/app/favicon.svg")]
+        [TestCase("/app/")]
+        public void Pwa_files_of_the_web_app_are_public_even_with_a_password(string path)
+        {
+            Assert.That(WebAccessPolicy.Classify(path), Is.EqualTo(WebPathKind.Public));
+            var d = WebAccessPolicy.Evaluate(Req(path));
+            Assert.Multiple(() =>
+            {
+                Assert.That(d.Allowed, Is.True);
+                Assert.That(d.Method, Is.EqualTo(AccessMethod.Open));
+            });
+        }
+
         // --- no password: exactly the previous behaviour --------------------
 
         [TestCase("/api/v1/channels")]

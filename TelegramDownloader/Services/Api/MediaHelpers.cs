@@ -265,4 +265,45 @@ namespace TelegramDownloader.Services.Api
             return Short;
         }
     }
+
+    /// <summary>
+    /// Static hosting rules of the SPA at <c>/app</c> (also an installable
+    /// PWA: manifest, service worker, icons).
+    /// </summary>
+    public static class SpaHosting
+    {
+        /// <summary>The manifest must be served with this type (browsers ignore it otherwise).</summary>
+        public const string ManifestContentType = "application/manifest+json";
+
+        /// <summary>Folders of the build that only hold files, never SPA routes.</summary>
+        private static readonly string[] FileFolders = { "assets/", "icons/", "screenshots/" };
+
+        /// <summary>Content types the <c>/app</c> static files need beyond the defaults.</summary>
+        public static void AddContentTypes(Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider provider)
+        {
+            provider.Mappings[".webmanifest"] = ManifestContentType;
+        }
+
+        /// <summary>
+        /// Whether a request under <c>/app</c> that no static file answered is
+        /// a missing file of the build (a real 404) rather than a deep link of
+        /// the SPA (which gets <c>index.html</c>). Missing files are everything
+        /// under <c>/app/assets/</c>, <c>/app/icons/</c> and
+        /// <c>/app/screenshots/</c>, and any file name with an extension at the
+        /// root of <c>/app</c> (<c>sw.js</c>, <c>registerSW.js</c>,
+        /// <c>manifest.webmanifest</c>, <c>workbox-*.js</c>, <c>favicon.svg</c>...),
+        /// which are never routes. Without this a browser would get the HTML
+        /// shell as its service worker or manifest (e.g. when the web app is
+        /// not built yet). Deeper paths with dots (<c>/app/local/song.mp3</c>)
+        /// stay SPA routes.
+        /// </summary>
+        public static bool IsMissingAppFile(string? requestPath)
+        {
+            var path = (requestPath ?? string.Empty).Replace('\\', '/');
+            if (!path.StartsWith("/app/", StringComparison.OrdinalIgnoreCase)) return false;
+            var rel = path["/app/".Length..];
+            if (FileFolders.Any(f => rel.StartsWith(f, StringComparison.OrdinalIgnoreCase))) return true;
+            return !rel.Contains('/') && rel.Contains('.');
+        }
+    }
 }
