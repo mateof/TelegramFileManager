@@ -12,6 +12,7 @@ import { useRoutePath } from '@/features/files/useRoutePath';
 import { getLanguage, t } from '@/i18n';
 import { api, errorMessage } from '@/lib/api';
 import { queryKeys } from '@/lib/queryKeys';
+import { useUi } from '@/stores/ui';
 import { ShareDialog, StrmDialog } from '../components/ChannelDialogs';
 import { ChannelHeader, NotIndexed } from '../components/ChannelHeader';
 import { channelActions, countLabel, type ChannelDialog } from '../lib/channelActions';
@@ -23,6 +24,7 @@ const strings = fileManagerStrings();
 export default function ChannelPage() {
   const channelId = useParams()['id'] ?? '';
   const [path, setPath] = useRoutePath(`/channels/${channelId}`);
+  const singleClickFolders = useUi((s) => s.singleClickFolders);
   const detail = useQuery({
     queryKey: queryKeys.channel(channelId),
     queryFn: ({ signal }) => api.channels.get(channelId, signal),
@@ -46,6 +48,7 @@ export default function ChannelPage() {
   } else if (detail.data) {
     body = (
       <FileManager
+        singleClickFolders={singleClickFolders}
         key={channelId}
         provider={provider}
         path={path}

@@ -10,6 +10,7 @@ import { useRoutePath } from '@/features/files/useRoutePath';
 import { getLanguage, t } from '@/i18n';
 import { api } from '@/lib/api';
 import { PageHeader } from '@/shell/PageHeader';
+import { useUi } from '@/stores/ui';
 import { UploadToTelegramDialog } from '../components/UploadToTelegramDialog';
 import { createLocalProvider } from '../lib/localProvider';
 
@@ -18,6 +19,7 @@ const strings = fileManagerStrings();
 /** `/local/*`: the server local files (download target, upload source). */
 export default function LocalFilesPage() {
   const [path, setPath] = useRoutePath('/local');
+  const singleClickFolders = useUi((s) => s.singleClickFolders);
   const [uploading, setUploading] = useState<FileEntry[] | null>(null);
   const provider = useMemo(() => createLocalProvider(t('Local files')), []);
 
@@ -62,6 +64,7 @@ export default function LocalFilesPage() {
     <div className="flex h-full min-h-0 flex-col">
       <PageHeader title={t('Local files')} description={t('Files stored on the server.')} icon={<HardDrive />} className="px-3 pt-3 sm:px-4 [&_p]:hidden sm:[&_p]:block" />
       <FileManager
+        singleClickFolders={singleClickFolders}
         provider={provider}
         path={path}
         onPathChange={setPath}

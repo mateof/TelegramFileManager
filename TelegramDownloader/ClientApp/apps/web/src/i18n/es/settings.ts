@@ -324,6 +324,8 @@ const settings: Record<string, string> = {
   'Premium: up to 4 GB': 'Premium: hasta 4 GB',
   'Up to 2 GB': 'Hasta 2 GB',
   'Split size': 'Tamaño de división',
+  'Open folders with a single click': 'Abrir carpetas con un solo clic',
+  'With a mouse, one click opens a folder. Ctrl/Shift+click or the checkbox select it; files still open with a double click. Stored in this browser only.': 'Con el ratón, un clic abre una carpeta. Ctrl/Mayús+clic o la casilla la seleccionan; los ficheros se siguen abriendo con doble clic. Se guarda solo en este navegador.',
   'Options of the file manager of the web interface.': 'Opciones del gestor de ficheros de la interfaz web.',
   'The notifications appear in the bell of the top bar and as toasts in every open browser. Errors are always shown.': 'Las notificaciones aparecen en la campana de la barra superior y como avisos en todos los navegadores abiertos. Los errores se muestran siempre.',
   'Pending downloads cleared': 'Descargas pendientes vaciadas',
