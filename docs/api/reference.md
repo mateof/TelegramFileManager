@@ -76,6 +76,7 @@ server serves at **`/swagger/api-v1/swagger.json`** (browsable at
 | GET | `/api/v1/channels/{channelId}/files/{fileId}/content` | ✓ | The bytes (`disposition=inline\|attachment`, `collectionId`), range-capable. |
 | GET | `/api/v1/channels/{channelId}/files/{fileId}/stream` | ✓ | Video playback, transcoded to MP4 when needed. |
 | GET | `/api/v1/channels/{channelId}/messages/{messageId}/thumbnail` | ✓ | JPEG thumbnail of a photo/video message (cached). |
+| GET | `/api/v1/channels/{channelId}/messages/{messageId}/content` | ✓ | The attachment of a message, without indexing it (`disposition=inline\|attachment`), range-capable. |
 
 Browse, search, details and stats accept `collectionId` to read a shared collection.
 

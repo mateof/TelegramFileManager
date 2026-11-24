@@ -65,6 +65,13 @@ export function createChannelsApi(http: HttpClient) {
     /** GET /api/v1/channels/{id}/messages: recent history straight from Telegram. */
     messages: (id: ChannelId, query: ChannelMessagesQuery = {}, signal?: AbortSignal) =>
       http.get<ApiChatMessageDto[]>(`${BASE}/${enc(id)}/messages`, { query: { ...query }, signal }),
+    /**
+     * URL of GET /api/v1/channels/{id}/messages/{messageId}/content: the file of
+     * a message, straight from Telegram (no index entry needed), Range-capable.
+     * `<video>`/`<audio>`/`<img>` src, or a download with `attachment`.
+     */
+    messageContentUrl: (id: ChannelId, messageId: number, disposition?: 'inline' | 'attachment') =>
+      http.url(`${BASE}/${enc(id)}/messages/${messageId}/content`, { disposition: disposition === 'attachment' ? 'attachment' : undefined }),
     /** GET /api/v1/channels/{id}/image: avatar (image/jpeg, 404 without one). URL for `<img src>`. */
     imageUrl: (id: ChannelId) => http.url(`${BASE}/${enc(id)}/image`),
     /** GET /api/v1/channels/{id}/invitation */

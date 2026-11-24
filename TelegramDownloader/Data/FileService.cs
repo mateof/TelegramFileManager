@@ -2108,17 +2108,32 @@ namespace TelegramDownloader.Data
             return node;
         }
 
+        /// <summary>
+        /// Media types the original table lacks; browsers need a real type to
+        /// play these (Safari refuses <c>application/octet-stream</c> media).
+        /// </summary>
+        private static readonly Dictionary<string, string> ExtraMimeTypes = new(StringComparer.OrdinalIgnoreCase)
+        {
+            { "webm", "video/webm" }, { "weba", "audio/webm" }, { "ogv", "video/ogg" }, { "oga", "audio/ogg" },
+            { "opus", "audio/ogg" }, { "aac", "audio/aac" }, { "3gp", "video/3gpp" }, { "ts", "video/mp2t" },
+            { "wmv", "video/x-ms-wmv" }, { "avif", "image/avif" }, { "heic", "image/heic" },
+            { "json", "application/json" }, { "srt", "text/plain" }, { "vtt", "text/vtt" }
+        };
+
+        /// <summary>
+        /// Media type for an extension (<c>mp4</c>, <c>.mp4</c>, <c>MP4</c>) or a
+        /// file name (<c>Holiday.MP4</c>); <c>application/octet-stream</c> when unknown.
+        /// </summary>
         public static string getMimeType(string extension)
         {
-            try
-            {
-                return MIMETypesDictionary[extension.Replace(".", "")] ?? "application/octet-stream";
-            }
-            catch
-            {
-                return "application/octet-stream";
-            }
-
+            var ext = extension ?? string.Empty;
+            var dot = ext.LastIndexOf('.');
+            if (dot >= 0) ext = ext[(dot + 1)..];
+            ext = ext.Trim().ToLowerInvariant();
+            if (ext.Length == 0) return "application/octet-stream";
+            if (MIMETypesDictionary.TryGetValue(ext, out var mime) && !string.IsNullOrEmpty(mime)) return mime;
+            if (ExtraMimeTypes.TryGetValue(ext, out mime)) return mime;
+            return "application/octet-stream";
         }
 
         private static List<FolderModel> getSubforlders(string path)

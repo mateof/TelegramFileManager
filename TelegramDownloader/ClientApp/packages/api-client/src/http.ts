@@ -166,6 +166,35 @@ export function buildQuery(query?: Query): string {
   return s ? `?${s}` : '';
 }
 
+/** Paths only this server serves: media, downloads, hubs. */
+const SERVER_PATHS = ['/api/', '/local/', '/hubs/'];
+
+/**
+ * Rebases a URL the server built for itself onto `baseUrl` (the origin the
+ * app actually talks to; '' = same origin).
+ *
+ * The server writes absolute media URLs (`contentUrl`, `playbackUrl`,
+ * `thumbnailUrl`...) from its own view of the request: `Request.Scheme` and
+ * `Request.Host`. Behind a reverse proxy that does not forward the public
+ * host (or scheme), that is an internal address such as
+ * `http://tfm:5000/api/v1/...`. `fetch` calls never notice (they use relative
+ * paths), but `<video>`, `<audio>` and `<img>` would load from that address
+ * and fail; the classic UI is immune because it builds its URLs from the
+ * browser's own base URI. External URLs (posters, t.me links) are kept.
+ */
+export function serverUrl(value: string, baseUrl = ''): string {
+  if (!/^https?:\/\//i.test(value)) return value;
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return value;
+  }
+  const path = url.pathname.toLowerCase();
+  if (!SERVER_PATHS.some((p) => path.startsWith(p))) return value;
+  return `${baseUrl}${url.pathname}${url.search}${url.hash}`;
+}
+
 export class HttpClient {
   readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
@@ -282,7 +311,10 @@ export class HttpClient {
     const text = await response.text();
     if (!text) return { success: true, data: null };
     try {
-      return JSON.parse(text) as ApiEnvelope<T>;
+      // Every `...Url` field the server built for itself is rebased (see serverUrl).
+      return JSON.parse(text, (key, value: unknown) =>
+        typeof value === 'string' && /url$/i.test(key) ? serverUrl(value, this.baseUrl) : value
+      ) as ApiEnvelope<T>;
     } catch {
       throw new ApiError(ApiErrorCodes.NetworkError, 'The server answer is not valid JSON', response.status, text.slice(0, 200));
     }

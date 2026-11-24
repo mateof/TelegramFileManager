@@ -501,14 +501,26 @@ namespace TelegramDownloader.Controllers
         [ProducesResponseType(416)]
         public async Task<IActionResult> GetFileStreamCached(string idChannel, string idFile, string name)
         {
-            var mimeType = FileService.getMimeType(name.Split(".").Last());
-
             var dbFile = await _fs.getItemById(idChannel, idFile);
             if (dbFile == null)
             {
                 return NotFound();
             }
 
+            return await ServeProgressive(idChannel, dbFile, FileService.getMimeType(name));
+        }
+
+        /// <summary>
+        /// Body of <see cref="GetFileStreamCached"/> for an entry that is already
+        /// resolved: serves the requested range from the progressive disk cache
+        /// (filled once by a background download) or straight from Telegram for
+        /// seeks ahead of it. Also used by the v1 media endpoints, including
+        /// message attachments that are not in any index (a synthetic entry with
+        /// the message id, name and size).
+        /// </summary>
+        [NonAction]
+        public async Task<IActionResult> ServeProgressive(string idChannel, BsonFileManagerModel dbFile, string mimeType)
+        {
             // Ordered Telegram messages that make up the file (several for split files)
             var messageIds = ProgressiveDownloadService.GetMessageIds(dbFile);
             if (messageIds == null || messageIds.Count == 0)
