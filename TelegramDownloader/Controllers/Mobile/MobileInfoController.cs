@@ -35,6 +35,7 @@ namespace TelegramDownloader.Controllers.Mobile
             "setup.write",           // POST /api/v1/system/setup...
             "transfers.remove",      // DELETE /api/v1/transfers/{id}
             "system.admin",          // restart, image-cache, orphaned-favorites, ffmpeg, version
+            "webAuth.passkeys",      // /api/v1/web-auth/passkeys/** (passkey sign-in of the web app)
         };
 
         private static readonly string ServerVersion = ResolveServerVersion();
@@ -62,6 +63,7 @@ namespace TelegramDownloader.Controllers.Mobile
         /// - `setup.write`: POST /api/v1/system/setup, /test-mongo, /test-telegram, /complete
         /// - `transfers.remove`: DELETE /api/v1/transfers/{id}
         /// - `system.admin`: /api/v1/system/restart, image-cache, orphaned-favorites, ffmpeg y version
+        /// - `webAuth.passkeys`: /api/v1/web-auth/passkeys/** (inicio de sesión con passkeys de la web)
         ///
         /// Los servidores antiguos no tienen este endpoint: un **404** debe interpretarse
         /// como "sin funcionalidades opcionales". No accede a base de datos.

@@ -58,7 +58,7 @@ export function sections(): SectionDef[] {
     { id: 'channels', title: t('Channels'), description: t('Refresh of own channels, images and hidden channels.'), icon: FolderTree, group: 'server' },
     { id: 'tasks', title: t('Tasks & auto-resume'), description: t('Keep transfers across restarts.'), icon: ListRestart, group: 'server' },
     { id: 'library', title: t('Media library'), description: t('Movies and series: providers, channels, folder rules and scans.'), icon: Clapperboard, group: 'server' },
-    { id: 'security', title: t('Web security'), description: t('Password of the web interface and the local network rule.'), icon: ShieldCheck, group: 'access' },
+    { id: 'security', title: t('Web security'), description: t('Password of the web interface, passkeys and the local network rule.'), icon: ShieldCheck, group: 'access' },
     { id: 'apps', title: t('Apps & API'), description: t('API key for TFM Player, Android and Android TV.'), icon: Smartphone, group: 'access' },
     { id: 'webdav', title: t('WebDAV'), description: t('Credentials of the native WebDAV share.'), icon: Network, group: 'access' },
     { id: 'appearance', title: t('Appearance'), description: t('Theme, accent colour, effects, density and language.'), icon: Palette, group: 'personal' },
@@ -167,6 +167,7 @@ export function settingDefs(): SettingDef[] {
 
     // security
     { id: 'webPassword', section: 'security', label: t('Web password'), keywords: 'login password' },
+    { id: 'passkeys', section: 'security', label: t('Passkeys'), keywords: 'passkey webauthn fido bitwarden biometric windows hello touch id security key' },
     { id: 'lanBypass', section: 'security', label: t('No password on the local network'), keywords: 'lan bypass local' },
     { id: 'signOut', section: 'security', label: t('Sessions'), keywords: 'sign out logout' },
 

@@ -36,7 +36,19 @@ const auth: Record<string, string> = {
   'The passwords do not match': 'Las contraseñas no coinciden',
   'Save and continue': 'Guardar y continuar',
   'You can allow access without password from the local network later, in Settings → Security.':
-    'Más adelante puedes permitir el acceso sin contraseña desde la red local, en Ajustes → Seguridad.'
+    'Más adelante puedes permitir el acceso sin contraseña desde la red local, en Ajustes → Seguridad.',
+  'or': 'o',
+  'Sign in with a passkey': 'Iniciar sesión con una passkey',
+  'The passkey request expired. Try again.': 'La solicitud de passkey ha caducado. Vuelve a intentarlo.',
+  'This passkey is already registered.': 'Esta passkey ya está registrada.',
+  'Passkeys do not work when the server is opened by IP address. Open it by its host name (localhost works).': 'Las passkeys no funcionan si abres el servidor por su dirección IP. Ábrelo por su nombre de host (localhost sirve).',
+  'Sign in with the password in this browser to manage passkeys.': 'Inicia sesión con la contraseña en este navegador para gestionar las passkeys.',
+  'This passkey was not accepted. It may have been removed from this server, or belong to another one.': 'No se ha aceptado esta passkey. Puede que se haya quitado de este servidor o que sea de otro.',
+  'The passkey could not be verified.': 'No se ha podido verificar la passkey.',
+  'The passkey request was cancelled or timed out.': 'La solicitud de passkey se ha cancelado o ha caducado.',
+  'This authenticator already has a passkey for this server.': 'Este autenticador ya tiene una passkey para este servidor.',
+  'The browser refused the request for this domain. Passkeys need HTTPS (or localhost) and the domain they were created on.': 'El navegador ha rechazado la solicitud para este dominio. Las passkeys necesitan HTTPS (o localhost) y el dominio en el que se crearon.',
+  'This browser or authenticator does not support the requested passkey type.': 'Este navegador o autenticador no admite el tipo de passkey solicitado.'
 };
 
 export default auth;
