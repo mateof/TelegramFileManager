@@ -88,7 +88,7 @@ export interface TransferSummaryDto {
   downloadSpeed: string;
   /** Human readable upload speed. */
   uploadSpeed: string;
-  /** Bytes transferred during the current sampling second. */
+  /** Bytes transferred during the last full second. */
   downloadBytesPerSecond: number;
   uploadBytesPerSecond: number;
   /** True when the download queue has been paused globally. */

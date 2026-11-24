@@ -162,11 +162,11 @@
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(150%);
 }
 
-/* Stronger variant for overlays floating over content (menus, popovers) */
+/* Stronger variant for overlays floating over content (menus, popovers).
+   The build adds the -webkit- prefix: a hand-written one makes the minifier drop the standard property. */
 @utility glass-strong {
   background-color: color-mix(in oklab, var(--color-surface) calc(var(--glass-alpha) + 14%), transparent);
   backdrop-filter: blur(calc(var(--glass-blur) + 6px)) saturate(160%);
-  -webkit-backdrop-filter: blur(calc(var(--glass-blur) + 6px)) saturate(160%);
 }
 
 @utility focus-ring {

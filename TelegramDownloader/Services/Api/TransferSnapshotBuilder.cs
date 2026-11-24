@@ -47,8 +47,8 @@ namespace TelegramDownloader.Services.Api
                 TotalTasks = tasks.Count,
                 DownloadSpeed = tis.downloadSpeed ?? "0 KB/s",
                 UploadSpeed = tis.uploadSpeed ?? "0 KB/s",
-                DownloadBytesPerSecond = tis.bytesDownloaded,
-                UploadBytesPerSecond = tis.bytesUploaded,
+                DownloadBytesPerSecond = tis.downloadBytesPerSecond,
+                UploadBytesPerSecond = tis.uploadBytesPerSecond,
                 DownloadsPaused = tis.isPauseDownloads
             };
         }
