@@ -36,7 +36,7 @@ You will be able to store files of unlimited size.
 ### PC
 - Install [MongoDB](https://www.mongodb.com/try/download/community)
 - Install [.Net SDK](https://dotnet.microsoft.com/en-us/download)
-- Install [.Net Runtime Run server apps](https://dotnet.microsoft.com/en-us/download/dotnet/6.0/runtime?cid=getdotnetcore&os=windows&arch=x64)
+- Install [.Net Runtime Run server apps](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) (.NET 10, ASP.NET Core Runtime)
 
 ### Docker
 Docker Compose.
