@@ -14,7 +14,7 @@ This API lives side by side with the app's existing surfaces:
 | **API v1** (this document) | `/api/v1` | Full-featured, versioned API for app clients. |
 | Legacy mobile API | `/api/mobile` | The narrower API the current audio player uses. Untouched. |
 | Web UI | `/` | The Blazor Server application. |
-| New web app | `/app` | The React SPA (served from `wwwroot/app`, built from `ClientApp`). |
+| New web app | `/app` | The React SPA (served from `wwwroot/app`, built from `ClientApp`). Tour with screenshots: [web-app.md](../web-app.md). |
 
 ---
 
