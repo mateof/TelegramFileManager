@@ -2,6 +2,7 @@ import { HttpClient, type HttpClientOptions } from './http';
 import { createAuthApi } from './modules/auth';
 import { createChannelsApi } from './modules/channels';
 import { createConfigApi } from './modules/config';
+import { createDeleteOperationsApi } from './modules/deleteOperations';
 import { createFilesApi } from './modules/files';
 import { createLibraryApi } from './modules/library';
 import { createLocalApi } from './modules/local';
@@ -30,6 +31,7 @@ export function createApiClient(options: HttpClientOptions = {}) {
     files: createFilesApi(http),
     transfers: createTransfersApi(http),
     local: createLocalApi(http),
+    deleteOperations: createDeleteOperationsApi(http),
     playlists: createPlaylistsApi(http),
     shares: createSharesApi(http),
     config: createConfigApi(http),

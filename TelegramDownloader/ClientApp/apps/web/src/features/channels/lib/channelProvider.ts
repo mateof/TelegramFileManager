@@ -1,6 +1,8 @@
 import type { FileEntry, FileSystemProvider, Page, ProviderCapabilities } from '@tfm/file-manager';
 import { toast } from '@tfm/ui';
 import { downloadUrls, uploadBody, xhrUpload } from '@/features/files/browser';
+import { withoutPendingDeletes } from '@/features/files/deletes/deleteStore';
+import { startDelete } from '@/features/files/deletes/deleteTracker';
 import { apiFilter, apiSort, dtoOf, toApiFolder, toEntry } from '@/features/files/entries';
 import { t } from '@/i18n';
 import { api } from '@/lib/api';
@@ -49,8 +51,10 @@ export function createChannelProvider({ channelId, rootName, collectionId }: Cha
     hasNext: p.hasNext
   });
 
+  const id = channelProviderId(channelId, collectionId);
+
   return {
-    id: channelProviderId(channelId, collectionId),
+    id,
     rootName,
     capabilities,
 
@@ -68,7 +72,7 @@ export function createChannelProvider({ channelId, rootName, collectionId }: Cha
         },
         options?.signal
       );
-      let items = res.contents.items.map(toEntry);
+      let items = withoutPendingDeletes(id, res.contents.items.map(toEntry));
       if (options?.filter?.kind) items = items.filter((e) => e.kind === options.filter?.kind);
       return page(items, res.page);
     },
@@ -87,7 +91,7 @@ export function createChannelProvider({ channelId, rootName, collectionId }: Cha
         },
         options?.signal
       );
-      return page(res.items.map(toEntry), res.page);
+      return page(withoutPendingDeletes(id, res.items.map(toEntry)), res.page);
     },
 
     async createFolder(parentPath, name) {
@@ -109,8 +113,8 @@ export function createChannelProvider({ channelId, rootName, collectionId }: Cha
     },
 
     async delete(entries) {
-      const res = await api.files.delete(channelId, { ids: entries.map((e) => e.id) });
-      if (res?.skipped?.length) toast.warning(t('{count} entries could not be deleted', { count: res.skipped.length }));
+      // Runs in the background with a progress panel (or the old endpoint on older servers)
+      await startDelete({ kind: 'channel', channelId, placeName: rootName, providerId: id, entries });
     },
 
     async upload(targetPath, file, options) {

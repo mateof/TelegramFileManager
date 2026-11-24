@@ -163,7 +163,11 @@ export function UploadToTelegramDialog({ entries, onClose }: { entries: FileEntr
               disabled={!preview.data || preview.data.filesToUpload === 0 || preview.isFetching}
               onClick={() => void submit()}
             >
-              {preview.data ? t('Upload {count} files', { count: preview.data.filesToUpload }) : t('Upload')}
+              {preview.data
+                ? preview.data.filesToUpload === 1
+                  ? t('Upload 1 file')
+                  : t('Upload {count} files', { count: preview.data.filesToUpload })
+                : t('Upload')}
             </Button>
           </>
         }

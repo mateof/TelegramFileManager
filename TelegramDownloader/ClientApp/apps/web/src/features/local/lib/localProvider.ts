@@ -2,6 +2,8 @@ import type { FileSystemProvider } from '@tfm/file-manager';
 import { entryMediaKind } from '@tfm/file-manager';
 import { toast } from '@tfm/ui';
 import { downloadUrls, uploadBody, xhrUpload } from '@/features/files/browser';
+import { withoutPendingDeletes } from '@/features/files/deletes/deleteStore';
+import { startDelete } from '@/features/files/deletes/deleteTracker';
 import { apiFilter, apiSort, dtoOf, toEntry } from '@/features/files/entries';
 import { localRel } from '@/features/files/local';
 import { t } from '@/i18n';
@@ -45,7 +47,7 @@ export function createLocalProvider(rootName: string): FileSystemProvider {
         },
         options?.signal
       );
-      let items = res.contents.items.map(toEntry);
+      let items = withoutPendingDeletes(LOCAL_PROVIDER_ID, res.contents.items.map(toEntry));
       if (options?.filter?.kind) items = items.filter((e) => e.kind === options.filter?.kind);
       return { items, page: res.page.page, pageSize: res.page.pageSize, totalItems: res.page.totalItems, hasNext: res.page.hasNext };
     },
@@ -65,7 +67,8 @@ export function createLocalProvider(rootName: string): FileSystemProvider {
       skipped(await api.local.copy({ paths: entries.map((e) => e.id), targetPath: localRel(targetPath) }));
     },
     async delete(entries) {
-      skipped(await api.local.delete({ paths: entries.map((e) => e.id) }));
+      // Runs in the background with a progress panel (or the old endpoint on older servers)
+      await startDelete({ kind: 'local', placeName: rootName, providerId: LOCAL_PROVIDER_ID, entries });
     },
     async upload(targetPath, file, options) {
       await xhrUpload(api.http.url('/api/v1/local/upload'), uploadBody(file, localRel(targetPath)), file, options);

@@ -1,5 +1,6 @@
 import type { HttpClient, Paged } from '../http';
 import type {
+  CapabilitiesDto,
   DatabaseStatsDto,
   DeleteLogsQuery,
   FfmpegInfoDto,
@@ -25,6 +26,8 @@ export function createSystemApi(http: HttpClient) {
   return {
     /** GET /api/v1/system/ping: answers `"pong"`. */
     ping: (signal?: AbortSignal) => http.get<string>(`${BASE}/ping`, { signal }),
+    /** GET /api/mobile/capabilities: optional features (an old server answers 404: treat as none). */
+    capabilities: (signal?: AbortSignal) => http.get<CapabilitiesDto>('/api/mobile/capabilities', { signal }),
     /** GET /api/v1/system/info */
     info: (signal?: AbortSignal) => http.get<ServerInfoDto>(`${BASE}/info`, { signal }),
     /** GET /api/v1/system/setup */

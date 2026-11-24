@@ -1,5 +1,26 @@
 // Strings shared by the file manager features (channels, local, shared) and the @tfm/file-manager UI
 const files: Record<string, string> = {
+  // Delete progress panel
+  'Deleting {count} items from {place}': 'Eliminando {count} elementos de {place}',
+  'Deleting "{name}" from {place}': 'Eliminando «{name}» de {place}',
+  'Deleted {count} items from {place}': 'Eliminados {count} elementos de {place}',
+  'Deleted "{name}" from {place}': 'Eliminado «{name}» de {place}',
+  'Deleted with errors': 'Eliminado con errores',
+  'Delete failed': 'No se pudo completar la eliminación',
+  'Delete cancelled': 'Eliminación cancelada',
+  'Counting...': 'Contando...',
+  'Deleting...': 'Eliminando...',
+  'Cancelling...': 'Cancelando...',
+  'Waiting for Telegram (flood wait) {seconds} s': 'Esperando a Telegram (flood wait) {seconds} s',
+  '{done} of {total} files': '{done} de {total} ficheros',
+  '{done} of {total} folders': '{done} de {total} carpetas',
+  'Delete progress': 'Progreso de la eliminación',
+  'Deletes': 'Eliminaciones',
+  'Only the index is cleaned: this account cannot delete messages in this channel.':
+    'Solo se limpia el índice: esta cuenta no puede eliminar mensajes en este canal.',
+  'and {count} more': 'y {count} más',
+  'Other operations': 'Otras operaciones',
+  'The server no longer knows this delete': 'El servidor ya no tiene información de esta eliminación',
   '{count} downloads queued': '{count} descargas en cola',
   '{count} could not be resolved': '{count} no se pudieron resolver',
   'Could not start the download': 'No se pudo iniciar la descarga',

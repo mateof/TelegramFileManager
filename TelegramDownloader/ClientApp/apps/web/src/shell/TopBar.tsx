@@ -45,6 +45,7 @@ import {
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router';
 import { useTelegramStatus } from '@/auth/useTelegramStatus';
+import { DeleteOperationsSummary } from '@/features/files/deletes/DeleteOperationsSummary';
 import { getLanguage, LANGUAGES, setLanguage, t, type Language } from '@/i18n';
 import { api } from '@/lib/api';
 import { formatRelative } from '@/lib/format';
@@ -134,6 +135,7 @@ function TransfersIndicator() {
         ) : (
           <p className="mt-3 text-xs text-fg-muted">{t('Connecting to the server...')}</p>
         )}
+        <DeleteOperationsSummary />
         <Button asChild variant="secondary" size="sm" className="mt-3 w-full">
           <Link to="/transfers">{t('Open transfers')}</Link>
         </Button>

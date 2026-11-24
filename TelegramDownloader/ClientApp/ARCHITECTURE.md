@@ -177,8 +177,8 @@ Prefer composing these over new primitives; if something is generic, add it to `
 
 ## 5. @tfm/api-client
 
-- `createApiClient()` → `{ http, auth, webAuth, channels, files, transfers, local, playlists, shares,
-  config, system, library, search }`; the app's instance is `api` in `@/lib/api`.
+- `createApiClient()` → `{ http, auth, webAuth, channels, files, transfers, local, deleteOperations,
+  playlists, shares, config, system, library, search }`; the app's instance is `api` in `@/lib/api`.
 - DTO interfaces mirror the C# classes in `Models/Api/*.cs` with the same names (camelCase
   properties). String-constant classes are `const` objects + union types (`AuthStep`, `TransferKind`…).
 - Calls return the unwrapped `data`; paged endpoints return `{ items, page }`; failures throw
@@ -206,6 +206,13 @@ not import TFM code. TFM providers and actions live in the app:
   viewer / playlist actions (`openMedia`, `mediaActions`), local folder picker, "download to the
   server" dialog, import progress, `useRoutePath()` (the route splat is the folder path, so deep
   links like `/channels/42/music/rock` and `/local/downloads` open that folder).
+  `files/deletes/`: deletes with progress. The providers call `startDelete()` (`deleteTracker.ts`):
+  background operation (`files.deleteOperations` capability) followed through `DeleteProgress` on
+  /hubs/events with a 1 s poll fallback, or the old synchronous endpoint on older servers. The
+  entries are hidden from the listings while the delete runs (`withoutPendingDeletes()` in the
+  providers' `list`) and the listings are invalidated when it ends. `<DeleteProgressHost/>` (layout,
+  bottom left of the content) lazy-loads the stacked cards; the transfers popover lists the running
+  ones under "Other operations".
 - `features/channels/`: channel provider (`createChannelProvider`, also used read only for shared
   collections with `collectionId`), TFM actions, header (refresh with live progress, export/import
   index, WebDAV, statistics, delete index, link to the chat view).
