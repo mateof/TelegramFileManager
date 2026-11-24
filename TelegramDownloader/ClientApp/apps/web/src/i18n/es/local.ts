@@ -25,6 +25,7 @@ const local: Record<string, string> = {
   'Upload {count} files': 'Subir {count} ficheros',
   'Upload 1 file': 'Subir 1 fichero',
   'Choose a channel': 'Elige un canal',
+  '{count} more in all channels': '{count} más en todos los canales',
   'Also look for files already in the channel at another path (reads and hashes the files: slower)': 'Buscar también ficheros que ya están en el canal en otra ruta (lee y calcula el hash de los ficheros: más lento)',
   'Checking the files and their content...': 'Comprobando los ficheros y su contenido...',
   'Checking the files...': 'Comprobando los ficheros...',

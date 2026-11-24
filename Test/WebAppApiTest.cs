@@ -367,7 +367,44 @@ namespace Test
         [TestCase("/app/sw.js", SpaCachePolicy.NoCache)]
         [TestCase("/app/manifest.webmanifest", SpaCachePolicy.NoCache)]
         [TestCase("/app/favicon.svg", SpaCachePolicy.Short)]
+        [TestCase("/app/registerSW.js", SpaCachePolicy.NoCache)]
+        [TestCase("/app/workbox-1a2b3c.js", SpaCachePolicy.NoCache)]
+        [TestCase("/app/assets/workbox-window.prod.es5-BBnX5xw4.js", SpaCachePolicy.Immutable)]
+        [TestCase("/app/icons/icon-192.png", SpaCachePolicy.Short)]
+        [TestCase("/app/screenshots/wide.webp", SpaCachePolicy.Short)]
         public void CachePolicy(string path, string expected) => Assert.That(SpaCachePolicy.For(path), Is.EqualTo(expected));
+
+        // Missing files of the build are a 404, never the HTML shell
+        [TestCase("/app/sw.js", true)]
+        [TestCase("/app/registerSW.js", true)]
+        [TestCase("/app/manifest.webmanifest", true)]
+        [TestCase("/app/workbox-1a2b3c.js", true)]
+        [TestCase("/app/favicon.svg", true)]
+        [TestCase("/app/assets/index-old.js", true)]
+        [TestCase("/APP/Assets/index-old.js", true)]
+        [TestCase("/app/icons/icon-192.png", true)]
+        [TestCase("/app/screenshots/wide.webp", true)]
+        // SPA routes, deep links included, get index.html
+        [TestCase("/app", false)]
+        [TestCase("/app/", false)]
+        [TestCase("/app/channels", false)]
+        [TestCase("/app/channels/42/music/rock", false)]
+        [TestCase("/app/local/music/song.mp3", false)]
+        [TestCase("/app/channels/42/v1.2", false)]
+        // Not the web app
+        [TestCase("/sw.js", false)]
+        [TestCase("/application/x.js", false)]
+        [TestCase(null, false)]
+        public void MissingAppFile(string? path, bool expected) => Assert.That(SpaHosting.IsMissingAppFile(path), Is.EqualTo(expected));
+
+        [Test]
+        public void ManifestIsServedAsManifestJson()
+        {
+            var provider = new Microsoft.AspNetCore.StaticFiles.FileExtensionContentTypeProvider();
+            SpaHosting.AddContentTypes(provider);
+            Assert.That(provider.TryGetContentType("manifest.webmanifest", out var type), Is.True);
+            Assert.That(type, Is.EqualTo("application/manifest+json"));
+        }
     }
 
     public class MiscWebAppApiTest

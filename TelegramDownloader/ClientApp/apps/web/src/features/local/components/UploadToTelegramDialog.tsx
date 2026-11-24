@@ -1,7 +1,7 @@
 import type { UploadPreviewResult } from '@tfm/api-client';
 import { useQuery } from '@tanstack/react-query';
 import type { FileEntry } from '@tfm/file-manager';
-import { Badge, Button, Checkbox, Dialog, DialogContent, Field, Select, Skeleton, toast } from '@tfm/ui';
+import { Badge, Button, Checkbox, Dialog, DialogContent, Field, Skeleton, toast } from '@tfm/ui';
 import { AlertTriangle, CloudUpload, Copy, FolderTree } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
@@ -10,6 +10,7 @@ import { FolderBrowser } from '@/features/files/FolderBrowser';
 import { t } from '@/i18n';
 import { api, errorMessage } from '@/lib/api';
 import { formatBytes } from '@/lib/format';
+import { ChannelCombobox } from '@/shell/ChannelCombobox';
 import { useChannels } from '@/shell/useChannels';
 
 async function listChannelFolders(channelId: string, path: string, signal: AbortSignal) {
@@ -175,15 +176,16 @@ export function UploadToTelegramDialog({ entries, onClose }: { entries: FileEntr
         <div className="flex flex-col gap-4">
           <Field label={t('Channel')}>
             {({ id }) => (
-              <Select
+              <ChannelCombobox
                 id={id}
-                value={channelId || undefined}
-                onValueChange={(v) => {
+                channels={targets}
+                value={channelId}
+                onChange={(v) => {
                   setChannelId(v);
                   setTarget('/');
                 }}
-                placeholder={channels.isLoading ? t('Loading...') : t('Choose a channel')}
-                options={targets.map((c) => ({ value: String(c.id), label: c.name }))}
+                loading={channels.isLoading}
+                placeholder={t('Choose a channel')}
               />
             )}
           </Field>

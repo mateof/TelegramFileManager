@@ -1101,6 +1101,25 @@
                         <div class="config-item">
                             <div class="config-item-info">
                                 <div class="config-item-label">
+                                    <i class="bi bi-fingerprint"></i>
+                                    Passkeys
+                                    @if (WebAuth.Passkeys.Count > 0)
+                                    {
+                                        <span class="badge bg-info ms-2">@WebAuth.Passkeys.Count</span>
+                                    }
+                                </div>
+                                <div class="config-item-description">
+                                    Passkeys (Bitwarden, Windows Hello, iCloud, Google, security keys) are managed in the new web: <a href="/app/settings/security">/app → Settings → Web security</a>. Removing the password also removes them.
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    @if (WebAuth.PasswordSet)
+                    {
+                        <div class="config-item">
+                            <div class="config-item-info">
+                                <div class="config-item-label">
                                     <i class="bi bi-key"></i>
                                     Current password
                                 </div>

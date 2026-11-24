@@ -42,7 +42,9 @@ export function AppLayout() {
   const loading = navigation.state === 'loading';
 
   return (
-    <div className="relative flex h-dvh overflow-hidden">
+    // Side safe-area insets (landscape phones with a notch, installed app); the
+    // top bar, sidebar and bottom nav pad the top/bottom insets themselves.
+    <div className="relative flex h-dvh overflow-hidden pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
       <div aria-hidden className="tfm-ambient" />
       <a
         href="#tfm-main"
@@ -53,7 +55,7 @@ export function AppLayout() {
 
       <aside
         className={cn(
-          'glass relative z-20 hidden shrink-0 border-r border-border transition-[width] duration-300 ease-out-soft lg:block',
+          'glass relative z-20 hidden shrink-0 border-r border-border pt-[env(safe-area-inset-top)] transition-[width] duration-300 ease-out-soft lg:block',
           collapsed ? 'w-16' : 'w-72'
         )}
       >
@@ -65,7 +67,7 @@ export function AppLayout() {
         <div
           aria-hidden
           className={cn(
-            'pointer-events-none absolute inset-x-0 top-14 z-40 h-0.5 origin-left bg-primary transition-[opacity,transform] duration-500',
+            'pointer-events-none absolute inset-x-0 top-[calc(3.5rem+env(safe-area-inset-top))] z-40 h-0.5 origin-left bg-primary transition-[opacity,transform] duration-500',
             loading ? 'scale-x-75 opacity-100' : 'scale-x-0 opacity-0'
           )}
         />

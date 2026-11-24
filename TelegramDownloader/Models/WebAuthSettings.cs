@@ -42,6 +42,73 @@ namespace TelegramDownloader.Models
 
         public DateTime UpdatedUtc { get; set; } = DateTime.UtcNow;
 
-        public WebAuthSettings Clone() => (WebAuthSettings)MemberwiseClone();
+        /// <summary>
+        /// Passkeys (WebAuthn credentials) registered as an extra sign-in
+        /// method. Only meaningful while a password is set: removing or
+        /// resetting the password removes them.
+        /// </summary>
+        public List<WebPasskey> Passkeys { get; set; } = new();
+
+        /// <summary>
+        /// WebAuthn user handle of the single web user (base64url of 32 random
+        /// bytes), generated with the first passkey and then kept stable.
+        /// </summary>
+        public string? PasskeyUserHandle { get; set; }
+
+        /// <summary>
+        /// Optional relying party ID override (reverse proxy setups). Null =
+        /// the host name of each request.
+        /// </summary>
+        public string? PasskeyRpId { get; set; }
+
+        /// <summary>
+        /// Optional list of allowed origins (<c>https://host[:port]</c>). Empty =
+        /// the origin of each request.
+        /// </summary>
+        public List<string> PasskeyOrigins { get; set; } = new();
+
+        public WebAuthSettings Clone()
+        {
+            var copy = (WebAuthSettings)MemberwiseClone();
+            copy.Passkeys = (Passkeys ?? new()).Select(p => p.Clone()).ToList();
+            copy.PasskeyOrigins = new List<string>(PasskeyOrigins ?? new());
+            return copy;
+        }
+    }
+
+    /// <summary>One registered passkey. Binary values are base64url strings (same in MongoDB and the JSON mirror).</summary>
+    [BsonIgnoreExtraElements]
+    public class WebPasskey
+    {
+        /// <summary>Credential ID (base64url).</summary>
+        public string CredentialId { get; set; } = string.Empty;
+        /// <summary>COSE-encoded public key (base64url).</summary>
+        public string PublicKey { get; set; } = string.Empty;
+        /// <summary>Last signature counter seen. Synced passkeys always report 0.</summary>
+        public long SignCount { get; set; }
+        /// <summary>User handle the credential was created for (base64url).</summary>
+        public string UserHandle { get; set; } = string.Empty;
+        /// <summary>Authenticator model (all zeros for most password managers).</summary>
+        public string AaGuid { get; set; } = Guid.Empty.ToString();
+        /// <summary>Transports reported by the browser (usb, nfc, ble, hybrid, internal...).</summary>
+        public List<string> Transports { get; set; } = new();
+        /// <summary>Backup eligible (BE flag): a synced / multi-device passkey.</summary>
+        public bool BackupEligible { get; set; }
+        /// <summary>Backed up (BS flag) at the last use.</summary>
+        public bool BackedUp { get; set; }
+        /// <summary>Attestation statement format (always accepted without trust checks).</summary>
+        public string? AttestationFormat { get; set; }
+        /// <summary>Relying party ID it was registered for.</summary>
+        public string? RpId { get; set; }
+        public string Name { get; set; } = string.Empty;
+        public DateTime CreatedUtc { get; set; } = DateTime.UtcNow;
+        public DateTime? LastUsedUtc { get; set; }
+
+        public WebPasskey Clone()
+        {
+            var copy = (WebPasskey)MemberwiseClone();
+            copy.Transports = new List<string>(Transports ?? new());
+            return copy;
+        }
     }
 }

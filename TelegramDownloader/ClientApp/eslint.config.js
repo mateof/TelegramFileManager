@@ -25,6 +25,11 @@ export default defineConfig([
     extends: [reactRefresh.configs.vite]
   },
   {
+    // The service worker of the web app
+    files: ['apps/*/sw/**/*.ts'],
+    languageOptions: { globals: globals.serviceworker }
+  },
+  {
     files: ['**/*.config.{ts,js}', 'scripts/**/*.mjs'],
     languageOptions: { globals: globals.node }
   }

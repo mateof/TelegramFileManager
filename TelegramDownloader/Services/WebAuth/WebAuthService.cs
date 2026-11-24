@@ -52,6 +52,22 @@ namespace TelegramDownloader.Services.WebAuth
         Task<WebAuthResult> ChangePasswordAsync(string? currentPassword, string? newPassword);
         Task<WebAuthResult> RemovePasswordAsync(string? currentPassword);
         Task SetLanBypassAsync(bool enabled);
+
+        /// <summary>Registered passkeys (empty while no password is set).</summary>
+        IReadOnlyList<WebPasskey> Passkeys { get; }
+        /// <summary>Stable WebAuthn user handle (base64url), null until the first passkey.</summary>
+        string? PasskeyUserHandle { get; }
+        /// <summary>Relying party ID override, null = request host.</summary>
+        string? PasskeyRpId { get; }
+        /// <summary>Allowed origins override, empty = request origin.</summary>
+        IReadOnlyList<string> PasskeyOrigins { get; }
+
+        /// <summary>
+        /// Changes the passkey data (list, user handle, relying party override)
+        /// under the settings lock and persists it. <paramref name="change"/>
+        /// works on a copy and returns false to cancel. Sessions stay valid.
+        /// </summary>
+        Task<bool> UpdatePasskeysAsync(Func<WebAuthSettings, bool> change);
     }
 
     public class WebAuthService : IWebAuthService
@@ -88,6 +104,18 @@ namespace TelegramDownloader.Services.WebAuth
         public string InternalToken { get; }
         public LoginRateLimiter RateLimiter { get; } = new();
         public event Action? Changed;
+
+        public IReadOnlyList<WebPasskey> Passkeys => (_current.Passkeys ?? new()).AsReadOnly();
+        public string? PasskeyUserHandle => _current.PasskeyUserHandle;
+        public string? PasskeyRpId => _current.PasskeyRpId;
+        public IReadOnlyList<string> PasskeyOrigins => (_current.PasskeyOrigins ?? new()).AsReadOnly();
+
+        public async Task<bool> UpdatePasskeysAsync(Func<WebAuthSettings, bool> change)
+        {
+            var applied = false;
+            await MutateAsync(s => applied = change(s), newStamp: false);
+            return applied;
+        }
 
         public bool IsInternalToken(string? value)
         {
@@ -149,8 +177,22 @@ namespace TelegramDownloader.Services.WebAuth
                     _logger.LogWarning("{Var} is set: removing the web password. Unset it and set a new password.", ResetEnvironmentVariable);
                     current = current.Clone();
                     current.PasswordHash = null;
+                    if (current.Passkeys.Count > 0)
+                        _logger.LogWarning("{Var} is set: removing {Count} passkey(s) too", ResetEnvironmentVariable, current.Passkeys.Count);
+                    current.Passkeys = new();
                     current.SecurityStamp = Guid.NewGuid().ToString("N");
                     current.UpdatedUtc = DateTime.UtcNow;
+                    if (dbOk) await TrySaveToDb(current);
+                }
+
+                current.Passkeys ??= new();
+                current.PasskeyOrigins ??= new();
+                if (string.IsNullOrEmpty(current.PasswordHash) && current.Passkeys.Count > 0)
+                {
+                    // Passkeys are an extra way in to a password-protected UI only.
+                    _logger.LogWarning("Removing {Count} passkey(s) left without a web password", current.Passkeys.Count);
+                    current = current.Clone();
+                    current.Passkeys = new();
                     if (dbOk) await TrySaveToDb(current);
                 }
 
@@ -212,8 +254,17 @@ namespace TelegramDownloader.Services.WebAuth
             if (!PasswordSet) return new(WebAuthOutcome.NotSet);
             if (!VerifyPassword(currentPassword)) return new(WebAuthOutcome.InvalidCredentials);
 
-            await MutateAsync(s => { s.PasswordHash = null; return true; }, newStamp: true);
+            var passkeys = 0;
+            await MutateAsync(s =>
+            {
+                passkeys = s.Passkeys.Count;
+                s.PasswordHash = null;
+                // Passkeys without a password make no sense here: remove them too.
+                s.Passkeys = new();
+                return true;
+            }, newStamp: true);
             _logger.LogWarning("Web password removed: the web UI is open again");
+            if (passkeys > 0) _logger.LogWarning("Removed {Count} passkey(s) with the web password", passkeys);
             return new(WebAuthOutcome.Ok);
         }
 

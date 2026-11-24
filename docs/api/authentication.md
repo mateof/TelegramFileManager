@@ -340,13 +340,19 @@ GET /api/v1/web-auth/status
     "passwordSet": true,
     "authenticated": false,
     "lanBypassEnabled": true,
-    "lanBypassActive": false
+    "lanBypassActive": false,
+    "passkeyCount": 1,
+    "passkeysAvailable": true
   }
 }
 ```
 
 - `authenticated`: the request carries a valid session cookie.
 - `lanBypassActive`: this very request is let in by the LAN rule.
+- `passkeyCount`: registered passkeys (always 0 without a password).
+- `passkeysAvailable`: the login page may offer "Sign in with a passkey" (a
+  password is set, at least one passkey exists and this request's host can be
+  a WebAuthn RP ID, i.e. it is not an IP address).
 
 The web app shows the login page when `passwordSet && !authenticated && !lanBypassActive`.
 
@@ -373,6 +379,71 @@ HMAC-SHA512, random salt, 100 000 iterations) in the config database
 if MongoDB is unreachable at startup. **Forgot it?** Start the server once with
 the environment variable `TFM_RESET_WEB_PASSWORD=true`, then remove the
 variable and set a new password.
+
+### Passkeys
+
+While a web password is set, passkeys (WebAuthn) can be added as an extra way to
+sign in; the password keeps working as the fallback. Any authenticator works:
+password managers with synced passkeys (Bitwarden, 1Password, iCloud Keychain,
+Google Password Manager), the platform authenticator (Windows Hello, Touch ID,
+Android) and security keys. Capability string: `webAuth.passkeys`.
+
+| Method | Path | Body | Needs | Errors |
+|---|---|---|---|---|
+| `POST` | `/api/v1/web-auth/passkeys/register/begin` | `{ "currentPassword": "…" }` | browser session | `403 session_required`, `401 invalid_credentials`, `400 passkey_unsupported`, `409 password_not_set`, `429 too_many_attempts` |
+| `POST` | `/api/v1/web-auth/passkeys/register/finish` | `{ "requestId": "…", "name": "Bitwarden", "credential": { … } }` | browser session | `403 session_required`, `400 passkey_challenge_invalid`, `400 passkey_invalid`, `409 passkey_exists` |
+| `POST` | `/api/v1/web-auth/passkeys/login/begin` | — | — | `400 passkey_unsupported`, `409 password_not_set`, `429 too_many_attempts` |
+| `POST` | `/api/v1/web-auth/passkeys/login/finish` | `{ "requestId": "…", "credential": { … }, "remember": true }` | — | `400 passkey_challenge_invalid`, `401 passkey_invalid`, `429 too_many_attempts` |
+| `GET` | `/api/v1/web-auth/passkeys` | — | browser session | `403 session_required` |
+| `PUT` | `/api/v1/web-auth/passkeys/{id}` | `{ "name": "…" }` | browser session | `403 session_required`, `404 not_found` |
+| `DELETE` | `/api/v1/web-auth/passkeys/{id}` | — | browser session | `403 session_required`, `404 not_found` |
+| `PUT` | `/api/v1/web-auth/passkeys/settings` | `{ "rpId": "example.com", "origins": ["https://tfm.example.com"] }` | browser session | `403 session_required`, `400 invalid_request` |
+
+"Browser session" means a session cookie obtained with the password (or a
+passkey): the API key, the LAN bypass and the server-side token are **not**
+enough, so neither an app nor a LAN neighbour can add a way in. Registration
+also re-checks the current password (wrong ones count for the rate limiter).
+All are state-changing web-auth calls, so the CSRF header is required.
+
+**Ceremonies.** `begin` returns `{ requestId, options }`; `options` is the JSON
+form of the WebAuthn options (binary values base64url), for
+`PublicKeyCredential.parseCreationOptionsFromJSON()` /
+`parseRequestOptionsFromJSON()`. Send `credential.toJSON()` and the `requestId`
+to `finish` within 5 minutes. Challenges are kept in memory, are single use and
+bound to the ceremony (a registration challenge cannot finish a login). A
+successful `login/finish` sets exactly the same cookie as the password login;
+failed ones count for the same per-IP rate limiter.
+
+**Options.** Discoverable credentials (`residentKey: required`),
+`userVerification: preferred`, no authenticator attachment restriction,
+attestation `none` (any attestation format is accepted, no trust-chain or
+metadata checks), algorithms ES256, EdDSA and RS256, `excludeCredentials` with
+the registered ids. Login is usernameless (empty `allowCredentials`) and
+supports conditional mediation (autofill). One fixed random user handle
+(`TFM` / `Telegram File Manager`) is used for every passkey.
+
+**Counters.** Synced passkeys always report a signature counter of 0, which is
+accepted. A login is rejected (possible clone) only when both the stored and
+the received counters are non-zero and the received one did not grow. The
+backup flags (BE/BS) are accepted and stored (shown as "synced" in the UI).
+
+**RP ID and origin.** The RP ID is the host name of the request and the
+expected origin is its scheme + host (+ port); behind a proxy listed in
+`TrustedProxies` they come from `X-Forwarded-Host`/`-Proto`. Both the
+`clientDataJSON.origin` and the RP ID hash are verified on registration and
+login. A passkey only works on the domain it was created for, and browsers
+refuse IP addresses as RP IDs: open the web UI by a host name (`localhost` is
+fine) and over HTTPS (browsers only allow WebAuthn on `http://localhost`).
+For proxies that cannot forward the host, `PUT passkeys/settings` sets an RP ID
+override (a domain) and the list of accepted origins (each on that domain);
+empty values go back to the request host/origin. Changing the RP ID makes
+existing passkeys unusable.
+
+**Storage.** Passkeys live with the password hash (`TCCONFIG.webauth` and
+`datauser/web-auth.json`): credential id, COSE public key, counter, user
+handle, AAGUID, transports, BE/BS, name, creation and last use. Removing the
+password removes every passkey, and so does `TFM_RESET_WEB_PASSWORD=true`
+(logged). Changing the password keeps them.
 
 ### Reverse proxies (`TrustedProxies`)
 
