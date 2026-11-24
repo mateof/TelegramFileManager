@@ -54,6 +54,16 @@ export default function VideoView({ item }: { item: ViewerItem }) {
   /** Sources that already failed (each one is tried once). */
   const tried = useRef<string[]>([]);
 
+  // ---- source
+  // Set once the element is mounted, not as a prop: React builds the <video>
+  // before committing it (a lazy chunk delays the commit up to 300 ms), and it
+  // would start loading detached. React ignores the events of an uncommitted
+  // element, so a fast answer lost `loadedmetadata`, `play` and `playing`: no
+  // duration, a spinner over the picture and no resume position.
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.src = src;
+  }, [src]);
+
   // ---- watch progress (media library)
   const report = useCallback(
     (ended = false) => {
@@ -190,7 +200,6 @@ export default function VideoView({ item }: { item: ViewerItem }) {
     >
       <video
         ref={videoRef}
-        src={src}
         autoPlay
         playsInline
         preload="auto"

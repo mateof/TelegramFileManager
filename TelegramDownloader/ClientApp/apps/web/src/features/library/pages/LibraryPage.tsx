@@ -56,7 +56,7 @@ export default function LibraryPage() {
   const reviewCount = stats.data?.files?.['review'] ?? 0;
 
   return (
-    <div className="tfm-library flex min-h-full flex-col pb-10">
+    <div className="tfm-library flex min-h-full shrink-0 flex-col pb-10">
       <div className="relative">
         {featured ? (
           <Hero item={featured} onPlay={() => void playItem(featured.id)} />

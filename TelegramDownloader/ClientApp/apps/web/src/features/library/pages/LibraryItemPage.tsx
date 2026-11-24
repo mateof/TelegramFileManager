@@ -79,7 +79,7 @@ export default function LibraryItemPage() {
 
   const data = item.data;
   return (
-    <div className="tfm-library flex min-h-full flex-col pb-12">
+    <div className="tfm-library flex min-h-full shrink-0 flex-col pb-12">
       <ItemHeader item={data} onIdentify={() => setIdentify({ type: 'item', item: data })} />
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 sm:px-6 lg:px-10">
         {data.kind === 'series' ? (
