@@ -94,8 +94,9 @@ Share → Add to Home Screen). The build emits `manifest.webmanifest`, the servi
 ## Conventions in one minute
 
 - Features live in `apps/web/src/features/<feature>/` and export lazy routes from `routes.ts`.
-- UI strings: `t('English text')` from `@/i18n`; add the Spanish text to
-  `apps/web/src/i18n/es/<area>.ts`. `npm test` fails on a missing translation.
+- UI strings: `t('English text')` from `@/i18n`; add the Spanish and Galician texts to
+  `apps/web/src/i18n/es/<area>.ts` and `apps/web/src/i18n/gl/<area>.ts`. `npm test` fails on a
+  missing translation.
 - Server calls: `api.<module>.<call>()` from `@/lib/api` inside TanStack Query hooks.
 - Realtime: `useEventsMessage()` / `useTransfersMessage()` / `useRealtime()` from `@/lib/realtime`.
 - Components: import from `@tfm/ui`; see them live at `/app/dev/ui`.

@@ -2,6 +2,7 @@ import { ACCENTS, BACKGROUNDS, cn, SegmentedControl, Switch, useAppearance, type
 import { Check, Languages, Monitor, Palette, Sparkles } from 'lucide-react';
 import { useId } from 'react';
 import { getLanguage, LANGUAGES, setLanguage, t, type Language } from '@/i18n';
+import { LanguageFlag } from '@/shell/LanguageFlag';
 import { SettingRow, SettingsGroup } from '../components/SettingRow';
 
 function accentLabel(id: string): string {
@@ -132,7 +133,7 @@ export function AppearanceSection() {
 
       <SettingsGroup title={t('Language')} icon={<Languages />}>
         <SettingRow id="language" extra={<p className="mt-1 text-xs text-fg-muted">{t('The page reloads to apply the language.')}</p>}>
-          <SegmentedControl<Language> value={getLanguage()} onValueChange={setLanguage} options={LANGUAGES.map((l) => ({ value: l.code, label: l.label }))} size="sm" />
+          <SegmentedControl<Language> value={getLanguage()} onValueChange={setLanguage} options={LANGUAGES.map((l) => ({ value: l.code, label: l.label, icon: <LanguageFlag lang={l.code} /> }))} size="sm" />
         </SettingRow>
       </SettingsGroup>
     </>
