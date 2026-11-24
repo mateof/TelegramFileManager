@@ -341,7 +341,7 @@ function Versions({ item, files, onIdentifyFile }: { item: ApiLibraryItemDetailD
         {files.map((f) => {
           const percent = progressPercent(f.watch);
           return (
-            <li key={`${f.channelId}:${f.fileId}`} className="glass flex items-center gap-3 rounded-xl border border-border p-3 shadow-soft">
+            <li key={`${f.channelId}:${f.fileId}`} className="glass-flat flex items-center gap-3 rounded-xl border border-border p-3 shadow-soft">
               <IconButton variant="soft" label={t('Play')} onClick={() => playLibraryFile(f, item)}>
                 <Play className="fill-current" />
               </IconButton>
@@ -429,7 +429,7 @@ function EpisodeRow({ item, ep, isNext, onIdentifyFile }: { item: ApiLibraryItem
   return (
     <li
       className={cn(
-        'group glass flex flex-col gap-3 rounded-2xl border border-border p-3 shadow-soft transition-colors sm:flex-row sm:items-start',
+        'group glass-flat flex flex-col gap-3 rounded-2xl border border-border p-3 shadow-soft transition-colors sm:flex-row sm:items-start',
         isNext && 'border-accent-500/40 ring-1 ring-accent-500/20'
       )}
     >

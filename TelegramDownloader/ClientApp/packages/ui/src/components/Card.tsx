@@ -2,8 +2,8 @@ import { forwardRef, type HTMLAttributes } from 'react';
 import { cn } from '../lib/cn';
 
 export interface CardProps extends HTMLAttributes<HTMLDivElement> {
-  /** Frosted translucent surface instead of an opaque one. */
-  glass?: boolean;
+  /** Frosted translucent surface instead of an opaque one; `flat` skips the blur, for cards repeated down a list. */
+  glass?: boolean | 'flat';
   /** Lift + glow on hover (for clickable cards). */
   interactive?: boolean;
 }
@@ -14,7 +14,7 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(function Card({ glass,
       ref={ref}
       className={cn(
         'rounded-2xl border border-border shadow-soft',
-        glass ? 'glass' : 'bg-surface',
+        glass === 'flat' ? 'glass-flat' : glass ? 'glass' : 'bg-surface',
         interactive &&
           'transition-[transform,box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:border-accent-500/40 hover:shadow-glow',
         className

@@ -216,7 +216,7 @@ function ResultGroup({ group, query }: { group: SearchGroup; query: string }) {
   const visible = expanded ? group.files : group.files.slice(0, COLLAPSED_ROWS);
 
   return (
-    <Card glass className="overflow-hidden">
+    <Card glass="flat" className="overflow-hidden">
       <div className="flex items-center gap-3 border-b border-border px-4 py-3">
         <button
           type="button"
