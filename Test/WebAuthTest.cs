@@ -29,7 +29,9 @@ namespace Test
         [Test]
         public void Hashes_are_salted()
         {
-            Assert.That(WebPasswordHasher.Hash("same password"), Is.Not.EqualTo(WebPasswordHasher.Hash("same password")));
+            string first = WebPasswordHasher.Hash("same password");
+            string second = WebPasswordHasher.Hash("same password");
+            Assert.That(first, Is.Not.EqualTo(second));
         }
 
         [Test]

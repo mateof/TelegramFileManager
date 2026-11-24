@@ -639,7 +639,8 @@ namespace TelegramDownloader.Data
 
         public async Task<User> CallQrGenerator(Action<string> func, CancellationToken ct, bool logoutFirst = false)
         {
-            User user = await client.LoginWithQRCode(func, logoutFirst: logoutFirst, ct: ct);
+            // WTelegramClient 4.4.11+ also passes the QR code expiration time; callers only need the tg:// URL.
+            User user = await client.LoginWithQRCode((url, _expires) => func(url), logoutFirst: logoutFirst, ct: ct);
             if (user != null)
                 await CompleteLogin();
             return user;
