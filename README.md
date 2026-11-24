@@ -14,16 +14,38 @@
 With telegramFileManager you can have your own unlimited cloud and manage it through a file system in a simple way.
 You will be able to store files of unlimited size.
 
-<img width="2499" height="890" alt="TFM Home" src="https://github.com/user-attachments/assets/98f28256-f1cf-4a67-9bfe-e23951525bbb" />
+## New web app
 
-## Getting started
-[Wiki](https://github.com/mateof/TelegramFileManager/wiki)
+The server also ships a new web interface at **`/app`**: a file manager for your channels, a
+media library with posters, a music player with a queue, live transfers, global search and
+themes, made for desktop and mobile and installable as an app (PWA). It works side by side with
+the classic interface ([details](#web-interface-app)).
+
+<table>
+  <tr>
+    <td><img src="docs/screenshots/web/file-manager.webp" alt="File manager of a channel" /></td>
+    <td><img src="docs/screenshots/web/library-grid.webp" alt="Media library with posters" /></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/web/player.webp" alt="Music player with the queue" /></td>
+    <td><img src="docs/screenshots/web/transfers.webp" alt="Transfers with live progress" /></td>
+  </tr>
+</table>
+
+More screenshots (viewers, search, settings, light theme, mobile): **[docs/web-app.md](docs/web-app.md)**.
+
+### Classic interface
+
+<img width="2499" height="890" alt="TFM Home" src="https://github.com/user-attachments/assets/98f28256-f1cf-4a67-9bfe-e23951525bbb" />
 
 <img width="2190" height="890" alt="TFM File Manager" src="https://github.com/user-attachments/assets/742c6e61-b49e-4c5e-be63-dc9cb65f8689" />
 
 <img width="1318" height="861" alt="TFM Audio Player FM" src="https://github.com/user-attachments/assets/d6d818cd-f8c8-4059-9d90-35f1b12096b3" />
 
 <img width="1480" height="852" alt="TFM Video player FM" src="https://github.com/user-attachments/assets/1d2c97ce-2b6a-4238-97bd-efc863918d3a" />
+
+## Getting started
+[Wiki](https://github.com/mateof/TelegramFileManager/wiki)
 
 
 ## Installation
@@ -121,7 +143,7 @@ Besides the classic interface at `/`, the server ships a new web interface at
 **`http://<server>:<port>/app/`**: a React app built on the REST API v1, made for desktop
 and mobile (themes, command palette with `Ctrl/Cmd+K`, touch layout with a bottom
 navigation bar). Both interfaces work over the same Telegram session and settings, and you
-can switch between them at any time:
+can switch between them at any time (a tour with screenshots: [docs/web-app.md](docs/web-app.md)):
 
 - From the classic interface: the **New interface** button in the side menu (also in the
   mobile menu), or the banner shown until you choose "Don't show again".
