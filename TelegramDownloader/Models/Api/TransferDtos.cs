@@ -163,7 +163,7 @@ namespace TelegramDownloader.Models.Api
         /// <summary>Human readable upload speed.</summary>
         public string UploadSpeed { get; set; } = "0 KB/s";
 
-        /// <summary>Bytes transferred during the current sampling second.</summary>
+        /// <summary>Bytes transferred during the last full second.</summary>
         public long DownloadBytesPerSecond { get; set; }
         public long UploadBytesPerSecond { get; set; }
 

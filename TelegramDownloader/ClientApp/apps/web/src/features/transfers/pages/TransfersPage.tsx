@@ -164,7 +164,7 @@ export default function TransfersPage() {
       <Stats summary={summary} />
 
       <Card className="p-4">
-        <SpeedChart series={series} windowSeconds={windowSeconds} />
+        <SpeedChart working={!!summary && summary.activeDownloads + summary.activeUploads > 0} series={series} windowSeconds={windowSeconds} />
       </Card>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)} className="flex flex-col gap-4">

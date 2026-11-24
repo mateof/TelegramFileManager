@@ -26,7 +26,7 @@ function path(points: [number, number][]): string {
  * accent colour, upload a contrasting hue plus a dashed line, so the two never
  * rely on colour alone; legend with the current values, hover crosshair.
  */
-export function SpeedChart({ series, windowSeconds }: { series: SpeedSeries[]; windowSeconds: number }) {
+export function SpeedChart({ series, windowSeconds, working }: { series: SpeedSeries[]; windowSeconds: number; working: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(600);
   const [hover, setHover] = useState<number | null>(null);
@@ -137,7 +137,11 @@ export function SpeedChart({ series, windowSeconds }: { series: SpeedSeries[]; w
             </p>
           </div>
         )}
-        {series.length < 2 && <p className="absolute inset-0 flex items-center justify-center text-xs text-fg-subtle">{t('Waiting for speed samples...')}</p>}
+        {series.length < 2 && (
+          <p className="absolute inset-0 flex items-center justify-center text-xs text-fg-subtle">
+            {working ? t('Waiting for speed samples...') : t('No recent transfers.')}
+          </p>
+        )}
       </div>
     </div>
   );

@@ -12,6 +12,7 @@ const transfers: Record<string, string> = {
   '{count} uploads': '{count} subidas',
   'Last {minutes} minutes': 'Últimos {minutes} minutos',
   'Transfer speed over time': 'Velocidade de transferencia ao longo do tempo',
+  'No recent transfers.': 'Non hai transferencias recentes.',
   'Waiting for speed samples...': 'Agardando mostras de velocidade...',
 
   // tabs and toolbar

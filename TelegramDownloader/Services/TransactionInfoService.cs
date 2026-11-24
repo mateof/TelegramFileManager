@@ -58,10 +58,18 @@ namespace TelegramDownloader.Services
         private long _bytesDownloaded = 0;
         public long bytesUploaded => Interlocked.Read(ref _bytesUploaded);
         public long bytesDownloaded => Interlocked.Read(ref _bytesDownloaded);
+        private long _downloadBytesPerSecond = 0;
+        private long _uploadBytesPerSecond = 0;
+        /// <summary>Bytes of the last full second.</summary>
+        public long downloadBytesPerSecond => Interlocked.Read(ref _downloadBytesPerSecond);
+        public long uploadBytesPerSecond => Interlocked.Read(ref _uploadBytesPerSecond);
         public List<SpeedHistory> downloadSpeedsHistory { get; set; } = new List<SpeedHistory>();
         public List<SpeedHistory> uploadSpeedsHistory { get; set; } = new List<SpeedHistory>();
         private readonly object _speedHistoryLock = new object();
         private int speedHistoryCount = 0;
+        // Bytes since the last history point, which is their average.
+        private long _intervalDownloaded = 0;
+        private long _intervalUploaded = 0;
 
         public static int MAX_SPEED_HISTORY_SECONDS = 600; // 10 minutes
         public static int INTERVAL_SPEED_HISTORY_SECONDS = 3;
@@ -311,6 +319,12 @@ namespace TelegramDownloader.Services
                 return _infoDownloadTaksModel.FirstOrDefault(t => t._internalId == internalId);
         }
 
+        /// <summary>True while the speeds are being sampled.</summary>
+        public bool IsTimerRunning
+        {
+            get { lock (_timerLock) return aTimer?.Enabled == true; }
+        }
+
         public void startTimer()
         {
             lock (_timerLock)
@@ -342,19 +356,10 @@ namespace TelegramDownloader.Services
         {
             try
             {
-                long downloaded = bytesDownloaded;
-                long uploaded = bytesUploaded;
-                if (downloaded > 0)
-                    setDownloadSpeed(HelperService.SizeSuffixPerTime(downloaded));
-                if (uploaded > 0)
-                    setUploadSpeed(HelperService.SizeSuffixPerTime(uploaded));
-                if (speedHistoryCount++ >= INTERVAL_SPEED_HISTORY_SECONDS)
-                {
-                    speedHistoryCount = 0;
-                    setHistorySpeed();
-                }
-                resetDownloadBytes();
-                resetUploadBytes();
+                SampleSpeeds();
+                // Nothing else stops it when no page of the Blazor UI is open.
+                if (!isDownloading() && !isUploading())
+                    stopTimer();
             }
             catch (Exception ex)
             {
@@ -363,15 +368,47 @@ namespace TelegramDownloader.Services
             }
         }
 
+        /// <summary>One second of sampling: current speeds, and a history point every few seconds.</summary>
+        public void SampleSpeeds()
+        {
+            long downloaded = Interlocked.Exchange(ref _bytesDownloaded, 0);
+            long uploaded = Interlocked.Exchange(ref _bytesUploaded, 0);
+            Interlocked.Exchange(ref _downloadBytesPerSecond, downloaded);
+            Interlocked.Exchange(ref _uploadBytesPerSecond, uploaded);
+            Interlocked.Add(ref _intervalDownloaded, downloaded);
+            Interlocked.Add(ref _intervalUploaded, uploaded);
+            if (downloaded > 0)
+                setDownloadSpeed(HelperService.SizeSuffixPerTime(downloaded));
+            else if (!isDownloading())
+                setDownloadSpeed("0 KB/s");
+            if (uploaded > 0)
+                setUploadSpeed(HelperService.SizeSuffixPerTime(uploaded));
+            else if (!isUploading())
+                setUploadSpeed("0 KB/s");
+            if (++speedHistoryCount >= INTERVAL_SPEED_HISTORY_SECONDS)
+            {
+                speedHistoryCount = 0;
+                setHistorySpeed(
+                    Interlocked.Exchange(ref _intervalDownloaded, 0) / INTERVAL_SPEED_HISTORY_SECONDS,
+                    Interlocked.Exchange(ref _intervalUploaded, 0) / INTERVAL_SPEED_HISTORY_SECONDS);
+            }
+        }
+
         private bool canStopTimer()
         {
+            // Bytes that are not in a history point yet: the chart would lose them.
+            if (bytesDownloaded + bytesUploaded + Interlocked.Read(ref _intervalDownloaded) + Interlocked.Read(ref _intervalUploaded) != 0)
+                return false;
             lock (_speedHistoryLock)
             {
                 return uploadSpeedsHistory.Sum(x => x.speed) + downloadSpeedsHistory.Sum(x => x.speed) == 0;
             }
         }
 
-        private void setHistorySpeed()
+        private static string speedText(long bytesPerSecond) =>
+            bytesPerSecond > 0 ? HelperService.SizeSuffixPerTime(bytesPerSecond) : "0 KB/s";
+
+        private void setHistorySpeed(long downloadBps, long uploadBps)
         {
             DateTime now = DateTime.Now;
             List<string> activeDownloads;
@@ -381,8 +418,8 @@ namespace TelegramDownloader.Services
             lock (_uploadLock)
                 activeUploads = _uploadModels.Where(x => x.state == StateTask.Working).Select(x => x.name).ToList();
 
-            var newDownloadPoint = new SpeedHistory() { time = now, speed = bytesDownloaded, speedString = downloadSpeed, activeFiles = activeDownloads };
-            var newUploadPoint = new SpeedHistory() { time = now, speed = bytesUploaded, speedString = uploadSpeed, activeFiles = activeUploads };
+            var newDownloadPoint = new SpeedHistory() { time = now, speed = downloadBps, speedString = speedText(downloadBps), activeFiles = activeDownloads };
+            var newUploadPoint = new SpeedHistory() { time = now, speed = uploadBps, speedString = speedText(uploadBps), activeFiles = activeUploads };
 
             lock (_speedHistoryLock)
             {
@@ -418,12 +455,18 @@ namespace TelegramDownloader.Services
         public Task addDownloadBytes(long bytes)
         {
             Interlocked.Add(ref _bytesDownloaded, bytes);
+            // Not every transfer goes through the queue (streaming cache, web downloads...).
+            if (bytes > 0)
+                startTimer();
             return Task.CompletedTask;
         }
 
         public Task addUploadBytes(long bytes)
         {
             Interlocked.Add(ref _bytesUploaded, bytes);
+            // Not every transfer goes through the queue (streaming cache, web downloads...).
+            if (bytes > 0)
+                startTimer();
             return Task.CompletedTask;
         }
 
