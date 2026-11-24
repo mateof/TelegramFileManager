@@ -20,9 +20,18 @@ export function pickVideoSource(item: ViewerItem, canPlayType: (mime: string) =>
   return item.url;
 }
 
-/** Source to fall back to after `current` failed, or null when there is nothing else to try. */
-export function fallbackVideoSource(item: ViewerItem, current: string): string | null {
-  if (item.playbackUrl && current !== item.playbackUrl) return item.playbackUrl;
+/**
+ * Source to fall back to after `current` failed, or null when there is nothing
+ * else to try. Each URL is tried once, in both directions: a direct stream the
+ * browser cannot decode goes to the transcoder, and a transcoder that is off
+ * (403), missing FFmpeg or failing goes to the direct stream (Chrome and
+ * Firefox play many MKVs, AVIs... with H.264/AAC inside).
+ */
+export function fallbackVideoSource(item: ViewerItem, current: string, tried: readonly string[] = []): string | null {
+  const done = new Set([...tried, current]);
+  for (const candidate of [item.playbackUrl, item.url]) {
+    if (candidate && !done.has(candidate)) return candidate;
+  }
   return null;
 }
 

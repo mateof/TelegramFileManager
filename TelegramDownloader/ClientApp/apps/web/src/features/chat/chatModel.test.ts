@@ -1,6 +1,6 @@
 import type { ApiChatMessageDto } from '@tfm/api-client';
 import { describe, expect, it } from 'vitest';
-import { dayLabel, fileTypeLabel, groupByDay, hasOlderPage, isVisualMedia, localDay, mergePages, telegramMessageLink } from './chatModel';
+import { dayLabel, fileTypeLabel, groupByDay, hasOlderPage, isVisualMedia, localDay, mergePages, messageMedia, telegramMessageLink } from './chatModel';
 
 function msg(id: number, date: Date, extra: Partial<ApiChatMessageDto> = {}): ApiChatMessageDto {
   return { id, date: date.toISOString(), text: null, hasMedia: false, mediaType: null, fileName: null, fileSize: 0, mimeType: null, from: null, ...extra };
@@ -66,5 +66,40 @@ describe('message helpers', () => {
     expect(fileTypeLabel({ fileName: 'a.Mp3', mimeType: null })).toBe('MP3');
     expect(fileTypeLabel({ fileName: null, mimeType: 'application/pdf' })).toBe('PDF');
     expect(fileTypeLabel({ fileName: 'noext', mimeType: null })).toBe('');
+  });
+});
+
+describe('messageMedia', () => {
+  const url = (id: number, disposition?: string) => `/api/v1/channels/5/messages/${id}/content${disposition ? `?disposition=${disposition}` : ''}`;
+  const at = new Date(2024, 0, 1);
+
+  it('streams videos, photos and PDFs of a message without the index', () => {
+    const video = messageMedia('5', msg(7, at, { hasMedia: true, mediaType: 'video', fileName: null, fileSize: 900, mimeType: 'video/mp4' }), url, 'Video');
+    expect(video).toEqual({
+      kind: 'video',
+      id: '5:msg:7',
+      name: 'Video',
+      url: '/api/v1/channels/5/messages/7/content',
+      downloadUrl: '/api/v1/channels/5/messages/7/content?disposition=attachment',
+      mimeType: 'video/mp4',
+      size: 900
+    });
+    expect(messageMedia('5', msg(8, at, { hasMedia: true, mediaType: 'photo' }), url, 'Photo')).toMatchObject({ kind: 'image', url: '/api/v1/channels/5/messages/8/content' });
+    expect(messageMedia('5', msg(9, at, { hasMedia: true, mediaType: 'document', fileName: 'Manual.PDF' }), url, 'x')).toMatchObject({ kind: 'pdf', name: 'Manual.PDF' });
+  });
+
+  it('gives audio as a player track', () => {
+    expect(messageMedia('5', msg(10, at, { hasMedia: true, mediaType: 'audio', fileName: '01 - Song.flac', fileSize: 42 }), url, 'Audio')).toEqual({
+      kind: 'audio',
+      id: '5:msg:10',
+      title: '01 - Song',
+      url: '/api/v1/channels/5/messages/10/content',
+      size: 42
+    });
+  });
+
+  it('leaves other files and text messages alone', () => {
+    expect(messageMedia('5', msg(11, at, { hasMedia: true, mediaType: 'document', fileName: 'backup.zip' }), url, 'x')).toBeNull();
+    expect(messageMedia('5', msg(12, at), url, 'x')).toBeNull();
   });
 });

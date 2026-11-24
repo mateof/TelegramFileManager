@@ -1,3 +1,4 @@
+using TelegramDownloader.Data;
 using TelegramDownloader.Models.Api;
 
 namespace TelegramDownloader.Services.Api
@@ -171,6 +172,73 @@ namespace TelegramDownloader.Services.Api
 
             if ((dto.Category == "Photo" || dto.Category == "Video") && dto.MessageId.HasValue && !dto.IsSplit)
                 dto.ThumbnailUrl = Thumbnail(baseUrl, channelId, dto.MessageId.Value);
+        }
+    }
+
+    /// <summary>
+    /// The file carried by a Telegram message, described for the message
+    /// content endpoint (which serves it without any index entry).
+    /// </summary>
+    public sealed record MessageAttachment(string Name, long Size, string MimeType, string Category, bool IsPhoto)
+    {
+        private static readonly Dictionary<string, string> ExtensionByMime = new(StringComparer.OrdinalIgnoreCase)
+        {
+            { "video/mp4", ".mp4" }, { "video/webm", ".webm" }, { "video/quicktime", ".mov" }, { "video/x-matroska", ".mkv" },
+            { "audio/mpeg", ".mp3" }, { "audio/mp4", ".m4a" }, { "audio/ogg", ".ogg" }, { "audio/flac", ".flac" },
+            { "audio/x-flac", ".flac" }, { "audio/wav", ".wav" }, { "audio/x-wav", ".wav" }, { "image/jpeg", ".jpg" },
+            { "image/png", ".png" }, { "image/webp", ".webp" }, { "image/gif", ".gif" }, { "application/pdf", ".pdf" }
+        };
+
+        /// <summary>Null when the message has no photo nor document.</summary>
+        public static MessageAttachment? From(TL.Message message)
+        {
+            switch (message.media)
+            {
+                case TL.MessageMediaPhoto { photo: TL.Photo }:
+                    return new MessageAttachment($"photo_{message.id}.jpg", 0, "image/jpeg", "Photo", true);
+                case TL.MessageMediaDocument { document: TL.Document doc }:
+                {
+                    var name = SafeFileName(doc.Filename);
+                    var mime = string.IsNullOrWhiteSpace(doc.mime_type) ? null : doc.mime_type.Trim();
+                    if (string.IsNullOrEmpty(System.IO.Path.GetExtension(name ?? string.Empty)))
+                    {
+                        var ext = mime != null && ExtensionByMime.TryGetValue(mime, out var e) ? e : string.Empty;
+                        name = (name ?? $"file_{message.id}") + ext;
+                    }
+                    var fromName = FileService.getMimeType(name!);
+                    // Telegram's type wins when it is a real one; generic documents fall back to the extension.
+                    if (mime == null || mime.Equals("application/octet-stream", StringComparison.OrdinalIgnoreCase))
+                        mime = fromName;
+
+                    var category = mime.StartsWith("video/", StringComparison.OrdinalIgnoreCase) ? "Video"
+                        : mime.StartsWith("audio/", StringComparison.OrdinalIgnoreCase) ? "Audio"
+                        : mime.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ? "Photo"
+                        : TelegramDownloader.Models.Api.ApiFileDto.CategoryOf(System.IO.Path.GetExtension(name!));
+                    return new MessageAttachment(name!, doc.size, mime, category, false);
+                }
+                default:
+                    return null;
+            }
+        }
+
+        /// <summary>A stand-in index entry, so the shared streaming code (and its cache) can serve the message.</summary>
+        public TelegramDownloader.Models.BsonFileManagerModel ToEntry(int messageId) => new()
+        {
+            Id = $"msg-{messageId}",
+            Name = Name,
+            Type = System.IO.Path.GetExtension(Name),
+            IsFile = true,
+            Size = Size,
+            MessageId = messageId
+        };
+
+        /// <summary>Telegram file names may hold path separators or characters Windows refuses.</summary>
+        public static string? SafeFileName(string? name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) return null;
+            var invalid = System.IO.Path.GetInvalidFileNameChars().Concat(new[] { '/', '\\', ':', '*', '?', '"', '<', '>', '|' }).ToHashSet();
+            var clean = new string(name.Trim().Select(c => invalid.Contains(c) || char.IsControl(c) ? '_' : c).ToArray()).Trim('.', ' ');
+            return clean.Length == 0 ? null : clean;
         }
     }
 

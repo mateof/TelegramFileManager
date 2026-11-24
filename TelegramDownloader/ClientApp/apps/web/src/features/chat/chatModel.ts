@@ -91,3 +91,37 @@ export function fileTypeLabel(m: Pick<ApiChatMessageDto, 'fileName' | 'mimeType'
   const sub = m.mimeType?.split('/')[1];
   return sub ? sub.toUpperCase() : '';
 }
+
+/** What the player/viewer can do with the file of a message that is not in the channel index. */
+export type MessageMedia =
+  | { kind: 'audio'; id: string; title: string; url: string; size: number }
+  | { kind: 'video' | 'image' | 'pdf'; id: string; name: string; url: string; downloadUrl: string; mimeType?: string; size: number };
+
+const IMAGE_EXT = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.avif']);
+
+/**
+ * Plays a message attachment straight from Telegram
+ * (`GET /api/v1/channels/{id}/messages/{messageId}/content`), without
+ * indexing it first: audio for the player, video/photo/PDF for the viewer.
+ * Null for other files (they still go through "Download to server").
+ */
+export function messageMedia(
+  channelId: string,
+  m: ApiChatMessageDto,
+  contentUrl: (messageId: number, disposition?: 'inline' | 'attachment') => string,
+  fallbackName: string
+): MessageMedia | null {
+  if (!m.hasMedia) return null;
+  const id = `${channelId}:msg:${m.id}`;
+  const name = m.fileName || fallbackName;
+  const ext = extensionOf(m.fileName);
+  const url = contentUrl(m.id);
+  if (m.mediaType === 'audio') {
+    const dot = name.lastIndexOf('.');
+    return { kind: 'audio', id, title: dot > 0 ? name.slice(0, dot) : name, url, size: m.fileSize };
+  }
+  const kind =
+    m.mediaType === 'video' ? 'video' : m.mediaType === 'photo' || IMAGE_EXT.has(ext) ? 'image' : ext === '.pdf' || m.mimeType === 'application/pdf' ? 'pdf' : null;
+  if (!kind) return null;
+  return { kind, id, name, url, downloadUrl: contentUrl(m.id, 'attachment'), mimeType: m.mimeType ?? undefined, size: m.fileSize };
+}

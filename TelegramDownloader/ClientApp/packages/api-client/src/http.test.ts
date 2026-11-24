@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ApiError, apiEvents, buildQuery, HttpClient, UNAUTHORIZED_EVENT } from './http';
+import { ApiError, apiEvents, buildQuery, HttpClient, serverUrl, UNAUTHORIZED_EVENT } from './http';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
@@ -119,5 +119,38 @@ describe('buildQuery', () => {
     expect(buildQuery({ a: 1, b: undefined, c: null, d: ['x', 'y'], e: false })).toBe('?a=1&d=x&d=y&e=false');
     expect(buildQuery({})).toBe('');
     expect(buildQuery()).toBe('');
+  });
+});
+
+describe('server URLs', () => {
+  it('rebases media URLs the server built with its own (internal) host', async () => {
+    const file = {
+      name: 'Holiday.mp4',
+      contentUrl: 'http://tfm:5000/api/v1/channels/1/files/a/content',
+      playbackUrl: 'http://10.0.0.5:5000/api/v1/channels/1/files/a/stream?x=1',
+      thumbnailUrl: 'http://tfm:5000/api/v1/channels/1/messages/7/thumbnail',
+      streamUrl: 'http://tfm:5000/api/file/GetFileStreamCached/1/a/Holiday.mp4',
+      downloadUrl: 'http://tfm:5000/local/music/a%20b.mp3',
+      posterUrl: 'https://image.tmdb.org/t/p/w342/abc.jpg',
+      loginUrl: 'tg://login?token=abc',
+      text: 'http://tfm:5000/api/v1/not-a-url-field'
+    };
+    const { http } = clientWith(jsonResponse({ success: true, data: { items: [file] } }));
+    const data = await http.get<{ items: (typeof file)[] }>('/api/v1/channels/1/files');
+    expect(data.items[0]).toEqual({
+      ...file,
+      contentUrl: '/api/v1/channels/1/files/a/content',
+      playbackUrl: '/api/v1/channels/1/files/a/stream?x=1',
+      thumbnailUrl: '/api/v1/channels/1/messages/7/thumbnail',
+      streamUrl: '/api/file/GetFileStreamCached/1/a/Holiday.mp4',
+      downloadUrl: '/local/music/a%20b.mp3'
+    });
+  });
+
+  it('keeps relative and external URLs, and honours a base URL', () => {
+    expect(serverUrl('/api/v1/x')).toBe('/api/v1/x');
+    expect(serverUrl('https://t.me/+abc')).toBe('https://t.me/+abc');
+    expect(serverUrl('not a url')).toBe('not a url');
+    expect(serverUrl('https://proxy.example/api/v1/x?a=1', 'https://tfm.example')).toBe('https://tfm.example/api/v1/x?a=1');
   });
 });

@@ -3,6 +3,7 @@ import { toast } from '@tfm/ui';
 import { openViewer, playAudio } from '@/features/player/public';
 import { toAudioTrack, toViewerItem, type MediaFileDto } from '@/features/search/fileMedia';
 import { t } from '@/i18n';
+import { messageMedia } from './chatModel';
 import { api, errorMessage } from '@/lib/api';
 
 /** URL of the JPEG preview of a photo/video message (404 when it has none). */
@@ -11,8 +12,9 @@ export function messageThumbnailUrl(channelId: string, messageId: number): strin
 }
 
 /**
- * Raw messages have no stream URL: playing one goes through the channel index.
- * Looks the file up by name and keeps the entry backed by this message.
+ * The indexed entry of a message, when there is one (it brings transcoding,
+ * library progress and playlists). Looks the file up by name and keeps the
+ * entry backed by this message.
  */
 async function findIndexedFile(channelId: string, m: ApiChatMessageDto): Promise<ApiFileDto | null> {
   if (!m.fileName) return null;
@@ -46,20 +48,29 @@ export async function openMessageMedia(channelId: string, channelName: string, m
   const file = (await findIndexedFile(channelId, m)) as MediaFileDto | null;
   if (m.mediaType === 'audio') {
     const track = file && toAudioTrack(file, channelId, channelName);
-    if (track) playAudio([track], 0);
-    else notIndexed(channelId, m);
+    if (track) {
+      playAudio([track], 0);
+      return;
+    }
+  } else {
+    const item = file && toViewerItem(file, channelId);
+    if (item) {
+      openViewer([{ ...item, thumbnailUrl: item.thumbnailUrl ?? messageThumbnailUrl(channelId, m.id) }], 0);
+      return;
+    }
+  }
+
+  // Not indexed: stream the attachment of the message itself
+  const fallbackName = m.mediaType === 'video' ? t('Video') : m.mediaType === 'audio' ? t('Audio') : t('Photo');
+  const media = messageMedia(channelId, m, (id, disposition) => api.channels.messageContentUrl(channelId, id, disposition), fallbackName);
+  if (!media) {
+    notIndexed(channelId, m);
     return;
   }
-  const item = file && toViewerItem(file, channelId);
-  if (item) {
-    openViewer([{ ...item, thumbnailUrl: item.thumbnailUrl ?? messageThumbnailUrl(channelId, m.id) }], 0);
+  if (media.kind === 'audio') {
+    playAudio([{ id: media.id, title: media.title, source: channelName, url: media.url, size: media.size }], 0);
     return;
   }
-  if (m.mediaType === 'photo') {
-    // Not indexed: the preview is the best we can show
-    const url = messageThumbnailUrl(channelId, m.id);
-    openViewer([{ id: `${channelId}:msg:${m.id}`, name: m.fileName ?? t('Photo'), kind: 'image', url, thumbnailUrl: url }], 0);
-    return;
-  }
-  notIndexed(channelId, m);
+  const thumbnailUrl = media.kind === 'image' ? media.url : m.mediaType === 'video' ? messageThumbnailUrl(channelId, m.id) : undefined;
+  openViewer([{ ...media, thumbnailUrl }], 0);
 }

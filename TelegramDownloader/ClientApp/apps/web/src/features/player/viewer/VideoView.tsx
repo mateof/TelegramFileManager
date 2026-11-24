@@ -51,6 +51,8 @@ export default function VideoView({ item }: { item: ViewerItem }) {
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const resumeAt = useRef<number>(item.watch?.startAtSeconds ?? 0);
   const lastReport = useRef(0);
+  /** Sources that already failed (each one is tried once). */
+  const tried = useRef<string[]>([]);
 
   // ---- watch progress (media library)
   const report = useCallback(
@@ -152,7 +154,8 @@ export default function VideoView({ item }: { item: ViewerItem }) {
 
   const onError = () => {
     const el = videoRef.current;
-    const next = fallbackVideoSource(item, src);
+    const next = fallbackVideoSource(item, src, tried.current);
+    tried.current.push(src);
     if (next) {
       resumeAt.current = el?.currentTime || resumeAt.current;
       setSrc(next);

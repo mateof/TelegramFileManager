@@ -300,7 +300,13 @@ index. To download shared files onto the server use
 GET /api/v1/channels/{channelId}/files/{fileId}/content?disposition=inline|attachment[&collectionId=…]
 GET /api/v1/channels/{channelId}/files/{fileId}/stream
 GET /api/v1/channels/{channelId}/messages/{messageId}/thumbnail
+GET /api/v1/channels/{channelId}/messages/{messageId}/content?disposition=inline|attachment
 ```
+
+Media URLs in file objects are absolute and built from the request's scheme and
+host (behind a reverse proxy, forward `Host`/`X-Forwarded-Host` and
+`X-Forwarded-Proto` from a trusted proxy so they point to the public address).
+The web app uses their path only, on its own origin.
 
 - **`content`** answers `200`, `206` (one `Range`) or `416`, with
   `Content-Disposition` `inline` (default) or `attachment`. Files already in the
@@ -315,6 +321,16 @@ GET /api/v1/channels/{channelId}/messages/{messageId}/thumbnail
 - **`thumbnail`** returns a JPEG (a small photo size, or a video's embedded
   preview), cached on disk with `Cache-Control: private, max-age=604800`.
   Messages without a preview answer `404`.
+- **`messages/{messageId}/content`** serves the attachment of any message of a
+  chat by message id, straight from Telegram, **without indexing it** (the
+  index is neither read nor changed). Same answers as `content` (`200`, `206`,
+  `416`; `inline`/`attachment`): inline audio and video go through the
+  progressive cache (shared with the indexed entry of the same message, if
+  any), photos are cached whole, everything else is streamed with exact ranges.
+  `Content-Type` is the document's `mime_type` (the file extension when
+  Telegram only says `application/octet-stream`); messages without a file
+  answer `404`. No transcoding. Advertised as `messages.content` in
+  `GET /api/mobile/info` features.
 
 ## Preload into the server cache
 

@@ -60,7 +60,9 @@ namespace TelegramDownloader.Controllers.Api.V1
         /// <param name="disposition"><c>inline</c> or <c>attachment</c>.</param>
         /// <param name="collectionId">Read the entry from this shared collection.</param>
         [HttpGet("files/{fileId}/content")]
-        [Produces("application/octet-stream")]
+        // application/json too: error answers are JSON envelopes (with only
+        // octet-stream MVC finds no formatter for them and answers 406).
+        [Produces("application/octet-stream", "application/json")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status206PartialContent)]
         [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status404NotFound)]
@@ -103,9 +105,7 @@ namespace TelegramDownloader.Controllers.Api.V1
             if (!attachment && collectionId == null && (category == "Audio" || category == "Video"))
             {
                 // Same progressive cache the web player uses.
-                var legacy = ActivatorUtilities.CreateInstance<FileController>(HttpContext.RequestServices);
-                legacy.ControllerContext = ControllerContext;
-                return await legacy.GetFileStreamCached(channelId, fileId, entry.Name ?? "file");
+                return await ServeProgressive(channelId, entry, mime);
             }
 
             var messageIds = ProgressiveDownloadService.GetMessageIds(entry);
@@ -149,7 +149,7 @@ namespace TelegramDownloader.Controllers.Api.V1
         /// redirect to the direct stream. Same behaviour as <c>/api/video/stream</c>.
         /// </remarks>
         [HttpGet("files/{fileId}/stream")]
-        [Produces("video/mp4")]
+        [Produces("video/mp4", "application/json")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(StatusCodes.Status302Found)]
         [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status403Forbidden)]
@@ -172,6 +172,96 @@ namespace TelegramDownloader.Controllers.Api.V1
             return await legacy.StreamVideo(channelId, fileId, name);
         }
 
+        /// <summary>The attachment of a message, without indexing it first.</summary>
+        /// <remarks>
+        /// Plays or downloads the file of any message of a chat straight from
+        /// Telegram, by message id: the channel index is not read nor changed.
+        /// Same behaviour as <c>files/{fileId}/content</c>: <c>disposition=inline</c>
+        /// (default) for <c>&lt;video&gt;</c>, <c>&lt;audio&gt;</c>, <c>&lt;img&gt;</c>,
+        /// <c>disposition=attachment</c> to save it; <c>200</c>, <c>206</c> (one
+        /// <c>Range</c>) or <c>416</c>. Inline audio and video go through the
+        /// progressive disk cache (fetched from Telegram once while they play,
+        /// shared with the indexed entry of the same message); photos are cached
+        /// whole; anything else is streamed. The type comes from the Telegram
+        /// document (<c>mime_type</c>), the name from its file name.
+        /// Answers <c>404</c> for messages without a file.
+        /// </remarks>
+        /// <param name="channelId">Chat that holds the message.</param>
+        /// <param name="messageId">Telegram message id.</param>
+        /// <param name="disposition"><c>inline</c> or <c>attachment</c>.</param>
+        [HttpGet("messages/{messageId:int}/content")]
+        [Produces("application/octet-stream", "application/json")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status206PartialContent)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status416RangeNotSatisfiable)]
+        public async Task<IActionResult> MessageContent(string channelId, int messageId, [FromQuery] string? disposition = "inline")
+        {
+            if (!long.TryParse(channelId, out _))
+                return BadRequestResult("channelId must be numeric");
+            var attachment = string.Equals(disposition, "attachment", StringComparison.OrdinalIgnoreCase);
+
+            Message? message;
+            try
+            {
+                message = await _telegram.getMessageFile(channelId, messageId);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFoundResult("Channel not found", ApiErrorCodes.ChannelNotFound);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not read message {MessageId} of chat {ChannelId}", messageId, channelId);
+                return ErrorResult("Could not read the message from Telegram", ex);
+            }
+
+            var file = message == null ? null : MessageAttachment.From(message);
+            if (message == null || file == null)
+                return NotFoundResult("This message has no file", ApiErrorCodes.FileNotFound);
+
+            var entry = file.ToEntry(messageId);
+            var cachePath = CachePath(channelId, entry);
+            SetDisposition(file.Name, attachment);
+
+            try
+            {
+                if (file.IsPhoto)
+                {
+                    // Photos cannot be fetched by ranges: cache the whole (small) file, then serve it.
+                    if (!System.IO.File.Exists(cachePath) || new FileInfo(cachePath).Length == 0)
+                        await DownloadWholeToCache(message, cachePath);
+                    return PhysicalFile(cachePath, file.MimeType, enableRangeProcessing: true);
+                }
+
+                if (System.IO.File.Exists(cachePath) && new FileInfo(cachePath).Length >= file.Size)
+                    return PhysicalFile(cachePath, file.MimeType, enableRangeProcessing: true);
+
+                if (!attachment && (file.Category == "Audio" || file.Category == "Video"))
+                    return await ServeProgressive(channelId, entry, file.MimeType);
+
+                return await StreamFromTelegram(channelId, entry, new List<int> { messageId }, message, file.MimeType);
+            }
+            catch (OperationCanceledException)
+            {
+                return new EmptyResult();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error serving the file of message {MessageId} in chat {ChannelId}", messageId, channelId);
+                if (Response.HasStarted) return new EmptyResult();
+                return ErrorResult("Could not read the file from Telegram", ex);
+            }
+        }
+
+        /// <summary>The progressive cache of the legacy stream endpoint, for an entry resolved here.</summary>
+        private Task<IActionResult> ServeProgressive(string channelId, BsonFileManagerModel entry, string mime)
+        {
+            var legacy = ActivatorUtilities.CreateInstance<FileController>(HttpContext.RequestServices);
+            legacy.ControllerContext = ControllerContext;
+            return legacy.ServeProgressive(channelId, entry, mime);
+        }
+
         /// <summary>JPEG thumbnail of a photo or video message.</summary>
         /// <remarks>
         /// Photos return one of their small sizes; videos (and documents that
@@ -180,7 +270,7 @@ namespace TelegramDownloader.Controllers.Api.V1
         /// a preview answer <c>404</c> (also cached).
         /// </remarks>
         [HttpGet("messages/{messageId:int}/thumbnail")]
-        [Produces("image/jpeg")]
+        [Produces("image/jpeg", "application/json")]
         [ProducesResponseType(StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> Thumbnail(string channelId, int messageId)

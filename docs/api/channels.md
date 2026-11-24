@@ -314,7 +314,10 @@ GET /api/v1/channels/{id}/messages?limit=30&offset=0&onlyMedia=true
 Reads the raw recent history straight from Telegram (does not use the index), so
 it works even for channels that were never indexed. Use it to build a
 "messages" view and hand message ids to
-`POST /api/v1/transfers/messages` to download their attachments.
+`POST /api/v1/transfers/messages` to download their attachments, or play/view
+an attachment directly with
+`GET /api/v1/channels/{id}/messages/{messageId}/content` (see
+[files](files.md#media-urls); no index entry needed).
 
 ```json
 {
