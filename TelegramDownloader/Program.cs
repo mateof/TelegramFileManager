@@ -211,6 +211,10 @@ builder.Services.AddHostedService<TelegramDownloader.Services.Api.TransferBroadc
 // Application events hub (/hubs/events): notifications, refresh/import progress, session state, metrics
 builder.Services.AddSingleton<TelegramDownloader.Services.Api.ImportProgressTracker>();
 builder.Services.AddSingleton<TelegramDownloader.Hubs.EventsHubState>();
+// Background deletes with progress (/api/v1/delete-operations, DeleteProgress on /hubs/events)
+builder.Services.AddSingleton(sp => new TelegramDownloader.Services.Deletes.DeleteOperationRegistry(
+    sp.GetRequiredService<ILogger<TelegramDownloader.Services.Deletes.DeleteOperationRegistry>>()));
+builder.Services.AddSingleton<TelegramDownloader.Services.Deletes.DeleteOperationService>();
 builder.Services.AddHostedService<TelegramDownloader.Services.Api.EventsBroadcastService>();
 
 // Media library: identification through metadata providers, cached images, watch state

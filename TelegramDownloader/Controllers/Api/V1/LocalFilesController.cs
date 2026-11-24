@@ -3,6 +3,7 @@ using TelegramDownloader.Data;
 using TelegramDownloader.Models.Api;
 using TelegramDownloader.Services;
 using TelegramDownloader.Services.Api;
+using TelegramDownloader.Services.Deletes;
 
 namespace TelegramDownloader.Controllers.Api.V1
 {
@@ -214,36 +215,48 @@ namespace TelegramDownloader.Controllers.Api.V1
         /// <remarks>Directories are deleted recursively and the data is not recoverable.</remarks>
         [HttpPost("delete")]
         [ProducesResponseType(typeof(ApiResult<TransferAcceptedDto>), StatusCodes.Status200OK)]
-        public IActionResult Delete([FromBody] LocalDeleteRequest request)
+        public async Task<IActionResult> Delete([FromBody] LocalDeleteRequest request)
         {
             if (request == null || request.Paths.Count == 0)
                 return BadRequestResult("At least one path is required");
 
-            var deleted = 0;
-            var skipped = new List<string>();
+            // Same implementation as the background operations, without a listener.
+            var progress = new DeleteOperation(DeleteKinds.Local, null, null, request.Paths.Count);
+            var result = await new LocalDeleteRunner(FileService.LOCALDIR, _logger).RunAsync(request.Paths, progress);
+            var deleted = result.Deleted.Count;
+            return OkResult(new TransferAcceptedDto { Accepted = deleted, Skipped = result.Skipped }, $"{deleted} entries deleted");
+        }
 
+        /// <summary>Starts deleting local files and directories in the background, with live progress.</summary>
+        /// <remarks>
+        /// Counts the files first, then deletes them one by one and the folders
+        /// bottom-up. Answers at once with an <c>operationId</c>: follow it with
+        /// <c>GET /api/v1/delete-operations/{operationId}</c> or the
+        /// <c>DeleteProgress</c> message of <c>/hubs/events</c>, cancel it with
+        /// <c>POST /api/v1/delete-operations/{operationId}/cancel</c>. Paths that
+        /// escape the local root and the root itself are rejected with 400;
+        /// paths reached through a link outside the root are reported as failed
+        /// items, and links inside the folders are removed, never followed.
+        /// </remarks>
+        /// <param name="request">Paths relative to the local root.</param>
+        /// <param name="operations">Delete operations service.</param>
+        [HttpPost("delete-operations")]
+        [ProducesResponseType(typeof(ApiResult<DeleteOperationStartedDto>), StatusCodes.Status202Accepted)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status400BadRequest)]
+        public IActionResult StartDeleteOperation([FromBody] LocalDeleteRequest request, [FromServices] DeleteOperationService operations)
+        {
+            if (request == null || request.Paths == null || request.Paths.Count == 0)
+                return BadRequestResult("At least one path is required");
             foreach (var path in request.Paths)
             {
-                if (!TryResolve(path, out var absolute, out _, out _))
-                {
-                    skipped.Add(path);
-                    continue;
-                }
-
-                try
-                {
-                    if (System.IO.File.Exists(absolute)) { System.IO.File.Delete(absolute); deleted++; }
-                    else if (Directory.Exists(absolute)) { Directory.Delete(absolute, true); deleted++; }
-                    else skipped.Add(path);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Could not delete local path {Path}", path);
-                    skipped.Add(path);
-                }
+                if (!TryResolve(path, out _, out var relative, out var error))
+                    return BadRequestResult(error ?? "Invalid path");
+                if (string.IsNullOrEmpty(relative))
+                    return BadRequestResult("The local root cannot be deleted");
             }
 
-            return OkResult(new TransferAcceptedDto { Accepted = deleted, Skipped = skipped }, $"{deleted} entries deleted");
+            var operation = operations.StartLocal(FileService.LOCALDIR, request.Paths);
+            return Accepted(ApiResult<DeleteOperationStartedDto>.Ok(new DeleteOperationStartedDto { OperationId = operation.Id }, "Delete started"));
         }
 
         /// <summary>Downloads a local file.</summary>

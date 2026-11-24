@@ -66,6 +66,7 @@ server serves at **`/swagger/api-v1/swagger.json`** (browsable at
 | POST | `/api/v1/channels/{channelId}/files/folders` | ✓ | Create a folder. |
 | PUT | `/api/v1/channels/{channelId}/files/{fileId}/name` | ✓ | Rename. |
 | POST | `/api/v1/channels/{channelId}/files/delete` | ✓ | Delete (also frees Telegram storage). |
+| POST | `/api/v1/channels/{channelId}/files/delete-operations` | ✓ | Delete in the background with progress → `{ operationId }`. |
 | POST | `/api/v1/channels/{channelId}/files/copy` | ✓ | Copy within the channel. |
 | POST | `/api/v1/channels/{channelId}/files/move` | ✓ | Move within the channel. |
 | POST | `/api/v1/channels/{channelId}/files/upload` | ✓ | Direct multipart upload to Telegram. |
@@ -122,6 +123,10 @@ Browse, search, details and stats accept `collectionId` to read a shared collect
 | POST | `/api/v1/local/folders` | | Create a directory. |
 | POST | `/api/v1/local/rename` | | Rename. |
 | POST | `/api/v1/local/delete` | | Delete (recursive). |
+| POST | `/api/v1/local/delete-operations` | | Delete in the background with progress → `{ operationId }`. |
+| GET | `/api/v1/delete-operations` | | Running and recent (10 min) delete operations. |
+| GET | `/api/v1/delete-operations/{id}` | | One delete operation (`ApiDeleteOperationDto`). |
+| POST | `/api/v1/delete-operations/{id}/cancel` | | Cancel a delete operation (409 when finished). |
 | GET | `/api/v1/local/download` | | Download a local file (range-capable). |
 | POST | `/api/v1/local/upload` | | Store an uploaded file locally. |
 | POST | `/api/v1/local/cache/clear` | | Empty the streaming cache. |
@@ -245,6 +250,7 @@ Browse, search, details and stats accept `collectionId` to read a shared collect
 | Server → client | `ImportProgress` | `ImportProgressEventDto` |
 | Server → client | `AuthState` | `AuthStateEventDto` |
 | Server → client | `LibraryScan` | `LibraryScanEventDto` |
+| Server → client | `DeleteProgress` | `ApiDeleteOperationDto` |
 | Server → client | `Metrics` | `SystemMetricsDto` (subscribers only) |
 | Client → server | `GetAuthState()` | → `AuthStateEventDto` |
 | Client → server | `SubscribeMetrics()` / `UnsubscribeMetrics()` | – |
@@ -386,7 +392,7 @@ interface SharedCollectionDto { id: string; name?: string; description?: string;
 | `POST /channels/{id}/refresh` | `{ includeDocuments?, includeAudio?, includeVideo?, includePhotos?, force? }` |
 | `POST …/files/folders` | `{ path: string; name: string }` |
 | `PUT …/files/{fileId}/name` | `{ newName: string }` |
-| `POST …/files/delete` | `{ ids: string[] }` |
+| `POST …/files/delete` · `/delete-operations` | `{ ids: string[] }` |
 | `POST …/files/copy` · `/move` | `{ ids: string[]; targetPath?: string; targetFolderId?: string }` |
 | `POST /transfers/downloads` | `{ channelId: string; fileIds: string[]; targetPath?: string; sharedCollectionId?: string }` |
 | `POST /transfers/uploads` | `{ channelId: string; localPaths: string[]; targetPath?: string }` |
@@ -394,7 +400,7 @@ interface SharedCollectionDto { id: string; name?: string; description?: string;
 | `POST /transfers/messages` | `{ chatId: number; messageIds: number[]; targetPath?: string }` |
 | `POST /local/folders` | `{ path: string; name: string }` |
 | `POST /local/rename` | `{ path: string; newName: string }` |
-| `POST /local/delete` | `{ paths: string[] }` |
+| `POST /local/delete` · `/local/delete-operations` | `{ paths: string[] }` |
 | `POST /local/copy` · `/local/move` | `{ paths: string[]; targetPath: string; overwrite?: boolean }` |
 | `POST …/files/preload` | `{ fileIds: string[] }` |
 | `POST /system/setup/test-mongo` | `{ connectionString: string }` |

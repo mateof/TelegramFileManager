@@ -13,6 +13,7 @@ using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
 using TelegramDownloader.Models.Persistence;
 using TelegramDownloader.Services;
+using TelegramDownloader.Services.Deletes;
 using TelegramDownloader.Services.Upload;
 using TL;
 using TelegramDownloader.Models.FileSystem;
@@ -337,191 +338,55 @@ namespace TelegramDownloader.Data
             return null;
         }
 
+        /// <summary>
+        /// Deletes channel index entries (folders recursively) and, in channels
+        /// where the account may delete messages, the Telegram messages no other
+        /// entry references, in batches. The one implementation behind every
+        /// delete path (Blazor, WebDAV, the v1 endpoints and the background
+        /// delete operations): see <see cref="ChannelDeleteRunner"/>.
+        /// </summary>
+        /// <param name="dbName">Channel id (index database).</param>
+        /// <param name="entries">Selected entries.</param>
+        /// <param name="progress">Live counters; a throwaway one when null.</param>
+        /// <param name="cancellationToken">Stops between batches (what was deleted stays deleted).</param>
+        public async Task<ChannelDeleteResult> DeleteChannelEntriesAsync(string dbName, IReadOnlyList<BsonFileManagerModel> entries,
+            DeleteOperation progress = null, CancellationToken cancellationToken = default)
+        {
+            _logger.LogInformation("Deleting items - DbName: {DbName}, Count: {Count}", dbName, entries.Count);
+            var runner = new ChannelDeleteRunner(new ChannelDeleteBackend(_db, _ts, dbName), _logger);
+            progress ??= new DeleteOperation(DeleteKinds.Channel, dbName, null, entries.Count);
+            return await runner.RunAsync(entries, ChannelDeleteBackend.CanDeleteMessages(_ts, dbName), progress, cancellationToken);
+        }
+
+        private async Task<BsonFileManagerModel> getEntryOrThrow(string dbName, string filterPath, string name)
+        {
+            BsonFileManagerModel entry = await _db.getEntry(dbName, filterPath, name);
+            if (entry == null)
+                throw new Exception($"File {System.IO.Path.Combine(filterPath ?? "", name ?? "")} not found");
+            return entry;
+        }
+
         public async Task<FsListing> itemDeleteAsync(string dbName, FsDeleteRequest args)
         {
-            _logger.LogInformation("Deleting items - DbName: {DbName}, Count: {Count}, Path: {Path}",
-                dbName, args.Files.Count(), args.Path);
-            string[] names = args.Files.Select(x => x.Name).ToArray();
-            bool isMyChannel = _ts.isMyChat(Convert.ToInt64(dbName));
-            // args.Response = await FileManagerService.Delete(args.Path, names, args.Files.ToArray());
-            foreach (FsEntry File in args.Files)
-            {
-                BsonFileManagerModel entry = await _db.getEntry(dbName, File.FilterPath, File.Name);
-                if (entry == null)
-                    throw new Exception($"File {System.IO.Path.Combine(File.FilterPath, File.Name)} not found");
-                if (!entry.IsFile)
-                {
-                    List<BsonFileManagerModel> allChilds = await _db.getAllChildFilesInDirectory(dbName, File.FilterPath + File.Name + "/");
-                    foreach (BsonFileManagerModel child in allChilds)
-                    {
-                        await _db.deleteEntry(dbName, child.Id);
-                        if (child.IsFile)
-                        {
-                            if (child.isSplit)
-                            {
-                                foreach (int id in child.ListMessageId)
-                                {
-                                    if (isMyChannel && !await _db.existItemByTelegramId(dbName, id))
-                                        await _ts.deleteFile(dbName, id);
-                                }
-                            }
-                            else
-                            {
-                                if (isMyChannel && child.MessageId.HasValue && !await _db.existItemByTelegramId(dbName, (int)child.MessageId))
-                                    await _ts.deleteFile(dbName, (int)child.MessageId);
-                            }
-                        }
-
-                        //if (item.IsFile)
-                        //    await _db.subBytesToFolder(dbName, item.ParentId, item.Size);
-                    }
-                    await _db.deleteEntry(dbName, entry.Id);
-                    // await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size);
-                }
-
-                if (entry.IsFile)
-                {
-                    await _db.deleteEntry(dbName, entry.Id);
-                    if (entry.isSplit)
-                    {
-                        foreach (int id in entry.ListMessageId)
-                        {
-                            if (isMyChannel && !await _db.existItemByTelegramId(dbName, id))
-                                await _ts.deleteFile(dbName, id);
-                        }
-                    }
-                    else
-                    {
-                        if (isMyChannel && entry.MessageId.HasValue && !await _db.existItemByTelegramId(dbName, (int)entry.MessageId))
-                            await _ts.deleteFile(dbName, (int)entry.MessageId);
-                    }
-                }
-
-
-
-                await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size, filterIdHint: entry.FilterId);
-            }
-
-            var firstFile = args.Files.FirstOrDefault();
-            if (firstFile != null)
-            {
-                await _db.checkAndSetDirectoryHasChild(dbName, firstFile.ParentId);
-            }
+            var entries = new List<BsonFileManagerModel>();
+            foreach (FsEntry file in args.Files)
+                entries.Add(await getEntryOrThrow(dbName, file.FilterPath, file.Name));
+            await DeleteChannelEntriesAsync(dbName, entries);
             return await GetFilesPath(dbName, args.Path);
         }
 
+        // Replacing a file on upload: the previous entry and its messages go.
         private async Task itemDeleteAsync(string dbName, string filterPath, string name, string parentId, string path)
         {
-
-            BsonFileManagerModel entry = await _db.getEntry(dbName, filterPath, name);
-            if (entry == null)
-                throw new Exception($"File {System.IO.Path.Combine(filterPath, name)} not found");
-            if (!entry.IsFile)
-            {
-                List<BsonFileManagerModel> allChilds = await _db.getAllChildFilesInDirectory(dbName, filterPath + name + "/");
-                foreach (BsonFileManagerModel child in allChilds)
-                {
-                    await _db.deleteEntry(dbName, child.Id);
-                    if (child.IsFile)
-                    {
-                        if (child.isSplit)
-                        {
-                            foreach (int id in child.ListMessageId)
-                            {
-                                if (!await _db.existItemByTelegramId(dbName, id))
-                                    await _ts.deleteFile(dbName, id);
-                            }
-                        }
-                        else if (child.MessageId.HasValue)
-                        {
-                            if (!await _db.existItemByTelegramId(dbName, (int)child.MessageId))
-                                await _ts.deleteFile(dbName, (int)child.MessageId);
-                        }
-                    }
-
-                    //if (item.IsFile)
-                    //    await _db.subBytesToFolder(dbName, item.ParentId, item.Size);
-                }
-                await _db.deleteEntry(dbName, entry.Id);
-                // await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size);
-            }
-
-            if (entry.IsFile)
-            {
-                await _db.deleteEntry(dbName, entry.Id);
-                if (entry.isSplit)
-                {
-                    foreach (int id in entry.ListMessageId)
-                    {
-                        if (!await _db.existItemByTelegramId(dbName, id))
-                            await _ts.deleteFile(dbName, id);
-                    }
-                }
-                else if (entry.MessageId.HasValue)
-                {
-                    if (!await _db.existItemByTelegramId(dbName, (int)entry.MessageId))
-                        await _ts.deleteFile(dbName, (int)entry.MessageId);
-                }
-            }
-
-
-
-            await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size, filterIdHint: entry.FilterId);
-
-            await _db.checkAndSetDirectoryHasChild(dbName, parentId);
+            await DeleteChannelEntriesAsync(dbName, new[] { await getEntryOrThrow(dbName, filterPath, name) });
         }
 
         public async Task oneItemDeleteAsync(string dbName, FsEntry File)
         {
-
-            BsonFileManagerModel entry = await _db.getEntry(dbName, File.FilterPath, File.Name);
-            if (entry == null)
-                throw new Exception($"File {System.IO.Path.Combine(File.FilterPath, File.Name)} not found");
-            if (!entry.IsFile)
-            {
-                List<BsonFileManagerModel> allChilds = await _db.getAllChildFilesInDirectory(dbName, File.FilterPath + File.Name + "/");
-                foreach (BsonFileManagerModel child in allChilds)
-                {
-                    if (child.IsFile)
-                    {
-                        if (child.isSplit)
-                        {
-                            foreach (int id in child.ListMessageId)
-                            {
-                                if (!await _db.existItemByTelegramId(dbName, id))
-                                    await _ts.deleteFile(dbName, id);
-                            }
-                        }
-                        else if (child.MessageId.HasValue)
-                        {
-                            if (!await _db.existItemByTelegramId(dbName, (int)child.MessageId))
-                                await _ts.deleteFile(dbName, (int)child.MessageId);
-                        }
-                    }
-
-                    await _db.deleteEntry(dbName, child.Id);
-                    //if (item.IsFile)
-                    //    await _db.subBytesToFolder(dbName, item.ParentId, item.Size);
-                }
-                await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size, filterIdHint: entry.FilterId);
-            }
-            if (entry.IsFile)
-                if (entry.isSplit)
-                {
-                    foreach (int id in entry.ListMessageId)
-                    {
-                        if (!await _db.existItemByTelegramId(dbName, id))
-                            await _ts.deleteFile(dbName, id);
-                    }
-                }
-                else if (entry.MessageId.HasValue)
-                {
-                    if (!await _db.existItemByTelegramId(dbName, (int)entry.MessageId))
-                        await _ts.deleteFile(dbName, (int)entry.MessageId);
-                }
-
-            await _db.deleteEntry(dbName, entry.Id);
-            await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size, filterIdHint: entry.FilterId);
+            BsonFileManagerModel entry = await getEntryOrThrow(dbName, File.FilterPath, File.Name);
+            ChannelDeleteResult result = await DeleteChannelEntriesAsync(dbName, new[] { entry });
+            if (result.FailedRootIds.Count > 0)
+                throw new Exception($"{System.IO.Path.Combine(File.FilterPath ?? "", File.Name ?? "")} could not be deleted completely");
         }
 
         public async Task<FsListing> RenameFileOrFolder(string dbName, FsEntry file, string newName)

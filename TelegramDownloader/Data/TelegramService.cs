@@ -1251,6 +1251,15 @@ namespace TelegramDownloader.Data
             _logger.LogInformation("File deleted successfully - MessageId: {MessageId}", idMessage);
         }
 
+        public async Task deleteFiles(string chatId, IReadOnlyList<int> idMessages)
+        {
+            if (idMessages.Count == 0) return;
+            _logger.LogInformation("Deleting {Count} messages from Telegram - ChatId: {ChatId}", idMessages.Count, chatId);
+            InputPeer peer = chats.chats[Convert.ToInt64(chatId)];
+            // channels.deleteMessages / messages.deleteMessages accept up to 100 ids per call.
+            await client.DeleteMessages(peer, idMessages.ToArray());
+        }
+
         public async Task<Message> getMessageFile(string chatId, int idMessage)
         {
             var peer = chats.chats[Convert.ToInt64(chatId)];

@@ -3,6 +3,7 @@ using TelegramDownloader.Data;
 using TelegramDownloader.Hubs;
 using TelegramDownloader.Models;
 using TelegramDownloader.Models.Api;
+using TelegramDownloader.Services.Deletes;
 using TelegramDownloader.Services.Library;
 
 namespace TelegramDownloader.Services.Api
@@ -14,7 +15,9 @@ namespace TelegramDownloader.Services.Api
     /// Push sources: <see cref="NotificationModel.EventNotification"/>,
     /// <see cref="FileService.ChannelRefreshFinished"/>,
     /// <see cref="ImportProgressTracker.Progress"/>,
-    /// <see cref="TelegramService.OnUserLoggedIn"/> and
+    /// <see cref="TelegramService.OnUserLoggedIn"/>,
+    /// <see cref="DeleteOperationRegistry.Changed"/> (<c>DeleteProgress</c>, throttled
+    /// to <see cref="DeleteThrottle"/>; the ticker sends a change the throttle held back) and
     /// <see cref="ISystemMetricsService.OnMetricsUpdated"/>. Refresh progress,
     /// the library scan and the Telegram session state have no events, so a
     /// one-second ticker polls them (which is also the throttle of
@@ -35,7 +38,13 @@ namespace TelegramDownloader.Services.Api
         private readonly LibraryScanService _scan;
         private readonly ILogger<EventsBroadcastService> _logger;
 
+        /// <summary>Minimum interval between two <c>DeleteProgress</c> messages of the same operation (4 per second).</summary>
+        public static readonly TimeSpan DeleteThrottle = TimeSpan.FromMilliseconds(250);
+
         private readonly KeyedThrottle _importThrottle = new KeyedThrottle(ImportThrottle);
+        private readonly KeyedThrottle _deleteThrottle = new KeyedThrottle(DeleteThrottle);
+        private readonly DeleteProgressSendState _deleteSent = new DeleteProgressSendState();
+        private readonly DeleteOperationRegistry _deletes;
         private readonly ChangeDetector<bool> _authState = new ChangeDetector<bool>();
         private bool _scanWasRunning;
         private int _ticking;
@@ -47,8 +56,10 @@ namespace TelegramDownloader.Services.Api
             ImportProgressTracker imports,
             ISystemMetricsService metrics,
             LibraryScanService scan,
+            DeleteOperationRegistry deletes,
             ILogger<EventsBroadcastService> logger)
         {
+            _deletes = deletes;
             _hub = hub;
             _state = state;
             _imports = imports;
@@ -64,6 +75,7 @@ namespace TelegramDownloader.Services.Api
             TelegramService.OnUserLoggedIn += OnUserLoggedIn;
             _imports.Progress += OnImportProgress;
             _metrics.OnMetricsUpdated += OnMetricsUpdated;
+            _deletes.Changed += OnDeleteChanged;
             _timer = new Timer(_ => Tick(), null, TickInterval, TickInterval);
             _logger.LogInformation("EventsBroadcastService started - streaming application events on {Path}", "/hubs/events");
             return Task.CompletedTask;
@@ -76,6 +88,7 @@ namespace TelegramDownloader.Services.Api
             TelegramService.OnUserLoggedIn -= OnUserLoggedIn;
             _imports.Progress -= OnImportProgress;
             _metrics.OnMetricsUpdated -= OnMetricsUpdated;
+            _deletes.Changed -= OnDeleteChanged;
             _timer?.Change(Timeout.Infinite, Timeout.Infinite);
             return Task.CompletedTask;
         }
@@ -109,6 +122,20 @@ namespace TelegramDownloader.Services.Api
             _ = SafeSend(() => _hub.Clients.All.SendAsync(EventsHub.ImportProgressMessage, dto));
         }
 
+        private void OnDeleteChanged(DeleteOperation operation) => SendDeleteProgress(operation);
+
+        /// <summary>Sends the operation unless the throttle holds it back (the final state always goes).</summary>
+        private void SendDeleteProgress(DeleteOperation operation)
+        {
+            var snapshot = operation.Snapshot();
+            var final = DeletePhases.IsFinal(snapshot.Phase);
+            if (!_deleteSent.IsNewer(snapshot.Id, snapshot.Version)) return;
+            if (!_deleteThrottle.ShouldSend(snapshot.Id, final)) return;
+            _deleteSent.MarkSent(snapshot.Id, snapshot.Version, final);
+            var dto = ApiDeleteOperationDto.From(snapshot);
+            _ = SafeSend(() => _hub.Clients.All.SendAsync(EventsHub.DeleteProgressMessage, dto));
+        }
+
         private void OnMetricsUpdated(object? sender, SystemMetrics metrics)
         {
             if (_state.MetricsSubscribers.Count == 0) return;
@@ -135,6 +162,10 @@ namespace TelegramDownloader.Services.Api
                     };
                     _ = SafeSend(() => _hub.Clients.All.SendAsync(EventsHub.ChannelRefreshProgressMessage, dto));
                 }
+
+                // Changes the throttle held back (e.g. the start of a FLOOD_WAIT).
+                foreach (var operation in _deletes.Running())
+                    SendDeleteProgress(operation);
 
                 var scan = _scan.Current;
                 var running = scan?.Running == true;
