@@ -53,7 +53,7 @@ namespace TelegramDownloader.Controllers.Api.V1
             return Accepted(ApiResult.Done("The application is restarting"));
         }
 
-        /// <summary>Size of the image caches (channel avatars and message thumbnails).</summary>
+        /// <summary>Size of the image caches (channel avatars, message thumbnails and library posters/backdrops/stills).</summary>
         [HttpGet("image-cache")]
         [ProducesResponseType(typeof(ApiResult<ImageCacheInfoDto>), StatusCodes.Status200OK)]
         public IActionResult ImageCache() => OkResult(ReadImageCache());
@@ -61,7 +61,7 @@ namespace TelegramDownloader.Controllers.Api.V1
         /// <summary>Empties the image caches. Images are downloaded again when next shown.</summary>
         [HttpDelete("image-cache")]
         [ProducesResponseType(typeof(ApiResult<ImageCacheInfoDto>), StatusCodes.Status200OK)]
-        public IActionResult ClearImageCache()
+        public IActionResult ClearImageCache([FromServices] TelegramDownloader.Services.Library.LibraryImageService libraryImages)
         {
             var deleted = 0;
             foreach (var (folder, pattern) in CacheFolders())
@@ -69,6 +69,8 @@ namespace TelegramDownloader.Controllers.Api.V1
                 if (!Directory.Exists(folder)) continue;
                 foreach (var file in Directory.EnumerateFiles(folder, pattern))
                 {
+                    // A library image being downloaded right now
+                    if (file.EndsWith(".part", StringComparison.OrdinalIgnoreCase)) continue;
                     try
                     {
                         System.IO.File.Delete(file);
@@ -80,6 +82,7 @@ namespace TelegramDownloader.Controllers.Api.V1
                     }
                 }
             }
+            libraryImages.ResetFailures();
             return OkResult(ReadImageCache(), $"{deleted} cached images deleted");
         }
 
@@ -170,6 +173,8 @@ namespace TelegramDownloader.Controllers.Api.V1
         {
             yield return (ChannelImageCacheFolder, "*.jpg");
             yield return (MediaController.ThumbnailCacheFolder, "*");
+            // Library posters, backdrops and stills (partial downloads are left to the image service)
+            yield return (TelegramDownloader.Services.Library.LibraryImageService.CacheFolder, "*.*");
         }
 
         private static ImageCacheInfoDto ReadImageCache()
@@ -184,6 +189,11 @@ namespace TelegramDownloader.Controllers.Api.V1
                     {
                         var length = new FileInfo(file).Length;
                         if (folder == ChannelImageCacheFolder) dto.ChannelImages++;
+                        else if (folder == TelegramDownloader.Services.Library.LibraryImageService.CacheFolder)
+                        {
+                            if (file.EndsWith(".part", StringComparison.OrdinalIgnoreCase)) continue;
+                            dto.LibraryImages++;
+                        }
                         else if (file.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase)) dto.Thumbnails++;
                         dto.SizeInBytes += length;
                     }
@@ -200,6 +210,8 @@ namespace TelegramDownloader.Controllers.Api.V1
     {
         public int ChannelImages { get; set; }
         public int Thumbnails { get; set; }
+        /// <summary>Library posters, backdrops and stills (<c>datauser/library/images</c>).</summary>
+        public int LibraryImages { get; set; }
         public long SizeInBytes { get; set; }
         public string SizeText { get; set; } = "0 B";
     }

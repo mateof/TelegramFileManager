@@ -19,14 +19,14 @@ function ImageCacheRow() {
     },
     onError: (error) => toast.error(t('Could not clear the image cache'), { description: errorMessage(error) })
   });
-  const total = (cache.data?.channelImages ?? 0) + (cache.data?.thumbnails ?? 0);
+  const total = (cache.data?.channelImages ?? 0) + (cache.data?.thumbnails ?? 0) + (cache.data?.libraryImages ?? 0);
   return (
     <SettingRow
       id="imageCache"
       extra={
         cache.data && (
           <p className="mt-1.5 text-xs text-fg-subtle">
-            {t('{channels} channel images · {thumbs} thumbnails · {size}', { channels: cache.data.channelImages, thumbs: cache.data.thumbnails, size: cache.data.sizeText })}
+            {t('{channels} channel images · {thumbs} thumbnails · {covers} library images · {size}', { channels: cache.data.channelImages, thumbs: cache.data.thumbnails, covers: cache.data.libraryImages ?? 0, size: cache.data.sizeText })}
           </p>
         )
       }

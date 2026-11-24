@@ -150,16 +150,41 @@ namespace TelegramDownloader.Controllers.Api.V1
         }
 
         /// <summary>A poster, backdrop or still, cached on this server. <c>key</c> comes from the item DTOs.</summary>
+        /// <remarks>
+        /// The first request downloads the image from the provider (once, even
+        /// when many clients ask at the same time) and stores it in
+        /// <c>datauser/library/images</c>; later requests are served from disk.
+        /// <c>size</c> is one of <c>w92 w154 w185 w300 w342 w500 w780 w1280
+        /// original</c> (default <c>original</c>; only TMDB images have sizes).
+        /// Images never change for a given URL: they are sent with
+        /// <c>Cache-Control: private, max-age=31536000, immutable</c>, an
+        /// <c>ETag</c> and <c>Last-Modified</c>, and conditional requests get
+        /// <c>304</c>. Errors are <c>no-store</c>, so a provider hiccup is not
+        /// remembered by the browser. Works with the web session cookie, so it
+        /// can be used directly in <c>&lt;img src&gt;</c>.
+        /// </remarks>
         [HttpGet("images/{key}")]
-        [ResponseCache(Duration = 604800)]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status304NotModified)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status404NotFound)]
         public async Task<IActionResult> Image(string key, [FromQuery] string? size = null, CancellationToken ct = default)
         {
+            Response.Headers.CacheControl = "no-store";
             var url = LibraryImageService.Decode(key);
             if (url == null || !LibraryImageService.IsAllowed(url))
                 return BadRequestResult("Unknown image");
-            var path = await _images.GetLocalPathAsync(url, LibraryImageService.NormalizeSize(size), ct);
-            if (path == null) return NotFound();
-            return PhysicalFile(path, LibraryImageService.ContentTypeOf(path));
+            if (!LibraryImageService.TryNormalizeSize(size, out var normalized))
+                return BadRequestResult($"Unknown size '{size}'", detail: "Valid sizes: " + string.Join(", ", LibraryImageService.Sizes));
+
+            var image = await _images.GetAsync(url, normalized, ct);
+            if (image == null)
+                return NotFoundResult("The image is not available at the provider right now");
+
+            Response.Headers.CacheControl = "private, max-age=31536000, immutable";
+            Response.Headers.XContentTypeOptions = "nosniff";
+            return PhysicalFile(image.Path, image.ContentType, image.LastModified,
+                new Microsoft.Net.Http.Headers.EntityTagHeaderValue(image.ETag));
         }
 
         #endregion

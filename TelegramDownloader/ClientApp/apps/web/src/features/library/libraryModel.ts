@@ -73,6 +73,13 @@ export function imageAtSize(url: string | null | undefined, size: string): strin
   return `${base}?${params.toString()}`;
 }
 
+/** `srcset` with a 1x and a 2x size of a library image (null without image). */
+export function imageSrcSet(url: string | null | undefined, size1x: string, size2x: string): string | undefined {
+  const one = imageAtSize(url, size1x);
+  const two = imageAtSize(url, size2x);
+  return one && two ? `${one} 1x, ${two} 2x` : undefined;
+}
+
 const QUALITY = /\b(2160p|4k|1080p|720p|576p|480p|hdr10\+?|hdr|dv|remux|bluray|bdrip|web-?dl|webrip|hdtv|x265|hevc|x264|h\.?264|av1)\b/gi;
 const LANGS = /\b(castellano|español|espanol|spanish|latino|english|ingl[eé]s|dual|multi|vose|vos|subs?)\b/gi;
 
