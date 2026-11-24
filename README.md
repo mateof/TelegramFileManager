@@ -24,7 +24,7 @@ the classic interface ([details](#web-interface-app)).
 <table>
   <tr>
     <td><img src="docs/screenshots/web/file-manager.webp" alt="File manager of a channel" /></td>
-    <td><img src="docs/screenshots/web/library.webp" alt="Media library" /></td>
+    <td><img src="docs/screenshots/web/library-grid.webp" alt="Media library with posters" /></td>
   </tr>
   <tr>
     <td><img src="docs/screenshots/web/player.webp" alt="Music player with the queue" /></td>

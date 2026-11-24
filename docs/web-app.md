@@ -58,7 +58,15 @@ Grid view with thumbnails of a photo folder.
 
 <img src="screenshots/web/library.webp" alt="Media library home" />
 
+The library home: the title to resume, "continue watching" and the latest additions.
+
+<img src="screenshots/web/library-grid.webp" alt="All the titles of the library with their posters" />
+
+All the titles, with filters by genre and year and the watch progress of each one.
+
 <img src="screenshots/web/library-item.webp" alt="Detail page of a movie" />
+
+A movie: resume, play from the start or mark it as watched.
 
 ## Music player
 
