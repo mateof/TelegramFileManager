@@ -1,6 +1,6 @@
 import type { FileEntry, FileOperation } from '@tfm/file-manager';
 import { confirm, toast } from '@tfm/ui';
-import { t } from '@/i18n';
+import { getLocale, t, type Language } from '@/i18n';
 import { errorMessage } from '@/lib/api';
 
 /** Asks before deleting (shared by every TFM file manager). */
@@ -39,6 +39,6 @@ export function reportSuccess(operation: FileOperation, entries: FileEntry[]): v
 }
 
 /** The locale of dates in the file manager. */
-export function fmLocale(lang: string): string {
-  return lang === 'es' ? 'es-ES' : 'en-GB';
+export function fmLocale(lang: Language): string {
+  return getLocale(lang);
 }

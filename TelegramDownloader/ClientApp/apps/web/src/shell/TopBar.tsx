@@ -48,6 +48,7 @@ import { Link, useNavigate } from 'react-router';
 import { useTelegramStatus } from '@/auth/useTelegramStatus';
 import { DeleteOperationsSummary } from '@/features/files/deletes/DeleteOperationsSummary';
 import { getLanguage, LANGUAGES, setLanguage, t, type Language } from '@/i18n';
+import { LanguageFlag } from './LanguageFlag';
 import { api } from '@/lib/api';
 import { formatRelative } from '@/lib/format';
 import { queryKeys } from '@/lib/queryKeys';
@@ -279,7 +280,8 @@ function UserMenu() {
           <DropdownMenuSubContent>
             <DropdownMenuRadioGroup value={getLanguage()} onValueChange={(v) => setLanguage(v as Language)}>
               {LANGUAGES.map((l) => (
-                <DropdownMenuRadioItem key={l.code} value={l.code}>
+                <DropdownMenuRadioItem key={l.code} value={l.code} lang={l.code}>
+                  <LanguageFlag lang={l.code} />
                   {l.label}
                 </DropdownMenuRadioItem>
               ))}

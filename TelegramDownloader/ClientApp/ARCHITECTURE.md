@@ -55,7 +55,7 @@ src/
   stores/ui.ts           layout state (sidebar collapsed, drawer, palette, channel tab)
   pwa/                   installable app: install.ts (beforeinstallprompt, useInstallMode), register.ts
                          (lazy SW registration), update.ts ("New version available" toast, update checks)
-  i18n/                  t(), dictionaries per area in es/<area>.ts, coverage test
+  i18n/                  t(), dictionaries per area in es/<area>.ts and gl/<area>.ts, coverage test
   features/<feature>/    one folder per feature (see below)
 sw/sw.ts                 the service worker (precached shell + offline navigations only; see the README)
 ```
@@ -101,7 +101,7 @@ sw/sw.ts                 the service worker (precached shell + offline navigatio
 
 ## 2. Adding / implementing a feature
 
-Each feature owns **its folder** and **its dictionary** `i18n/es/<feature>.ts`. The foundation
+Each feature owns **its folder** and **its dictionaries** `i18n/es/<feature>.ts` and `i18n/gl/<feature>.ts`. The foundation
 created a placeholder for every feature:
 
 ```
@@ -142,14 +142,21 @@ Rules:
 ## 3. i18n
 
 Same system as the TFM Player PWA. The English text is the key: `t('Delete {count} files', { count })`.
-Spanish is the default; a missing translation falls back to the English key. Dictionaries:
-`apps/web/src/i18n/es/<area>.ts` (`common`, `shell`, `auth`, `apps`, one per feature), merged at
-startup. Changing language reloads the page (`setLanguage`). `i18n.test.ts` scans every source file
-for `t('literal')` and fails if a key has no Spanish entry, or if two area files translate the same
-key differently. Only literal keys are detected: write `t('Downloads')`, not `t(variable)`.
+Languages: Spanish (default), Galician and English (`LANGUAGES`, each with its flag in
+`shell/LanguageFlag.tsx` and its locale for dates and numbers, `getLocale()`). A browser set to
+Galician starts in Galician. A missing translation falls back to Spanish, then to the English key.
+Dictionaries: `apps/web/src/i18n/<lang>/<area>.ts` (`common`, `shell`, `auth`, `apps`, one per
+feature), merged per language. Spanish is bundled; Galician is a lazy chunk that `main.tsx` loads
+(`loadLanguage()`) before the first render, so **no `t()` may run while a module is evaluated**
+(translate inside components and functions). Changing language reloads the page (`setLanguage`).
+
+`i18n.test.ts` scans every source file for `t('literal')` and fails if a key has no Spanish or
+Galician entry, if a Galician area file does not mirror its Spanish file (keys and placeholders),
+if two area files translate the same key differently, or if `t()` is called at module level. Only
+literal keys are detected: write `t('Downloads')`, not `t(variable)`.
 
 `@tfm/ui` has no i18n of its own: its few built-in labels are set once by the app through
-`configureUiStrings()` (in `App.tsx`).
+`configureUiStrings()` (in `main.tsx`, after the dictionary is loaded).
 
 ## 4. @tfm/ui and theming
 

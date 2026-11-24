@@ -1,0 +1,41 @@
+// Strings of the search feature (owned by that feature)
+const search: Record<string, string> = {
+  'Search': 'Buscar',
+  'Search files in every channel.': 'Busca ficheiros en todas as canles.',
+  'Nothing to play': 'Non hai nada que reproducir',
+  'Playing next': 'Reproducirase a continuación',
+  'Added to the queue': 'Engadido á cola',
+  'This file cannot be previewed': 'Este ficheiro non se pode previsualizar',
+  'All types': 'Todos os tipos',
+  'Audio': 'Audio',
+  'Video': 'Vídeo',
+  'Photos': 'Fotos',
+  'Documents': 'Documentos',
+  'Archives': 'Comprimidos',
+  'File name...': 'Nome do ficheiro...',
+  'Search files': 'Buscar ficheiros',
+  'Where to search': 'Onde buscar',
+  'Everywhere': 'En todas partes',
+  'File type': 'Tipo de ficheiro',
+  'Search across all your files': 'Busca en todos os teus ficheiros',
+  'Type at least two characters. Every indexed channel and the server local storage are searched at once.':
+    'Escribe polo menos dous caracteres. Búscase á vez en todas as canles indexadas e no almacenamento local do servidor.',
+  'The search failed': 'A busca fallou',
+  'No files found': 'Non se atoparon ficheiros',
+  'Nothing matches "{query}". Try another word or file type.': 'Nada coincide con «{query}». Proba outra palabra ou outro tipo de ficheiro.',
+  '{count} files in {groups} places': '{count} ficheiros en {groups} lugares',
+  'Showing the first results only: refine the search to see more.': 'Só se amosan os primeiros resultados: afina a busca para ver máis.',
+  '{count} files': '{count} ficheiros',
+  'Play {count}': 'Reproducir {count}',
+  'Open': 'Abrir',
+  'Show less': 'Amosar menos',
+  'Show all {count}': 'Amosar os {count}',
+  'More actions': 'Máis accións',
+  'Play next': 'Reproducir a continuación',
+  'Add to queue': 'Engadir á cola',
+  'Add to playlist': 'Engadir a unha lista',
+  'Open containing folder': 'Abrir o cartafol que o contén',
+  'Download to this device': 'Descargar neste dispositivo'
+};
+
+export default search;
