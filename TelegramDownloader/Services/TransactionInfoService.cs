@@ -563,7 +563,8 @@ namespace TelegramDownloader.Services
             lock (_downloadLock)
             {
                 isPauseDownloads = true;
-                paused = _downloadModels.Where(x => x.state == StateTask.Working).ToList();
+                // The ones that could not be resumed keep going
+                paused = _downloadModels.Where(x => x.state == StateTask.Working && x.CanRestart).ToList();
                 foreach (DownloadModel dm in paused)
                 {
                     if (!_pendingDownloadModels.Contains(dm))
@@ -581,6 +582,60 @@ namespace TelegramDownloader.Services
         {
             _logger.LogInformation("Resuming downloads - PendingCount: {Count}", getTotalDownloads(true));
             isPauseDownloads = false;
+            foreach (DownloadModel dm in pendingDownloadModels)
+                dm.UserPaused = false;
+            CheckPendingDownloads();
+        }
+
+        /// <summary>
+        /// Pauses one download, running or queued, until the user resumes it.
+        /// False when it could not be resumed later or is not active.
+        /// </summary>
+        public bool PauseDownload(DownloadModel dm)
+        {
+            if (!dm.CanRestart || (dm.state != StateTask.Working && dm.state != StateTask.Pending))
+                return false;
+            bool running;
+            lock (_downloadLock)
+            {
+                running = _downloadModels.Contains(dm) && dm.state == StateTask.Working;
+                if (!running && !_pendingDownloadModels.Contains(dm))
+                    return false;
+                dm.UserPaused = true;
+                if (running && !_pendingDownloadModels.Contains(dm))
+                    _pendingDownloadModels.Insert(0, dm);
+            }
+            _logger.LogInformation("Pausing download {Name}", dm.name);
+            if (running)
+                dm.Pause();
+            raiseListChanged();
+            return true;
+        }
+
+        /// <summary>
+        /// Queues a cancelled or failed download again, first in the queue. False
+        /// when it cannot start again or its last run is still ending.
+        /// </summary>
+        public bool RetryDownload(DownloadModel dm)
+        {
+            if (!dm.CanRestart || dm.IsRunning)
+                return false;
+            // The queue does not start what is marked as cancelled
+            dm.state = StateTask.Pending;
+            addToPendingDownloadList(dm, atFirst: true);
+            return true;
+        }
+
+        /// <summary>Puts a download paused with <see cref="PauseDownload"/> first in the queue and lets it start.</summary>
+        public void ResumeDownload(DownloadModel dm)
+        {
+            _logger.LogInformation("Resuming download {Name}", dm.name);
+            dm.UserPaused = false;
+            lock (_downloadLock)
+            {
+                if (_pendingDownloadModels.Remove(dm))
+                    _pendingDownloadModels.Insert(0, dm);
+            }
             CheckPendingDownloads();
         }
 
@@ -615,10 +670,16 @@ namespace TelegramDownloader.Services
             {
                 int max = GeneralConfigStatic.config?.MaxSimultaneousDownloads ?? 1;
                 int working = _downloadModels.Count(x => x.state == StateTask.Working);
-                while (working < max && _pendingDownloadModels.Count > 0 && !isPauseDownloads)
+                int next = 0;
+                while (working < max && next < _pendingDownloadModels.Count && !isPauseDownloads)
                 {
-                    DownloadModel dm = _pendingDownloadModels[0];
-                    _pendingDownloadModels.RemoveAt(0);
+                    DownloadModel dm = _pendingDownloadModels[next];
+                    if (dm.UserPaused)
+                    {
+                        next++;
+                        continue;
+                    }
+                    _pendingDownloadModels.RemoveAt(next);
                     _downloadModels.Remove(dm);
                     _downloadModels.Insert(0, dm);
                     // Canceled while queued: listed as canceled, never started.
@@ -871,7 +932,8 @@ namespace TelegramDownloader.Services
             List<UploadModel> removed;
             lock (_uploadLock)
             {
-                removed = _uploadModels.Where(x => isClearable(x.state, states)).ToList();
+                // A paused upload is still waiting to go on: it is cancelled, not cleared
+                removed = _uploadModels.Where(x => !(x.CanPause && x.state == StateTask.Paused) && isClearable(x.state, states)).ToList();
                 _uploadModels.RemoveAll(x => removed.Contains(x));
             }
             foreach (UploadModel um in removed)

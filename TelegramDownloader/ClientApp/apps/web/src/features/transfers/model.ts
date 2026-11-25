@@ -85,21 +85,23 @@ export function tabCounts(snapshot: TransfersSnapshotDto | null): Record<Transfe
 
 /**
  * What the user can do with a transfer:
- * pause (running downloads only), resume (paused → retry), cancel (running or
- * queued), retry (failed/cancelled downloads and tasks), remove (anything not running).
+ * pause (what the server says it can, or running downloads on an older server),
+ * resume (paused → retry), cancel (running or queued), retry (failed/cancelled
+ * downloads and tasks), remove (anything not running; a paused upload is cancelled instead).
  */
 export function availableActions(t: TransferDto): TransferAction[] {
   const g = stateGroup(t);
   const out: TransferAction[] = [];
-  const retryable = t.kind === 'download' || t.kind === 'task';
+  const retryable = t.canRetry ?? (t.kind === 'download' || t.kind === 'task');
   if (g === 'active') {
-    if (t.kind === 'download') out.push('pause');
+    if (t.canPause ?? t.kind === 'download') out.push('pause');
     out.push('cancel');
     return out;
   }
   if (g === 'paused') {
-    if (retryable) out.push('resume');
-    out.push('cancel', 'remove');
+    if (t.canPause ?? retryable) out.push('resume');
+    out.push('cancel');
+    if (t.kind !== 'upload') out.push('remove');
     return out;
   }
   if (g === 'queued') return ['cancel', 'remove'];

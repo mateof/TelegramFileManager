@@ -234,12 +234,19 @@ Works on any chat, indexed or not — this is how you save a file straight from 
 | `POST /api/v1/transfers/downloads/pause` | Pause all downloads; running ones go back to the front of the queue. |
 | `POST /api/v1/transfers/downloads/resume` | Resume the download queue. |
 | `POST /api/v1/transfers/downloads/stop` | Stop everything and empty the download queue. |
-| `POST /api/v1/transfers/{id}/pause` | Pause one running download. |
+| `POST /api/v1/transfers/{id}/pause` | Pause one download (running or queued) or one running upload. Only with `canPause: true`. |
 | `POST /api/v1/transfers/{id}/cancel` | Cancel one transfer (a task also cancels its children). |
-| `POST /api/v1/transfers/{id}/retry` | Retry a paused/cancelled/failed download or task. |
+| `POST /api/v1/transfers/{id}/retry` | Resume a paused download or upload; retry a cancelled/failed download (with `canRetry: true`) or task. |
 | `POST /api/v1/transfers/clear?scope=all` | Remove finished entries (`downloads`/`uploads`/`tasks`/`all`). |
 | `POST /api/v1/transfers/queue/clear?scope=all` | Empty a queue without touching running transfers. |
 | `DELETE /api/v1/transfers/{id}` | Remove one entry from the lists ("remove from list"): finished, paused or queued. A running transfer answers `409` (cancel it first). |
+
+A paused download keeps its bytes and waits in the queue (`state: "Paused"`,
+`isQueued: true`) until it is resumed on its own or with `downloads/resume`; meanwhile
+the next ones in the queue run. A paused upload stays in the list, stops sending data
+and goes on from the same part. Telegram only keeps the parts of an unfinished upload
+for a while: after a very long pause, or a server restart, that file (or that part of a
+split file) is sent again from the start.
 
 The pause/resume/stop endpoints return the fresh `summary`; the per-item ones
 return an empty success. Watch the hub for the state change either way.

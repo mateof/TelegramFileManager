@@ -219,11 +219,11 @@ namespace TelegramDownloader.Models
         public void cancelTask()
         {
             state = StateTask.Canceled;
-            foreach (DownloadModel dm in currentDownloads.Where(x => x.state == StateTask.Working))
+            foreach (DownloadModel dm in currentDownloads.Where(x => x.state == StateTask.Working || x.UserPaused))
             {
                 dm.Cancel();
             }
-            foreach (UploadModel um in currentUploads.Where(x => x.state == StateTask.Working))
+            foreach (UploadModel um in currentUploads.Where(x => x.state == StateTask.Working || x.state == StateTask.Paused))
             {
                 um.Cancel();
             }
@@ -233,8 +233,9 @@ namespace TelegramDownloader.Models
 
         private void deleteNotWorkingTasks()
         {
-            _currentUploads.RemoveAll(um => um.state != StateTask.Working);
-            _currentDownloads.RemoveAll(dm => dm.state != StateTask.Working);
+            // Paused ones still belong to the task: cancelling it must reach them
+            _currentUploads.RemoveAll(um => um.state != StateTask.Working && um.state != StateTask.Paused);
+            _currentDownloads.RemoveAll(dm => dm.state != StateTask.Working && dm.state != StateTask.Paused && !dm.UserPaused);
         }
 
         /// <summary>Copy of the parts already sent for the file in progress.</summary>
@@ -355,6 +356,20 @@ namespace TelegramDownloader.Models
         [BsonIgnore]
         public bool IsRunning => Volatile.Read(ref _running) == 1;
 
+        /// <summary>
+        /// Paused on its own by the user: it waits in the queue and nothing but
+        /// the user (resume, resume all) starts it again.
+        /// </summary>
+        [BsonIgnore]
+        public bool UserPaused { get; set; }
+
+        /// <summary>
+        /// Whether it can run again after being paused, cancelled or failed. Not
+        /// the downloads tied to one HTTP request.
+        /// </summary>
+        [BsonIgnore]
+        public bool CanRestart => callbacks?.callback != null;
+
         // Persistence context - not serialized to MongoDB
         [BsonIgnore]
         public string PersistenceChannelId { get; set; }
@@ -379,10 +394,15 @@ namespace TelegramDownloader.Models
 
         private ILogger logger => tis?.Logger;
 
-        private void throwIfStopped()
+        /// <summary>Throws when the user canceled or paused the download, to end the current run.</summary>
+        public void throwIfStopped()
         {
             if (state == StateTask.Canceled)
                 throw new TransferStoppedException($"Canceled {name}");
+            // Parallel parts report after the first one noticed the pause: the run
+            // is over for all of them
+            if (_pausedRun)
+                throw new TransferStoppedException($"Paused {name}");
             if (state == StateTask.Paused)
             {
                 state = StateTask.Working;
@@ -449,6 +469,7 @@ namespace TelegramDownloader.Models
 
         public void Cancel()
         {
+            UserPaused = false;
             lock (_sync)
                 state = StateTask.Canceled;
             tis.CheckPendingDownloads();
@@ -480,6 +501,7 @@ namespace TelegramDownloader.Models
                 return;
             }
             _pausedRun = false;
+            UserPaused = false;
             lock (_sync)
             {
                 state = StateTask.Working;
@@ -490,7 +512,10 @@ namespace TelegramDownloader.Models
             Task run;
             try
             {
-                run = callbacks?.callback?.Invoke() ?? Task.CompletedTask;
+                // Without callback nothing would be downloaded: it must not end as completed
+                run = CanRestart
+                    ? callbacks.callback.Invoke() ?? Task.CompletedTask
+                    : Task.FromException(new InvalidOperationException("This download cannot be started again"));
             }
             catch (Exception ex)
             {
@@ -554,11 +579,16 @@ namespace TelegramDownloader.Models
             }
             RunFinished?.Invoke(this, EventArgs.Empty);
             // A paused download sits first in the queue: kicking the queue here
-            // would restart it right away.
-            if (!paused)
+            // would restart it right away, unless it is the only one paused: then
+            // it leaves its place to the next one.
+            if (!paused || (UserPaused && !restart))
                 tis?.CheckPendingDownloads();
             if (restart && state == StateTask.Working)
+            {
+                // Resumed while the paused run was ending, which took it off the list
+                tis?.addToDownloadList(this);
                 RetryCallback();
+            }
         }
     }
 
@@ -588,6 +618,12 @@ namespace TelegramDownloader.Models
         public DateTime startDate { get; set; }
         public DateTime endnDate { get; set; }
         public TransactionInfoService tis { get; set; }
+
+        /// <summary>Set by the transfers that send a file to Telegram: their source stream waits while paused.</summary>
+        [BsonIgnore]
+        public bool CanPause { get; set; }
+        // Completed when a paused upload is resumed or stopped
+        private TaskCompletionSource _unpaused;
 
         // Persistence context - not serialized to MongoDB
         [BsonIgnore]
@@ -642,16 +678,77 @@ namespace TelegramDownloader.Models
         {
             if (newState == StateTask.Working)
                 startDate = DateTime.Now;
-            lock (_sync)
-                state = newState;
+            changeState(newState);
             EventChanged?.Invoke(this, new UploadEventArgs());
         }
 
         public void Cancel()
         {
-            lock (_sync)
-                state = StateTask.Canceled;
+            changeState(StateTask.Canceled);
             EventChanged?.Invoke(this, new UploadEventArgs());
+        }
+
+        private void changeState(StateTask newState)
+        {
+            TaskCompletionSource waiting = null;
+            lock (_sync)
+            {
+                state = newState;
+                if (newState != StateTask.Paused)
+                {
+                    waiting = _unpaused;
+                    _unpaused = null;
+                }
+            }
+            waiting?.TrySetResult();
+        }
+
+        /// <summary>
+        /// Pauses a running upload: the parts in flight end and no more are
+        /// sent. False when it is not running or cannot be paused.
+        /// </summary>
+        public bool Pause()
+        {
+            lock (_sync)
+            {
+                if (!CanPause || state != StateTask.Working)
+                    return false;
+                state = StateTask.Paused;
+                _unpaused = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            }
+            EventChanged?.Invoke(this, new UploadEventArgs());
+            return true;
+        }
+
+        /// <summary>Resumes a paused upload where it was. False when it is not paused.</summary>
+        public bool Resume()
+        {
+            lock (_sync)
+            {
+                if (state != StateTask.Paused)
+                    return false;
+            }
+            changeState(StateTask.Working);
+            EventChanged?.Invoke(this, new UploadEventArgs());
+            return true;
+        }
+
+        /// <summary>Waits while the upload is paused; throws when it is canceled.</summary>
+        public async Task WaitWhilePausedAsync(CancellationToken ct = default)
+        {
+            while (true)
+            {
+                Task wait;
+                lock (_sync)
+                {
+                    if (state == StateTask.Canceled)
+                        throw new TransferStoppedException($"Canceled {name}");
+                    if (state != StateTask.Paused || _unpaused == null)
+                        return;
+                    wait = _unpaused.Task;
+                }
+                await wait.WaitAsync(ct);
+            }
         }
 
         public void InvokeEvent(UploadEventArgs uploadEventArgs)

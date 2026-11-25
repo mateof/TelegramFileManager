@@ -151,7 +151,7 @@ namespace Test
             {
                 "playlist.bulkAdd", "search.global", "channels.refresh", "channels.refreshProgress", "stream.localTranscode",
                 "events.hub", "search.v1", "files.thumbnails", "files.content", "files.preload", "local.copyMove",
-                "shares.browse", "setup.write", "transfers.remove", "system.admin", "webAuth.passkeys", "files.deleteOperations", "messages.content"
+                "shares.browse", "setup.write", "transfers.remove", "system.admin", "webAuth.passkeys", "files.deleteOperations", "messages.content", "transfers.pauseUploads"
             }));
         }
     }

@@ -38,6 +38,7 @@ namespace TelegramDownloader.Controllers.Mobile
             "webAuth.passkeys",      // /api/v1/web-auth/passkeys/** (passkey sign-in of the web app)
             "files.deleteOperations", // POST /api/v1/channels/{id}/files/delete-operations, /api/v1/local/delete-operations, /api/v1/delete-operations
             "messages.content",      // GET  /api/v1/channels/{id}/messages/{messageId}/content (play a message attachment without indexing it)
+            "transfers.pauseUploads", // POST /api/v1/transfers/{id}/pause and /retry on an upload; canPause / canRetry on every transfer
         };
 
         private static readonly string ServerVersion = ResolveServerVersion();

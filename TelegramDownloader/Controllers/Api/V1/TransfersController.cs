@@ -397,29 +397,36 @@ namespace TelegramDownloader.Controllers.Api.V1
             return OkEmpty("Transfer cancelled");
         }
 
-        /// <summary>Pauses one download.</summary>
+        /// <summary>Pauses one download or upload.</summary>
+        /// <remarks>
+        /// A download, running or queued, stays paused in the queue until it is
+        /// resumed (<c>retry</c>, or resuming all the downloads). An upload stops
+        /// sending data. Transfers with <c>canPause: false</c> answer <c>400</c>.
+        /// </remarks>
         [HttpPost("{id}/pause")]
         [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status404NotFound)]
         public IActionResult Pause(string id)
         {
-            var download = _tis.downloadModels.FirstOrDefault(d => d._internalId == id);
-            if (download == null)
-                return NotFoundResult("No running download with that id", ApiErrorCodes.TaskNotFound);
+            if (!TransferSnapshotBuilder.TryFind(_tis, id, out var download, out var upload, out _) || (download == null && upload == null))
+                return NotFoundResult("No download or upload with that id", ApiErrorCodes.TaskNotFound);
 
-            _tis.addToPendingDownloadList(download, atFirst: true, chekDownloads: false);
-            download.Pause();
-            return OkEmpty("Download paused");
+            if (download != null ? _tis.PauseDownload(download) : upload!.Pause())
+                return OkEmpty("Transfer paused");
+            return BadRequestResult("This transfer cannot be paused now", ApiErrorCodes.NotSupported);
         }
 
-        /// <summary>Retries a paused, cancelled or failed transfer.</summary>
+        /// <summary>Resumes a paused transfer, or retries a cancelled or failed one.</summary>
         [HttpPost("{id}/retry")]
         [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status404NotFound)]
         public IActionResult Retry(string id)
         {
-            if (!TransferSnapshotBuilder.TryFind(_tis, id, out var download, out _, out var task))
+            if (!TransferSnapshotBuilder.TryFind(_tis, id, out var download, out var upload, out var task))
                 return NotFoundResult("Transfer not found", ApiErrorCodes.TaskNotFound);
+
+            if (upload != null && upload.Resume())
+                return OkEmpty("Upload resumed");
 
             if (task != null)
             {
@@ -429,10 +436,12 @@ namespace TelegramDownloader.Controllers.Api.V1
 
             if (download != null)
             {
-                if (!_tis.pendingDownloadModels.Contains(download))
-                    _tis.addToPendingDownloadList(download, atFirst: true);
-                else
-                    _ = _tis.CheckPendingDownloads();
+                if (!download.CanRestart)
+                    return BadRequestResult("This download cannot be started again", ApiErrorCodes.NotSupported);
+                if (_tis.pendingDownloadModels.Contains(download))
+                    _tis.ResumeDownload(download);
+                else if (!_tis.RetryDownload(download))
+                    return ConflictResult("The download is still running");
                 return OkEmpty("Download queued again");
             }
 
@@ -456,7 +465,7 @@ namespace TelegramDownloader.Controllers.Api.V1
                 return NotFoundResult("Transfer not found", ApiErrorCodes.TaskNotFound);
 
             var state = download?.state ?? upload?.state ?? task!.state;
-            if (!TransferSnapshotBuilder.CanRemove(state))
+            if (!TransferSnapshotBuilder.CanRemove(state) || upload?.state == StateTask.Paused)
                 return ConflictResult("The transfer is running; cancel it before removing it");
 
             if (download != null)

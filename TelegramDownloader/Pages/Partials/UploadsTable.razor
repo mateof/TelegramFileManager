@@ -73,6 +73,16 @@
                 </button>
             }
 
+            @if (context.state == StateTask.Paused && !isPending)
+            {
+                <button class="action-btn retry" @onclick="() => context.Resume()" title="Resume">
+                    <i class="bi bi-play-fill"></i>
+                </button>
+                <button class="action-btn cancel" @onclick="() => cancel(context)" title="Cancel">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            }
+
             @if ((context.state == StateTask.Canceled || context.state == StateTask.Error) && !isPending)
             {
                 <button class="action-btn retry" @onclick="() => retry(context)" title="Retry">
@@ -207,7 +217,7 @@
     private async Task cancel(UploadModel um)
     {
         // um.thread.Interrupt();
-        um.state = StateTask.Canceled;
+        um.Cancel();
         await InvokeAsync(StateHasChanged);
     }
 

@@ -34,6 +34,12 @@ namespace TelegramDownloader.Models.Api
         /// <summary>True when the transfer sits in the queue instead of running.</summary>
         public bool IsQueued { get; set; }
 
+        /// <summary>Whether <c>pause</c> works on it while it runs (and <c>retry</c> resumes it).</summary>
+        public bool CanPause { get; set; }
+
+        /// <summary>Whether <c>retry</c> works on it once cancelled or failed.</summary>
+        public bool CanRetry { get; set; }
+
         public string Name { get; set; } = string.Empty;
 
         /// <summary>Destination path for downloads, source path for uploads.</summary>
@@ -69,8 +75,10 @@ namespace TelegramDownloader.Models.Api
             Id = m._internalId,
             Kind = TransferKind.Download,
             Action = m.action,
-            State = m.state.ToString(),
+            State = DownloadState(m, isQueued).ToString(),
             IsQueued = isQueued,
+            CanPause = m.CanRestart,
+            CanRetry = m.CanRestart,
             Name = m.name ?? string.Empty,
             Path = m.path,
             ChannelId = m.PersistenceChannelId,
@@ -85,6 +93,16 @@ namespace TelegramDownloader.Models.Api
             EndedAt = m.endnDate == default ? null : m.endnDate
         };
 
+        /// <summary>A download in the queue is not running, even if its model still says so after a pause.</summary>
+        private static StateTask DownloadState(DownloadModel m, bool isQueued)
+        {
+            if (m.UserPaused && m.state is (StateTask.Working or StateTask.Pending))
+                return StateTask.Paused;
+            if (!isQueued || m.state != StateTask.Working)
+                return m.state;
+            return m.tis?.isPauseDownloads == true ? StateTask.Paused : StateTask.Pending;
+        }
+
         public static TransferDto FromUpload(UploadModel m, bool isQueued = false) => new()
         {
             Id = m._internalId,
@@ -92,6 +110,7 @@ namespace TelegramDownloader.Models.Api
             Action = m.action,
             State = m.state.ToString(),
             IsQueued = isQueued,
+            CanPause = m.CanPause,
             Name = m.name ?? string.Empty,
             Path = m.path,
             ChannelId = m.PersistenceChannelId,
@@ -113,6 +132,7 @@ namespace TelegramDownloader.Models.Api
             Action = m.isUpload ? "Upload batch" : "Download batch",
             State = m.state.ToString(),
             IsQueued = m.state == StateTask.Pending,
+            CanRetry = true,
             Name = m.isUpload ? (m.toPath ?? "batch") : (m.fromPath ?? "batch"),
             ChannelId = m.channelId,
             Size = m.totalSize,
