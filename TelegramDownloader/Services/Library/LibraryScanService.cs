@@ -19,7 +19,7 @@ namespace TelegramDownloader.Services.Library
     /// </summary>
     public class LibraryScanService : IHostedService
     {
-        private static readonly HashSet<string> VideoExtensions = new(StringComparer.OrdinalIgnoreCase)
+        public static readonly IReadOnlySet<string> VideoExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             ".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".ts", ".mpg", ".mpeg", ".m2ts", ".3gp", ".ogv", ".divx", ".vob"
         };
@@ -36,7 +36,7 @@ namespace TelegramDownloader.Services.Library
         private readonly IMetadataProviderSource _providers;
         private readonly ILogger<LibraryScanService> _logger;
         private readonly object _sync = new();
-        private readonly ConcurrentQueue<string> _pending = new();
+        private readonly ConcurrentQueue<(string Channel, string? Folder)> _pending = new();
         // Episodes already fetched during the current scan, per "itemId:season"
         private readonly ConcurrentDictionary<string, List<LibraryEpisode>> _seasonCache = new();
         // Two titles can lead to the same item or season at once: one creates it, the other waits
@@ -102,8 +102,22 @@ namespace TelegramDownloader.Services.Library
             var config = GeneralConfigStatic.config;
             if (!config.LibraryEnabled || !config.LibraryAutoScan) return;
             if (!IsChannelSelected(config, channelId)) return;
-            if (!Start(channelId, false, out _) && !_pending.Contains(channelId))
-                _pending.Enqueue(channelId);
+            StartOrQueue(channelId);
+        }
+
+        /// <summary>
+        /// Scans a channel, or one of its folders, now or after the running
+        /// scan. False when it cannot be scanned: no provider is enabled.
+        /// </summary>
+        public bool StartOrQueue(string channelId, string? folder = null)
+        {
+            lock (_sync)
+            {
+                if (Start(channelId, false, out _, folder)) return true;
+                if (!IsRunning) return false;
+                if (!_pending.Contains((channelId, folder))) _pending.Enqueue((channelId, folder));
+                return true;
+            }
         }
 
         /// <summary>
@@ -127,7 +141,7 @@ namespace TelegramDownloader.Services.Library
         #region Start / cancel
 
         /// <summary>Starts a scan in the background. False when one is already running or nothing is configured.</summary>
-        public bool Start(string? channelId, bool force, out string? error)
+        public bool Start(string? channelId, bool force, out string? error, string? folder = null)
         {
             error = null;
             lock (_sync)
@@ -147,6 +161,7 @@ namespace TelegramDownloader.Services.Library
                     Running = true,
                     StartedAt = DateTime.UtcNow,
                     Scope = string.IsNullOrWhiteSpace(channelId) ? "all" : channelId.Trim(),
+                    Folder = folder,
                     Force = force
                 };
                 Current = state;
@@ -196,7 +211,7 @@ namespace TelegramDownloader.Services.Library
                 }
                 // Channels refreshed while this scan was running
                 if (_pending.TryDequeue(out var next))
-                    Start(next, false, out _);
+                    StartOrQueue(next.Channel, next.Folder);
             }
         }
 
@@ -224,7 +239,10 @@ namespace TelegramDownloader.Services.Library
             }
         }
 
-        private sealed record ScanEntry(long ChannelId, BsonFileManagerModel Doc, ParsedName Parsed, LibraryFile? Old, string? Hint);
+        private sealed record ScanEntry(long ChannelId, BsonFileManagerModel Doc, ParsedName Parsed, LibraryFile? Old, string? Hint, PinnedTitle? Pin);
+
+        /// <summary>The series assigned to the folder of a file.</summary>
+        private sealed record PinnedTitle(LibraryFolderRule Rule, string Key, bool Continuous);
 
         /// <summary>Everything the parallel parts of one scan share.</summary>
         private sealed class ScanRun
@@ -384,23 +402,30 @@ namespace TelegramDownloader.Services.Library
 
             var config = GeneralConfigStatic.config;
             var ignored = new List<LibraryFile>();
+            var pins = new Dictionary<LibraryFolderRule, PinnedTitle>();
             foreach (var doc in docs)
             {
                 ct.ThrowIfCancellationRequested();
+                if (run.State.Folder != null && !LibraryFolderRules.IsWithin(doc.FilterPath, run.State.Folder)) continue;
                 existing.TryGetValue(doc.Id, out var old);
-                var hint = LibraryFolderRules.Effective(config, chId, doc.FilterPath);
-                if (old != null && !ShouldRescan(old, force, hint)) continue;
+                var rule = LibraryFolderRules.ResolveRule(config, chId, doc.FilterPath);
+                var hint = rule?.Kind ?? LibraryFolderRules.HintFromPath(doc.FilterPath);
+                if (old != null && !ShouldRescan(old, force, hint, rule?.TitleKey)) continue;
+
+                PinnedTitle? pin = null;
+                if (rule?.TitleKey is string title && !pins.TryGetValue(rule, out pin))
+                    pins[rule] = pin = new PinnedTitle(rule, title, IsContinuous(config, rule, chId, docs));
 
                 if (hint == LibraryRuleKind.Ignore)
                 {
                     // Folder rule: not library material (extras, trailers...)
-                    var file = NewFile(chId, doc, old, MediaNameParser.Parse(doc.Name, doc.FilterPath), null, hint);
+                    var file = NewFile(chId, doc, old, MediaNameParser.Parse(doc.Name, doc.FilterPath), null, hint, null);
                     file.Status = LibraryFileStatus.Ignored;
                     ignored.Add(file);
                     if (old?.ItemId != null) run.Touch(old.ItemId);
                     continue;
                 }
-                entries.Add(new ScanEntry(chId, doc, MediaNameParser.Parse(doc.Name, doc.FilterPath, null, hint), old, hint));
+                entries.Add(new ScanEntry(chId, doc, MediaNameParser.Parse(doc.Name, doc.FilterPath, null, hint), old, hint, pin));
             }
             if (ignored.Count > 0)
                 await _lib.UpsertFiles(ignored);
@@ -408,9 +433,21 @@ namespace TelegramDownloader.Services.Library
             return entries;
         }
 
-        /// <summary>The files of one title, from any channel: identified with a single search.</summary>
+        /// <summary>
+        /// Whether the files of a folder assigned to a series are numbered from
+        /// 1 on without seasons, so 102 is the episode 102 and not 1x02. It looks
+        /// at every file of the folder: the new ones alone do not tell.
+        /// </summary>
+        private static bool IsContinuous(GeneralConfig config, LibraryFolderRule rule, long channelId, List<BsonFileManagerModel> docs)
+        {
+            var titles = new[] { rule.Title };
+            return docs.Any(d => ReferenceEquals(LibraryFolderRules.ResolveRule(config, channelId, d.FilterPath), rule)
+                && SeriesFolderParser.Read(d.Name, d.FilterPath, rule.Path, titles) is { IsLoose: true, Number: < 100 });
+        }
+
+        /// <summary>The files of one title, from any channel: identified with a single search, or none when the folder says the title.</summary>
         private static List<List<ScanEntry>> GroupByTitle(List<ScanEntry> entries) =>
-            entries.GroupBy(e => $"{(e.Parsed.IsSeries ? LibraryKind.Series : LibraryKind.Movie)}|{MediaNameParser.NormalizeForMatch(e.Parsed.Title)}|{e.Parsed.Year}")
+            entries.GroupBy(e => e.Pin != null ? $"={e.Pin.Key}" : $"{(e.Parsed.IsSeries ? LibraryKind.Series : LibraryKind.Movie)}|{MediaNameParser.NormalizeForMatch(e.Parsed.Title)}|{e.Parsed.Year}")
                 .Select(g => g.ToList())
                 .ToList();
 
@@ -507,11 +544,12 @@ namespace TelegramDownloader.Services.Library
             return true;
         }
 
-        private static bool ShouldRescan(LibraryFile old, bool force, string? hint)
+        private static bool ShouldRescan(LibraryFile old, bool force, string? hint, string? title)
         {
             if (old.Locked) return false;
             // A folder rule that changed since the file was scanned re-decides it
             if (!string.Equals(old.RuleKind, hint, StringComparison.Ordinal)) return true;
+            if (!string.Equals(old.RuleTitle, title, StringComparison.Ordinal)) return true;
             if (old.Status == LibraryFileStatus.Ignored) return false;
             if (force) return true;
             // Unmatched files get another chance every scan (a new provider or a
@@ -519,7 +557,7 @@ namespace TelegramDownloader.Services.Library
             return old.Status == LibraryFileStatus.Unmatched;
         }
 
-        private static LibraryFile NewFile(long channelId, BsonFileManagerModel doc, LibraryFile? old, ParsedName parsed, string? kind, string? hint) => new()
+        private static LibraryFile NewFile(long channelId, BsonFileManagerModel doc, LibraryFile? old, ParsedName parsed, string? kind, string? hint, string? title) => new()
         {
             Id = old?.Id ?? MongoDB.Bson.ObjectId.GenerateNewId().ToString(),
             ChannelId = channelId,
@@ -536,18 +574,34 @@ namespace TelegramDownloader.Services.Library
             Status = LibraryFileStatus.Unmatched,
             MatchSource = LibraryMatchSource.Auto,
             RuleKind = hint,
+            RuleTitle = title,
             ScannedAt = DateTime.UtcNow
         };
 
         private async Task ProcessGroupAsync(List<ScanEntry> files, ScanRun run, CancellationToken ct)
         {
             var sample = files[0].Parsed;
+            var pin = files[0].Pin;
             var kind = sample.IsSeries ? LibraryKind.Series : LibraryKind.Movie;
             LibraryItem? item = null;
             MatchResult? best = null;
             string? error = null;
 
-            if (sample.HasTitle && !MediaNameParser.IsJunk(sample.Title))
+            if (pin != null)
+            {
+                try
+                {
+                    item = await ResolvePinnedAsync(pin.Rule, run, ct);
+                    best = new MatchResult { Score = 1 };
+                }
+                catch (Exception ex) when (ex is not OperationCanceledException && !IsRefusal(ex))
+                {
+                    _logger.LogWarning(ex, "Could not get the title assigned to the folder {Folder}: {Title}", pin.Rule.Path, pin.Rule.Title);
+                    error = ex.Message;
+                    run.Update(st => st.Failed += files.Count);
+                }
+            }
+            else if (sample.HasTitle && !MediaNameParser.IsJunk(sample.Title))
             {
                 try
                 {
@@ -578,7 +632,9 @@ namespace TelegramDownloader.Services.Library
             foreach (var entry in files)
             {
                 var (parsed, old) = (entry.Parsed, entry.Old);
-                var file = NewFile(entry.ChannelId, entry.Doc, old, parsed, kind, entry.Hint);
+                if (entry.Pin != null)
+                    ReadEpisode(entry, item);
+                var file = NewFile(entry.ChannelId, entry.Doc, old, parsed, kind, entry.Hint, entry.Pin?.Key);
                 file.Error = error;
 
                 if (item != null && best != null)
@@ -638,10 +694,52 @@ namespace TelegramDownloader.Services.Library
             && old.ItemId == null && now.ItemId == null
             && old.FileName == now.FileName && old.FolderPath == now.FolderPath && old.Type == now.Type
             && old.Size == now.Size && old.MessageId == now.MessageId && old.IsSplit == now.IsSplit
-            && old.Kind == now.Kind && old.RuleKind == now.RuleKind && old.Error == now.Error
+            && old.Kind == now.Kind && old.RuleKind == now.RuleKind && old.RuleTitle == now.RuleTitle && old.Error == now.Error
             && old.Parsed.Title == now.Parsed.Title && old.Parsed.Year == now.Parsed.Year
             && old.Parsed.Season == now.Parsed.Season && old.Parsed.Episode == now.Parsed.Episode
             && old.Parsed.EpisodeEnd == now.Parsed.EpisodeEnd && old.Parsed.IsSeries == now.Parsed.IsSeries;
+
+        /// <summary>Title, season and episode of a file whose folder is assigned to a series.</summary>
+        private static void ReadEpisode(ScanEntry entry, LibraryItem? item)
+        {
+            var (rule, parsed) = (entry.Pin!.Rule, entry.Parsed);
+            var read = SeriesFolderParser.Read(entry.Doc.Name, entry.Doc.FilterPath, rule.Path, new[] { rule.Title, item?.Title, item?.OriginalTitle });
+            var (season, episode) = SeriesFolderParser.Map(read, item?.Seasons ?? new List<LibrarySeason>(), entry.Pin.Continuous);
+            parsed.IsSeries = true;
+            parsed.Title = item?.Title ?? rule.Title ?? parsed.Title;
+            parsed.Year = item?.Year ?? rule.Year;
+            parsed.Source = "rule";
+            parsed.Season = season;
+            parsed.Episode = episode;
+            parsed.EpisodeEnd = episode + (read.End - read.Number);
+        }
+
+        /// <summary>The series a folder rule names. Only asks its provider when the library does not have it yet.</summary>
+        private async Task<LibraryItem> ResolvePinnedAsync(LibraryFolderRule rule, ScanRun run, CancellationToken ct)
+        {
+            var existing = await FindExistingAsync(rule.Provider!, LibraryKind.Series, rule.ProviderId!, null);
+            if (existing != null) return existing;
+            if (run.Excluded.TryGetValue(rule.Provider!, out var reason))
+                throw new ProviderException(reason);
+            var provider = _providers.Get(rule.Provider!) ?? throw new ProviderException($"Provider '{rule.Provider}' is not enabled");
+            try
+            {
+                return await ResolveItemAsync(provider, LibraryKind.Series, CandidateFor(provider, LibraryKind.Series, rule.ProviderId!), run, ct);
+            }
+            catch (ProviderException ex) when (IsRefusal(ex) && TryExclude(run, provider, ex))
+            {
+                throw new ProviderException(ex.Message, null, ex);
+            }
+        }
+
+        /// <summary>A candidate known only by its id, picked by the user.</summary>
+        public static ProviderCandidate CandidateFor(IMetadataProvider provider, string kind, string providerId) => new()
+        {
+            Provider = provider.Id,
+            ProviderId = providerId,
+            Kind = kind,
+            ImdbId = provider.Id == OmdbProvider.ProviderId ? providerId : null
+        };
 
         private async Task<(IMetadataProvider? Provider, MatchResult? Result)> FindBestAsync(string kind, ParsedName parsed, ScanRun run, CancellationToken ct)
         {
@@ -706,9 +804,9 @@ namespace TelegramDownloader.Services.Library
 
         private async Task<LibraryItem> ResolveItemAsync(IMetadataProvider provider, string kind, ProviderCandidate candidate, ScanRun? run, CancellationToken ct, bool refresh = false)
         {
-            using var _ = await _itemLocks.LockAsync($"{provider.Id}:{candidate.ProviderId}", ct);
+            using var _ = await _itemLocks.LockAsync($"{provider.Id}:{kind}:{candidate.ProviderId}", ct);
 
-            var existing = await FindExistingAsync(provider, candidate.ProviderId, candidate.ImdbId);
+            var existing = await FindExistingAsync(provider.Id, kind, candidate.ProviderId, candidate.ImdbId);
             if (existing != null && !refresh)
                 return existing;
 
@@ -738,7 +836,7 @@ namespace TelegramDownloader.Services.Library
             await _itemWriteLock.WaitAsync(ct);
             try
             {
-                existing ??= await FindExistingAsync(provider, candidate.ProviderId, fetched.ImdbId);
+                existing ??= await FindExistingAsync(provider.Id, kind, candidate.ProviderId, fetched.ImdbId);
                 if (existing != null)
                 {
                     fetched.Id = existing.Id;
@@ -774,10 +872,13 @@ namespace TelegramDownloader.Services.Library
             return fetched;
         }
 
-        private async Task<LibraryItem?> FindExistingAsync(IMetadataProvider provider, string providerId, string? imdbId)
+        private async Task<LibraryItem?> FindExistingAsync(string provider, string kind, string providerId, string? imdbId)
         {
-            var existing = await _lib.FindItemByProvider(provider.Id, providerId)
-                ?? await _lib.FindItemByExternalId(ExternalKeyFor(provider.Id), providerId);
+            // TMDB numbers movies and series separately: the same id is two titles
+            var key = ExternalKeyFor(provider);
+            var scope = key == "imdb" ? null : kind;
+            var existing = await _lib.FindItemByProvider(provider, providerId, scope)
+                ?? await _lib.FindItemByExternalId(key, providerId, scope);
             if (existing == null && !string.IsNullOrEmpty(imdbId))
                 existing = await _lib.FindItemByExternalId("imdb", imdbId);
             return existing;

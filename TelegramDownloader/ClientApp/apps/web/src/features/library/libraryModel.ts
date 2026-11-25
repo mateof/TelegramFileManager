@@ -11,6 +11,24 @@ import {
   type LibraryKind
 } from '@tfm/api-client';
 
+/** Pause in the typing before searching titles: every search is a request to the metadata providers, which limit them. */
+export const SEARCH_DELAY_MS = 1500;
+
+/** The folder and its parents, the deepest first: `/Series/Dark/`, `/Series/`, `/`. */
+export function folderChoices(path: string): string[] {
+  const segments = path.split('/').filter(Boolean);
+  return [...segments.map((_s, i) => `/${segments.slice(0, segments.length - i).join('/')}/`), '/'];
+}
+
+const SEASON_FOLDER = /^(?:(?:temporada|tempada|temp|season|s|t)\s*[.-]?\s*\d{1,2}|\d{1,2}(?:\s*[ªaº]?\s*(?:temporada|tempada))?|especiales|specials)$/i;
+
+/** The folder that holds a whole series, for a file in it: the parent of a season folder. */
+export function seriesFolderOf(path: string): string {
+  const choices = folderChoices(path);
+  const name = choices[0].split('/').filter(Boolean).at(-1) ?? '';
+  return choices.length > 2 && SEASON_FOLDER.test(name) ? choices[1] : choices[0];
+}
+
 /** True for the `503 library_disabled` answer of the catalogue endpoints. */
 export function isLibraryDisabled(error: unknown): boolean {
   return isApiError(error) && error.code === ApiErrorCodes.LibraryDisabled;

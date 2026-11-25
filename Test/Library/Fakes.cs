@@ -49,13 +49,13 @@ namespace Test.Library
         public Task<LibraryItem?> GetItem(string id) => Task.FromResult(Items.GetValueOrDefault(id));
         public Task<List<LibraryItem>> GetItems(IEnumerable<string> ids) => Task.FromResult(ids.Distinct().Select(i => Items.GetValueOrDefault(i)).Where(i => i != null).ToList()!);
         public Task<List<LibraryItem>> GetAllItems() => Task.FromResult(Items.Values.ToList());
-        public async Task<LibraryItem?> FindItemByProvider(string provider, string providerId)
+        public async Task<LibraryItem?> FindItemByProvider(string provider, string providerId, string? kind = null)
         {
             if (LookupDelay > TimeSpan.Zero) await Task.Delay(LookupDelay);
-            return Items.Values.FirstOrDefault(i => i.Provider == provider && i.ProviderId == providerId);
+            return Items.Values.FirstOrDefault(i => i.Provider == provider && i.ProviderId == providerId && (kind == null || i.Kind == kind));
         }
-        public Task<LibraryItem?> FindItemByExternalId(string key, string value) =>
-            Task.FromResult(Items.Values.FirstOrDefault(i => i.ExternalIds.TryGetValue(key, out var v) && v == value));
+        public Task<LibraryItem?> FindItemByExternalId(string key, string value, string? kind = null) =>
+            Task.FromResult(Items.Values.FirstOrDefault(i => i.ExternalIds.TryGetValue(key, out var v) && v == value && (kind == null || i.Kind == kind)));
         public Task UpsertItem(LibraryItem item) { Items[item.Id] = item; return Task.CompletedTask; }
         public Task DeleteItem(string id) { Items.TryRemove(id, out _); lock (Episodes) Episodes.RemoveAll(e => e.ItemId == id); return Task.CompletedTask; }
         public Task UpdateItemCounts(IEnumerable<LibraryItem> items)

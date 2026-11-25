@@ -6,6 +6,7 @@ import {
   episodeCode,
   episodeFile,
   formatClock,
+  folderChoices,
   formatRuntime,
   genreRows,
   imageAtSize,
@@ -18,6 +19,7 @@ import {
   progressPercent,
   resumeSeconds,
   scanPercent,
+  seriesFolderOf,
   versionLabel
 } from './libraryModel';
 
@@ -228,5 +230,21 @@ describe('misc helpers', () => {
     expect(matchesDecade({ year: null }, 1990)).toBe(false);
     expect(matchesDecade({ year: null }, null)).toBe(true);
     expect(decades(new Date(2026, 0, 1), 2000)).toEqual([2020, 2010, 2000]);
+  });
+});
+
+describe('series folders', () => {
+  it('lists the folder and its parents', () => {
+    expect(folderChoices('/Series/Dark/Temporada 1/')).toEqual(['/Series/Dark/Temporada 1/', '/Series/Dark/', '/Series/', '/']);
+    expect(folderChoices('/')).toEqual(['/']);
+  });
+
+  it('skips the season folder', () => {
+    for (const season of ['Temporada 2', 'Season 02', 'S2', 'T02', '2', '2ª Temporada', 'Especiales']) {
+      expect(seriesFolderOf(`/Series/Dark/${season}/`)).toBe('/Series/Dark/');
+    }
+    expect(seriesFolderOf('/Series/Dark/')).toBe('/Series/Dark/');
+    expect(seriesFolderOf('/Temporada 2/')).toBe('/Temporada 2/');
+    expect(seriesFolderOf('/')).toBe('/');
   });
 });

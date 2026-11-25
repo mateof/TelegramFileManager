@@ -1381,7 +1381,7 @@
                                         <tr>
                                             <td class="text-truncate" style="max-width: 260px;" title="@rule.ChannelId">@LibraryChannelName(rule.ChannelId)</td>
                                             <td><code>@rule.Path</code></td>
-                                            <td>@FolderRuleKindLabel(rule.Kind)</td>
+                                            <td>@FolderRuleKindLabel(rule.Kind)@(rule.TitleKey != null ? $": {rule.Title}" : string.Empty)</td>
                                             <td class="text-end"><button type="button" class="btn btn-link btn-sm p-0 text-danger" title="Remove" @onclick="() => RemoveFolderRule(rule)"><i class="bi bi-x-lg"></i></button></td>
                                         </tr>
                                     }

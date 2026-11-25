@@ -1,6 +1,7 @@
 // Media library (movies and series): /api/v1/library (mirrors Models/Api/LibraryDtos.cs and the
 // string constants of Models/Library/LibraryModels.cs)
 import type { PagedQuery } from '../http';
+import type { LibraryFolderRule } from './config';
 import type { ApiFileDto } from './files';
 
 /** Kind of a library item. */
@@ -281,6 +282,34 @@ export interface LibraryMatchFileRequest {
   kind: LibraryKind;
   season?: number | null;
   episode?: number | null;
+}
+
+/** A folder of a channel as the library sees it. */
+export interface ApiLibraryFolderDto {
+  channelId: number;
+  path: string;
+  /** Videos in the folder and its subfolders. */
+  videos: number;
+  /** How many of them were identified by hand. */
+  locked: number;
+  /** The rule of exactly this folder. */
+  rule: LibraryFolderRule | null;
+  /** The rule that applies, which may be the one of a parent folder. */
+  effectiveRule: LibraryFolderRule | null;
+  /** Only after assigning: the library item of the series. */
+  itemId: string | null;
+  /** Only after assigning: the files are being identified, or will be when the running scan ends. */
+  scanStarted: boolean | null;
+}
+
+/** Body of `PUT /api/v1/library/folders/series`. */
+export interface LibraryAssignFolderRequest {
+  channelId: number;
+  path: string;
+  provider: string;
+  providerId: string;
+  /** Also reassign the files identified by hand. */
+  includeLocked?: boolean;
 }
 
 /** Body of `PUT /api/v1/library/items/{id}/identify`. */

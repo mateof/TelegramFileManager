@@ -92,6 +92,8 @@ const channels: Record<string, string> = {
   'No channel is indexed yet: show all of them and open one to index it.': 'Aún no hay canales indexados: muéstralos todos y abre uno para indexarlo.',
   'Not indexed': 'Sin indexar',
   'Owner': 'Propietario',
+  'Identify as a series': 'Identificar como serie',
+  'Identify this folder as a series': 'Identificar esta carpeta como serie'
 };
 
 export default channels;

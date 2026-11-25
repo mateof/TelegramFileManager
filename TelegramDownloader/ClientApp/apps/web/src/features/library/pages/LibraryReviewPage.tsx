@@ -2,11 +2,12 @@ import type { ApiLibraryFileDto, LibraryFileStatus, LibraryKind } from '@tfm/api
 import { useMutation } from '@tanstack/react-query';
 import { Badge, Button, Card, EmptyState, IconButton, Input, SegmentedControl, Skeleton, Spinner, toast, Tooltip } from '@tfm/ui';
 import { Check, CircleSlash, Eye, FolderOpen, Lock, Play, Search, SearchCheck, TriangleAlert, Undo2, WandSparkles, X } from 'lucide-react';
-import { useDeferredValue, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { containingFolderRoute } from '@/features/search/fileMedia';
 import { t } from '@/i18n';
 import { api, errorMessage } from '@/lib/api';
+import { useSearchText } from '@/lib/useSearchText';
 import { PageHeader } from '@/shell/PageHeader';
 import { IdentifyDialog, type IdentifyTarget } from '../components/IdentifyDialog';
 import { LibraryDisabled, LibraryNav, ScanStatus } from '../components/LibraryChrome';
@@ -20,11 +21,10 @@ type Tab = Extract<LibraryFileStatus, 'review' | 'unmatched' | 'ignored'>;
 
 export default function LibraryReviewPage() {
   const [tab, setTab] = useState<Tab>('review');
-  const [text, setText] = useState('');
-  const search = useDeferredValue(text.trim());
+  const text = useSearchText('', 600);
   const [identify, setIdentify] = useState<IdentifyTarget | null>(null);
   const stats = useLibraryStats();
-  const files = useReviewFiles(tab, search);
+  const files = useReviewFiles(tab, text.query);
   const counts = stats.data?.files ?? {};
 
   const sentinel = useRef<HTMLDivElement>(null);
@@ -64,14 +64,16 @@ export default function LibraryReviewPage() {
         />
         <Input
           className="min-w-48 flex-1"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
+          value={text.value}
+          onChange={(e) => text.setValue(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && text.commit()}
+          enterKeyHint="search"
           placeholder={t('Search file names...')}
           aria-label={t('Search file names')}
           leading={<Search className="size-4" />}
           trailing={
-            text ? (
-              <IconButton size="xs" label={t('Clear')} onClick={() => setText('')}>
+            text.value ? (
+              <IconButton size="xs" label={t('Clear')} onClick={() => text.commit('')}>
                 <X />
               </IconButton>
             ) : undefined

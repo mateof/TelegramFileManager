@@ -88,6 +88,40 @@ The body replaces the whole list. The Config page manages the same list with a
 single-choice channel selector and a folder picker that lists the first three
 levels of the channel (deeper folders are reached by searching).
 
+### A folder that is one series
+
+A `series` rule can also name **the** series: every video of the folder is then
+an episode of it, whatever the files are called, and no title search is made.
+
+```
+PUT /api/v1/library/folders/series
+{ "channelId": 1290586824, "path": "/Dark/", "provider": "tmdb", "providerId": "70523", "includeLocked": false }
+-> { "videos": 26, "locked": 0, "rule": { … "title": "Dark", "year": 2017 }, "itemId": "66f1…", "scanStarted": true }
+
+GET    /api/v1/library/folders?channelId=…&path=/Dark/           -> videos, files identified by hand and the rule
+DELETE /api/v1/library/folders/series?channelId=…&path=/Dark/    -> removes the rule; each file is identified by its name again
+```
+
+- The rule is stored and the folder is scanned in the background: now, or after
+  the running scan. Files added later are assigned by the next scan.
+- The **season** comes from the name (`2x03`, `S02E03`) or from a subfolder
+  (`Temporada 2`, `Season 02`, `2ª temporada`, `S2`, `2`; `Especiales` is
+  season 0). Without either, it is the first one.
+- The **episode** comes from the name: `2x03`, `Cap.203`, `Episodio 3`, or just a
+  number (`03 - Title.mkv`, `Dark 03.mkv`, `03.mkv`). `203` is 2x03, unless the
+  folder also has numbers below 100 without season: then the numbering runs
+  across seasons and the episode counts of the provider tell which one it is.
+- A file without an episode number, or with one the provider does not have, is
+  linked to the series and listed for review.
+- Files identified by hand are left alone; `includeLocked` reassigns them too.
+  Ignored files stay ignored.
+- `identify` on the series moves its folders to the new title.
+
+The same fields (`provider`, `providerId`, `title`, `year`) are part of
+`libraryFolderRules`. In a `PATCH`, a rule without `providerId` keeps the title
+it has; an empty one clears it. Advertised as `library.seriesFolders` in the
+`features` of `GET /api/mobile/info`.
+
 For a picker, list the folders of a channel (works with the library disabled):
 
 ```

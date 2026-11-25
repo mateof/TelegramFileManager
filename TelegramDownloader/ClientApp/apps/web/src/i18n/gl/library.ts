@@ -158,7 +158,23 @@ const library: Record<string, string> = {
   Rumored: 'En rumores',
   Ended: 'Finalizada',
   'Returning series': 'En emisión',
-  Pilot: 'Piloto'
+  Pilot: 'Piloto',
+  'Press Enter to search at once.': 'Preme Intro para buscar no momento.',
+  'Search now': 'Buscar agora',
+  'Identify folder as a series': 'Identificar cartafol como serie',
+  'What to identify': 'Que identificar',
+  'This file': 'Este ficheiro',
+  'The whole folder': 'Todo o cartafol',
+  '1 video.': '1 vídeo.',
+  '{count} videos.': '{count} vídeos.',
+  'All of them become episodes of the series you choose, with the season and episode taken from the subfolders and file names. New files too.': 'Todos pasan a ser capítulos da serie que escollas, coa temporada e o capítulo dos subcartafoles e dos nomes de ficheiro. Tamén os ficheiros novos.',
+  'Now: {title}': 'Agora: {title}',
+  'Also the file identified by hand': 'Tamén o ficheiro identificado á man',
+  'Also the {count} files identified by hand': 'Tamén os {count} ficheiros identificados á man',
+  'The folder is no longer assigned': 'O cartafol xa non está asignado',
+  'Its files are being identified again, each by its name.': 'Os seus ficheiros estanse a identificar de novo, cada un polo seu nome.',
+  'Folder assigned to {title}': 'Cartafol asignado a {title}',
+  'Its files are being identified.': 'Os seus ficheiros estanse a identificar.'
 };
 
 export default library;

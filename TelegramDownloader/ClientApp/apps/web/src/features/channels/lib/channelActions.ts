@@ -1,8 +1,8 @@
 import type { FileAction, FileEntry } from '@tfm/file-manager';
 import { toast } from '@tfm/ui';
-import { Clapperboard, HardDriveDownload, Send, Share2, Zap } from 'lucide-react';
+import { Clapperboard, HardDriveDownload, Send, Share2, Tv, Zap } from 'lucide-react';
 import { createElement } from 'react';
-import { dtoOf } from '@/features/files/entries';
+import { dtoOf, toApiFolder } from '@/features/files/entries';
 import { mediaActions } from '@/features/files/media';
 import { t } from '@/i18n';
 import { api, errorMessage } from '@/lib/api';
@@ -11,6 +11,7 @@ import { api, errorMessage } from '@/lib/api';
 export type ChannelDialog =
   | { type: 'download'; entries: FileEntry[] }
   | { type: 'strm'; path: string; name: string }
+  | { type: 'series'; path: string; name: string }
   | { type: 'share'; folderId?: string; name: string };
 
 export interface ChannelActionsOptions {
@@ -82,6 +83,27 @@ export function channelActions({ channelId, channelName, collectionId, openDialo
       order: 1,
       placement: ['context'],
       run: (_e, ctx) => openDialog({ type: 'strm', path: ctx.currentPath, name: ctx.currentPath === '/' ? channelName : ctx.currentPath.split('/').pop() ?? '' })
+    },
+    {
+      id: 'tfm:series',
+      label: t('Identify as a series'),
+      icon: icon(Tv),
+      selection: 'single',
+      group: 'b-media',
+      order: 8,
+      placement: ['context', 'details'],
+      when: ([e]) => e.kind === 'folder',
+      run: ([e]) => openDialog({ type: 'series', path: toApiFolder(e.path), name: e.name })
+    },
+    {
+      id: 'tfm:series-current',
+      label: t('Identify this folder as a series'),
+      icon: icon(Tv),
+      selection: 'none',
+      group: 'b-media',
+      order: 8,
+      placement: ['context'],
+      run: (_e, ctx) => openDialog({ type: 'series', path: toApiFolder(ctx.currentPath), name: ctx.currentPath === '/' ? channelName : ctx.currentPath.split('/').pop() ?? '' })
     },
     {
       id: 'tfm:share',

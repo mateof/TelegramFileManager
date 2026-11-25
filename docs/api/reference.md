@@ -182,6 +182,9 @@ Browse, search, details and stats accept `collectionId` to read a shared collect
 | POST | `/api/v1/library/files/{channelId}/{fileId}/ignore` | | Keep a file out of the library. |
 | DELETE | `/api/v1/library/files/{channelId}/{fileId}/ignore` | | Put it back. |
 | PUT | `/api/v1/library/items/{id}/identify` | | Move every file of an item to another title. |
+| GET | `/api/v1/library/folders` | | Videos of a folder (`channelId`, `path`) and the series assigned to it. |
+| PUT | `/api/v1/library/folders/series` | | Every video of a folder is an episode of one series. |
+| DELETE | `/api/v1/library/folders/series` | | Remove the rule of a folder (`channelId`, `path`). |
 | POST | `/api/v1/library/items/{id}/refresh` | | Re-download metadata and episodes. |
 | GET | `/api/v1/library/watch/{channelId}/{fileId}` | | Playback progress of a file. |
 | PUT | `/api/v1/library/watch/{channelId}/{fileId}` | | Save playback progress. |

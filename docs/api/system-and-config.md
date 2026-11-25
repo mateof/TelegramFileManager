@@ -165,7 +165,7 @@ Returns the full `AppConfigDto`. Highlights:
 | `hiddenChannels` | Ids of channels hidden from the channel lists (read-only here; change via `POST/DELETE /api/v1/channels/{id}/hidden`). |
 | `showHiddenChannels` | When `true`, hidden channels are still shown in the channel lists. |
 | `libraryEnabled`, `libraryLanguage`, `libraryAutoScan`, `libraryIncludedChannels`, `libraryExcludedChannels`, `libraryWatchedThreshold` | Media library settings (see [library.md](library.md)). An empty `libraryIncludedChannels` means every indexed channel. |
-| `libraryFolderRules` | What a channel folder holds: `[{ channelId, path, kind }]` with `kind` `movie`, `series` or `ignore` (see [library.md](library.md#folder-rules)). PATCH replaces the whole list. |
+| `libraryFolderRules` | What a channel folder holds: `[{ channelId, path, kind }]` with `kind` `movie`, `series` or `ignore`; a `series` rule can name the series with `provider` and `providerId` (see [library.md](library.md#folder-rules)). PATCH replaces the whole list. |
 | `libraryProviders` | Metadata providers (`id`, `enabled`, `priority`, `hasKey`, `apiKeyMasked`). PATCH with `[{ id, enabled?, apiKey?, priority? }]`; omit `apiKey` to keep the current key, send `""` to clear it. |
 | `useMobileFileManagerAlways`, `hasFileManagerVirtualScroll` | Web UI file manager options. |
 | `defaultWebUi` | `classic` (default) or `app`: with `app`, a browser opening `/` is redirected to the web app at `/app/` (other classic pages are not). `/?ui=classic` opens the classic UI and remembers it for that browser (cookie `tfm_ui`); `/?ui=app` clears that. Any other value is a `400`. |

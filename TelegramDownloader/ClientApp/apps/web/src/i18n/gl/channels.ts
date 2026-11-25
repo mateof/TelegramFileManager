@@ -92,6 +92,8 @@ const channels: Record<string, string> = {
   'No channel is indexed yet: show all of them and open one to index it.': 'Aínda non hai canles indexadas: amósaas todas e abre unha para indexala.',
   'Not indexed': 'Sen indexar',
   'Owner': 'Propietario',
+  'Identify as a series': 'Identificar como serie',
+  'Identify this folder as a series': 'Identificar este cartafol como serie'
 };
 
 export default channels;

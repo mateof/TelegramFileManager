@@ -1,9 +1,10 @@
-import type { ApiLibraryScanStateDto, LibraryFolderRule, LibraryFolderRuleKind } from '@tfm/api-client';
+import type { ApiLibraryScanStateDto, ApiProviderCandidateDto, LibraryFolderRule, LibraryFolderRuleKind } from '@tfm/api-client';
 import { isApiError } from '@tfm/api-client';
-import { Badge, Button, cn, IconButton, Input, Progress, RadioGroup, Select, Skeleton, Switch, toast } from '@tfm/ui';
+import { Badge, Button, cn, Dialog, DialogContent, IconButton, Input, Progress, RadioGroup, Select, Skeleton, Switch, toast } from '@tfm/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowUpRight, Clapperboard, Eraser, FolderTree, KeyRound, ListFilter, Plus, Radar, RotateCcw, Search, Square, Trash2 } from 'lucide-react';
+import { ArrowUpRight, Clapperboard, Eraser, FolderTree, KeyRound, ListFilter, Plus, Radar, RotateCcw, Search, Square, Trash2, Tv, X } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
+import { CandidateSearch } from '@/features/library/components/CandidateSearch';
 import { getLanguage, t } from '@/i18n';
 import { api, errorMessage } from '@/lib/api';
 import { useEventsMessage } from '@/lib/realtime';
@@ -137,16 +138,20 @@ function FolderRules({ form, values: v, options }: FormSectionProps & { options:
   const [channelId, setChannelId] = useState<number | null>(null);
   const [path, setPath] = useState('/');
   const [kind, setKind] = useState<LibraryFolderRuleKind>('series');
+  const [title, setTitle] = useState<ApiProviderCandidateDto | null>(null);
+  const [picking, setPicking] = useState(false);
   const rules = v.libraryFolderRules;
   const kindId = useId();
   const sorted = [...rules].sort((a, b) => channelName(options, a.channelId).localeCompare(channelName(options, b.channelId)) || a.path.localeCompare(b.path));
 
   const add = () => {
     if (channelId === null) return;
-    const rule: LibraryFolderRule = { channelId, path: normalizeFolderPath(path), kind };
+    const rule: LibraryFolderRule = { channelId, path: normalizeFolderPath(path), kind, providerId: '' };
+    if (kind === 'series' && title) Object.assign(rule, { provider: title.provider, providerId: title.providerId, title: title.title, year: title.year });
     const others = rules.filter((r) => !(r.channelId === rule.channelId && normalizeFolderPath(r.path) === rule.path));
     form.setField('libraryFolderRules', [...others, rule]);
     setPath('/');
+    setTitle(null);
   };
   const remove = (rule: LibraryFolderRule) => form.setField('libraryFolderRules', rules.filter((r) => r !== rule));
 
@@ -175,6 +180,12 @@ function FolderRules({ form, values: v, options }: FormSectionProps & { options:
                     <td className="px-3 py-2 font-mono text-xs text-fg">{r.path}</td>
                     <td className="px-3 py-2">
                       <Badge tone={r.kind === 'ignore' ? 'neutral' : r.kind === 'movie' ? 'info' : 'accent'}>{kindLabel(r.kind)}</Badge>
+                      {r.kind === 'series' && r.providerId && (
+                        <span className="ml-2 text-xs text-fg">
+                          {r.title ?? r.providerId}
+                          {r.year ? ` (${r.year})` : ''}
+                        </span>
+                      )}
                     </td>
                     <td className="px-2 py-1">
                       <IconButton label={t('Remove')} size="sm" variant="ghost" onClick={() => remove(r)}>
@@ -220,14 +231,40 @@ function FolderRules({ form, values: v, options }: FormSectionProps & { options:
                 { value: 'movie', label: t('Movies') },
                 { value: 'ignore', label: t('Ignore') }
               ]}
-              className="w-36"
+              className="w-full md:w-44"
             />
+            {kind === 'series' && (
+              <div className="flex items-center gap-1 md:w-44">
+                <Button size="sm" variant="secondary" icon={<Tv />} onClick={() => setPicking(true)} className="min-w-0 flex-1" title={title?.title}>
+                  <span className="truncate">{title ? title.title : t('Only one series...')}</span>
+                </Button>
+                {title && (
+                  <IconButton size="sm" label={t('Any series')} onClick={() => setTitle(null)}>
+                    <X />
+                  </IconButton>
+                )}
+              </div>
+            )}
             <Button icon={<Plus />} disabled={channelId === null} onClick={add} className="mt-auto">
               {t('Add rule')}
             </Button>
           </div>
         </div>
         <p className="text-[11px] text-fg-subtle">{t('Rules are stored when you save the settings.')}</p>
+        <Dialog open={picking} onOpenChange={setPicking}>
+          {picking && (
+            <DialogContent size="lg" title={t('Series of the folder')} description={t('Every video of the folder will be an episode of the series you choose.')}>
+              <CandidateSearch
+                initialTitle={title?.title ?? path.split('/').filter(Boolean).at(-1) ?? ''}
+                kind="series"
+                onChoose={(c) => {
+                  setTitle(c);
+                  setPicking(false);
+                }}
+              />
+            </DialogContent>
+          )}
+        </Dialog>
       </div>
     </SettingRow>
   );

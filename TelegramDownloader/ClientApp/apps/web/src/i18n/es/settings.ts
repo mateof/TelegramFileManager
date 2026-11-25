@@ -380,7 +380,11 @@ const settings: Record<string, string> = {
   'A passkey only works on the domain where it was created.': 'Una passkey solo funciona en el dominio en el que se creó.',
   'Domain': 'Dominio',
   'No passkeys yet.': 'Todavía no hay passkeys.',
-  'Your {count} passkeys are removed too.': 'También se quitan tus {count} passkeys.'
+  'Your {count} passkeys are removed too.': 'También se quitan tus {count} passkeys.',
+  'Only one series...': 'Una sola serie...',
+  'Any series': 'Cualquier serie',
+  'Series of the folder': 'Serie de la carpeta',
+  'Every video of the folder will be an episode of the series you choose.': 'Todos los vídeos de la carpeta serán capítulos de la serie que elijas.'
 };
 
 export default settings;

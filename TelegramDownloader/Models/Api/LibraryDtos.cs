@@ -400,6 +400,36 @@ namespace TelegramDownloader.Models.Api
         public int? Episode { get; set; }
     }
 
+    /// <summary>A folder of a channel as the library sees it.</summary>
+    public class ApiLibraryFolderDto
+    {
+        public long ChannelId { get; set; }
+        public string Path { get; set; } = "/";
+        /// <summary>Videos in the folder and its subfolders.</summary>
+        public int Videos { get; set; }
+        /// <summary>How many of them were identified by hand: assigning the folder leaves them alone by default.</summary>
+        public int Locked { get; set; }
+        /// <summary>The rule of exactly this folder.</summary>
+        public LibraryFolderRule? Rule { get; set; }
+        /// <summary>The rule that applies, which may be the one of a parent folder.</summary>
+        public LibraryFolderRule? EffectiveRule { get; set; }
+        /// <summary>Only after assigning: the library item of the series.</summary>
+        public string? ItemId { get; set; }
+        /// <summary>Only after assigning: the files are being identified, or will be when the running scan ends.</summary>
+        public bool? ScanStarted { get; set; }
+    }
+
+    public class LibraryAssignFolderRequest
+    {
+        public long ChannelId { get; set; }
+        /// <summary>Folder path, as listed by <c>channel-folders</c>; <c>/</c> is the whole channel.</summary>
+        public string? Path { get; set; }
+        public string Provider { get; set; } = string.Empty;
+        public string ProviderId { get; set; } = string.Empty;
+        /// <summary>Also reassign the files identified by hand. Ignored files stay ignored.</summary>
+        public bool IncludeLocked { get; set; }
+    }
+
     public class LibraryIdentifyItemRequest
     {
         public string Provider { get; set; } = string.Empty;

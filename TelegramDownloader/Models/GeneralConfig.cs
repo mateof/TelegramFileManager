@@ -289,6 +289,20 @@ namespace TelegramDownloader.Models
         public string Path { get; set; } = "/";
         /// <summary><c>movie</c>, <c>series</c> or <c>ignore</c>.</summary>
         public string Kind { get; set; } = "series";
+        /// <summary>Series: the title every file of the folder belongs to, at <see cref="Provider"/>. Empty: each file is looked up.</summary>
+        public string? ProviderId { get; set; }
+        public string? Provider { get; set; }
+        /// <summary>Name and year of that title, to show the rule.</summary>
+        public string? Title { get; set; }
+        public int? Year { get; set; }
+
+        /// <summary>Identifies the assigned title, null when the rule has none.</summary>
+        [BsonIgnore]
+        [System.Text.Json.Serialization.JsonIgnore]
+        [Newtonsoft.Json.JsonIgnore]
+        public string? TitleKey => Kind == Library.LibraryKind.Series && !string.IsNullOrWhiteSpace(Provider) && !string.IsNullOrWhiteSpace(ProviderId)
+            ? $"{Provider.ToLowerInvariant()}:{ProviderId}"
+            : null;
     }
 
     /// <summary>One metadata provider of the media library (tmdb, omdb...).</summary>
