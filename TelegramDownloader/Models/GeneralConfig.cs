@@ -3,9 +3,7 @@
 using MongoDB.Bson.Serialization.Attributes;
 using MongoDB.Bson;
 using TelegramDownloader.Data.db;
-using Syncfusion.Blazor.RichTextEditor;
 using Newtonsoft.Json;
-using Syncfusion.Blazor.Charts;
 using TelegramDownloader.Data;
 using System.Diagnostics;
 using TelegramDownloader.Services;
@@ -156,6 +154,12 @@ namespace TelegramDownloader.Models
         /// <summary>Ids of channels the user chose to hide from the channel lists.</summary>
         public List<long> HiddenChannels { get; set; } = new List<long>();
 
+        /// <summary>
+        /// Interface a browser gets at <c>/</c>: <c>classic</c> (Blazor) or
+        /// <c>app</c> (redirect to the web app at <c>/app/</c>). See <see cref="WebUiMode"/>.
+        /// </summary>
+        public string DefaultWebUi { get; set; } = WebUiMode.Classic;
+
         // API / WebDAV credentials, managed from the Config page and persisted in
         // MongoDB. When set here they take precedence over the equivalents in
         // config.json (TLConfig), so they can be changed from the UI without
@@ -183,6 +187,11 @@ namespace TelegramDownloader.Models
         /// By default, refresh is only available for channels you don't own.
         /// </summary>
         public bool EnableRefreshOwnChannels { get; set; } = false;
+        /// <summary>
+        /// Index refresh: search one media type after another instead of all of
+        /// them at once (fewer requests per second, fewer FLOOD_WAIT).
+        /// </summary>
+        public bool RefreshOneTypeAtATime { get; set; } = false;
 
         // Memory Split Upload Settings
         /// <summary>
@@ -256,6 +265,60 @@ namespace TelegramDownloader.Models
         /// </summary>
         public int MultiConnectionMinFileSizeMB { get; set; } = 32;
 
+        // Media library (movies / series identified from the channel indexes)
+        /// <summary>Master switch of the media library. Off: no scans, library endpoints answer 503.</summary>
+        public bool LibraryEnabled { get; set; } = false;
+        /// <summary>Language for titles and overviews at providers that support it (TMDB), e.g. es-ES.</summary>
+        public string LibraryLanguage { get; set; } = "es-ES";
+        /// <summary>Scan a channel's new files right after its index is refreshed.</summary>
+        public bool LibraryAutoScan { get; set; } = true;
+        /// <summary>Channels the library scans. Empty means every channel with an index.</summary>
+        public List<long> LibraryIncludedChannels { get; set; } = new List<long>();
+        /// <summary>Channels the library never scans, even when included.</summary>
+        public List<long> LibraryExcludedChannels { get; set; } = new List<long>();
+        /// <summary>Fraction of the duration after which a file counts as watched (0.5-1).</summary>
+        public double LibraryWatchedThreshold { get; set; } = 0.92;
+        /// <summary>Metadata providers, their keys and the order they are asked in.</summary>
+        public List<LibraryProviderConfig> LibraryProviders { get; set; } = new List<LibraryProviderConfig>();
+        /// <summary>What a channel folder holds (movies, series, nothing). Longest matching path wins.</summary>
+        public List<LibraryFolderRule> LibraryFolderRules { get; set; } = new List<LibraryFolderRule>();
+
+    }
+
+    /// <summary>A folder of a channel index and the kind of content the library should expect there.</summary>
+    [BsonIgnoreExtraElements]
+    public class LibraryFolderRule
+    {
+        public long ChannelId { get; set; }
+        /// <summary>Folder path as stored in the index (<c>/Series/</c>); <c>/</c> is the whole channel.</summary>
+        public string Path { get; set; } = "/";
+        /// <summary><c>movie</c>, <c>series</c> or <c>ignore</c>.</summary>
+        public string Kind { get; set; } = "series";
+        /// <summary>Series: the title every file of the folder belongs to, at <see cref="Provider"/>. Empty: each file is looked up.</summary>
+        public string? ProviderId { get; set; }
+        public string? Provider { get; set; }
+        /// <summary>Name and year of that title, to show the rule.</summary>
+        public string? Title { get; set; }
+        public int? Year { get; set; }
+
+        /// <summary>Identifies the assigned title, null when the rule has none.</summary>
+        [BsonIgnore]
+        [System.Text.Json.Serialization.JsonIgnore]
+        [Newtonsoft.Json.JsonIgnore]
+        public string? TitleKey => Kind == Library.LibraryKind.Series && !string.IsNullOrWhiteSpace(Provider) && !string.IsNullOrWhiteSpace(ProviderId)
+            ? $"{Provider.ToLowerInvariant()}:{ProviderId}"
+            : null;
+    }
+
+    /// <summary>One metadata provider of the media library (tmdb, omdb...).</summary>
+    [BsonIgnoreExtraElements]
+    public class LibraryProviderConfig
+    {
+        public string Id { get; set; } = string.Empty;
+        public bool Enabled { get; set; }
+        public string? ApiKey { get; set; }
+        /// <summary>Lower goes first when identifying.</summary>
+        public int Priority { get; set; } = 100;
     }
 
     public class TLConfig
@@ -283,5 +346,13 @@ namespace TelegramDownloader.Models
         /// sends credentials base64-encoded.
         /// </summary>
         public string? webdav_password { get; set; }
+
+        /// <summary>
+        /// Reverse proxies allowed to set X-Forwarded-For/Proto/Host (IPs or
+        /// CIDR ranges). Overridden by the <c>TrustedProxies</c> setting
+        /// (appsettings or environment variable). Default when both are empty:
+        /// loopback and private ranges.
+        /// </summary>
+        public List<string>? trusted_proxies { get; set; }
     }
 }

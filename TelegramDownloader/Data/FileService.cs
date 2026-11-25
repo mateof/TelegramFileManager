@@ -1,14 +1,9 @@
 #nullable disable
-using BlazorBootstrap;
 using Microsoft.AspNetCore.Components.Forms;
 using Microsoft.AspNetCore.StaticFiles;
 using MongoDB.Driver;
 using Newtonsoft.Json;
-using Syncfusion.Blazor.FileManager;
-using Syncfusion.Blazor.Inputs;
 
-using Syncfusion.EJ2.FileManager.PhysicalFileProvider;
-using Syncfusion.EJ2.Linq;
 using System.Dynamic;
 using System.IO.Compression;
 using System.IO.Hashing;
@@ -16,8 +11,12 @@ using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
+using TelegramDownloader.Models.Persistence;
 using TelegramDownloader.Services;
+using TelegramDownloader.Services.Deletes;
+using TelegramDownloader.Services.Upload;
 using TL;
+using TelegramDownloader.Models.FileSystem;
 
 namespace TelegramDownloader.Data
 {
@@ -225,26 +224,43 @@ namespace TelegramDownloader.Data
     {"xyz", "chemical/x-xyz"},
     {"zip", "application/zip"}
   };
-        public static List<string> refreshChannelList = new List<string>();
+        // Channels with a scan in flight; claiming one is atomic (see tryStartChannelRefresh).
+        private static readonly ChannelRefreshRegistry refreshRegistry = new ChannelRefreshRegistry();
+        /// <summary>Raised after a channel index refresh finishes successfully, with the channel id.</summary>
+        public static event Action<string>? ChannelRefreshed;
+        /// <summary>
+        /// Raised after every channel refresh ends (success, cancel or failure),
+        /// with its result. Unlike <see cref="ChannelRefreshed"/> it also fires
+        /// for canceled and failed scans, so live clients can stop waiting.
+        /// </summary>
+        public static event Action<ChannelRefreshResult>? ChannelRefreshFinished;
 
-        protected PhysicalFileProvider operation = new PhysicalFileProvider();
+        /// <summary>Live progress of every refresh in flight (for the events hub).</summary>
+        public static IReadOnlyList<ChannelRefreshProgressSnapshot> GetRunningRefreshes() => refreshRegistry.Snapshots();
+
         protected ITelegramService _ts { get; set; }
         protected IDbService _db { get; set; }
         protected ILogger<IFileService> _logger { get; set; }
         protected TransactionInfoService _tis { get; set; }
-        protected ToastService _toastService { get; set;  }
         protected ITaskPersistenceService _persistence { get; set; }
-        private static Mutex refreshMutex = new Mutex();
+
+        // User-facing messages: shown by the Blazor ToastNotify and forwarded on /hubs/events.
+        private static readonly NotificationModel notifier = new NotificationModel();
+
+        // The refresh is fire-and-forget, so the outcome is kept here for the
+        // client that started it to read once the scan is done. In memory only:
+        // it is a report on this run, not history worth persisting.
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, ChannelRefreshResult>
+            lastRefreshResults = new System.Collections.Concurrent.ConcurrentDictionary<string, ChannelRefreshResult>();
 
         const int MaxSize = 1024 * 1024 * 1000; // 1GB
 
 
-        public FileService(ITelegramService ts, IDbService db, ILogger<IFileService> logger, TransactionInfoService tis, ToastService toastService, ITaskPersistenceService persistence)
+        public FileService(ITelegramService ts, IDbService db, ILogger<IFileService> logger, TransactionInfoService tis, ITaskPersistenceService persistence)
         {
             _ts = ts;
             _db = db;
             _tis = tis;
-            _toastService = toastService;
             _logger = logger;
             _persistence = persistence;
             createTempFolder();
@@ -304,11 +320,11 @@ namespace TelegramDownloader.Data
             return await _db.getShareFolder(dbName, bsonId);
         }
 
-        public async Task<FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>> SearchAsync(string dbName, string path, string searchText, string? collectionId = null)
+        public async Task<FsListing> SearchAsync(string dbName, string path, string searchText, string? collectionId = null)
         {
-            FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> response = new FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>();
+            FsListing response = new FsListing();
             var files = collectionId == null ? await _db.Search(dbName, path, searchText) : await _db.Search(dbName, path, searchText, collectionName: collectionId);
-            response.Files = files.Select(x => x.toFileManagerContent()).ToList();
+            response.Files = files.Select(x => x.ToFsEntry()).ToList();
             return response;
         }
 
@@ -322,221 +338,85 @@ namespace TelegramDownloader.Data
             return null;
         }
 
-        public async Task<FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>> itemDeleteAsync(string dbName, ItemsDeleteEventArgs<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> args)
+        /// <summary>
+        /// Deletes channel index entries (folders recursively) and, in channels
+        /// where the account may delete messages, the Telegram messages no other
+        /// entry references, in batches. The one implementation behind every
+        /// delete path (Blazor, WebDAV, the v1 endpoints and the background
+        /// delete operations): see <see cref="ChannelDeleteRunner"/>.
+        /// </summary>
+        /// <param name="dbName">Channel id (index database).</param>
+        /// <param name="entries">Selected entries.</param>
+        /// <param name="progress">Live counters; a throwaway one when null.</param>
+        /// <param name="cancellationToken">Stops between batches (what was deleted stays deleted).</param>
+        public async Task<ChannelDeleteResult> DeleteChannelEntriesAsync(string dbName, IReadOnlyList<BsonFileManagerModel> entries,
+            DeleteOperation progress = null, CancellationToken cancellationToken = default)
         {
-            _logger.LogInformation("Deleting items - DbName: {DbName}, Count: {Count}, Path: {Path}",
-                dbName, args.Files.Count(), args.Path);
-            string[] names = args.Files.Select(x => x.Name).ToArray();
-            bool isMyChannel = _ts.isMyChat(Convert.ToInt64(dbName));
-            // args.Response = await FileManagerService.Delete(args.Path, names, args.Files.ToArray());
-            foreach (Syncfusion.Blazor.FileManager.FileManagerDirectoryContent File in args.Files)
-            {
-                BsonFileManagerModel entry = await _db.getEntry(dbName, File.FilterPath, File.Name);
-                if (entry == null)
-                    throw new Exception($"File {System.IO.Path.Combine(File.FilterPath, File.Name)} not found");
-                if (!entry.IsFile)
-                {
-                    List<BsonFileManagerModel> allChilds = await _db.getAllChildFilesInDirectory(dbName, File.FilterPath + File.Name + "/");
-                    foreach (BsonFileManagerModel child in allChilds)
-                    {
-                        await _db.deleteEntry(dbName, child.Id);
-                        if (child.IsFile)
-                        {
-                            if (child.isSplit)
-                            {
-                                foreach (int id in child.ListMessageId)
-                                {
-                                    if (isMyChannel && !await _db.existItemByTelegramId(dbName, id))
-                                        await _ts.deleteFile(dbName, id);
-                                }
-                            }
-                            else
-                            {
-                                if (isMyChannel && child.MessageId.HasValue && !await _db.existItemByTelegramId(dbName, (int)child.MessageId))
-                                    await _ts.deleteFile(dbName, (int)child.MessageId);
-                            }
-                        }
+            _logger.LogInformation("Deleting items - DbName: {DbName}, Count: {Count}", dbName, entries.Count);
+            var runner = new ChannelDeleteRunner(new ChannelDeleteBackend(_db, _ts, dbName), _logger);
+            progress ??= new DeleteOperation(DeleteKinds.Channel, dbName, null, entries.Count);
+            return await runner.RunAsync(entries, ChannelDeleteBackend.CanDeleteMessages(_ts, dbName), progress, cancellationToken);
+        }
 
-                        //if (item.IsFile)
-                        //    await _db.subBytesToFolder(dbName, item.ParentId, item.Size);
-                    }
-                    await _db.deleteEntry(dbName, entry.Id);
-                    // await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size);
-                }
+        private async Task<BsonFileManagerModel> getEntryOrThrow(string dbName, string filterPath, string name)
+        {
+            BsonFileManagerModel entry = await _db.getEntry(dbName, filterPath, name);
+            if (entry == null)
+                throw new Exception($"File {System.IO.Path.Combine(filterPath ?? "", name ?? "")} not found");
+            return entry;
+        }
 
-                if (entry.IsFile)
-                {
-                    await _db.deleteEntry(dbName, entry.Id);
-                    if (entry.isSplit)
-                    {
-                        foreach (int id in entry.ListMessageId)
-                        {
-                            if (isMyChannel && !await _db.existItemByTelegramId(dbName, id))
-                                await _ts.deleteFile(dbName, id);
-                        }
-                    }
-                    else
-                    {
-                        if (isMyChannel && entry.MessageId.HasValue && !await _db.existItemByTelegramId(dbName, (int)entry.MessageId))
-                            await _ts.deleteFile(dbName, (int)entry.MessageId);
-                    }
-                }
-
-
-
-                await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size);
-            }
-
-            var firstFile = args.Files.FirstOrDefault();
-            if (firstFile != null)
-            {
-                await _db.checkAndSetDirectoryHasChild(dbName, firstFile.ParentId);
-            }
+        public async Task<FsListing> itemDeleteAsync(string dbName, FsDeleteRequest args)
+        {
+            var entries = new List<BsonFileManagerModel>();
+            foreach (FsEntry file in args.Files)
+                entries.Add(await getEntryOrThrow(dbName, file.FilterPath, file.Name));
+            await DeleteChannelEntriesAsync(dbName, entries);
             return await GetFilesPath(dbName, args.Path);
         }
 
+        // Replacing a file on upload: the previous entry and its messages go.
         private async Task itemDeleteAsync(string dbName, string filterPath, string name, string parentId, string path)
         {
-
-            BsonFileManagerModel entry = await _db.getEntry(dbName, filterPath, name);
-            if (entry == null)
-                throw new Exception($"File {System.IO.Path.Combine(filterPath, name)} not found");
-            if (!entry.IsFile)
-            {
-                List<BsonFileManagerModel> allChilds = await _db.getAllChildFilesInDirectory(dbName, filterPath + name + "/");
-                foreach (BsonFileManagerModel child in allChilds)
-                {
-                    await _db.deleteEntry(dbName, child.Id);
-                    if (child.IsFile)
-                    {
-                        if (child.isSplit)
-                        {
-                            foreach (int id in child.ListMessageId)
-                            {
-                                if (!await _db.existItemByTelegramId(dbName, id))
-                                    await _ts.deleteFile(dbName, id);
-                            }
-                        }
-                        else if (child.MessageId.HasValue)
-                        {
-                            if (!await _db.existItemByTelegramId(dbName, (int)child.MessageId))
-                                await _ts.deleteFile(dbName, (int)child.MessageId);
-                        }
-                    }
-
-                    //if (item.IsFile)
-                    //    await _db.subBytesToFolder(dbName, item.ParentId, item.Size);
-                }
-                await _db.deleteEntry(dbName, entry.Id);
-                // await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size);
-            }
-
-            if (entry.IsFile)
-            {
-                await _db.deleteEntry(dbName, entry.Id);
-                if (entry.isSplit)
-                {
-                    foreach (int id in entry.ListMessageId)
-                    {
-                        if (!await _db.existItemByTelegramId(dbName, id))
-                            await _ts.deleteFile(dbName, id);
-                    }
-                }
-                else if (entry.MessageId.HasValue)
-                {
-                    if (!await _db.existItemByTelegramId(dbName, (int)entry.MessageId))
-                        await _ts.deleteFile(dbName, (int)entry.MessageId);
-                }
-            }
-
-
-
-            await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size);
-
-            await _db.checkAndSetDirectoryHasChild(dbName, parentId);
+            await DeleteChannelEntriesAsync(dbName, new[] { await getEntryOrThrow(dbName, filterPath, name) });
         }
 
-        public async Task oneItemDeleteAsync(string dbName, Syncfusion.Blazor.FileManager.FileManagerDirectoryContent File)
+        public async Task oneItemDeleteAsync(string dbName, FsEntry File)
         {
-
-            BsonFileManagerModel entry = await _db.getEntry(dbName, File.FilterPath, File.Name);
-            if (entry == null)
-                throw new Exception($"File {System.IO.Path.Combine(File.FilterPath, File.Name)} not found");
-            if (!entry.IsFile)
-            {
-                List<BsonFileManagerModel> allChilds = await _db.getAllChildFilesInDirectory(dbName, File.FilterPath + File.Name + "/");
-                foreach (BsonFileManagerModel child in allChilds)
-                {
-                    if (child.IsFile)
-                    {
-                        if (child.isSplit)
-                        {
-                            foreach (int id in child.ListMessageId)
-                            {
-                                if (!await _db.existItemByTelegramId(dbName, id))
-                                    await _ts.deleteFile(dbName, id);
-                            }
-                        }
-                        else if (child.MessageId.HasValue)
-                        {
-                            if (!await _db.existItemByTelegramId(dbName, (int)child.MessageId))
-                                await _ts.deleteFile(dbName, (int)child.MessageId);
-                        }
-                    }
-
-                    await _db.deleteEntry(dbName, child.Id);
-                    //if (item.IsFile)
-                    //    await _db.subBytesToFolder(dbName, item.ParentId, item.Size);
-                }
-                await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size);
-            }
-            if (entry.IsFile)
-                if (entry.isSplit)
-                {
-                    foreach (int id in entry.ListMessageId)
-                    {
-                        if (!await _db.existItemByTelegramId(dbName, id))
-                            await _ts.deleteFile(dbName, id);
-                    }
-                }
-                else if (entry.MessageId.HasValue)
-                {
-                    if (!await _db.existItemByTelegramId(dbName, (int)entry.MessageId))
-                        await _ts.deleteFile(dbName, (int)entry.MessageId);
-                }
-
-            await _db.deleteEntry(dbName, entry.Id);
-            await _db.subBytesToFolder(dbName, entry.ParentId, entry.Size);
+            BsonFileManagerModel entry = await getEntryOrThrow(dbName, File.FilterPath, File.Name);
+            ChannelDeleteResult result = await DeleteChannelEntriesAsync(dbName, new[] { entry });
+            if (result.FailedRootIds.Count > 0)
+                throw new Exception($"{System.IO.Path.Combine(File.FilterPath ?? "", File.Name ?? "")} could not be deleted completely");
         }
 
-        public async Task<FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>> RenameFileOrFolder(string dbName, Syncfusion.Blazor.FileManager.FileManagerDirectoryContent file, string newName)
+        public async Task<FsListing> RenameFileOrFolder(string dbName, FsEntry file, string newName)
         {
-            FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> fm = new FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>();
-            var lista = new List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>();
-            lista.Add((await _db.updateName(dbName, file.Id, newName, file.Name, file.IsFile, file.FilterPath)).toFileManagerContent());
+            FsListing fm = new FsListing();
+            var lista = new List<FsEntry>();
+            lista.Add((await _db.updateName(dbName, file.Id, newName, file.Name, file.IsFile, file.FilterPath)).ToFsEntry());
             fm.Files = lista;
             return fm;
         }
 
-        public async Task<FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>> CopyItems(string dbName, ItemsMoveEventArgs<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> args)
+        public async Task<FsListing> CopyItems(string dbName, FsMoveRequest args)
         {
             try
             {
-                FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> fm = new FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>();
-                var lista = new List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>();
+                FsListing fm = new FsListing();
+                var lista = new List<FsEntry>();
                 foreach (var item in args.Files)
                 {
                     if (!item.IsFile)
                     {
                         // Pass args.IsCopy to handle internal files correctly (delete originals when moving)
                         var result = await copyAllDirectoryFiles(dbName, item.Id, args.TargetData, args.TargetPath + item.Name + "/", args.IsCopy);
-                        lista.Add(result.toFileManagerContentInCopy());
+                        lista.Add(result.ToFsEntryInCopy());
                         // Note: copyAllDirectoryFiles now handles deletion of the folder when IsCopy=false
                     }
                     else
                     {
                         var result = await _db.copyItem(dbName, item.Id, args.TargetData, args.TargetPath, item.IsFile);
-                        lista.Add(result.toFileManagerContentInCopy());
+                        lista.Add(result.ToFsEntryInCopy());
                         if (!args.IsCopy)
                         {
                             await _db.deleteEntry(dbName, item.Id);
@@ -564,25 +444,25 @@ namespace TelegramDownloader.Data
 
         }
 
-        public async Task<FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>> CopyOrMoveItems(string dbName, Syncfusion.Blazor.FileManager.FileManagerDirectoryContent[] files, string targetPath, Syncfusion.Blazor.FileManager.FileManagerDirectoryContent targetData, bool isCopy)
+        public async Task<FsListing> CopyOrMoveItems(string dbName, FsEntry[] files, string targetPath, FsEntry targetData, bool isCopy)
         {
             try
             {
-                FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> fm = new FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>();
-                var lista = new List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>();
+                FsListing fm = new FsListing();
+                var lista = new List<FsEntry>();
                 foreach (var item in files)
                 {
                     if (!item.IsFile)
                     {
                         // Pass isCopy to handle internal files correctly (delete originals when moving)
                         var result = await copyAllDirectoryFiles(dbName, item.Id, targetData, targetPath + item.Name + "/", isCopy);
-                        lista.Add(result.toFileManagerContentInCopy());
+                        lista.Add(result.ToFsEntryInCopy());
                         // Note: copyAllDirectoryFiles now handles deletion of the folder when isCopy=false
                     }
                     else
                     {
                         var result = await _db.copyItem(dbName, item.Id, targetData, targetPath, item.IsFile);
-                        lista.Add(result.toFileManagerContentInCopy());
+                        lista.Add(result.ToFsEntryInCopy());
                         if (!isCopy)
                         {
                             await _db.deleteEntry(dbName, item.Id);
@@ -608,7 +488,7 @@ namespace TelegramDownloader.Data
             }
         }
 
-        private async Task<BsonFileManagerModel> copyAllDirectoryFiles(string dbName, string idfolder, Syncfusion.Blazor.FileManager.FileManagerDirectoryContent target, string targetPath, bool isCopy = true)
+        private async Task<BsonFileManagerModel> copyAllDirectoryFiles(string dbName, string idfolder, FsEntry target, string targetPath, bool isCopy = true)
         {
             var result = await _db.copyItem(dbName, idfolder, target, targetPath, false);
             var files = await _db.getAllFilesInDirectoryById(dbName, idfolder);
@@ -617,7 +497,7 @@ namespace TelegramDownloader.Data
             {
                 if (file.IsFile)
                 {
-                    await _db.copyItem(dbName, file.Id, result.toFileManagerContent(), targetPath, file.IsFile);
+                    await _db.copyItem(dbName, file.Id, result.ToFsEntry(), targetPath, file.IsFile);
                     if (!isCopy)
                     {
                         await _db.deleteEntry(dbName, file.Id);
@@ -626,7 +506,7 @@ namespace TelegramDownloader.Data
                 else
                 {
                     // Pass isCopy to recursive call to handle nested folders correctly
-                    await copyAllDirectoryFiles(dbName, file.Id, result.toFileManagerContent(), targetPath + file.Name + "/", isCopy);
+                    await copyAllDirectoryFiles(dbName, file.Id, result.ToFsEntry(), targetPath + file.Name + "/", isCopy);
                     // Note: recursive call handles deletion when isCopy=false, no need to delete here
                 }
             }
@@ -752,12 +632,12 @@ namespace TelegramDownloader.Data
 
         }
 
-        public virtual async Task downloadFile(string dbName, List<FileManagerDirectoryContent> files, string targetPath, string? collectionId = null, string? channelId = null)
+        public virtual async Task downloadFile(string dbName, List<FsEntry> files, string targetPath, string? collectionId = null, string? channelId = null)
         {
             NotificationModel nm = new NotificationModel();
             try
             {
-                foreach(FileManagerDirectoryContent file in  files)
+                foreach(FsEntry file in  files)
                 {
                     _logger.LogInformation($"Download files to {targetPath} :: {file.Name}");
                 }
@@ -780,7 +660,7 @@ namespace TelegramDownloader.Data
                         var filesInDir = collectionId == null ? await _db.getAllFilesInDirectoryPath(dbName, itemFile.FilterPath == "" ? "/" : itemFile.FilterPath + itemFile.Name + "/") : await _db.getAllFilesInDirectoryPath(dbName, itemFile.FilterPath == "" ?  "/" : itemFile.FilterPath + itemFile.Name + "/", collectionId);
                         if (filesInDir.Count() > 0)
                         {
-                            await downloadFile(dbName, filesInDir.Select(x => x.toFileManagerContent()).ToList(), System.IO.Path.Combine(currentTargetPath, itemFile.Name).Replace("\\", "/"), collectionId, channelId);
+                            await downloadFile(dbName, filesInDir.Select(x => x.ToFsEntry()).ToList(), System.IO.Path.Combine(currentTargetPath, itemFile.Name).Replace("\\", "/"), collectionId, channelId);
                         }
 
                     }
@@ -814,7 +694,7 @@ namespace TelegramDownloader.Data
 
         }
 
-        public virtual async Task downloadSplitFiles(FileManagerDirectoryContent itemFile, BsonFileManagerModel file, string currentFilePath, string dbName)
+        public virtual async Task downloadSplitFiles(FsEntry itemFile, BsonFileManagerModel file, string currentFilePath, string dbName)
         {
             int i = 1;
             List<string> splitPaths = new List<string>();
@@ -1017,14 +897,14 @@ namespace TelegramDownloader.Data
                     try
                     {
                         await _ts.joinChatInvitationHash(sfm.invitation.invitationHash);
-                        _toastService.Notify(new(ToastType.Success, "Join chat", $"Joined to chat"));
+                        notifier.sendEvent(FileServiceNotifications.JoinedChat());
                     }
                     catch (Exception ex)
                     {
-                        _toastService.Notify(new(ToastType.Danger, $"Error: {ex.Message}."));
+                        notifier.sendEvent(FileServiceNotifications.JoinChatFailed(ex));
                     }
                 else
-                    _toastService.Notify(new(ToastType.Info, "You were already joined the chat"));
+                    notifier.sendEvent(FileServiceNotifications.AlreadyJoinedChat());
                     
                 BsonSharedInfoModel bsi = new BsonSharedInfoModel();
                 bsi.ChannelId = sfm.id;
@@ -1071,17 +951,17 @@ namespace TelegramDownloader.Data
             return default(T);
         }
 
-        public async Task<List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>> createFolder(string dbName, FolderCreateEventArgs<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> args)
+        public async Task<List<FsEntry>> createFolder(string dbName, FsCreateFolderRequest args)
         {
-            var result = (await _db.createEntry(dbName, await _db.toBasonFile(args.Path, args.FolderName, args.ParentFolder))).Select(x => x.toFileManagerContent()).ToList();
+            var result = (await _db.createEntry(dbName, await _db.toBasonFile(args.Path, args.FolderName, args.ParentFolder))).Select(x => x.ToFsEntry()).ToList();
             if (!string.IsNullOrEmpty(args.ParentFolder?.Id))
                 await _db.setDirectoryHasChild(dbName, args.ParentFolder.Id);
             return result;
         }
 
-        public async Task<List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>> createFolder(string dbName, string path, string folderName, Syncfusion.Blazor.FileManager.FileManagerDirectoryContent? parentFolder)
+        public async Task<List<FsEntry>> createFolder(string dbName, string path, string folderName, FsEntry? parentFolder)
         {
-            var result = (await _db.createEntry(dbName, await _db.toBasonFile(path, folderName, parentFolder))).Select(x => x.toFileManagerContent()).ToList();
+            var result = (await _db.createEntry(dbName, await _db.toBasonFile(path, folderName, parentFolder))).Select(x => x.ToFsEntry()).ToList();
             if (!string.IsNullOrEmpty(parentFolder?.Id))
                 await _db.setDirectoryHasChild(dbName, parentFolder.Id);
             return result;
@@ -1095,7 +975,7 @@ namespace TelegramDownloader.Data
                 throw new Exception($"Channel {id} does not exist");
         }
 
-        //public async Task UploadFileFromServer(string dbName, string currentPath, string filePath) // ItemsUploadedEventArgs<FileManagerDirectoryContent> args)
+        //public async Task UploadFileFromServer(string dbName, string currentPath, string filePath) // ItemsUploadedEventArgs<FsEntry> args)
         //{
         //    // string currentPath = args.Path;
         //    try
@@ -1194,7 +1074,7 @@ namespace TelegramDownloader.Data
         //    }
         //}
 
-        public async Task AddUploadFileFromServer(string dbName, string currentPath, List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files, InfoDownloadTaksModel idt = null) // ItemsUploadedEventArgs<FileManagerDirectoryContent> args)
+        public async Task<string> AddUploadFileFromServer(string dbName, string currentPath, List<FsEntry> files, InfoDownloadTaksModel idt = null) // ItemsUploadedEventArgs<FsEntry> args)
         {
             _logger.LogInformation("Adding upload task from server - DbName: {DbName}, Path: {Path}, FilesCount: {Count}",
                 dbName, currentPath, files.Count);
@@ -1211,31 +1091,13 @@ namespace TelegramDownloader.Data
             idt.executedSize = 0;
             idt.isUpload = true;
             idt.files = files;
-            
-            foreach (var file in files)
-            {
-                var filePath = file.IsFile ? file.FilterPath.Replace("\\", "/") + file.Name : file.FilterPath.Replace("\\", "/") + file.Name + "/";
-                string currentFilePath = System.IO.Path.Combine(LOCALDIR, filePath[0] == '/' ? filePath.Substring(1) : filePath).Replace("\\", "/");
 
-                var fileInfo = new System.IO.FileInfo(currentFilePath);
-                if (!file.IsFile)
-                {
-                    if (file.Name == "@eaDir") continue;
-                    var allFiles = new DirectoryInfo(currentFilePath).GetFiles("*.*", SearchOption.AllDirectories).Where(x => !x.Attributes.HasFlag(FileAttributes.Hidden) && !x.Attributes.HasFlag(FileAttributes.Directory) && !x.FullName.Contains("@eaDir") && x.Length > 0);
-                    idt.total += allFiles.Count();
-                    idt.totalSize += allFiles.Sum(x => x.Length);
-                }
-                else
-                {
-                    if (file.Size > 0)
-                    {
-                        idt.total++;
-                        idt.totalSize += fileInfo.Length;
-                    }
-                    
-                }
-
-            }
+            // Totals need a walk of every selected folder. Run it off the caller's
+            // thread (the Blazor modal fires this without awaiting, so the walk used
+            // to freeze the circuit) and read each tree once.
+            var (total, totalSize) = await Task.Run(() => CountUploadTotals(files));
+            idt.total += total;
+            idt.totalSize += totalSize;
             idt.callbacks = new Callbacks();
             idt.callbacks.callback = async () => await UploadFileFromServer(dbName, currentPath, files, idt);
 
@@ -1252,6 +1114,117 @@ namespace TelegramDownloader.Data
 
             _tis.addToInfoDownloadTaskList(idt);
             _tis.CheckPendingUploadInfoTasks();
+            return idt._internalId;
+        }
+
+        private static (int total, long totalSize) CountUploadTotals(List<FsEntry> files)
+        {
+            int total = 0;
+            long totalSize = 0;
+            foreach (var file in files)
+            {
+                var filePath = file.IsFile ? file.FilterPath.Replace("\\", "/") + file.Name : file.FilterPath.Replace("\\", "/") + file.Name + "/";
+                string currentFilePath = System.IO.Path.Combine(LOCALDIR, filePath[0] == '/' ? filePath.Substring(1) : filePath).Replace("\\", "/");
+
+                if (!file.IsFile)
+                {
+                    if (file.Name == "@eaDir") continue;
+                    var totals = Services.Upload.FolderUploadPlanning.CountUploadableFiles(currentFilePath);
+                    total += totals.Count;
+                    totalSize += totals.Size;
+                }
+                else if (file.Size > 0)
+                {
+                    total++;
+                    totalSize += new System.IO.FileInfo(currentFilePath).Length;
+                }
+            }
+            return (total, totalSize);
+        }
+
+        public async Task<UploadPreviewResult> PreviewUploadFromServer(string dbName, string currentPath, List<FsEntry> files, bool findDuplicates = false, int maxItems = UploadPreviewPlanner.DefaultMaxItems, CancellationToken cancellationToken = default)
+        {
+            ArgumentNullException.ThrowIfNull(currentPath);
+            files ??= new List<FsEntry>();
+            await EnsureChannelIndexes(dbName);
+
+            // Same index snapshot, local listing and path keys as UploadFileFromServer.
+            var source = new UploadPlanSource
+            {
+                LoadDestinationChildren = async (path, ct) => await _db.getDirectChildrenByFilePathPrefix(dbName, path),
+                ListLocalFolder = ListLocalFolderForUpload,
+                LocalFileLength = relative =>
+                {
+                    var info = new System.IO.FileInfo(LocalAbsolutePath(relative));
+                    return info.Exists ? info.Length : null;
+                }
+            };
+            var toUpload = new List<UploadPreviewItem>();
+            // Off the caller's thread: the walk touches the disk (Blazor circuit).
+            var result = await Task.Run(() => UploadPreviewPlanner.PlanAsync(currentPath, files, source, maxItems, toUpload, cancellationToken), cancellationToken);
+
+            // The upload looks the destination up the same way; when it is missing
+            // the entries are attached to the root folder.
+            result.TargetFolderExists = await _db.getParentDirectoryByPath(dbName, currentPath) != null;
+
+            if (findDuplicates)
+                await FindUploadDuplicates(dbName, result, toUpload, cancellationToken);
+            return result;
+        }
+
+        /// <summary>
+        /// Duplicate detection of the upload preview. Only local files whose size
+        /// equals the size of a channel file with a stored XXHash can match, so
+        /// only those are read and hashed (same stored format as CheckHash).
+        /// </summary>
+        private async Task FindUploadDuplicates(string dbName, UploadPreviewResult result, List<UploadPreviewItem> toUpload, CancellationToken cancellationToken)
+        {
+            result.DuplicateCheck = true;
+            var hashedSizes = await _db.GetHashedFileSizes(dbName, cancellationToken);
+            if (hashedSizes.Count == 0)
+                return;
+
+            var localHashes = new List<(UploadPreviewItem Item, string Hash)>();
+            foreach (var item in toUpload)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!hashedSizes.Contains(item.Size))
+                    continue;
+                var absolute = LocalAbsolutePath(item.LocalPath);
+                if (!File.Exists(absolute))
+                    continue;
+                var hash = await StoredXxHash.ComputeFileAsync(absolute, cancellationToken);
+                result.HashedFiles++;
+                result.HashedBytes += item.Size;
+                localHashes.Add((item, hash));
+            }
+            if (localHashes.Count == 0)
+                return;
+
+            var byHash = (await _db.GetFilesByXxHashes(dbName, localHashes.Select(x => x.Hash), cancellationToken))
+                .GroupBy(x => x.XXHash, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.Ordinal);
+
+            foreach (var (item, hash) in localHashes)
+            {
+                if (!byHash.TryGetValue(hash, out var sameHash))
+                    continue;
+                // "Elsewhere": the entry this upload replaces does not count.
+                var matches = sameHash
+                    .Where(m => m.Size == item.Size && m.FilePath != item.TargetPath)
+                    .Select(m => new UploadPreviewDuplicateMatch { Id = m.Id, FilePath = m.FilePath, Size = m.Size })
+                    .ToList();
+                if (matches.Count == 0)
+                    continue;
+                result.Duplicates.Add(new UploadPreviewDuplicate
+                {
+                    LocalPath = item.LocalPath,
+                    TargetPath = item.TargetPath,
+                    Size = item.Size,
+                    XxHash = hash,
+                    Matches = matches
+                });
+            }
         }
 
         /// <summary>
@@ -1297,13 +1270,21 @@ namespace TelegramDownloader.Data
         /// </summary>
         private static string BuildStrmUrl(string host, string dbName, BsonFileManagerModel file)
         {
+            // Media servers (Emby, Kodi...) play these URLs without any session:
+            // when an API key is configured it goes in the URL, so the files keep
+            // playing once a web password protects the legacy endpoints.
+            var apiKey = TelegramDownloader.Middleware.WebAccessMiddleware.ConfiguredApiKey();
+            var keyQuery = string.IsNullOrEmpty(apiKey) ? string.Empty : "apiKey=" + Uri.EscapeDataString(apiKey);
+
             StreamingMode mode = GeneralConfigStatic.config.GetEffectiveStreamingMode();
             if (mode == StreamingMode.Preload || HelperService.bytesToMegaBytes(file.Size) < GeneralConfigStatic.config.MaxPreloadFileSizeInMb)
             {
-                return Path.Combine(host, "api/file/GetFileByTfmId", Uri.EscapeDataString(file.Name)).Replace("\\", "/") + $"?idChannel={dbName}&idFile={file.Id}";
+                return Path.Combine(host, "api/file/GetFileByTfmId", Uri.EscapeDataString(file.Name)).Replace("\\", "/") + $"?idChannel={dbName}&idFile={file.Id}"
+                    + (keyQuery.Length > 0 ? "&" + keyQuery : string.Empty);
             }
             string endpoint = mode == StreamingMode.ProgressiveCache ? "GetFileStreamCached" : "GetFileStream";
-            return Path.Combine(host, "api/file", endpoint, dbName, file.Id, "file" + file.Type).Replace("\\", "/");
+            return Path.Combine(host, "api/file", endpoint, dbName, file.Id, "file" + file.Type).Replace("\\", "/")
+                + (keyQuery.Length > 0 ? "?" + keyQuery : string.Empty);
         }
 
         public async Task<String> CreateStrmFiles(string path, string dbName, string host)
@@ -1406,7 +1387,28 @@ namespace TelegramDownloader.Data
             }
         }
 
-        public async Task UploadFileFromServer(string dbName, string currentPath, List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> files, InfoDownloadTaksModel dm = null) // ItemsUploadedEventArgs<FileManagerDirectoryContent> args)
+        public async Task UploadFileFromServer(string dbName, string currentPath, List<FsEntry> files, InfoDownloadTaksModel dm = null) // ItemsUploadedEventArgs<FsEntry> args)
+        {
+            await EnsureChannelIndexes(dbName);
+            // Each run (first start or retry) gets a fresh view of the destination
+            // index; it is shared by the recursive calls for the subfolders.
+            await UploadFileFromServer(dbName, currentPath, files, dm, new UploadDestinationCache(), isRoot: true);
+        }
+
+        /// <summary>The indexes the upload lookups rely on; never fails the caller.</summary>
+        private async Task EnsureChannelIndexes(string dbName)
+        {
+            try
+            {
+                await _db.EnsureIndexes(dbName);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not ensure the indexes of channel {DbName}", dbName);
+            }
+        }
+
+        private async Task UploadFileFromServer(string dbName, string currentPath, List<FsEntry> files, InfoDownloadTaksModel dm, UploadDestinationCache cache, bool isRoot)
         {
             _logger.LogInformation("Starting upload from server - DbName: {DbName}, Path: {Path}, FilesCount: {Count}",
                 dbName, currentPath, files.Count);
@@ -1416,7 +1418,15 @@ namespace TelegramDownloader.Data
 
             try
             {
-                nm.sendEvent(new Notification($"Uploading files from folder {currentPath} to Telegram", "Telegram Upload", NotificationTypes.Info));
+                // One toast for the whole batch, not one per subfolder.
+                if (isRoot)
+                    nm.sendEvent(new Notification($"Uploading files from folder {currentPath} to Telegram", "Telegram Upload", NotificationTypes.Info));
+
+                // Read the existing entries of this destination folder once, instead
+                // of one index lookup per file further down.
+                if (currentPath != null && files.Count > 0 && !cache.IsFolderLoaded(currentPath))
+                    cache.LoadFolder(currentPath, await _db.getDirectChildrenByFilePathPrefix(dbName, currentPath));
+
                 foreach (var file in files)
                 {
 
@@ -1436,19 +1446,34 @@ namespace TelegramDownloader.Data
                             continue;
                         }
                         idt.currentUpload++;
-                        BsonFileManagerModel savedFile = await _db.getFileByPath(dbName, System.IO.Path.Combine(currentPath, file.Name));
-                        if (file.Size == 0 || (savedFile != null && savedFile.DateModified > file.DateModified))
+                        string entryPath = System.IO.Path.Combine(currentPath, file.Name);
+                        // Skip decision from the folder snapshot: empty files and files
+                        // already indexed with a newer date are not sent. This is the
+                        // path that used to cost one MongoDB round trip per file.
+                        if (FolderUploadPlanning.ShouldSkipFile(file.Size, file.DateModified, cache.Get(entryPath)))
+                        {
+                            if (idt != null) idt.AddOne(file.Size);
+                            continue;
+                        };
+                        // About to upload: re-read the entry so the decision and the
+                        // replacement of an older copy use the current index state.
+                        BsonFileManagerModel savedFile = await _db.getFileByPath(dbName, entryPath);
+                        if (savedFile == null)
+                            cache.Remove(entryPath);
+                        else
+                            cache.Set(entryPath, savedFile);
+                        if (FolderUploadPlanning.ShouldSkipFile(file.Size, file.DateModified, savedFile))
                         {
                             if (idt != null) idt.AddOne(file.Size);
                             continue;
                         };
                         model.Size = fileInfo.Length;
-                        if (GeneralConfigStatic.config.CheckHash)
-                        {
-                            _logger.LogInformation($"Calculating HASH of file {currentFilePath}");
-                            model.XXHash = ComputeXXHash64(currentFilePath);
-                            _logger.LogInformation($"Calculated HASH of file {currentFilePath}: {model.XXHash}");
-                        }
+                        // CheckHash: the XXHash is only stored on the new entry, so it is
+                        // computed from the bytes the upload reads instead of a full read
+                        // of the file beforehand (see UploadHashAccumulator).
+                        UploadHashAccumulator? hasher = GeneralConfigStatic.config.CheckHash
+                            ? new UploadHashAccumulator(fileInfo.Length)
+                            : null;
                         TL.Message m = null;
                         long max = (long)MaxSize * (long)TelegramService.splitSizeGB;
                         if (fileInfo.Length > max)
@@ -1472,8 +1497,16 @@ namespace TelegramDownloader.Data
                                     long chunkStart = (long)chunkIndex * chunkSizeBytes;
                                     long chunkLength = Math.Min(chunkSizeBytes, fileInfo.Length - chunkStart);
 
-                                    int attempts = 3;
-                                    int waitForNextAttempt = 1000;
+                                    // Sent by a previous run of this task (resume): reuse it.
+                                    int? sentPart = idt.TryGetUploadedPart(fileInfo, UploadedPartMode.Memory, chunkSizeBytes, chunkIndex);
+                                    if (sentPart != null)
+                                    {
+                                        model.ListMessageId.Add(sentPart.Value);
+                                        continue;
+                                    }
+
+                                    int attempts = UploadRetryPolicy.MaxAttempts;
+                                    bool sent = false;
                                     UploadModel um = new UploadModel();
                                     um.tis = _tis;
                                     um.startDate = DateTime.Now;
@@ -1481,16 +1514,18 @@ namespace TelegramDownloader.Data
                                     um.chatName = _ts.getChatName(Convert.ToInt64(dbName));
                                     idt.addUpload(um);
 
-                                    while (attempts != 0 && um.state != StateTask.Canceled)
+                                    while (UploadRetryPolicy.ShouldAttempt(attempts, um.state))
                                     {
                                         try
                                         {
                                             wt = new WaitingTime();
                                             using (var chunkStream = new Services.Streams.FileChunkStream(currentFilePath, chunkStart, chunkLength))
+                                            using (var uploadStream = WrapForHash(chunkStream, hasher, chunkStart))
                                             {
                                                 string chunkFileName = $"({chunkIndex + 1} of {totalChunks}) - " + file.Name;
-                                                m = await _ts.uploadFile(dbName, chunkStream, chunkFileName, um: um, caption: getCaption(filePath));
+                                                m = await _ts.uploadFile(dbName, uploadStream, chunkFileName, um: um, caption: getCaption(filePath));
                                             }
+                                            sent = true;
                                             attempts = 0;
                                             await wt.Sleep();
                                         }
@@ -1514,13 +1549,22 @@ namespace TelegramDownloader.Data
                                                 um.state = StateTask.Error;
                                                 throw;
                                             }
+                                            var retryDelay = UploadRetryPolicy.GetRetryDelay(e, UploadRetryPolicy.MaxAttempts - attempts, TimeSpan.FromSeconds(1), UploadRetryPolicy.MaxDelay);
                                             _logger.LogWarning("Retrying chunk upload in {DelayMs}ms - FileName: {FileName}, Chunk: {Chunk}",
-                                                waitForNextAttempt, file.Name, chunkIndex + 1);
-                                            await Task.Delay(waitForNextAttempt);
+                                                retryDelay.TotalMilliseconds, file.Name, chunkIndex + 1);
+                                            await Task.Delay(retryDelay);
                                         }
                                     }
 
+                                    if (!sent)
+                                    {
+                                        // Canceled before a successful send: stop here (nothing to index).
+                                        um.SendNotification();
+                                        return;
+                                    }
+
                                     model.ListMessageId.Add(m.ID);
+                                    await idt.RecordUploadedPartAsync(fileInfo, UploadedPartMode.Memory, chunkSizeBytes, chunkIndex, m.ID);
                                 }
 
                                 _logger.LogInformation("Memory-based split upload completed for {FileName} - {TotalChunks} chunks", file.Name, totalChunks);
@@ -1528,13 +1572,24 @@ namespace TelegramDownloader.Data
                             else
                             {
                                 // Disk-based splitting - create temp split files
-                                List<string> filesSplit = await splitFileStreamAsync(folderPath, file.Name, MaxSize);
+                                // The split pass reads the original file once: hash it there.
+                                List<string> filesSplit = await splitFileStreamAsync(folderPath, file.Name, MaxSize, hasher);
                                 int i = 1;
 
                                 foreach (string s in filesSplit)
                                 {
-                                    int attempts = 3;
-                                    int waitForNextAttempt = 1000;
+                                    // Sent by a previous run of this task (resume): reuse it.
+                                    int? sentPart = idt.TryGetUploadedPart(fileInfo, UploadedPartMode.Disk, MaxSize, i - 1);
+                                    if (sentPart != null)
+                                    {
+                                        model.ListMessageId.Add(sentPart.Value);
+                                        File.Delete(s);
+                                        i++;
+                                        continue;
+                                    }
+
+                                    int attempts = UploadRetryPolicy.MaxAttempts;
+                                    bool sent = false;
                                     UploadModel um = new UploadModel();
                                     um.tis = _tis;
                                     um.startDate = DateTime.Now;
@@ -1542,12 +1597,15 @@ namespace TelegramDownloader.Data
                                     um.chatName = _ts.getChatName(Convert.ToInt64(dbName));
                                     idt.addUpload(um);
 
-                                    while (attempts != 0 || um.state == StateTask.Canceled)
+                                    // Was "attempts != 0 || canceled": after a cancel that landed
+                                    // once the part was already sent, the loop uploaded it again.
+                                    while (UploadRetryPolicy.ShouldAttempt(attempts, um.state))
                                         try
                                         {
                                             wt = new WaitingTime();
                                             using (FileStream fs = new FileStream(s, FileMode.Open, FileAccess.Read, FileShare.Read))
                                                 m = await _ts.uploadFile(dbName, fs, $"({i} of {filesSplit.Count}) - " + file.Name, um: um, caption: getCaption(filePath));
+                                            sent = true;
                                             attempts = 0;
                                             await wt.Sleep();
                                         }
@@ -1571,11 +1629,20 @@ namespace TelegramDownloader.Data
                                                 um.state = StateTask.Error;
                                                 throw e;
                                             }
-                                            _logger.LogWarning("Retrying upload in {DelayMs}ms - FileName: {FileName}", waitForNextAttempt, file.Name);
-                                            await Task.Delay(waitForNextAttempt);
+                                            var retryDelay = UploadRetryPolicy.GetRetryDelay(e, UploadRetryPolicy.MaxAttempts - attempts, TimeSpan.FromSeconds(1), UploadRetryPolicy.MaxDelay);
+                                            _logger.LogWarning("Retrying upload in {DelayMs}ms - FileName: {FileName}", retryDelay.TotalMilliseconds, file.Name);
+                                            await Task.Delay(retryDelay);
                                         }
 
+                                    if (!sent)
+                                    {
+                                        // Canceled before a successful send: stop here (nothing to index).
+                                        um.SendNotification();
+                                        return;
+                                    }
+
                                     model.ListMessageId.Add(m.ID);
+                                    await idt.RecordUploadedPartAsync(fileInfo, UploadedPartMode.Disk, MaxSize, i - 1, m.ID);
                                     File.Delete(s);
                                     i++;
                                 }
@@ -1585,8 +1652,10 @@ namespace TelegramDownloader.Data
                         else
                         {
 
-                            int attempts = 3;
-                            int waitForNextAttempt = 60000;
+                            // Sent by a previous run of this task but not indexed yet (resume).
+                            int? sentMessage = idt.TryGetUploadedPart(fileInfo, UploadedPartMode.Single, fileInfo.Length, 0);
+                            int attempts = sentMessage != null ? 0 : UploadRetryPolicy.MaxAttempts;
+                            bool sent = sentMessage != null;
                             UploadModel um = new UploadModel();
                             um.tis = _tis;
                             um.path = currentFilePath;
@@ -1594,14 +1663,22 @@ namespace TelegramDownloader.Data
                             // add upload to task list
                             idt.addUpload(um);
                             um.startDate = DateTime.Now;
-                            while (attempts != 0 || um.state == StateTask.Canceled)
+                            if (sentMessage != null)
+                            {
+                                um.name = file.Name;
+                                um.SetState(StateTask.Completed);
+                            }
+                            // Was "attempts != 0 || canceled": after a cancel that landed once
+                            // the file was already sent, the loop uploaded it again.
+                            while (UploadRetryPolicy.ShouldAttempt(attempts, um.state))
                                 try
                                 {
 
                                     try
                                     {
                                         wt = new WaitingTime();
-                                        using (FileStream ms = new FileStream(System.IO.Path.Combine(currentFilePath), FileMode.Open))
+                                        using (FileStream fileStream = new FileStream(System.IO.Path.Combine(currentFilePath), FileMode.Open))
+                                        using (Stream ms = WrapForHash(fileStream, hasher, 0))
                                             if (ImageExtensions.Any(x => file.Name.ToUpper().EndsWith(x)) && file.Size >= (1024 * 1024 * GeneralConfigStatic.config.MaxImageUploadSizeInMb))
                                             {
                                                 m = await _ts.uploadFile(dbName, ms, file.Name, "application/octet-stream", um, caption: getCaption(filePath));
@@ -1613,7 +1690,8 @@ namespace TelegramDownloader.Data
                                     {
                                         if (new List<string> { "IMAGE", "PHOTO" }.Any(x => ex.Message.Contains(x)))
                                         {
-                                            using (FileStream ms = new FileStream(System.IO.Path.Combine(currentFilePath), FileMode.Open))
+                                            using (FileStream fileStream = new FileStream(System.IO.Path.Combine(currentFilePath), FileMode.Open))
+                                            using (Stream ms = WrapForHash(fileStream, hasher, 0))
                                                 m = await _ts.uploadFile(dbName, ms, file.Name, "application/octet-stream", um, caption: getCaption(filePath));
                                         }
                                         else
@@ -1622,6 +1700,7 @@ namespace TelegramDownloader.Data
                                         }
                                     }
 
+                                    sent = true;
                                     attempts = 0;
                                     await wt.Sleep(); // sleep 1 second to avoid 420 flood_wait_x
                                 }
@@ -1635,7 +1714,6 @@ namespace TelegramDownloader.Data
                                     _logger.LogError(e, "Exception sending file to Telegram - FileName: {FileName}, Attempt: {Attempt}, Remaining: {Remaining}",
                                         file.Name, 4 - attempts, attempts - 1);
                                     attempts--;
-                                    // waitForNextAttempt *= 2;
                                     if (attempts == 0 || um.state == StateTask.Canceled)
                                     {
                                         if (um.state == StateTask.Canceled)
@@ -1647,22 +1725,44 @@ namespace TelegramDownloader.Data
                                         um.state = StateTask.Error;
                                         throw e;
                                     }
-                                    _logger.LogWarning("Retrying upload in {DelayMs}ms - FileName: {FileName}", waitForNextAttempt, file.Name);
-                                    await Task.Delay(waitForNextAttempt);
+                                    // Telegram's FLOOD_WAIT when given, else 5 s, 10 s ... capped (was a fixed 60 s).
+                                    var retryDelay = UploadRetryPolicy.GetRetryDelay(e, UploadRetryPolicy.MaxAttempts - attempts);
+                                    _logger.LogWarning("Retrying upload in {DelayMs}ms - FileName: {FileName}", retryDelay.TotalMilliseconds, file.Name);
+                                    await Task.Delay(retryDelay);
                                 }
 
-                            model.MessageId = m.ID;
+                            if (!sent)
+                            {
+                                // Canceled before a successful send: stop here (nothing to index).
+                                um.SendNotification();
+                                return;
+                            }
+
+                            if (sentMessage == null)
+                                await idt.RecordUploadedPartAsync(fileInfo, UploadedPartMode.Single, fileInfo.Length, 0, m.ID);
+                            model.MessageId = sentMessage ?? m.ID;
                         }
+                        if (hasher != null)
+                            model.XXHash = CompleteUploadHash(hasher, currentFilePath);
                         // delete previous file, when the new modified date file is newest
                         if (savedFile != null)
                         {
                             await itemDeleteAsync(dbName, savedFile.FilterPath, savedFile.Name, savedFile.ParentId, savedFile.FilePath);
+                            cache.Remove(entryPath);
+                            // Deleting may have reset the folder's HasChild flag.
+                            cache.InvalidateParent(currentPath);
                         }
                     }
-                    BsonFileManagerModel parent = await _db.getParentDirectoryByPath(dbName, currentPath);
+                    BsonFileManagerModel parent = currentPath == null ? null : cache.GetParent(currentPath);
                     if (parent == null)
                     {
-                        parent = await _db.getRootFolder(dbName);
+                        parent = await _db.getParentDirectoryByPath(dbName, currentPath);
+                        if (parent == null)
+                        {
+                            parent = await _db.getRootFolder(dbName);
+                        }
+                        if (currentPath != null && parent != null)
+                            cache.SetParent(currentPath, parent);
                     }
                     model.Name = file.IsFile ? fileInfo.Name : file.Name;
                     model.IsFile = file.IsFile;
@@ -1677,22 +1777,43 @@ namespace TelegramDownloader.Data
                     model.FilePath = System.IO.Path.Combine(currentPath, file.IsFile ? fileInfo.Name : file.Name);
                     model.Type = file.IsFile ? (fileInfo.Name.Split(".").LastOrDefault() != null ? "." + fileInfo.Name.Split(".").LastOrDefault() : GetMimeType(fileInfo.Name)) : "folder";
                     // if file or folder does not exist, it will be created
-                    if ((await _db.getFileByPath(dbName, System.IO.Path.Combine(currentPath, file.Name))) == null)
-                        await _db.createEntry(dbName, model);
+                    string modelKey = System.IO.Path.Combine(currentPath, file.Name);
+                    if (cache.Get(modelKey) == null)
+                    {
+                        try
+                        {
+                            await _db.createEntry(dbName, model);
+                            cache.Set(modelKey, model);
+                        }
+                        catch (MongoWriteException ex) when (ex.WriteError?.Category == ServerErrorCategory.DuplicateKey)
+                        {
+                            // Created by someone else since the folder was read: same
+                            // outcome as the old "exists, do not create" check.
+                            var existing = await _db.getFileByPath(dbName, modelKey);
+                            if (existing != null)
+                                cache.Set(modelKey, existing);
+                        }
+                    }
                     if (!parent.HasChild)
+                    {
                         await _db.setDirectoryHasChild(dbName, parent.Id);
+                        parent.HasChild = true;
+                    }
                     if (file.IsFile)
                     {
-                        await _db.addBytesToFolder(dbName, model.ParentId, model.Size);
+                        await _db.addBytesToFolder(dbName, model.ParentId, model.Size, filterIdHint: model.FilterId);
                         if (idt != null) idt.AddOne(file.Size);
                     }
                     else
                     {
-                        await getFilesInDirectory(dbName, model.FilePath + "/", filePath, idt);
+                        await getFilesInDirectory(dbName, model.FilePath + "/", filePath, idt, cache);
                     }
 
 
-                    GC.Collect();
+                    // Only after an actual upload: a full blocking collection for every
+                    // folder of the tree adds latency without freeing upload buffers.
+                    if (file.IsFile)
+                        GC.Collect();
                 }
 
                 if (idt.files == files)
@@ -1700,7 +1821,8 @@ namespace TelegramDownloader.Data
                     idt.markAsCompleted();
                 }
 
-                nm.sendEvent(new Notification($"Upload files completed in {currentPath}", "Telegram Upload", NotificationTypes.Success));
+                if (isRoot)
+                    nm.sendEvent(new Notification($"Upload files completed in {currentPath}", "Telegram Upload", NotificationTypes.Success));
             }
             catch (Exception ex)
             {
@@ -1715,48 +1837,41 @@ namespace TelegramDownloader.Data
             }
         }
 
-        private async Task getFilesInDirectory(string dbName, string currentPath, string path, InfoDownloadTaksModel dm = null)
+        private async Task getFilesInDirectory(string dbName, string currentPath, string path, InfoDownloadTaksModel dm, UploadDestinationCache cache)
         {
-            var operation = new PhysicalFileProvider();
-            operation.RootFolder(Path.Combine(Environment.CurrentDirectory, FileService.RELATIVELOCALDIR));
-            var files = operation.GetFiles(path, false);
-            List<Syncfusion.EJ2.FileManager.Base.FileManagerDirectoryContent> fileContents = new List<Syncfusion.EJ2.FileManager.Base.FileManagerDirectoryContent>();
-            foreach (var f in files.Files)
-            {
-                if (!f.IsFile && f.Name == "@eaDir") continue;
-                fileContents.Add(f);
-            }
-            files.Files = fileContents;
-            await UploadFileFromServer(dbName, currentPath, converToFMD(files.Files), dm);
+            await UploadFileFromServer(dbName, currentPath, ListLocalFolderForUpload(path), dm, cache, isRoot: false);
         }
 
-        private List<FileManagerDirectoryContent> converToFMD(IEnumerable<Syncfusion.EJ2.FileManager.Base.FileManagerDirectoryContent> liste2j)
-        {
-            List<FileManagerDirectoryContent> files = new List<FileManagerDirectoryContent>();
-            foreach (var e2j in liste2j)
-            {
-                FileManagerDirectoryContent file = new FileManagerDirectoryContent();
+        /// <summary>
+        /// Content of a local folder (path relative to the local root) as the
+        /// folder upload walks it: hidden items left out, Synology
+        /// <c>@eaDir</c> folders skipped. Shared by the upload and its preview.
+        /// </summary>
+        private List<FsEntry> ListLocalFolderForUpload(string path)
+            => LocalFolderLister.ListForUpload(Path.Combine(Environment.CurrentDirectory, FileService.RELATIVELOCALDIR), path);
 
-                file.Action = e2j.Action;
-                file.Name = e2j.Name;
-                file.Path = e2j.Path;
-                file.FilterPath = e2j.FilterPath;
-                file.Path = e2j.Path;
-                file.TargetPath = e2j.TargetPath;
-                file.HasChild = e2j.HasChild;
-                file.CaseSensitive = e2j.CaseSensitive;
-                file.DateCreated = e2j.DateCreated;
-                file.DateModified = e2j.DateModified;
-                file.FilterId = e2j.FilterId;
-                file.IsFile = e2j.IsFile;
-                file.NewName = e2j.NewName;
-                file.ParentId = e2j.ParentId;
-                file.PreviousName = e2j.PreviousName;
-                file.ShowHiddenItems = e2j.ShowHiddenItems;
-                file.Size = e2j.Size;
-                files.Add(file);
-            }
-            return files;
+        /// <summary>Absolute path of an item given relative to the local root (forward slashes).</summary>
+        private static string LocalAbsolutePath(string relativePath)
+            => System.IO.Path.Combine(LOCALDIR, relativePath.Length > 0 && relativePath[0] == '/' ? relativePath.Substring(1) : relativePath).Replace("\\", "/");
+
+        /// <summary>Wraps an upload stream so the bytes it reads feed the file hash.</summary>
+        private static Stream WrapForHash(Stream inner, UploadHashAccumulator? hasher, long baseOffset)
+            => hasher == null ? inner : new HashingReadStream(inner, hasher, baseOffset, leaveOpen: true);
+
+        /// <summary>
+        /// Finishes the hash of an uploaded file. Normally every byte was already
+        /// hashed while it was sent; anything the upload did not read in order is
+        /// read from the file here, so the value always equals the old two-pass hash.
+        /// </summary>
+        private string CompleteUploadHash(UploadHashAccumulator hasher, string filePath)
+        {
+            using var source = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            var hash = hasher.Complete(source);
+            if (hasher.CatchUpBytes > 0)
+                _logger.LogInformation("Calculated HASH of file {FilePath}: {Hash} ({CatchUp} bytes read after the upload)", filePath, hash, hasher.CatchUpBytes);
+            else
+                _logger.LogInformation("Calculated HASH of file {FilePath} while uploading: {Hash}", filePath, hash);
+            return hash;
         }
 
         private string GetMimeType(string fileName)
@@ -1771,117 +1886,140 @@ namespace TelegramDownloader.Data
 
         public async Task refreshChannelFIles(string channelId, bool force = false, RefreshChannelOptions? refreshOptions = null)
         {
-            int totalNewMessages = 0;
-            refreshMutex.WaitOne();
-            refreshChannelList.Add(channelId);
-            refreshMutex.ReleaseMutex();
-            DateTime init = DateTime.Now;
-            List<int> presentIds = await _db.getAllIdsFromChannel(channelId);
-            _logger.LogInformation($"Refresh channel with id: {channelId}");
-
-            // Use default options if none provided
-            refreshOptions ??= new RefreshChannelOptions();
-
-            List<TelegramChatDocuments> telegramChatDocuments = (await _ts.searchAllChannelFiles(Convert.ToInt64(channelId), (presentIds.Count > 0 && !force) ? presentIds.Max() : 0, refreshOptions)).Where(x => x.name != null).ToList();
-            _logger.LogInformation($"Get the telegram files in: {(DateTime.Now - init).TotalSeconds} seconds  for channel id:{channelId}");
-            List<string> fileNames = await _db.getAllFileNamesFromChannel(channelId);
-            var nameCount = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-
-            foreach (string name in fileNames)
+            if (!refreshRegistry.TryBegin(channelId, out ChannelRefreshProgress progress))
             {
-                nameCount[name] = 1;
+                _logger.LogInformation("Refresh of channel {ChannelId} skipped: another refresh is already running", channelId);
+                notifier.sendEvent(FileServiceNotifications.RefreshAlreadyRunning());
+                return;
             }
+            await runChannelRefresh(channelId, force, refreshOptions, progress);
+        }
 
-            foreach (var doc in telegramChatDocuments)
+        public bool tryStartChannelRefresh(string channelId, bool force, RefreshChannelOptions? refreshOptions, out Task refreshTask)
+        {
+            if (!refreshRegistry.TryBegin(channelId, out ChannelRefreshProgress progress))
             {
-                var baseName = doc.name;
-                var name = baseName;
-                int count = 0;
+                refreshTask = Task.CompletedTask;
+                return false;
+            }
+            // Marked before returning, so a status poll right after sees it running.
+            refreshTask = Task.Run(() => runChannelRefresh(channelId, force, refreshOptions, progress));
+            return true;
+        }
 
-                while (nameCount.ContainsKey(name))
+        // The caller must have claimed the channel in refreshRegistry; it is released here.
+        private async Task runChannelRefresh(string channelId, bool force, RefreshChannelOptions? refreshOptions, ChannelRefreshProgress progress)
+        {
+            ChannelRefreshResult? result = null;
+            try
+            {
+                // Use default options if none provided
+                refreshOptions ??= new RefreshChannelOptions();
+                _logger.LogInformation("Refresh channel {ChannelId} ({Types}, force {Force})", channelId, refreshOptions.GetSelectionSummary(), force);
+
+                // Never throws: a failure or a cancel is reported in the result.
+                result = await ChannelRefreshRunner.RunAsync(
+                    channelId,
+                    new ChannelRefreshBackend(channelId, _ts, _db),
+                    refreshOptions.SelectedFilters(),
+                    force,
+                    progress,
+                    _logger,
+                    oneAtATime: refreshOptions.OneTypeAtATime ?? GeneralConfigStatic.config?.RefreshOneTypeAtATime ?? false);
+            }
+            finally
+            {
+                result ??= new ChannelRefreshResult
                 {
-                    count++;
-                    name = $"{baseName}({count})";
-                }
-
-                doc.name = name;
-                nameCount[name] = 1;
-                if (count == 0)
-                    nameCount[baseName] = 1;
+                    ChannelId = channelId,
+                    StartedAt = progress.StartedAt,
+                    FinishedAt = DateTime.Now,
+                    Failed = true
+                };
+                // The result is published before the channel is released, so
+                // a client that sees "not running" can read it right away.
+                lastRefreshResults[channelId] = result;
+                // Without this, a scan that throws would leave the channel
+                // flagged as refreshing forever and a polling client would
+                // never stop waiting. A cancel ends up here too.
+                refreshRegistry.End(channelId, progress);
             }
-            
-            var rootFolder = await _db.getRootFolder(channelId);
-            foreach (TelegramChatDocuments tcd in telegramChatDocuments)
+            _logger.LogInformation("Finish refresh of channel {ChannelId}: {Total} new files added (canceled {Canceled}, failed {Failed})",
+                channelId, result.Total, result.Canceled, result.Failed);
+
+            try
             {
-                if (!presentIds.Contains(tcd.id))
+                ChannelRefreshFinished?.Invoke(result);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "A channel refresh listener failed for {ChannelId}", channelId);
+            }
+
+            // Let the media library pick up the new files (it subscribes at startup)
+            if (result.Total > 0 || (!result.Failed && !result.Canceled))
+            {
+                try
                 {
-                    BsonFileManagerModel model = new BsonFileManagerModel();
-                    model.Size = tcd.fileSize;
-                    model.MessageId = tcd.id;
-                    model.Name = tcd.name;
-                    model.IsFile = true;
-                    model.HasChild = false;
-                    model.DateCreated = tcd.creationDate;
-                    model.DateModified = tcd.modifiedDate;
-                    model.FilterPath = "/";
-                    model.FilterId = rootFolder.Id + "/";
-                    model.ParentId = rootFolder.Id;
-                    model.FilePath = "/" + tcd.name;
-                    model.Type = tcd.extension;
-                    model.isSplit = false;
-                    model.isEncrypted = false;
-                    await _db.createEntry(channelId, model);
-                    totalNewMessages++;
+                    ChannelRefreshed?.Invoke(channelId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "A channel refresh listener failed for {ChannelId}", channelId);
                 }
             }
-            refreshMutex.WaitOne();
-            refreshChannelList.Remove(channelId);
-            refreshMutex.ReleaseMutex();
-            _logger.LogInformation($"Finish Refresh channel with id: {channelId} with {totalNewMessages} new files added.");
 
-            // Fix for CS1739: Removed the invalid 'autoHide' parameter and replaced it with the correct property assignment.
-            ToastMessage tm = new ToastMessage
-            {
-                Type = ToastType.Success,
-                IconName = IconName.CheckCircle,
-                Title = "Refresh channel files",
-                Message = $"Files channel has been refreshed with {totalNewMessages} new files added.",
-                AutoHide = true
-                
-            };
-            _toastService.Notify(tm);
+            notifier.sendEvent(FileServiceNotifications.RefreshFinished(result));
         }
 
         public bool isChannelRefreshing(string channelId)
         {
-            return refreshChannelList.Contains(channelId);
+            return refreshRegistry.IsRunning(channelId);
         }
 
-        public async Task UploadFile(string dbName, string currentPath, UploadFiles file) // ItemsUploadedEventArgs<FileManagerDirectoryContent> args)
+        public ChannelRefreshProgressSnapshot? getChannelRefreshProgress(string channelId)
+        {
+            return refreshRegistry.Get(channelId)?.Snapshot();
+        }
+
+        public bool cancelChannelRefresh(string channelId)
+        {
+            bool requested = refreshRegistry.TryCancel(channelId);
+            if (requested)
+                _logger.LogInformation("Cancellation of the refresh of channel {ChannelId} requested", channelId);
+            return requested;
+        }
+
+        public ChannelRefreshResult? getLastRefreshResult(string channelId)
+        {
+            return lastRefreshResults.TryGetValue(channelId, out ChannelRefreshResult? result) ? result : null;
+        }
+
+        public async Task UploadFile(string dbName, string currentPath, IBrowserFile file)
         {
             _logger.LogInformation("UploadFile started - DbName: {DbName}, CurrentPath: {CurrentPath}, FileName: {FileName}, FileSize: {FileSize} bytes ({FileSizeMB:F2} MB)",
-                dbName, currentPath, file.File.Name, file.File.Size, file.File.Size / 1024.0 / 1024.0);
+                dbName, currentPath, file.Name, file.Size, file.Size / 1024.0 / 1024.0);
 
             try
             {
                 string currentFilePath = System.IO.Path.Combine(TEMPDIR, dbName + currentPath);
                 _logger.LogDebug("Saving file to temp path: {TempPath}", currentFilePath);
 
-                await SaveToFile(file.File, currentFilePath);
+                await SaveToFile(file, currentFilePath);
                 _logger.LogDebug("File saved to temp successfully");
 
                 BsonFileManagerModel model = new BsonFileManagerModel();
-                model.Size = file.File.Size;
+                model.Size = file.Size;
                 TL.Message m = null;
 
-                if (file.File.Size > MaxSize)
+                if (file.Size > MaxSize)
                 {
                     _logger.LogInformation("File exceeds MaxSize ({MaxSizeMB:F2} MB), splitting file into chunks", MaxSize / 1024.0 / 1024.0);
 
-                    List<string> files = await splitFileStreamAsync(currentFilePath, file.File.Name, MaxSize);
+                    List<string> files = await splitFileStreamAsync(currentFilePath, file.Name, MaxSize);
                     _logger.LogDebug("File split into {ChunkCount} chunks", files.Count);
 
-                    File.Delete(System.IO.Path.Combine(currentFilePath, file.File.Name));
+                    File.Delete(System.IO.Path.Combine(currentFilePath, file.Name));
                     int i = 1;
                     model.ListMessageId = new List<int>();
                     model.isSplit = true;
@@ -1891,7 +2029,7 @@ namespace TelegramDownloader.Data
                         _logger.LogDebug("Uploading chunk {ChunkNumber} of {TotalChunks}: {ChunkPath}", i, files.Count, s);
 
                         using (FileStream fs = new FileStream(s, FileMode.Open, FileAccess.Read, FileShare.Read))
-                            m = await _ts.uploadFile(dbName, fs, $"({i} of {files.Count}) - " + file.File.Name, caption: getCaption(currentPath));
+                            m = await _ts.uploadFile(dbName, fs, $"({i} of {files.Count}) - " + file.Name, caption: getCaption(currentPath));
 
                         model.ListMessageId.Add(m.ID);
                         _logger.LogDebug("Chunk {ChunkNumber} uploaded successfully, MessageId: {MessageId}", i, m.ID);
@@ -1906,9 +2044,9 @@ namespace TelegramDownloader.Data
                 {
                     _logger.LogDebug("Uploading single file to Telegram");
 
-                    using (FileStream ms = new FileStream(System.IO.Path.Combine(currentFilePath, file.File.Name), FileMode.Open))
+                    using (FileStream ms = new FileStream(System.IO.Path.Combine(currentFilePath, file.Name), FileMode.Open))
                     {
-                        m = await _ts.uploadFile(dbName, ms, file.File.Name, caption: getCaption(currentPath));
+                        m = await _ts.uploadFile(dbName, ms, file.Name, caption: getCaption(currentPath));
                     }
                     model.MessageId = m.ID;
 
@@ -1922,7 +2060,7 @@ namespace TelegramDownloader.Data
                 }
                 _logger.LogDebug("Parent directory found - ParentId: {ParentId}, ParentName: {ParentName}", parent?.Id, parent?.Name);
 
-                model.Name = file.File.Name;
+                model.Name = file.Name;
                 model.IsFile = true;
                 model.HasChild = false;
                 model.DateCreated = DateTime.Now;
@@ -1932,26 +2070,26 @@ namespace TelegramDownloader.Data
                     : string.Concat(parent.FilterPath, parent.Name, "/");
                 model.FilterId = string.Concat(parent.FilterId, parent.Id.ToString(), "/");
                 model.ParentId = parent.Id;
-                model.FilePath = System.IO.Path.Combine(currentPath, file.File.Name);
-                model.Type = file.File.Name.Split(".").LastOrDefault() != null ? "." + file.File.Name.Split(".").LastOrDefault() : file.File.ContentType;
+                model.FilePath = System.IO.Path.Combine(currentPath, file.Name);
+                model.Type = file.Name.Split(".").LastOrDefault() != null ? "." + file.Name.Split(".").LastOrDefault() : file.ContentType;
 
                 await _db.createEntry(dbName, model);
                 _logger.LogDebug("Database entry created for file");
 
-                await _db.addBytesToFolder(dbName, model.ParentId, model.Size);
+                await _db.addBytesToFolder(dbName, model.ParentId, model.Size, filterIdHint: model.FilterId);
                 _logger.LogDebug("Folder size updated");
 
                 GC.Collect();
 
                 _logger.LogInformation("UploadFile completed successfully - FileName: {FileName}, IsSplit: {IsSplit}, MessageId: {MessageId}",
-                    file.File.Name, model.isSplit, model.isSplit ? string.Join(",", model.ListMessageId) : model.MessageId.ToString());
+                    file.Name, model.isSplit, model.isSplit ? string.Join(",", model.ListMessageId) : model.MessageId.ToString());
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error on uploadFile - FileName: {FileName}, CurrentPath: {CurrentPath}, DbName: {DbName}, Message: {Message}",
-                    file.File.Name, currentPath, dbName, ex.Message);
+                    file.Name, currentPath, dbName, ex.Message);
                 NotificationModel nm = new NotificationModel();
-                nm.sendEvent(new Notification($"Error on UploadFile: {file.File.Name}", "Error", NotificationTypes.Error));
+                nm.sendEvent(new Notification($"Error on UploadFile: {file.Name}", "Error", NotificationTypes.Error));
                 throw ex;
             }
         }
@@ -1971,17 +2109,32 @@ namespace TelegramDownloader.Data
             return node;
         }
 
+        /// <summary>
+        /// Media types the original table lacks; browsers need a real type to
+        /// play these (Safari refuses <c>application/octet-stream</c> media).
+        /// </summary>
+        private static readonly Dictionary<string, string> ExtraMimeTypes = new(StringComparer.OrdinalIgnoreCase)
+        {
+            { "webm", "video/webm" }, { "weba", "audio/webm" }, { "ogv", "video/ogg" }, { "oga", "audio/ogg" },
+            { "opus", "audio/ogg" }, { "aac", "audio/aac" }, { "3gp", "video/3gpp" }, { "ts", "video/mp2t" },
+            { "wmv", "video/x-ms-wmv" }, { "avif", "image/avif" }, { "heic", "image/heic" },
+            { "json", "application/json" }, { "srt", "text/plain" }, { "vtt", "text/vtt" }
+        };
+
+        /// <summary>
+        /// Media type for an extension (<c>mp4</c>, <c>.mp4</c>, <c>MP4</c>) or a
+        /// file name (<c>Holiday.MP4</c>); <c>application/octet-stream</c> when unknown.
+        /// </summary>
         public static string getMimeType(string extension)
         {
-            try
-            {
-                return MIMETypesDictionary[extension.Replace(".", "")] ?? "application/octet-stream";
-            }
-            catch
-            {
-                return "application/octet-stream";
-            }
-
+            var ext = extension ?? string.Empty;
+            var dot = ext.LastIndexOf('.');
+            if (dot >= 0) ext = ext[(dot + 1)..];
+            ext = ext.Trim().ToLowerInvariant();
+            if (ext.Length == 0) return "application/octet-stream";
+            if (MIMETypesDictionary.TryGetValue(ext, out var mime) && !string.IsNullOrEmpty(mime)) return mime;
+            if (ExtraMimeTypes.TryGetValue(ext, out mime)) return mime;
+            return "application/octet-stream";
         }
 
         private static List<FolderModel> getSubforlders(string path)
@@ -2075,10 +2228,10 @@ namespace TelegramDownloader.Data
             return Data;
         }
 
-        public async Task<FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>> GetFilesPath(string dbName, string path, List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> fileDetails = null, string? collectionName = null)
+        public async Task<FsListing> GetFilesPath(string dbName, string path, List<FsEntry> fileDetails = null, string? collectionName = null)
         {
-            if (fileDetails == null) fileDetails = new List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>();
-            FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> response = new FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>();
+            if (fileDetails == null) fileDetails = new List<FsEntry>();
+            FsListing response = new FsListing();
 
             if (path == "/")
             {
@@ -2090,26 +2243,26 @@ namespace TelegramDownloader.Data
                 if (rootElement == null)
                 {
                     // No root element found, return empty response
-                    response.CWD = new Syncfusion.Blazor.FileManager.FileManagerDirectoryContent
+                    response.CWD = new FsEntry
                     {
                         Name = "Root",
                         FilterPath = "/",
                         IsFile = false
                     };
-                    response.Files = new List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>();
+                    response.Files = new List<FsEntry>();
                     return response;
                 }
 
                 string ParentId = rootElement.Id;
-                response.CWD = rootElement.toFileManagerContent();
+                response.CWD = rootElement.ToFsEntry();
                 response.Files = Data
-                    .Where(x => x.ParentId == ParentId).Select(x => x.toFileManagerContent()).ToList();
+                    .Where(x => x.ParentId == ParentId).Select(x => x.ToFsEntry()).ToList();
             }
             else
             {
                 List<BsonFileManagerModel> Data = collectionName == null ? await _db.getAllFilesInDirectoryPath2(dbName, path) : await _db.getAllFilesInDirectoryPath2(dbName, path, collectionName);
 
-                Syncfusion.Blazor.FileManager.FileManagerDirectoryContent? childItem = null;
+                FsEntry? childItem = null;
 
                 if (fileDetails.Count > 0 && fileDetails[0] != null)
                 {
@@ -2145,18 +2298,18 @@ namespace TelegramDownloader.Data
 
                     if (matchingFolder != null)
                     {
-                        childItem = matchingFolder.toFileManagerContent();
+                        childItem = matchingFolder.ToFsEntry();
                     }
                     else
                     {
                         // If no matching folder found, return empty response
-                        response.CWD = new Syncfusion.Blazor.FileManager.FileManagerDirectoryContent
+                        response.CWD = new FsEntry
                         {
                             Name = path.Split('/').LastOrDefault(s => !string.IsNullOrEmpty(s)) ?? "Unknown",
                             FilterPath = path,
                             IsFile = false
                         };
-                        response.Files = new List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>();
+                        response.Files = new List<FsEntry>();
                         return response;
                     }
                 }
@@ -2175,7 +2328,7 @@ namespace TelegramDownloader.Data
                         : await _db.getFilesByParentId(dbName, childItem.Id, collectionName);
                 }
 
-                response.Files = files.Select(x => x.toFileManagerContent()).ToList();
+                response.Files = files.Select(x => x.ToFsEntry()).ToList();
             }
             await Task.Yield();
             return response;
@@ -2210,26 +2363,6 @@ namespace TelegramDownloader.Data
             }
         }
 
-        private string ComputeXXHash64(string filePath)
-        {
-            XxHashModel _xxHash = new XxHashModel();
-            _xxHash.path = filePath;
-            var hashAlgorithm = new XxHash64();
-            var buffer = new Span<byte>(new byte[512]);
-            using (Stream entryStream = File.OpenRead(filePath))
-            {
-                _tis.addToUploadList(_xxHash);
-                _xxHash.Init(entryStream.Length, Path.GetFileName(filePath));
-                while (entryStream.Read(buffer) > 0)
-                {
-                    hashAlgorithm.Append(buffer);
-                }
-            }
-
-            return BitConverter.ToString(hashAlgorithm.GetHashAndReset()).Replace("-", string.Empty);
-
-        }
-
         private async Task<List<Stream>> splitFileAsync(Stream s, int size)
         {
             List<Stream> ls = new List<Stream>();
@@ -2252,7 +2385,7 @@ namespace TelegramDownloader.Data
 
         }
 
-        private async Task<List<string>> splitFileStreamAsync(string path, string name, int splitSize)
+        private async Task<List<string>> splitFileStreamAsync(string path, string name, int splitSize, UploadHashAccumulator? hasher = null)
         {
             var originalFileInfo = new System.IO.FileInfo(System.IO.Path.Combine(path, name));
             long originalFileSize = originalFileInfo.Length;
@@ -2309,7 +2442,9 @@ namespace TelegramDownloader.Data
                     while (fs.Position < fs.Length && gb > 0)
                     {
                         int readSize = Convert.ToInt32(Math.Min(splitSize, fs.Length - fs.Position));
+                        long readOffset = fs.Position;
                         int readBytes = await fs.ReadAsync(buffer, 0, readSize);
+                        hasher?.Observe(readOffset, buffer.AsSpan(0, readBytes));
 
                         using (FileStream fsPart = new FileStream(partPath, FileMode.Append))
                             await fsPart.WriteAsync(buffer, 0, readSize);
@@ -2400,7 +2535,7 @@ namespace TelegramDownloader.Data
             _logger.LogInformation("File merge completed - DestName: {DestName}", destName);
         }
 
-        public virtual Task<int> PreloadFilesToTemp(string channelId, List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> items)
+        public virtual Task<int> PreloadFilesToTemp(string channelId, List<FsEntry> items)
         {
             throw new NotImplementedException("PreloadFilesToTemp is implemented in FileServiceV2");
         }

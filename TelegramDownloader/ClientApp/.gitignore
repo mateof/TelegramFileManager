@@ -1,0 +1,14 @@
+# Dependencies and tool output
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+.vite/
+.env.local
+.env.*.local
+
+# The repo-wide .gitignore ignores "**/packages/*" (NuGet) and "local/" (server data):
+# re-include the npm workspaces and the local-files feature folder
+!packages/
+!packages/*
+!**/features/local/

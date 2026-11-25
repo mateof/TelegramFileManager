@@ -491,30 +491,75 @@ namespace TelegramDownloader.Controllers.Api.V1
             if (!request.ToOptions().HasAnySelection)
                 return BadRequestResult("Select at least one media type to fetch");
 
-            if (_files.isChannelRefreshing(id))
+            // Check-and-mark is atomic, so two simultaneous requests cannot both start.
+            if (!_files.tryStartChannelRefresh(id, request.Force, request.ToOptions(), out Task refreshTask))
                 return ConflictResult("This channel is already being refreshed", ApiErrorCodes.AlreadyRunning);
 
             // Fire and forget: the scan is long running and reports through the
             // notification/transfer pipeline.
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    await _files.refreshChannelFIles(id, request.Force, request.ToOptions());
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Background refresh of channel {Id} failed", id);
-                }
-            });
+            _ = refreshTask.ContinueWith(
+                t => _logger.LogError(t.Exception, "Background refresh of channel {Id} failed", id),
+                TaskContinuationOptions.OnlyOnFaulted);
 
             return Accepted(ApiResult.Done("Channel refresh started"));
         }
 
         /// <summary>Tells whether a background refresh is running for a channel.</summary>
+        /// <remarks>Kept for compatibility; <c>GET .../refresh/progress</c> gives the details.</remarks>
         [HttpGet("{id}/refresh")]
         [ProducesResponseType(typeof(ApiResult<bool>), StatusCodes.Status200OK)]
         public IActionResult RefreshStatus(string id) => OkResult(_files.isChannelRefreshing(id));
+
+        /// <summary>Live progress of the channel's running refresh.</summary>
+        /// <remarks>
+        /// Answers <c>data: null</c> when no refresh is running. While one runs:
+        /// <c>phase</c> is <c>searching</c> (paging Telegram, per-type counters
+        /// in <c>filters</c>; <c>total</c> is what Telegram reports for the whole
+        /// channel and an incremental scan stops early), then <c>indexing</c>
+        /// (<c>indexed</c> of <c>newFiles</c> written), then briefly
+        /// <c>done</c>. Poll it about once a second at most.
+        /// </remarks>
+        [HttpGet("{id}/refresh/progress")]
+        [ProducesResponseType(typeof(ApiResult<ApiChannelRefreshProgressDto>), StatusCodes.Status200OK)]
+        public IActionResult RefreshProgress(string id)
+        {
+            ChannelRefreshProgressSnapshot? progress = _files.getChannelRefreshProgress(id);
+            return OkResult(progress == null ? null : ApiChannelRefreshProgressDto.From(progress));
+        }
+
+        /// <summary>Cancels the channel's running refresh.</summary>
+        /// <remarks>
+        /// The refresh stops after the Telegram page or insert batch in flight
+        /// (usually well under a few seconds); until then
+        /// <c>GET /api/v1/channels/{id}/refresh</c> still answers true. Files
+        /// already written stay in the index, which remains consistent, and the
+        /// result (<c>GET .../refresh/result</c>) reports <c>canceled: true</c>
+        /// with the counts of what got in. 404 when nothing is running.
+        /// </remarks>
+        [HttpDelete("{id}/refresh")]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status202Accepted)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status404NotFound)]
+        public IActionResult CancelRefresh(string id)
+        {
+            if (!_files.cancelChannelRefresh(id))
+                return NotFoundResult("No refresh is running for this channel");
+            return Accepted(ApiResult.Done("Refresh cancellation requested"));
+        }
+
+        /// <summary>What the last finished refresh added, broken down by media type.</summary>
+        /// <remarks>
+        /// Poll <c>GET /api/v1/channels/{id}/refresh</c> until it answers false,
+        /// then read this to find out what the scan actually indexed. Answers
+        /// <c>data: null</c> when the channel has not been refreshed since the
+        /// server started: the result is a report on this run, not history.
+        /// </remarks>
+        [HttpGet("{id}/refresh/result")]
+        [ProducesResponseType(typeof(ApiResult<ApiChannelRefreshResultDto>), StatusCodes.Status200OK)]
+        public IActionResult RefreshResult(string id)
+        {
+            ChannelRefreshResult? result = _files.getLastRefreshResult(id);
+            return OkResult(result == null ? null : ApiChannelRefreshResultDto.From(result));
+        }
 
         /// <summary>Reads the recent message history of a chat.</summary>
         /// <remarks>
@@ -541,7 +586,7 @@ namespace TelegramDownloader.Controllers.Api.V1
                 var messages = await _telegram.getChatHistory(id, limit, offset);
                 var items = (messages ?? new List<ChatMessages>())
                     .Where(m => m?.message != null)
-                    .Select(ToMessageDto)
+                    .Select(ApiChatMessageDto.FromMessage)
                     .Where(m => !onlyMedia || m.HasMedia)
                     .ToList();
                 return OkResult(items);
@@ -550,6 +595,95 @@ namespace TelegramDownloader.Controllers.Api.V1
             {
                 _logger.LogError(ex, "Error reading messages of chat {Id}", id);
                 return ErrorResult("Could not read the chat history", ex);
+            }
+        }
+
+        /// <summary>Reads a part of the history of a chat: its end, or before, after or around a message.</summary>
+        /// <remarks>
+        /// For a message view that can start anywhere (a search result, a
+        /// file): open it with <c>around</c> and go on with <c>before=oldestId</c>
+        /// and <c>after=newestId</c>. Send one of the three at most; without any,
+        /// the newest messages. Items come newest first.
+        /// </remarks>
+        /// <param name="id">Chat id.</param>
+        /// <param name="before">Messages older than this id.</param>
+        /// <param name="after">Messages newer than this id.</param>
+        /// <param name="around">This message with the ones before and after it.</param>
+        /// <param name="limit">Messages to return (1-100).</param>
+        [HttpGet("{id}/messages/window")]
+        [ProducesResponseType(typeof(ApiResult<ApiChatWindowDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> MessagesWindow(
+            long id,
+            [FromQuery] int? before = null,
+            [FromQuery] int? after = null,
+            [FromQuery] int? around = null,
+            [FromQuery] int limit = 50)
+        {
+            if (new[] { before, after, around }.Count(v => v != null) > 1)
+                return BadRequestResult("Send only one of before, after and around");
+            var window = new ChatWindow(before, after, around, Math.Clamp(limit, 1, 100));
+            return await ReadMessages(id, async () => ApiChatWindowDto.From(window, await _telegram.getChatWindow(id, window)));
+        }
+
+        /// <summary>Searches the messages of a chat on Telegram, by text and/or kind.</summary>
+        /// <remarks>
+        /// Covers the whole chat, also the messages that were never indexed or
+        /// loaded. Newest first; go on with <c>offsetId=nextOffsetId</c>.
+        /// </remarks>
+        /// <param name="id">Chat id.</param>
+        /// <param name="q">Text to look for (words of the message or of the file name).</param>
+        /// <param name="kind"><c>media</c> (photos and videos), <c>photos</c>, <c>videos</c>, <c>documents</c>, <c>audio</c>, <c>voice</c>, <c>gifs</c> or <c>links</c>.</param>
+        /// <param name="offsetId">Only messages older than this id.</param>
+        /// <param name="limit">Messages to return (1-100).</param>
+        [HttpGet("{id}/messages/search")]
+        [ProducesResponseType(typeof(ApiResult<ApiChatSearchDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> SearchMessages(
+            long id,
+            [FromQuery] string? q = null,
+            [FromQuery] string? kind = null,
+            [FromQuery] int offsetId = 0,
+            [FromQuery] int limit = 50)
+        {
+            ChatMessageKind? wanted = null;
+            if (!string.IsNullOrWhiteSpace(kind))
+            {
+                if (!ChatMessageKinds.TryParse(kind, out var parsed))
+                    return BadRequestResult($"Unknown kind '{kind}'");
+                wanted = parsed;
+            }
+            var text = q?.Trim() ?? string.Empty;
+            if (text.Length == 0 && wanted == null)
+                return BadRequestResult("A text or a kind is required");
+
+            offsetId = Math.Max(0, offsetId);
+            return await ReadMessages(id, async () =>
+                ApiChatSearchDto.From(await _telegram.searchChatMessages(id, text, wanted, offsetId, Math.Clamp(limit, 1, 100)), offsetId));
+        }
+
+        /// <summary>How many messages of each kind a chat has (<c>photos</c>, <c>audio</c>...).</summary>
+        [HttpGet("{id}/messages/counts")]
+        [ProducesResponseType(typeof(ApiResult<Dictionary<string, int>>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status404NotFound)]
+        public Task<IActionResult> MessageCounts(long id) => ReadMessages(id, async () =>
+            (await _telegram.countChatMessages(id)).ToDictionary(c => c.Key.ToKey(), c => c.Value));
+
+        private async Task<IActionResult> ReadMessages<T>(long id, Func<Task<T>> read)
+        {
+            try
+            {
+                return OkResult(await read());
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFoundResult("Channel not found", ApiErrorCodes.ChannelNotFound);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error reading messages of chat {Id}", id);
+                return ErrorResult("Could not read the messages of the chat", ex);
             }
         }
 
@@ -646,40 +780,6 @@ namespace TelegramDownloader.Controllers.Api.V1
                 _logger.LogWarning(ex, "Could not enumerate local channel databases; HasDatabase will not be populated");
                 return new HashSet<long>();
             }
-        }
-
-        private static ApiChatMessageDto ToMessageDto(ChatMessages m)
-        {
-            var dto = new ApiChatMessageDto
-            {
-                Id = m.message.ID,
-                Date = m.message.Date,
-                Text = m.message.message,
-                From = m.user?.ToString()
-            };
-
-            switch (m.message.media)
-            {
-                case MessageMediaPhoto:
-                    dto.HasMedia = true;
-                    dto.MediaType = "photo";
-                    break;
-                case MessageMediaDocument { document: Document doc }:
-                    dto.HasMedia = true;
-                    dto.FileName = doc.Filename;
-                    dto.FileSize = doc.size;
-                    dto.MimeType = doc.mime_type;
-                    dto.MediaType = doc.mime_type switch
-                    {
-                        not null when doc.mime_type.StartsWith("video") => "video",
-                        not null when doc.mime_type.StartsWith("audio") => "audio",
-                        not null when doc.mime_type.StartsWith("image") => "photo",
-                        _ => "document"
-                    };
-                    break;
-            }
-
-            return dto;
         }
     }
 }

@@ -150,6 +150,73 @@ POST /api/v1/transfers/uploads
 The whole request becomes one **batch task** (visible under `tasks`), which
 spawns one upload per file. Returns `202` with the `taskId`.
 
+### Preview an upload (dry run)
+
+```
+POST /api/v1/transfers/uploads/preview
+{
+  "channelId": "1290586824",
+  "localPaths": ["music/album1", "music/single.mp3"],
+  "targetPath": "/music/",
+  "findDuplicates": false,     // optional: also look for the same content elsewhere in the channel
+  "maxItems": 500              // optional: cap of `items` (0..5000)
+}
+```
+
+Same body as the upload, nothing is sent or queued and no Telegram session is
+needed. The decisions come from the same planner the upload runs, so the
+preview cannot disagree with what the upload would do against the same index:
+
+| Action | Rule |
+| --- | --- |
+| `new` | Not indexed at that path: uploaded. |
+| `replace` | Indexed with an older or equal date: uploaded, then the old entry is deleted. |
+| `skip-empty` | Empty file: never sent. |
+| `skip-newer` | Indexed with a newer date than the local file: kept, nothing sent. |
+| `create-folder` / `existing-folder` | Folder entry created or reused. |
+
+```jsonc
+{
+  "success": true,
+  "data": {
+    "targetPath": "/music/",
+    "targetFolderExists": true,        // false: entries go under the channel root, as the upload does
+    "newFiles": 12, "newBytes": 734003200,
+    "replacedFiles": 1, "replacedBytes": 8388608,
+    "filesToUpload": 13, "bytesToUpload": 742391808,
+    "skippedFiles": 3, "skippedEmpty": 1, "skippedNewerInChannel": 2, "skippedBytes": 20971520,
+    "foldersToCreate": 2, "existingFolders": 1,
+    "duplicateCheck": false, "hashedFiles": 0, "hashedBytes": 0,
+    "duplicates": [],
+    "items": [
+      { "localPath": "/music/album1/", "targetPath": "/music/album1", "isFile": false, "size": 0, "action": "existing-folder", "existingDateModified": null },
+      { "localPath": "/music/album1/01.flac", "targetPath": "/music/album1/01.flac", "isFile": true, "size": 41943040, "action": "new", "existingDateModified": null }
+    ],
+    "itemsTruncated": false,
+    "missingLocalPaths": []
+  }
+}
+```
+
+The counters always cover the whole tree; `items` is cut at `maxItems`
+(`itemsTruncated: true`).
+
+**Duplicates by content.** With `findDuplicates: true` the server reads and
+hashes the local files that would be uploaded **and** whose size equals the size
+of some channel file with a stored hash (`hashedFiles`/`hashedBytes` say how
+much it read). Each hit in `duplicates` lists the channel files with the same
+XXHash and size at another path:
+
+```jsonc
+{ "localPath": "/music/single.mp3", "targetPath": "/music/single.mp3", "size": 5242880,
+  "xxHash": "9A3F0C1B2D4E5F60",
+  "matches": [ { "id": "665f…", "filePath": "/old/single.mp3", "size": 5242880 } ] }
+```
+
+Only files uploaded with **CheckHash** enabled carry a hash, so channels filled
+another way report no duplicates. The preview does not skip anything: it is
+information for deciding whether to upload.
+
 ### Download media from raw messages
 
 ```
@@ -158,7 +225,11 @@ POST /api/v1/transfers/messages
 ```
 
 Works on any chat, indexed or not — this is how you save a file straight from a
-[message list](channels.md#message-history).
+[message list](channels.md#message-history). `targetPath` is a folder relative to
+the local root (`/` is the root itself; created if needed; `temp` when omitted;
+`400` outside it). Photos are saved there too. A name already used gets a number
+(`video (2).mp4`), so messages that share a file name do not overwrite each other.
+Messages without a file, or deleted, come back in `skipped`.
 
 ## Controlling the queue
 
@@ -167,26 +238,64 @@ Works on any chat, indexed or not — this is how you save a file straight from 
 | `POST /api/v1/transfers/downloads/pause` | Pause all downloads; running ones go back to the front of the queue. |
 | `POST /api/v1/transfers/downloads/resume` | Resume the download queue. |
 | `POST /api/v1/transfers/downloads/stop` | Stop everything and empty the download queue. |
-| `POST /api/v1/transfers/{id}/pause` | Pause one running download. |
+| `POST /api/v1/transfers/{id}/pause` | Pause one download (running or queued) or one running upload. Only with `canPause: true`. |
 | `POST /api/v1/transfers/{id}/cancel` | Cancel one transfer (a task also cancels its children). |
-| `POST /api/v1/transfers/{id}/retry` | Retry a paused/cancelled/failed download or task. |
+| `POST /api/v1/transfers/{id}/retry` | Resume a paused download or upload; retry a cancelled/failed download (with `canRetry: true`) or task. |
 | `POST /api/v1/transfers/clear?scope=all` | Remove finished entries (`downloads`/`uploads`/`tasks`/`all`). |
 | `POST /api/v1/transfers/queue/clear?scope=all` | Empty a queue without touching running transfers. |
+| `DELETE /api/v1/transfers/{id}` | Remove one entry from the lists ("remove from list"): finished, paused or queued. A running transfer answers `409` (cancel it first). |
+
+A paused download keeps its bytes and waits in the queue (`state: "Paused"`,
+`isQueued: true`) until it is resumed on its own or with `downloads/resume`; meanwhile
+the next ones in the queue run. A paused upload stays in the list, stops sending data
+and goes on from the same part. Telegram only keeps the parts of an unfinished upload
+for a while: after a very long pause, or a server restart, that file (or that part of a
+split file) is sent again from the start.
 
 The pause/resume/stop endpoints return the fresh `summary`; the per-item ones
 return an empty success. Watch the hub for the state change either way.
 
+`clear` also takes an optional `states` filter, so a client can tidy up the
+successes and leave the failures on screen to look at:
+
+```
+POST /api/v1/transfers/clear?scope=all&states=completed
+POST /api/v1/transfers/clear?scope=all&states=completed,failed
+```
+
+Valid states are `completed`, `error` (or `failed`), `canceled` (or
+`cancelled`), `paused` and `pending`; `working` is rejected, since a running
+transfer is cancelled rather than cleared. Without `states` the endpoint
+removes every finished entry, as it always did.
+
 ## Persisted transfers (survive restarts)
 
 When `enableTaskPersistence` is on (default), transfers are written to MongoDB.
-On startup the app reloads them and, if `autoResumeOnStartup` is on, resumes
-them from the last confirmed byte.
+Once the Telegram session is ready after a restart, records left `working` by
+the previous process are set back to `pending` and, if `autoResumeOnStartup`
+is on (default), every `pending`/`paused` transfer is queued again:
+
+- downloads continue the partial file from the last confirmed byte (split
+  files from the first unfinished part);
+- batch uploads are rebuilt from the selected items and skip the files already
+  in the destination; parts of a split file that already reached Telegram are
+  reused, not sent twice;
+- a task whose source is gone (local folder deleted, Telegram message deleted)
+  is marked `error` with the reason instead of blocking the queue.
+
+`error` tasks are not retried automatically; resume them by hand (same code
+path as the automatic resume):
 
 ```
-GET    /api/v1/transfers/persisted                 # list (paged)
-DELETE /api/v1/transfers/persisted/{internalId}    # forget one
-DELETE /api/v1/transfers/persisted                 # forget all
+GET    /api/v1/transfers/persisted                    # list (paged)
+POST   /api/v1/transfers/persisted/{internalId}/resume # resume / retry one
+DELETE /api/v1/transfers/persisted/{internalId}       # forget one
+DELETE /api/v1/transfers/persisted                    # forget all
 ```
+
+The resume answer says what happened: `resumed` (queued again), `action`
+(`ResumeDownload`, `ResumeSplitDownload`, `ResumeBatchUpload`, `Fail` or `Skip`)
+and a `message` (for instance "Already queued or running").
 
 ```json
 {

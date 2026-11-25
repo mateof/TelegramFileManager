@@ -1,6 +1,7 @@
 #nullable disable
 using MongoDB.Bson;
 using MongoDB.Bson.Serialization.Attributes;
+using TelegramDownloader.Models.FileSystem;
 
 namespace TelegramDownloader.Models.Persistence
 {
@@ -36,6 +37,12 @@ namespace TelegramDownloader.Models.Persistence
         // Split file tracking
         public int CurrentPartIndex { get; set; }
         public List<int> CompletedPartIndices { get; set; } = new List<int>();
+        /// <summary>
+        /// Split downloads: bytes of the destination file that belong to the
+        /// completed parts. A resume truncates the file back to this length
+        /// (plus whatever of the current part is confirmed) before continuing.
+        /// </summary>
+        public long CompletedBytes { get; set; }
 
         // Upload-specific fields
         public string DbFilePath { get; set; }
@@ -50,6 +57,18 @@ namespace TelegramDownloader.Models.Persistence
         public long TotalBatchSize { get; set; }
         public long ExecutedBatchSize { get; set; }
         public List<PersistedTaskModel> ChildTasks { get; set; } = new List<PersistedTaskModel>();
+        /// <summary>
+        /// Batch uploads: the items the user selected (relative to the server
+        /// local root). Needed to rebuild the batch after a restart; batches
+        /// persisted by older versions do not have it and cannot be resumed.
+        /// </summary>
+        public List<PersistedSourceItem> SourceItems { get; set; } = new List<PersistedSourceItem>();
+        /// <summary>
+        /// Batch uploads: Telegram messages already sent for the file that was
+        /// being uploaded when the batch stopped, so a resume reuses them
+        /// instead of sending the same parts again.
+        /// </summary>
+        public PersistedUploadProgress CurrentFile { get; set; }
 
         // Timestamps
         public DateTime CreationDate { get; set; }
@@ -59,6 +78,71 @@ namespace TelegramDownloader.Models.Persistence
         // Error tracking
         public int RetryCount { get; set; }
         public string LastError { get; set; }
+    }
+
+    /// <summary>
+    /// One item selected for a batch upload, enough to rebuild the
+    /// FsEntry the upload pipeline takes.
+    /// </summary>
+    public class PersistedSourceItem
+    {
+        public string Name { get; set; }
+        public string FilterPath { get; set; }
+        public bool IsFile { get; set; }
+        public long Size { get; set; }
+        public DateTime DateModified { get; set; }
+        public string Type { get; set; }
+    }
+
+    /// <summary>How the parts of an uploaded file were produced.</summary>
+    public static class UploadedPartMode
+    {
+        public const string Single = "single";
+        public const string Memory = "memory";
+        public const string Disk = "disk";
+    }
+
+    /// <summary>
+    /// Parts already sent to Telegram for the file a batch upload was working
+    /// on. They are only reused when the local file is unchanged (same path,
+    /// size and modification time) and was split the same way.
+    /// </summary>
+    public class PersistedUploadProgress
+    {
+        public string FilePath { get; set; }
+        public long FileSize { get; set; }
+        public long LastWriteTicksUtc { get; set; }
+        public string Mode { get; set; }
+        public long ChunkSize { get; set; }
+        public List<PersistedUploadedPart> Parts { get; set; } = new List<PersistedUploadedPart>();
+
+        public bool Matches(string filePath, long fileSize, long lastWriteTicksUtc, string mode, long chunkSize)
+        {
+            return string.Equals(FilePath, filePath, StringComparison.Ordinal)
+                && FileSize == fileSize
+                && LastWriteTicksUtc == lastWriteTicksUtc
+                && string.Equals(Mode, mode, StringComparison.Ordinal)
+                && ChunkSize == chunkSize;
+        }
+
+        public PersistedUploadProgress Clone()
+        {
+            return new PersistedUploadProgress
+            {
+                FilePath = FilePath,
+                FileSize = FileSize,
+                LastWriteTicksUtc = LastWriteTicksUtc,
+                Mode = Mode,
+                ChunkSize = ChunkSize,
+                Parts = Parts.Select(p => new PersistedUploadedPart { Index = p.Index, MessageId = p.MessageId }).ToList()
+            };
+        }
+    }
+
+    public class PersistedUploadedPart
+    {
+        public int Index { get; set; }
+        public int MessageId { get; set; }
     }
 
     /// <summary>
@@ -143,12 +227,16 @@ namespace TelegramDownloader.Models.Persistence
         /// </summary>
         public static PersistedTaskModel ToPersistedTask(InfoDownloadTaksModel idt)
         {
-            var persisted = new PersistedTaskModel
+            // The running children (one model per file or part) are not stored:
+            // a resume rebuilds the batch from the selected items and skips what
+            // is already in the destination, so they would only grow the record.
+            return new PersistedTaskModel
             {
                 InternalId = idt._internalId,
                 Type = idt.isUpload ? TaskType.BatchUpload : TaskType.BatchDownload,
                 State = idt.state,
                 ChannelId = idt.channelId,
+                Name = idt.DisplayName,
                 IsUpload = idt.isUpload,
                 FromPath = idt.fromPath,
                 ToPath = idt.toPath,
@@ -156,45 +244,40 @@ namespace TelegramDownloader.Models.Persistence
                 Executed = idt.executed,
                 TotalBatchSize = idt.totalSize,
                 ExecutedBatchSize = idt.executedSize,
+                TotalSize = idt.totalSize,
+                TransmittedBytes = idt.executedSize,
                 Progress = idt.progress,
                 CreationDate = idt.creationDate,
                 LastUpdated = DateTime.Now,
+                LastError = idt.LastError,
+                SourceItems = (idt.files ?? new List<FsEntry>())
+                    .Select(f => new PersistedSourceItem
+                    {
+                        Name = f.Name,
+                        FilterPath = f.FilterPath,
+                        IsFile = f.IsFile,
+                        Size = f.Size,
+                        DateModified = f.DateModified,
+                        Type = f.Type
+                    }).ToList(),
+                CurrentFile = idt.GetUploadInProgress(),
                 ChildTasks = new List<PersistedTaskModel>()
             };
+        }
 
-            // Persist child downloads
-            foreach (var dm in idt.currentDownloads)
-            {
-                persisted.ChildTasks.Add(new PersistedTaskModel
+        /// <summary>Rebuilds the items of a batch upload.</summary>
+        public static List<FsEntry> ToSourceContents(IEnumerable<PersistedSourceItem> items)
+        {
+            return (items ?? Enumerable.Empty<PersistedSourceItem>())
+                .Select(i => new FsEntry
                 {
-                    InternalId = dm._internalId,
-                    Type = TaskType.Download,
-                    State = dm.state,
-                    Name = dm.name,
-                    DestinationPath = dm.path,
-                    TotalSize = dm._size,
-                    TransmittedBytes = dm._transmitted,
-                    Progress = dm.progress
-                });
-            }
-
-            // Persist child uploads
-            foreach (var um in idt.currentUploads)
-            {
-                persisted.ChildTasks.Add(new PersistedTaskModel
-                {
-                    InternalId = um._internalId,
-                    Type = TaskType.Upload,
-                    State = um.state,
-                    Name = um.name,
-                    DestinationPath = um.path,
-                    TotalSize = um._size,
-                    TransmittedBytes = um._transmitted,
-                    Progress = um.progress
-                });
-            }
-
-            return persisted;
+                    Name = i.Name,
+                    FilterPath = i.FilterPath,
+                    IsFile = i.IsFile,
+                    Size = i.Size,
+                    DateModified = i.DateModified,
+                    Type = i.Type
+                }).ToList();
         }
 
         /// <summary>

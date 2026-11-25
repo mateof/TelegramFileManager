@@ -1,0 +1,68 @@
+import type { AppConfigDto } from '@tfm/api-client';
+
+/** A complete config for tests. */
+export function sampleConfig(overrides: Partial<AppConfigDto> = {}): AppConfigDto {
+  return {
+    shouldNotify: true,
+    timeSleepBetweenTransactions: 0,
+    splitSize: 2,
+    maxSimultaneousDownloads: 2,
+    checkHash: false,
+    maxImageUploadSizeInMb: 5,
+    maxPreloadFileSizeInMb: 50,
+    shouldShowCaptionPath: false,
+    shouldShowLogInTerminal: false,
+    strmStreamingMode: 'ProgressiveCache',
+    shouldShowPaginatedFileChannel: false,
+    showChannelImages: true,
+    showHiddenChannels: false,
+    favouriteChannels: [1],
+    hiddenChannels: [],
+    enableTaskPersistence: true,
+    taskPersistenceDebounceSeconds: 5,
+    staleTaskCleanupDays: 7,
+    autoResumeOnStartup: true,
+    enableVideoTranscoding: false,
+    enableRefreshOwnChannels: false,
+    refreshOneTypeAtATime: false,
+    enableMemorySplitUpload: false,
+    memorySplitSizeGB: 1,
+    parallelTransfers: 4,
+    enableMultiConnectionDownloads: false,
+    downloadConnections: 4,
+    multiConnectionPartSizeKB: 1024,
+    multiConnectionBlockSizeMB: 4,
+    multiConnectionMinFileSizeMB: 32,
+    useMobileFileManagerAlways: false,
+    hasFileManagerVirtualScroll: true,
+    defaultWebUi: 'classic',
+    mobileApiKey: '****abcd',
+    mobileApiKeySet: true,
+    webDavUser: 'dav',
+    webDavPasswordSet: true,
+    libraryEnabled: true,
+    libraryLanguage: 'es-ES',
+    libraryAutoScan: true,
+    libraryIncludedChannels: [],
+    libraryExcludedChannels: [],
+    libraryWatchedThreshold: 0.92,
+    libraryProviders: [
+      {
+        id: 'tmdb',
+        name: 'TMDB',
+        website: 'https://www.themoviedb.org',
+        keyUrl: 'https://www.themoviedb.org/settings/api',
+        requiresKey: true,
+        supportsEpisodes: true,
+        supportsImages: true,
+        supportsLanguage: true,
+        enabled: true,
+        hasKey: true,
+        apiKeyMasked: '****1234',
+        priority: 1
+      }
+    ],
+    libraryFolderRules: [],
+    ...overrides
+  };
+}

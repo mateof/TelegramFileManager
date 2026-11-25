@@ -11,6 +11,10 @@
 @inject TransactionInfoService tis
 @inject IHostApplicationLifetime applicationLifetime
 @inject ITelegramService ts
+@inject TelegramDownloader.Services.Library.LibraryScanService libraryScanService
+@inject ILibraryDbService libraryDb
+@inject TelegramDownloader.Services.WebAuth.IWebAuthService WebAuth
+@inject IJSRuntime JS
 @using TelegramDownloader.Shared
 
 <style>
@@ -520,6 +524,33 @@
                 </div>
             </div>
 
+            <!-- Web Interface Section -->
+            <div class="config-section">
+                <div class="config-section-header">
+                    <i class="bi bi-window-stack"></i>
+                    <span>Web Interface</span>
+                </div>
+                <div class="config-section-body">
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-stars"></i>
+                                Open the new interface by default
+                            </div>
+                            <div class="config-item-description">
+                                Browsers that open the server address go to the new web interface (<a href="/app/">/app</a>) instead of this one.
+                                This interface keeps working: open <code>/?ui=classic</code> (or "Classic UI" in the new interface) and that browser keeps getting it.
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <input type="checkbox" class="form-check-input config-switch"
+                                   checked="@(WebUiMode.Normalize(Model!.DefaultWebUi) == WebUiMode.App)"
+                                   @onchange="@(e => Model!.DefaultWebUi = e.Value is true ? WebUiMode.App : WebUiMode.Classic)" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- File Manager Section -->
             <div class="config-section">
                 <div class="config-section-header">
@@ -684,6 +715,22 @@
                             <InputCheckbox @bind-Value="Model!.EnableRefreshOwnChannels" class="form-check-input config-switch" />
                         </div>
                     </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-list-ol"></i>
+                                Refresh One File Type at a Time
+                            </div>
+                            <div class="config-item-description">
+                                Search documents, then audio, then video and then photos instead of all of them at once.
+                                Slower, but Telegram is less likely to limit the requests on large channels.
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputCheckbox @bind-Value="Model!.RefreshOneTypeAtATime" class="form-check-input config-switch" />
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -807,7 +854,7 @@
                                 Auto-Resume on Startup
                             </div>
                             <div class="config-item-description">
-                                Automatically resume pending tasks when the application starts
+                                Queue pending and interrupted transfers again once the Telegram session is ready after a restart. Downloads continue from the partial file and batch uploads skip what is already uploaded. Failed tasks wait for a manual retry in Downloads &gt; Persisted Tasks.
                             </div>
                         </div>
                         <div class="config-item-control">
@@ -1038,6 +1085,130 @@
                 </div>
             </div>
 
+            <!-- Web Security Section (saved on its own, not with the Save button) -->
+            <div class="config-section">
+                <div class="config-section-header">
+                    <i class="bi bi-shield-check"></i>
+                    <span>Web Security</span>
+                </div>
+                <div class="config-section-body">
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi @(WebAuth.PasswordSet ? "bi-lock-fill" : "bi-unlock")"></i>
+                                Web password
+                                <span class="badge @(WebAuth.PasswordSet ? "bg-success" : "bg-secondary") ms-2">@(WebAuth.PasswordSet ? "On" : "Off")</span>
+                            </div>
+                            <div class="config-item-description">
+                                @if (WebAuth.PasswordSet)
+                                {
+                                    <span>The web UI, the API, the hubs and the media/file URLs need this password (or the API key, for the apps). Changing or removing it signs out every browser.</span>
+                                }
+                                else
+                                {
+                                    <span>Without a password anyone who can reach this server can use the web UI. Set one (at least 8 characters) before exposing it outside your network. The apps keep using the API key.</span>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (WebAuth.PasswordSet)
+                    {
+                        <div class="config-item">
+                            <div class="config-item-info">
+                                <div class="config-item-label">
+                                    <i class="bi bi-fingerprint"></i>
+                                    Passkeys
+                                    @if (WebAuth.Passkeys.Count > 0)
+                                    {
+                                        <span class="badge bg-info ms-2">@WebAuth.Passkeys.Count</span>
+                                    }
+                                </div>
+                                <div class="config-item-description">
+                                    Passkeys (Bitwarden, Windows Hello, iCloud, Google, security keys) are managed in the new web: <a href="/app/settings/security">/app → Settings → Web security</a>. Removing the password also removes them.
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    @if (WebAuth.PasswordSet)
+                    {
+                        <div class="config-item">
+                            <div class="config-item-info">
+                                <div class="config-item-label">
+                                    <i class="bi bi-key"></i>
+                                    Current password
+                                </div>
+                                <div class="config-item-description">Required to change or remove the password.</div>
+                            </div>
+                            <div class="config-item-control">
+                                <input type="password" class="form-control" style="width: 220px;" autocomplete="current-password" @bind="webCurrentPassword" />
+                            </div>
+                        </div>
+                    }
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-key-fill"></i>
+                                @(WebAuth.PasswordSet ? "New password" : "Password")
+                            </div>
+                            <div class="config-item-description">Type it twice.</div>
+                        </div>
+                        <div class="config-item-control d-flex flex-column gap-2">
+                            <input type="password" class="form-control" style="width: 220px;" autocomplete="new-password" placeholder="New password" @bind="webNewPassword" />
+                            <input type="password" class="form-control" style="width: 220px;" autocomplete="new-password" placeholder="Repeat" @bind="webConfirmPassword" />
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            @if (!string.IsNullOrEmpty(webAuthError))
+                            {
+                                <div class="text-danger small"><i class="bi bi-exclamation-triangle"></i> @webAuthError</div>
+                            }
+                        </div>
+                        <div class="config-item-control d-flex gap-2">
+                            @if (WebAuth.PasswordSet)
+                            {
+                                <button type="button" class="btn btn-outline-primary btn-sm d-flex align-items-center gap-2" @onclick="ChangeWebPassword" disabled="@webAuthBusy">
+                                    <i class="bi bi-arrow-repeat"></i><span>Change</span>
+                                </button>
+                                <button type="button" class="btn btn-outline-danger btn-sm d-flex align-items-center gap-2" @onclick="RemoveWebPassword" disabled="@webAuthBusy">
+                                    <i class="bi bi-unlock"></i><span>Remove</span>
+                                </button>
+                            }
+                            else
+                            {
+                                <button type="button" class="btn btn-primary btn-sm d-flex align-items-center gap-2" @onclick="SetWebPassword" disabled="@webAuthBusy">
+                                    <i class="bi bi-lock"></i><span>Set password</span>
+                                </button>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-house-lock"></i>
+                                No password on the local network
+                            </div>
+                            <div class="config-item-description">
+                                Devices that connect <strong>directly</strong> from the local network (private or loopback address, using an IP, <code>localhost</code> or a local name such as <code>nas</code> or <code>*.local</code>) get in without the password.
+                                Requests that come through a reverse proxy always need it: the proxy itself sits on the local network, so otherwise internet traffic would look local too.
+                                @if (!WebAuth.PasswordSet)
+                                {
+                                    <span class="text-warning">Only applies once a password is set.</span>
+                                }
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <input type="checkbox" class="form-check-input config-switch" checked="@WebAuth.LanBypassEnabled" @onchange="ToggleLanBypass" disabled="@webAuthBusy" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- API & WebDAV Access Section -->
             <div class="config-section">
                 <div class="config-section-header">
@@ -1052,7 +1223,7 @@
                                 Mobile / v1 API Key
                             </div>
                             <div class="config-item-description">
-                                Required in the <code>X-Api-Key</code> header for <code>/api/mobile</code>, <code>/api/v1</code> and <code>/hubs</code>. Leave empty to disable authentication. Overrides <code>mobile_api_key</code> in config.json when set.
+                                Required in the <code>X-Api-Key</code> header for <code>/api/mobile</code>, <code>/api/v1</code> and <code>/hubs</code>. Leave empty to disable authentication. Overrides <code>mobile_api_key</code> in config.json when set. While a web password is set, the apps (Android, TV, TFM Player) can only connect with this key.
                             </div>
                         </div>
                         <div class="config-item-control">
@@ -1090,6 +1261,251 @@
                 </div>
             </div>
 
+            <!-- Media Library Section -->
+            <div class="config-section">
+                <div class="config-section-header">
+                    <i class="bi bi-film"></i>
+                    <span>Media Library</span>
+                </div>
+                <div class="config-section-body">
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-collection-play"></i>
+                                Enable Media Library
+                            </div>
+                            <div class="config-item-description">
+                                Identify movies and series in the indexed channels (Plex/Emby style) using the metadata providers below, and keep playback progress for the TV and mobile apps. Needs at least one provider with an API key.
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputCheckbox @bind-Value="Model!.LibraryEnabled" class="form-check-input config-switch" />
+                        </div>
+                    </div>
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-translate"></i>
+                                Metadata Language
+                            </div>
+                            <div class="config-item-description">
+                                Language for titles and overviews at providers that support it (TMDB), e.g. <code>es-ES</code>, <code>en-US</code>.
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputText @bind-Value="Model!.LibraryLanguage" class="form-control" style="width: 120px;" />
+                        </div>
+                    </div>
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-arrow-repeat"></i>
+                                Scan After Channel Refresh
+                            </div>
+                            <div class="config-item-description">
+                                When a channel index is refreshed, identify its new video files right away.
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputCheckbox @bind-Value="Model!.LibraryAutoScan" class="form-check-input config-switch" />
+                        </div>
+                    </div>
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-check2-circle"></i>
+                                Watched Threshold
+                            </div>
+                            <div class="config-item-description">
+                                Fraction of the duration after which a file counts as watched (0.5 – 1). Default 0.92 leaves room for end credits.
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputNumber TValue="double" @bind-Value="Model!.LibraryWatchedThreshold" step="0.01" min="0.5" max="1" class="form-control" style="width: 100px;" />
+                        </div>
+                    </div>
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-list-check"></i>
+                                Channels To Scan
+                            </div>
+                            <div class="config-item-description">
+                                Which indexed channels the library looks at. Either every channel with an index, or only the ones you pick.
+                            </div>
+                        </div>
+                        <div class="config-item-control" style="display: flex; flex-direction: column; gap: 0.35rem;">
+                            <label class="form-check-label" style="display: flex; gap: 0.35rem; align-items: center; cursor: pointer;">
+                                <input type="radio" class="form-check-input m-0" name="libraryChannelMode" checked="@(!libraryUseIncludeList)" @onchange="() => SetLibraryChannelMode(false)" />
+                                All indexed channels
+                            </label>
+                            <label class="form-check-label" style="display: flex; gap: 0.35rem; align-items: center; cursor: pointer;">
+                                <input type="radio" class="form-check-input m-0" name="libraryChannelMode" checked="@libraryUseIncludeList" @onchange="() => SetLibraryChannelMode(true)" />
+                                Only the selected channels
+                            </label>
+                        </div>
+                    </div>
+                    @if (libraryUseIncludeList)
+                    {
+                        <div class="config-item">
+                            <div class="config-item-info">
+                                <div class="config-item-label">
+                                    <i class="bi bi-check2-square"></i>
+                                    Included Channels
+                                </div>
+                                <div class="config-item-description">
+                                    Only these channels are scanned. With none selected the library scans every indexed channel.
+                                </div>
+                            </div>
+                            <div class="config-item-control">
+                                <ChannelPicker Channels="libraryChannels" @bind-Selected="Model!.LibraryIncludedChannels" Placeholder="Search channels to include…" />
+                            </div>
+                        </div>
+                    }
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-eye-slash"></i>
+                                Excluded Channels
+                            </div>
+                            <div class="config-item-description">
+                                Channels the library never scans, even when included above.
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <ChannelPicker Channels="libraryChannels" @bind-Selected="Model!.LibraryExcludedChannels" Placeholder="Search channels to exclude…" />
+                        </div>
+                    </div>
+
+                    <div class="config-item" style="flex-direction: column; align-items: stretch; gap: 0.5rem;">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-folder-symlink"></i>
+                                Folder Rules
+                            </div>
+                            <div class="config-item-description">
+                                Tell the scan what a folder holds when a channel mixes content: <strong>Series</strong>, <strong>Movies</strong> or <strong>Ignore</strong> (extras, trailers). The rule covers every subfolder; the most specific path wins, and <code>/</code> means the whole channel. Folders simply named <em>Series</em>, <em>Películas</em>, <em>Cine</em>, <em>Movies</em>… are recognised without a rule. Manual fixes are never undone by a rule.
+                            </div>
+                        </div>
+                        @if (Model!.LibraryFolderRules.Count > 0)
+                        {
+                            <table class="table table-sm mb-1" style="max-width: 860px;">
+                                <thead><tr><th>Channel</th><th>Folder</th><th>Kind</th><th></th></tr></thead>
+                                <tbody>
+                                    @foreach (var rule in Model!.LibraryFolderRules.OrderBy(r => LibraryChannelName(r.ChannelId)).ThenBy(r => r.Path))
+                                    {
+                                        <tr>
+                                            <td class="text-truncate" style="max-width: 260px;" title="@rule.ChannelId">@LibraryChannelName(rule.ChannelId)</td>
+                                            <td><code>@rule.Path</code></td>
+                                            <td>@FolderRuleKindLabel(rule.Kind)@(rule.TitleKey != null ? $": {rule.Title}" : string.Empty)</td>
+                                            <td class="text-end"><button type="button" class="btn btn-link btn-sm p-0 text-danger" title="Remove" @onclick="() => RemoveFolderRule(rule)"><i class="bi bi-x-lg"></i></button></td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                        <div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start;">
+                            <div>
+                                <small class="text-muted d-block mb-1">1. Channel (one at a time)</small>
+                                <ChannelSelect Channels="libraryChannels" Selected="newRuleChannelId" SelectedChanged="OnRuleChannelChanged" Placeholder="Search a channel…" />
+                            </div>
+                            <div>
+                                <small class="text-muted d-block mb-1">2. Folder@(newRuleChannelId is long rc ? $" of {LibraryChannelName(rc)}" : string.Empty)</small>
+                                @if (newRuleChannelId == null)
+                                {
+                                    <small class="text-muted">Pick a channel first.</small>
+                                }
+                                else if (newRuleFoldersLoading)
+                                {
+                                    <small class="text-muted">Loading folders…</small>
+                                }
+                                else
+                                {
+                                    <FolderPicker Folders="newRuleFolders" @bind-Selected="newRulePath" />
+                                }
+                            </div>
+                            <div>
+                                <small class="text-muted d-block mb-1">3. Kind</small>
+                                <select class="form-select form-select-sm mb-2" style="width: 160px;" @bind="newRuleKind">
+                                    <option value="series">Series</option>
+                                    <option value="movie">Movies</option>
+                                    <option value="ignore">Ignore</option>
+                                </select>
+                                <button type="button" class="btn btn-outline-primary btn-sm" disabled="@(newRuleChannelId == null)" @onclick="AddFolderRule"><i class="bi bi-plus-lg"></i> Add rule</button>
+                                <small class="text-muted d-block mt-1">Rules are stored when you save the configuration.</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    @foreach (var provider in Model!.LibraryProviders)
+                    {
+                        var info = TelegramDownloader.Services.Library.MetadataProviderRegistry.Describe(provider.Id);
+                        if (info == null) continue;
+                        <div class="config-item">
+                            <div class="config-item-info">
+                                <div class="config-item-label">
+                                    <i class="bi bi-database"></i>
+                                    @info.Name
+                                </div>
+                                <div class="config-item-description">
+                                    <a href="@info.Website" target="_blank" rel="noopener">@info.Website</a> ·
+                                    <a href="@info.KeyUrl" target="_blank" rel="noopener">get an API key</a>.
+                                    @(info.SupportsLanguage ? "Localized titles, posters, backdrops, episodes." : "IMDb ratings and English plots; its ids are IMDb ids.")
+                                    Lower priority number is asked first.
+                                </div>
+                            </div>
+                            <div class="config-item-control" style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                                <label class="form-check-label" style="display: flex; gap: 0.35rem; align-items: center;">
+                                    <InputCheckbox @bind-Value="provider.Enabled" class="form-check-input config-switch" />
+                                    Enabled
+                                </label>
+                                <InputText @bind-Value="provider.ApiKey" type="password" class="form-control" style="width: 220px;" placeholder="API key" autocomplete="new-password" />
+                                <InputNumber TValue="int" @bind-Value="provider.Priority" class="form-control" style="width: 80px;" title="Priority" />
+                            </div>
+                        </div>
+                    }
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-search"></i>
+                                Library Scan
+                            </div>
+                            <div class="config-item-description">
+                                @if (libraryScan == null)
+                                {
+                                    <span>Never scanned.</span>
+                                }
+                                else if (libraryScan.Running)
+                                {
+                                    <span>Scanning @(libraryScan.ChannelsScanned)/@(libraryScan.ChannelsTotal) channels (current: @libraryScan.CurrentChannel), @(libraryScan.FilesProcessed)/@(libraryScan.FilesToProcess) files — @libraryScan.Matched matched, @libraryScan.Review to review, @libraryScan.Unmatched unmatched.</span>
+                                }
+                                else
+                                {
+                                    <span>Last scan @(libraryScan.FinishedAt?.ToLocalTime().ToString("g")): @libraryScan.FilesSeen files seen, @libraryScan.FilesNew new, @libraryScan.Matched matched, @libraryScan.Review to review, @libraryScan.Unmatched unmatched@(libraryScan.Cancelled ? " (cancelled)" : "").</span>
+                                    @if (!string.IsNullOrEmpty(libraryScan.Error))
+                                    {
+                                        <br /><span class="text-danger">@libraryScan.Error</span>
+                                    }
+                                }
+                            </div>
+                        </div>
+                        <div class="config-item-control" style="display: flex; gap: 0.5rem;">
+                            @if (libraryScan?.Running == true)
+                            {
+                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="RefreshLibraryScan"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+                                <button type="button" class="btn btn-outline-danger btn-sm" @onclick="CancelLibraryScan"><i class="bi bi-x-lg"></i> Cancel</button>
+                            }
+                            else
+                            {
+                                <button type="button" class="btn btn-outline-primary btn-sm" @onclick="() => StartLibraryScan(false)" title="Save the settings and identify new files"><i class="bi bi-play-fill"></i> Save &amp; scan</button>
+                                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="() => StartLibraryScan(true)" title="Identify every file again (manual fixes are kept)"><i class="bi bi-arrow-repeat"></i> Full rescan</button>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Save Button -->
             <div class="config-save-section">
                 <button class="btn btn-primary config-save-btn" type="submit">
@@ -1121,6 +1537,131 @@
         }
     }
     private bool _disposed = false;
+
+    // Web security (password of the web UI): saved immediately through the
+    // same service as /api/v1/web-auth, not with the Save button.
+    private string webCurrentPassword = string.Empty;
+    private string webNewPassword = string.Empty;
+    private string webConfirmPassword = string.Empty;
+    private string? webAuthError;
+    private bool webAuthBusy;
+
+    private bool CheckNewWebPassword()
+    {
+        if (webNewPassword != webConfirmPassword)
+        {
+            webAuthError = "The two passwords do not match.";
+            return false;
+        }
+        webAuthError = TelegramDownloader.Services.WebAuth.WebPasswordHasher.Validate(webNewPassword);
+        return webAuthError == null;
+    }
+
+    private void ClearWebPasswordFields()
+    {
+        webCurrentPassword = webNewPassword = webConfirmPassword = string.Empty;
+        webAuthError = null;
+    }
+
+    private async Task SetWebPassword()
+    {
+        if (!CheckNewWebPassword()) return;
+        webAuthBusy = true;
+        try
+        {
+            var password = webNewPassword;
+            var result = await WebAuth.SetupAsync(password);
+            if (!result.Succeeded)
+            {
+                webAuthError = result.Outcome == TelegramDownloader.Services.WebAuth.WebAuthOutcome.AlreadySet
+                    ? "A password is already set." : result.Message;
+                return;
+            }
+            ClearWebPasswordFields();
+            // Give this browser a session cookie so a reload does not ask for it.
+            await TelegramDownloader.Services.WebAuth.WebAuthBrowser.SignInAsync(JS, password);
+            toastService.Notify(new(ToastType.Success, "Web password set") { Title = "Web security", AutoHide = true });
+        }
+        catch (Exception ex)
+        {
+            webAuthError = "Could not save the password: " + ex.Message;
+        }
+        finally
+        {
+            webAuthBusy = false;
+        }
+    }
+
+    private async Task ChangeWebPassword()
+    {
+        if (!CheckNewWebPassword()) return;
+        webAuthBusy = true;
+        try
+        {
+            var password = webNewPassword;
+            var result = await WebAuth.ChangePasswordAsync(webCurrentPassword, password);
+            if (!result.Succeeded)
+            {
+                webAuthError = result.Outcome == TelegramDownloader.Services.WebAuth.WebAuthOutcome.InvalidCredentials
+                    ? "The current password is wrong." : result.Message ?? "Could not change the password.";
+                return;
+            }
+            ClearWebPasswordFields();
+            // Every session was signed out by the change, this one included.
+            await TelegramDownloader.Services.WebAuth.WebAuthBrowser.SignInAsync(JS, password);
+            toastService.Notify(new(ToastType.Success, "Web password changed") { Title = "Web security", AutoHide = true });
+        }
+        catch (Exception ex)
+        {
+            webAuthError = "Could not save the password: " + ex.Message;
+        }
+        finally
+        {
+            webAuthBusy = false;
+        }
+    }
+
+    private async Task RemoveWebPassword()
+    {
+        webAuthBusy = true;
+        try
+        {
+            var result = await WebAuth.RemovePasswordAsync(webCurrentPassword);
+            if (!result.Succeeded)
+            {
+                webAuthError = result.Outcome == TelegramDownloader.Services.WebAuth.WebAuthOutcome.InvalidCredentials
+                    ? "The current password is wrong." : "No password is set.";
+                return;
+            }
+            ClearWebPasswordFields();
+            toastService.Notify(new(ToastType.Warning, "Web password removed: the web UI is open") { Title = "Web security", AutoHide = true });
+        }
+        catch (Exception ex)
+        {
+            webAuthError = "Could not remove the password: " + ex.Message;
+        }
+        finally
+        {
+            webAuthBusy = false;
+        }
+    }
+
+    private async Task ToggleLanBypass(Microsoft.AspNetCore.Components.ChangeEventArgs e)
+    {
+        webAuthBusy = true;
+        try
+        {
+            await WebAuth.SetLanBypassAsync(e.Value is bool b && b);
+        }
+        catch (Exception ex)
+        {
+            webAuthError = "Could not save the setting: " + ex.Message;
+        }
+        finally
+        {
+            webAuthBusy = false;
+        }
+    }
     private bool isRestarting = false;
 
     // Task counters
@@ -1173,9 +1714,150 @@
         }
     }
 
+    // Media library
+    private TelegramDownloader.Models.Library.LibraryScanState? libraryScan;
+
+    private List<ChannelPicker.ChannelOption> libraryChannels = new();
+    private bool libraryUseIncludeList;
+
+    // Folder rule being composed
+    private long? newRuleChannelId;
+    private List<string> newRuleFolders = new();
+    private bool newRuleFoldersLoading;
+    private string newRulePath = "/";
+    private string newRuleKind = "series";
+
+    private string LibraryChannelName(long id) => libraryChannels.FirstOrDefault(c => c.Id == id)?.Name ?? $"Channel {id}";
+
+    private static string FolderRuleKindLabel(string kind) => kind switch
+    {
+        "series" => "Series",
+        "movie" => "Movies",
+        "ignore" => "Ignore",
+        _ => kind
+    };
+
+    private async Task OnRuleChannelChanged(long? selected)
+    {
+        newRuleChannelId = selected;
+        newRulePath = "/";
+        newRuleFolders = new();
+        if (selected == null) return;
+        newRuleFoldersLoading = true;
+        try
+        {
+            newRuleFolders = await libraryDb.GetChannelFolders(selected.Value.ToString());
+        }
+        catch
+        {
+            newRuleFolders = new();
+        }
+        finally
+        {
+            newRuleFoldersLoading = false;
+        }
+    }
+
+    private void AddFolderRule()
+    {
+        if (Model == null || newRuleChannelId is not long channelId) return;
+        var path = TelegramDownloader.Services.Library.LibraryFolderRules.Normalize(newRulePath);
+        Model.LibraryFolderRules.RemoveAll(r => r.ChannelId == channelId && r.Path.Equals(path, StringComparison.OrdinalIgnoreCase));
+        Model.LibraryFolderRules.Add(new LibraryFolderRule { ChannelId = channelId, Path = path, Kind = newRuleKind });
+        // The channel stays selected so several folders of it can be added in a row
+        newRulePath = "/";
+    }
+
+    private void RemoveFolderRule(LibraryFolderRule rule)
+    {
+        Model?.LibraryFolderRules.Remove(rule);
+    }
+
+    private void SetLibraryChannelMode(bool useIncludeList)
+    {
+        libraryUseIncludeList = useIncludeList;
+        // "All channels" is represented by an empty include list
+        if (!useIncludeList && Model != null)
+            Model.LibraryIncludedChannels = new List<long>();
+    }
+
+    /// <summary>Channels with a MongoDB index, named from the chat cache when available.</summary>
+    private async Task LoadLibraryChannelsAsync()
+    {
+        try
+        {
+            var names = new Dictionary<long, string>();
+            try
+            {
+                foreach (var chat in await ts.getAllSavedChats() ?? new List<ChatViewBase>())
+                    if (chat?.chat != null)
+                        names[chat.chat.ID] = chat.chat.Title ?? chat.chat.ID.ToString();
+            }
+            catch
+            {
+                // No Telegram session: fall back to bare ids
+            }
+            var options = new List<ChannelPicker.ChannelOption>();
+            foreach (var dbName in await db.GetAllChannelDatabaseNames())
+                if (long.TryParse(dbName, out var id))
+                    options.Add(new ChannelPicker.ChannelOption(id, names.TryGetValue(id, out var n) ? n : $"Channel {id}"));
+            // Only channels with an index are offered; ids that lost theirs are
+            // dropped from both lists on save (see PruneLibraryChannelLists)
+            libraryChannels = options;
+        }
+        catch
+        {
+            libraryChannels = new();
+        }
+    }
+
+    private async Task RefreshLibraryScan()
+    {
+        try
+        {
+            libraryScan = await libraryScanService.GetStateAsync();
+        }
+        catch
+        {
+            libraryScan = null;
+        }
+    }
+
+    private async Task StartLibraryScan(bool force)
+    {
+        await Submit();
+        if (!Model!.LibraryEnabled)
+        {
+            toastService.Notify(new(ToastType.Warning, "Enable the media library first") { Title = "Media library", AutoHide = true });
+            return;
+        }
+        if (libraryScanService.Start(null, force, out var error))
+            toastService.Notify(new(ToastType.Success, force ? "Full library rescan started" : "Library scan started") { Title = "Media library", AutoHide = true });
+        else
+            toastService.Notify(new(ToastType.Warning, error ?? "Could not start the scan") { Title = "Media library", AutoHide = true });
+        await Task.Delay(500);
+        await RefreshLibraryScan();
+    }
+
+    private async Task CancelLibraryScan()
+    {
+        libraryScanService.Cancel();
+        await Task.Delay(500);
+        await RefreshLibraryScan();
+    }
+
     private async Task LoadModelAsync()
     {
         Model ??= await GeneralConfigStatic.Load(db);
+        // One row per known provider, so keys can be added before anything is enabled
+        Model.LibraryProviders = TelegramDownloader.Services.Library.MetadataProviderRegistry.EffectiveConfigs(Model);
+        Model.LibraryLanguage ??= "es-ES";
+        Model.LibraryIncludedChannels ??= new List<long>();
+        Model.LibraryExcludedChannels ??= new List<long>();
+        Model.LibraryFolderRules ??= new List<LibraryFolderRule>();
+        libraryUseIncludeList = Model.LibraryIncludedChannels.Count > 0;
+        await LoadLibraryChannelsAsync();
+        await RefreshLibraryScan();
         if (!_disposed)
         {
             await InvokeAsync(StateHasChanged);
@@ -1216,8 +1898,17 @@
         toastService.Notify(new(ToastType.Success, "Persisted tasks cleared") { Title = "Success", AutoHide = true });
     }
 
+    private void PruneLibraryChannelLists()
+    {
+        if (Model == null || libraryChannels.Count == 0) return;
+        var indexed = libraryChannels.Select(c => c.Id).ToHashSet();
+        Model.LibraryIncludedChannels = (Model.LibraryIncludedChannels ?? new()).Where(indexed.Contains).Distinct().ToList();
+        Model.LibraryExcludedChannels = (Model.LibraryExcludedChannels ?? new()).Where(indexed.Contains).Distinct().ToList();
+    }
+
     private async Task Submit()
     {
+        PruneLibraryChannelLists();
         await GeneralConfigStatic.SaveChanges(db, Model);
         toastService.Notify(new(ToastType.Success, "Configuration saved successfully") { Title = "Success", AutoHide = true });
     }

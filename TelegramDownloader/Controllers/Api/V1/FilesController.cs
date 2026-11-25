@@ -1,11 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
-using Syncfusion.Blazor.FileManager;
 using TelegramDownloader.Data;
 using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
 using TelegramDownloader.Models.Api;
 using TelegramDownloader.Services;
 using TelegramDownloader.Services.Api;
+using TelegramDownloader.Services.Deletes;
+using TelegramDownloader.Models.FileSystem;
 
 namespace TelegramDownloader.Controllers.Api.V1
 {
@@ -16,6 +17,10 @@ namespace TelegramDownloader.Controllers.Api.V1
     /// Folders are addressed either by <c>path</c> (<c>/music/rock/</c>) or by
     /// <c>folderId</c>. Both are accepted everywhere; <c>folderId</c> wins when
     /// both are present.
+    ///
+    /// The read endpoints (browse, search, details, stats) also browse an
+    /// imported shared collection when <c>collectionId</c> is given; the route
+    /// <c>channelId</c> is then the channel that holds the collection's files.
     /// </summary>
     [Route("api/v1/channels/{channelId}/files")]
     [Tags("Files")]
@@ -25,19 +30,32 @@ namespace TelegramDownloader.Controllers.Api.V1
         private readonly IDbService _db;
         private readonly IFileService _files;
         private readonly ChannelFolderResolver _resolver;
+        private readonly ImportProgressTracker _imports;
         private readonly ILogger<FilesController> _logger;
 
         public FilesController(
             IDbService db,
             IFileService files,
             ChannelFolderResolver resolver,
+            ImportProgressTracker imports,
             ILogger<FilesController> logger)
         {
             _db = db;
             _files = files;
             _resolver = resolver;
+            _imports = imports;
             _logger = logger;
         }
+
+        /// <summary>Index database to read: the channel's own, or the shared one for a collection.</summary>
+        internal static string DbFor(string channelId, string? collectionId) =>
+            string.IsNullOrWhiteSpace(collectionId) ? channelId : DbService.SHARED_DB_NAME;
+
+        internal static string CollectionFor(string? collectionId) =>
+            string.IsNullOrWhiteSpace(collectionId) ? "directory" : collectionId;
+
+        internal static string? NormalizeCollection(string? collectionId) =>
+            string.IsNullOrWhiteSpace(collectionId) ? null : collectionId.Trim();
 
         /// <summary>Lists the contents of a folder.</summary>
         /// <remarks>
@@ -45,7 +63,7 @@ namespace TelegramDownloader.Controllers.Api.V1
         /// values are <c>name</c> (default), <c>date</c>, <c>size</c> and
         /// <c>type</c>. <c>filter</c> narrows the result to one category:
         /// <c>audio</c>, <c>video</c>, <c>photo</c>, <c>document</c>,
-        /// <c>archive</c>.
+        /// <c>archive</c>. Pass <c>collectionId</c> to browse a shared collection.
         /// </remarks>
         /// <param name="channelId">Channel id (also the name of its index database).</param>
         /// <param name="query">Navigation, filtering, sorting and paging.</param>
@@ -56,13 +74,15 @@ namespace TelegramDownloader.Controllers.Api.V1
         {
             try
             {
-                var folder = await _resolver.ResolveFolder(channelId, query.FolderId, query.Path);
+                var collectionId = NormalizeCollection(query.CollectionId);
+                var dbName = DbFor(channelId, collectionId);
+                var folder = await _resolver.ResolveFolder(dbName, query.FolderId, query.Path, collectionId);
                 if (folder == null)
                     return NotFoundResult("Folder not found");
                 if (folder.IsFile)
                     return BadRequestResult("The requested id refers to a file, not a folder");
 
-                var children = await _resolver.ListChildren(channelId, folder);
+                var children = await _resolver.ListChildren(dbName, folder, collectionId);
                 var dto = BuildContents(channelId, folder, children, query, out var pageInfo);
                 return OkPaged(dto, pageInfo);
             }
@@ -88,10 +108,11 @@ namespace TelegramDownloader.Controllers.Api.V1
             {
                 var scope = ChannelFolderResolver.NormalizeFolderPath(query.Path);
                 var searchRoot = scope == "/" ? "" : scope.TrimEnd('/');
-                var matches = await _db.Search(channelId, searchRoot, q);
+                var collectionId = NormalizeCollection(query.CollectionId);
+                var matches = await _db.Search(DbFor(channelId, collectionId), searchRoot, q, CollectionFor(collectionId));
 
                 var items = (matches ?? new List<BsonFileManagerModel>())
-                    .Select(m => ApiFileDto.FromBson(m, channelId, BaseUrl))
+                    .Select(m => ApiFileDto.FromBson(m, channelId, BaseUrl, collectionId))
                     .ToList();
 
                 items = ApplyFilter(items, query);
@@ -108,17 +129,21 @@ namespace TelegramDownloader.Controllers.Api.V1
         }
 
         /// <summary>Details of a single file or folder.</summary>
+        /// <param name="channelId">Channel id.</param>
+        /// <param name="fileId">Entry id.</param>
+        /// <param name="collectionId">Read the entry from this shared collection.</param>
         [HttpGet("{fileId}")]
         [ProducesResponseType(typeof(ApiResult<ApiFileDto>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status404NotFound)]
-        public async Task<IActionResult> Get(string channelId, string fileId)
+        public async Task<IActionResult> Get(string channelId, string fileId, [FromQuery] string? collectionId = null)
         {
             try
             {
-                var entry = await _db.getFileById(channelId, fileId);
+                collectionId = NormalizeCollection(collectionId);
+                var entry = await _db.getFileById(DbFor(channelId, collectionId), fileId, CollectionFor(collectionId));
                 if (entry == null)
                     return NotFoundResult("File not found", ApiErrorCodes.FileNotFound);
-                return OkResult(ApiFileDto.FromBson(entry, channelId, BaseUrl));
+                return OkResult(ApiFileDto.FromBson(entry, channelId, BaseUrl, collectionId));
             }
             catch (Exception ex)
             {
@@ -130,16 +155,18 @@ namespace TelegramDownloader.Controllers.Api.V1
         /// <summary>Aggregate size and file-type breakdown of a folder subtree.</summary>
         [HttpGet("stats")]
         [ProducesResponseType(typeof(ApiResult<ApiFolderStatsDto>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> Stats(string channelId, [FromQuery] string? path, [FromQuery] string? folderId)
+        public async Task<IActionResult> Stats(string channelId, [FromQuery] string? path, [FromQuery] string? folderId, [FromQuery] string? collectionId = null)
         {
             try
             {
-                var folder = await _resolver.ResolveFolder(channelId, folderId, path);
+                collectionId = NormalizeCollection(collectionId);
+                var dbName = DbFor(channelId, collectionId);
+                var folder = await _resolver.ResolveFolder(dbName, folderId, path, collectionId);
                 if (folder == null)
                     return NotFoundResult("Folder not found");
 
                 var childPath = ChannelFolderResolver.ChildFolderPath(folder);
-                var all = await _db.getAllChildFilesInDirectory(channelId, childPath);
+                var all = await _db.getAllChildFilesInDirectory(dbName, childPath, CollectionFor(collectionId));
                 var files = (all ?? new List<BsonFileManagerModel>()).Where(f => f.IsFile).ToList();
 
                 var stats = new ApiFolderStatsDto
@@ -253,31 +280,58 @@ namespace TelegramDownloader.Controllers.Api.V1
             if (request == null || request.Ids.Count == 0)
                 return BadRequestResult("At least one id is required");
 
-            var deleted = 0;
+            var ids = request.Ids.Where(i => !string.IsNullOrWhiteSpace(i)).Distinct(StringComparer.Ordinal).ToList();
             var skipped = new List<string>();
-
-            foreach (var id in request.Ids)
+            var deleted = 0;
+            try
             {
-                try
+                var entries = await _db.GetFilesByIds(channelId, ids);
+                var found = entries.Select(e => e.Id).ToHashSet(StringComparer.Ordinal);
+                skipped.AddRange(ids.Where(id => !found.Contains(id)));
+                if (entries.Count > 0)
                 {
-                    var entry = await _db.getFileById(channelId, id);
-                    if (entry == null)
-                    {
-                        skipped.Add(id);
-                        continue;
-                    }
-                    await _files.oneItemDeleteAsync(channelId, ChannelFolderResolver.ToContent(entry));
-                    deleted++;
+                    // The shared implementation: entries in bulk, Telegram messages in batches.
+                    var result = await _files.DeleteChannelEntriesAsync(channelId, entries);
+                    deleted = result.DeletedRootIds.Count;
+                    skipped.AddRange(result.FailedRootIds);
                 }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Could not delete {FileId} in channel {ChannelId}", id, channelId);
-                    skipped.Add(id);
-                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Could not delete entries in channel {ChannelId}", channelId);
+                skipped = ids;
+                deleted = 0;
             }
 
             return OkResult(new TransferAcceptedDto { Accepted = deleted, Skipped = skipped },
                 $"{deleted} entries deleted");
+        }
+
+        /// <summary>Starts deleting files and folders in the background, with live progress.</summary>
+        /// <remarks>
+        /// Same effect as <c>POST .../files/delete</c> (folders recursively; the
+        /// Telegram messages no other entry references are deleted, in batches of
+        /// 100, when the account may delete in the channel; otherwise only the
+        /// index entries go), but answers at once with an <c>operationId</c>.
+        /// Follow it with <c>GET /api/v1/delete-operations/{operationId}</c> or the
+        /// <c>DeleteProgress</c> message of <c>/hubs/events</c>, and cancel it with
+        /// <c>POST /api/v1/delete-operations/{operationId}/cancel</c>. Ids that do
+        /// not exist are reported as failed items (<c>Not found</c>).
+        /// </remarks>
+        /// <param name="channelId">Channel id.</param>
+        /// <param name="request">Ids of the entries to delete.</param>
+        /// <param name="operations">Delete operations service.</param>
+        [HttpPost("delete-operations")]
+        [ProducesResponseType(typeof(ApiResult<DeleteOperationStartedDto>), StatusCodes.Status202Accepted)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status400BadRequest)]
+        public IActionResult StartDeleteOperation(string channelId, [FromBody] FileIdsRequest request,
+            [FromServices] DeleteOperationService operations)
+        {
+            if (request == null || request.Ids == null || request.Ids.Count(i => !string.IsNullOrWhiteSpace(i)) == 0)
+                return BadRequestResult("At least one id is required");
+
+            var operation = operations.StartChannel(channelId, request.Ids);
+            return Accepted(ApiResult<DeleteOperationStartedDto>.Ok(new DeleteOperationStartedDto { OperationId = operation.Id }, "Delete started"));
         }
 
         /// <summary>Copies files and folders to another folder of the same channel.</summary>
@@ -378,7 +432,7 @@ namespace TelegramDownloader.Controllers.Api.V1
                 await using (var fs = System.IO.File.Create(Path.Combine(stagingAbsolute, safeName)))
                     await file.CopyToAsync(fs);
 
-                var content = new FileManagerDirectoryContent
+                var content = new FsEntry
                 {
                     Name = safeName,
                     IsFile = true,
@@ -387,13 +441,66 @@ namespace TelegramDownloader.Controllers.Api.V1
                     Type = Path.GetExtension(safeName)
                 };
 
-                await _files.AddUploadFileFromServer(channelId, folder, new List<FileManagerDirectoryContent> { content });
+                await _files.AddUploadFileFromServer(channelId, folder, new List<FsEntry> { content });
                 return Accepted(ApiResult.Done($"Upload of {safeName} started"));
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error uploading {FileName} to channel {ChannelId}", file?.FileName, channelId);
                 return ErrorResult("Could not upload the file", ex);
+            }
+        }
+
+        /// <summary>Downloads files into the server streaming cache ahead of playback.</summary>
+        /// <remarks>
+        /// Folders are expanded recursively. Runs in the background (the call
+        /// answers <c>202</c> right away); its start and end are reported as
+        /// <c>Notification</c> messages on <c>/hubs/events</c>. Once cached, the
+        /// files are served from disk by the <c>content</c> and legacy stream
+        /// endpoints, which makes seeking instant.
+        /// </remarks>
+        [HttpPost("preload")]
+        [ProducesResponseType(typeof(ApiResult<TransferAcceptedDto>), StatusCodes.Status202Accepted)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> Preload(string channelId, [FromBody] PreloadFilesRequest request)
+        {
+            if (request == null || request.FileIds == null || request.FileIds.Count == 0)
+                return BadRequestResult("At least one file id is required");
+
+            try
+            {
+                var contents = new List<FsEntry>();
+                var skipped = new List<string>();
+                foreach (var id in request.FileIds.Distinct())
+                {
+                    var entry = await _db.getFileById(channelId, id);
+                    if (entry == null) skipped.Add(id);
+                    else contents.Add(ChannelFolderResolver.ToContent(entry));
+                }
+
+                if (contents.Count == 0)
+                    return BadRequestResult("None of the supplied ids could be resolved", ApiErrorCodes.FileNotFound);
+
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await _files.PreloadFilesToTemp(channelId, contents);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Background preload of channel {ChannelId} failed", channelId);
+                    }
+                });
+
+                return Accepted(ApiResult<TransferAcceptedDto>.Ok(
+                    new TransferAcceptedDto { Accepted = contents.Count, Skipped = skipped },
+                    "Preload started"));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error starting a preload in channel {ChannelId}", channelId);
+                return ErrorResult("Could not start the preload", ex);
             }
         }
 
@@ -424,13 +531,14 @@ namespace TelegramDownloader.Controllers.Api.V1
         /// <summary>Imports a previously exported channel index.</summary>
         /// <remarks>
         /// Send the export file as <c>multipart/form-data</c> in a <c>file</c>
-        /// part. Import runs in the background and reports through the
-        /// notification pipeline.
+        /// part. Import runs in the background: the response carries an
+        /// <c>importId</c> and the progress arrives as <c>ImportProgress</c>
+        /// messages (<c>kind: index</c>) on <c>/hubs/events</c>.
         /// </remarks>
         [HttpPost("import")]
         [RequestSizeLimit(long.MaxValue)]
         [RequestFormLimits(MultipartBodyLengthLimit = long.MaxValue)]
-        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status202Accepted)]
+        [ProducesResponseType(typeof(ApiResult<ImportStartedDto>), StatusCodes.Status202Accepted)]
         public async Task<IActionResult> Import(string channelId, IFormFile file)
         {
             if (file == null || file.Length == 0)
@@ -443,24 +551,15 @@ namespace TelegramDownloader.Controllers.Api.V1
                 await using (var fs = System.IO.File.Create(tempPath))
                     await file.CopyToAsync(fs);
 
-                var progress = new GenericNotificationProgressModel();
-                _ = Task.Run(async () =>
-                {
-                    try
-                    {
-                        await _files.importData(channelId, tempPath, progress);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Background import into channel {ChannelId} failed", channelId);
-                    }
-                    finally
-                    {
-                        try { System.IO.File.Delete(tempPath); } catch { }
-                    }
-                });
+                var importId = _imports.Run(
+                    ImportKinds.Index,
+                    progress => _files.importData(channelId, tempPath, progress),
+                    _logger,
+                    cleanup: () => System.IO.File.Delete(tempPath));
 
-                return Accepted(ApiResult.Done("Import started"));
+                return Accepted(ApiResult<ImportStartedDto>.Ok(
+                    new ImportStartedDto { ImportId = importId, Kind = ImportKinds.Index },
+                    "Import started"));
             }
             catch (Exception ex)
             {
@@ -476,7 +575,8 @@ namespace TelegramDownloader.Controllers.Api.V1
             BrowseQuery query,
             out PageInfo pageInfo)
         {
-            var all = children.Select(m => ApiFileDto.FromBson(m, channelId, BaseUrl)).ToList();
+            var collectionId = NormalizeCollection(query.CollectionId);
+            var all = children.Select(m => ApiFileDto.FromBson(m, channelId, BaseUrl, collectionId)).ToList();
 
             var stats = new ApiFolderStatsDto
             {

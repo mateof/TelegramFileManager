@@ -47,7 +47,13 @@ server serves at **`/swagger/api-v1/swagger.json`** (browsable at
 | POST | `/api/v1/channels/{id}/leave` | ✓ | Leave / delete a channel. |
 | POST | `/api/v1/channels/{id}/refresh` | ✓ | Index new files (background). |
 | GET | `/api/v1/channels/{id}/refresh` | ✓ | Is a refresh running? |
+| GET | `/api/v1/channels/{id}/refresh/result` | ✓ | What the last refresh added, per type. |
+| GET | `/api/v1/channels/{id}/refresh/progress` | ✓ | Live progress of the running refresh (`null` if none). |
+| DELETE | `/api/v1/channels/{id}/refresh` | ✓ | Cancel the running refresh (202, or 404 if none). |
 | GET | `/api/v1/channels/{id}/messages` | ✓ | Recent message history. |
+| GET | `/api/v1/channels/{id}/messages/window` | ✓ | History before, after or around a message (`before`, `after`, `around`, `limit`). |
+| GET | `/api/v1/channels/{id}/messages/search` | ✓ | Search the whole chat on Telegram (`q`, `kind`, `offsetId`, `limit`). |
+| GET | `/api/v1/channels/{id}/messages/counts` | ✓ | Messages of each kind. |
 | GET | `/api/v1/channels/{id}/image` | ✓ | Channel avatar (image bytes). |
 | GET | `/api/v1/channels/{id}/invitation` | ✓ | Invitation link. |
 | POST | `/api/v1/channels/join` | ✓ | Join via invite hash. |
@@ -63,11 +69,25 @@ server serves at **`/swagger/api-v1/swagger.json`** (browsable at
 | POST | `/api/v1/channels/{channelId}/files/folders` | ✓ | Create a folder. |
 | PUT | `/api/v1/channels/{channelId}/files/{fileId}/name` | ✓ | Rename. |
 | POST | `/api/v1/channels/{channelId}/files/delete` | ✓ | Delete (also frees Telegram storage). |
+| POST | `/api/v1/channels/{channelId}/files/delete-operations` | ✓ | Delete in the background with progress → `{ operationId }`. |
 | POST | `/api/v1/channels/{channelId}/files/copy` | ✓ | Copy within the channel. |
 | POST | `/api/v1/channels/{channelId}/files/move` | ✓ | Move within the channel. |
 | POST | `/api/v1/channels/{channelId}/files/upload` | ✓ | Direct multipart upload to Telegram. |
 | GET | `/api/v1/channels/{channelId}/files/export` | ✓ | Export the index (JSON). |
-| POST | `/api/v1/channels/{channelId}/files/import` | ✓ | Import an index. |
+| POST | `/api/v1/channels/{channelId}/files/import` | ✓ | Import an index (returns `importId`; progress on `/hubs/events`). |
+| POST | `/api/v1/channels/{channelId}/files/preload` | ✓ | Download files into the server cache ahead of playback. |
+| GET | `/api/v1/channels/{channelId}/files/{fileId}/content` | ✓ | The bytes (`disposition=inline\|attachment`, `collectionId`), range-capable. |
+| GET | `/api/v1/channels/{channelId}/files/{fileId}/stream` | ✓ | Video playback, transcoded to MP4 when needed. |
+| GET | `/api/v1/channels/{channelId}/messages/{messageId}/thumbnail` | ✓ | JPEG thumbnail of a photo/video message (cached). |
+| GET | `/api/v1/channels/{channelId}/messages/{messageId}/content` | ✓ | The attachment of a message, without indexing it (`disposition=inline\|attachment`), range-capable. |
+
+Browse, search, details and stats accept `collectionId` to read a shared collection.
+
+### Search
+
+| Method | Path | Sess. | Description |
+| --- | --- | :---: | --- |
+| GET | `/api/v1/search` | | Global name search in every channel index and the local storage (`q`, `filter`, `scope`, `limit`). |
 
 ### Transfers
 
@@ -82,6 +102,7 @@ server serves at **`/swagger/api-v1/swagger.json`** (browsable at
 | GET | `/api/v1/transfers/{id}` | | One transfer. |
 | POST | `/api/v1/transfers/downloads` | ✓ | Download channel files to the server. |
 | POST | `/api/v1/transfers/uploads` | ✓ | Upload server files to a channel. |
+| POST | `/api/v1/transfers/uploads/preview` | | Dry run of an upload: new / replaced / skipped files, bytes, folders, optional duplicates. |
 | POST | `/api/v1/transfers/messages` | ✓ | Download media from raw messages. |
 | POST | `/api/v1/transfers/downloads/pause` | | Pause all downloads. |
 | POST | `/api/v1/transfers/downloads/resume` | | Resume the download queue. |
@@ -89,11 +110,12 @@ server serves at **`/swagger/api-v1/swagger.json`** (browsable at
 | POST | `/api/v1/transfers/{id}/pause` | | Pause one download. |
 | POST | `/api/v1/transfers/{id}/cancel` | | Cancel one transfer. |
 | POST | `/api/v1/transfers/{id}/retry` | | Retry a transfer. |
-| POST | `/api/v1/transfers/clear` | | Remove finished entries (`scope`). |
+| POST | `/api/v1/transfers/clear` | | Remove finished entries (`scope`, `states`). |
 | POST | `/api/v1/transfers/queue/clear` | | Empty a queue (`scope`). |
 | GET | `/api/v1/transfers/persisted` | | List persisted transfers. |
 | DELETE | `/api/v1/transfers/persisted/{internalId}` | | Delete one persisted transfer. |
 | DELETE | `/api/v1/transfers/persisted` | | Delete all persisted transfers. |
+| DELETE | `/api/v1/transfers/{id}` | | Remove one finished/queued entry from the lists (409 while running). |
 
 ### Local files
 
@@ -105,9 +127,15 @@ server serves at **`/swagger/api-v1/swagger.json`** (browsable at
 | POST | `/api/v1/local/folders` | | Create a directory. |
 | POST | `/api/v1/local/rename` | | Rename. |
 | POST | `/api/v1/local/delete` | | Delete (recursive). |
+| POST | `/api/v1/local/delete-operations` | | Delete in the background with progress → `{ operationId }`. |
+| GET | `/api/v1/delete-operations` | | Running and recent (10 min) delete operations. |
+| GET | `/api/v1/delete-operations/{id}` | | One delete operation (`ApiDeleteOperationDto`). |
+| POST | `/api/v1/delete-operations/{id}/cancel` | | Cancel a delete operation (409 when finished). |
 | GET | `/api/v1/local/download` | | Download a local file (range-capable). |
 | POST | `/api/v1/local/upload` | | Store an uploaded file locally. |
 | POST | `/api/v1/local/cache/clear` | | Empty the streaming cache. |
+| POST | `/api/v1/local/copy` | | Copy entries into a folder (`overwrite`). |
+| POST | `/api/v1/local/move` | | Move entries into a folder (`overwrite`). |
 
 ### Playlists
 
@@ -130,9 +158,46 @@ server serves at **`/swagger/api-v1/swagger.json`** (browsable at
 | GET | `/api/v1/shares` | ✓ | List shared collections. |
 | GET | `/api/v1/shares/{id}` | ✓ | One shared collection. |
 | GET | `/api/v1/shares/export` | ✓ | Build a share payload. |
-| POST | `/api/v1/shares/import` | ✓ | Import a share. |
+| POST | `/api/v1/shares/import` | ✓ | Import a share (JSON or `.tfm` multipart; returns `importId`). |
 | DELETE | `/api/v1/shares/{id}` | ✓ | Delete a shared collection. |
 | POST | `/api/v1/shares/strm` | ✓ | Export `.strm` files. |
+
+### Library
+
+| Method | Path | Sess. | Description |
+| --- | --- | :---: | --- |
+| GET | `/api/v1/library/items` | | Movies and series (filters, sorting, paging). |
+| GET | `/api/v1/library/items/{id}` | | Item detail: files or seasons/episodes, watch state, next up. |
+| GET | `/api/v1/library/continue` | | Files with playback in progress. |
+| GET | `/api/v1/library/recent` | | Recently added items. |
+| GET | `/api/v1/library/genres` | | Genres with counts. |
+| GET | `/api/v1/library/stats` | | Settings summary, providers, counts, last scan. |
+| GET | `/api/v1/library/files` | | Files by identification status (review queue). |
+| GET | `/api/v1/library/files/{channelId}/{fileId}` | | One file as the library sees it. |
+| GET | `/api/v1/library/images/{key}` | | Cached poster/backdrop/still (`?size=`), long-lived cache headers, `304` on revalidation. |
+| POST | `/api/v1/library/scan` | | Start a scan of everything, a channel (`channelId`) or some folders (`folders`) (202 / 409). |
+| GET | `/api/v1/library/scan` | | Scan state (persisted). |
+| DELETE | `/api/v1/library/scan` | | Cancel the scan. |
+| GET | `/api/v1/library/providers` | | Providers and their configuration (masked keys). |
+| GET | `/api/v1/library/providers/search` | | Search providers by `q`/`kind`/`year` or `imdbId`. |
+| PUT | `/api/v1/library/files/{channelId}/{fileId}/match` | | Identify a file by hand (locks it). |
+| DELETE | `/api/v1/library/files/{channelId}/{fileId}/match` | | Drop a file's identification. |
+| POST | `/api/v1/library/files/{channelId}/{fileId}/ignore` | | Keep a file out of the library. |
+| DELETE | `/api/v1/library/files/{channelId}/{fileId}/ignore` | | Put it back. |
+| PUT | `/api/v1/library/items/{id}/identify` | | Move every file of an item to another title. |
+| GET | `/api/v1/library/folders` | | Videos of a folder (`channelId`, `path`) and the series assigned to it. |
+| PUT | `/api/v1/library/folders/series` | | Every video of a folder is an episode of one series. |
+| DELETE | `/api/v1/library/folders/series` | | Remove the rule of a folder (`channelId`, `path`). |
+| POST | `/api/v1/library/items/{id}/refresh` | | Re-download metadata and episodes. |
+| GET | `/api/v1/library/watch/{channelId}/{fileId}` | | Playback progress of a file. |
+| PUT | `/api/v1/library/watch/{channelId}/{fileId}` | | Save playback progress. |
+| DELETE | `/api/v1/library/watch/{channelId}/{fileId}` | | Forget the progress. |
+| POST | `/api/v1/library/watch/{channelId}/{fileId}/watched` | | Mark watched. |
+| DELETE | `/api/v1/library/watch/{channelId}/{fileId}/watched` | | Mark not watched. |
+| POST | `/api/v1/library/items/{id}/watched` | | Mark an item (or a season) watched. |
+| DELETE | `/api/v1/library/items/{id}/watched` | | Mark an item (or a season) not watched. |
+| GET | `/api/v1/library/watch/history` | | Watched files, most recent first. |
+| GET | `/api/v1/library/channel-folders` | | Folder paths of a channel (`channelId`), for the folder rules picker. |
 
 ### Configuration
 
@@ -157,6 +222,17 @@ server serves at **`/swagger/api-v1/swagger.json`** (browsable at
 | GET | `/api/v1/system/databases/{channelId}/analysis` | | Folder-path integrity check. |
 | POST | `/api/v1/system/databases/{channelId}/repair` | | Repair folder paths. |
 | POST | `/api/v1/system/maintenance/cleanup-tasks` | | Drop stale persisted tasks. |
+| POST | `/api/v1/system/setup/test-mongo` | | Wizard: test a MongoDB connection (409 once set up). |
+| POST | `/api/v1/system/setup/test-telegram` | | Wizard: validate Telegram API id/hash (409 once set up). |
+| POST | `/api/v1/system/setup` | | Wizard: save MongoDB and/or Telegram settings (409 once set up). |
+| POST | `/api/v1/system/setup/complete` | | Wizard: mark the setup as finished (409 once set up). |
+| POST | `/api/v1/system/restart` | | Graceful stop; Docker/systemd restarts it. |
+| GET | `/api/v1/system/image-cache` | | Size of the avatar + thumbnail caches. |
+| DELETE | `/api/v1/system/image-cache` | | Empty them. |
+| GET | `/api/v1/system/orphaned-favorites` | ✓ | Favourite channels no longer reachable. |
+| POST | `/api/v1/system/orphaned-favorites` | ✓ | Remove them. |
+| GET | `/api/v1/system/ffmpeg` | | FFmpeg availability and version. |
+| GET | `/api/v1/system/version` | | Current version vs latest GitHub release/dev build. |
 
 ### SignalR hub `/hubs/transfers`
 
@@ -170,6 +246,21 @@ server serves at **`/swagger/api-v1/swagger.json`** (browsable at
 | Client → server | `GetSpeedHistory()` | → `SpeedHistoryDto` |
 | Client → server | `MuteSnapshots()` / `UnmuteSnapshots()` | – |
 | Client → server | `MuteSpeedHistory()` / `UnmuteSpeedHistory()` | – |
+
+### SignalR hub `/hubs/events`
+
+| Direction | Name | Payload |
+| --- | --- | --- |
+| Server → client | `Notification` | `NotificationEventDto` |
+| Server → client | `ChannelRefreshed` | `ChannelRefreshedEventDto` |
+| Server → client | `ChannelRefreshProgress` | `ChannelRefreshProgressEventDto` |
+| Server → client | `ImportProgress` | `ImportProgressEventDto` |
+| Server → client | `AuthState` | `AuthStateEventDto` |
+| Server → client | `LibraryScan` | `LibraryScanEventDto` |
+| Server → client | `DeleteProgress` | `ApiDeleteOperationDto` |
+| Server → client | `Metrics` | `SystemMetricsDto` (subscribers only) |
+| Client → server | `GetAuthState()` | → `AuthStateEventDto` |
+| Client → server | `SubscribeMetrics()` / `UnsubscribeMetrics()` | – |
 
 ---
 
@@ -212,7 +303,7 @@ interface ApiChannelDetailDto extends ApiChannelDto {
 }
 interface ApiChannelsWithFoldersDto { folders: ApiChannelFolderDto[]; ungrouped: ApiChannelDto[]; totalChannels: number; }
 interface ApiChannelFolderDto { id: number; title: string; iconEmoji?: string; channels: ApiChannelDto[]; channelCount: number; }
-interface ApiChatMessageDto { id: number; date: string; text?: string; hasMedia: boolean; mediaType?: "photo"|"video"|"audio"|"document"; fileName?: string; fileSize: number; mimeType?: string; from?: string; }
+interface ApiChatMessageDto { id: number; date: string; text?: string; hasMedia: boolean; mediaType?: "photo"|"video"|"audio"|"document"; fileName?: string; fileSize: number; mimeType?: string; from?: string; duration?: number; title?: string; performer?: string; }
 ```
 
 ### Files
@@ -224,7 +315,11 @@ interface ApiFileDto {
   size: number; sizeText: string; type: string; category: string;
   dateCreated: string; dateModified: string;
   messageId?: number; isSplit: boolean; md5Hash?: string; xxHash?: string;
-  streamUrl?: string; downloadUrl?: string;
+  streamUrl?: string; downloadUrl?: string;          // legacy URLs, kept for old clients
+  contentUrl?: string;          // v1, inline, range-capable
+  contentDownloadUrl?: string;  // v1, Content-Disposition: attachment
+  playbackUrl?: string;         // v1, audio/video only (transcoding stream when needed)
+  thumbnailUrl?: string;        // v1, photos/videos backed by one message
 }
 interface ApiFolderContentsDto {
   channelId?: string; currentPath: string; currentFolderId?: string;
@@ -267,6 +362,22 @@ interface PlaylistModel { id: string; name: string; description?: string; tracks
 interface PlaylistTrackModel { fileId: string; channelId: string; channelName: string; fileName: string; filePath: string; fileType: string; fileSize: number; order: number; directUrl?: string; isLocalFile: boolean; dateAdded: string; }
 ```
 
+### Library
+
+```ts
+interface ApiLibraryItemDto { id: string; kind: "movie" | "series"; title: string; originalTitle?: string; year?: number; overview?: string; genres: string[]; rating?: number; voteCount?: number; runtime?: number; posterUrl?: string; backdropUrl?: string; provider: string; providerId: string; imdbId?: string; externalIds: Record<string, string>; locked: boolean; fileCount: number; channelIds: number[]; seasonCount: number; addedAt: string; watch: ApiWatchSummaryDto; }
+interface ApiLibraryItemDetailDto extends ApiLibraryItemDto { tagline?: string; status?: string; files: ApiLibraryFileDto[]; seasons: ApiLibrarySeasonDto[]; nextUp?: ApiLibraryEpisodeDto; resume?: ApiLibraryFileDto; }
+interface ApiLibrarySeasonDto { number: number; name?: string; overview?: string; posterUrl?: string; episodeCount?: number; episodes: ApiLibraryEpisodeDto[]; episodesWatched: number; }
+interface ApiLibraryEpisodeDto { season: number; number: number; title?: string; overview?: string; stillUrl?: string; airDate?: string; runtime?: number; rating?: number; files: ApiLibraryFileDto[]; watch?: ApiWatchStateDto; completed: boolean; }
+interface ApiLibraryFileDto { channelId: number; fileId: string; fileName: string; folderPath: string; size: number; sizeText: string; status: "matched" | "review" | "unmatched" | "ignored"; confidence: number; matchSource: "auto" | "manual"; locked: boolean; parsed: { title: string; year?: number; season?: number; episode?: number; isSeries: boolean; source: string }; itemId?: string; kind?: string; season?: number; episode?: number; file: ApiFileDto; watch?: ApiWatchStateDto; item?: ApiLibraryItemDto; scannedAt: string; error?: string; }
+interface ApiWatchStateDto { channelId: number; fileId: string; fileName?: string; itemId?: string; season?: number; episode?: number; positionMs: number; durationMs: number; progress: number; completed: boolean; playCount: number; firstPlayedAt: string; lastPlayedAt: string; }
+interface ApiWatchSummaryDto { completed: boolean; inProgress: boolean; positionMs: number; durationMs: number; progress: number; episodesTotal: number; episodesWatched: number; lastPlayedAt?: string; }
+interface ApiProviderCandidateDto { provider: string; providerId: string; kind: string; title: string; originalTitle?: string; year?: number; overview?: string; posterUrl?: string; imdbId?: string; }
+interface ApiLibraryProviderDto { id: string; name: string; website: string; keyUrl: string; requiresKey: boolean; supportsEpisodes: boolean; supportsImages: boolean; supportsLanguage: boolean; enabled: boolean; hasKey: boolean; apiKeyMasked?: string; priority: number; }
+interface ApiLibraryScanStateDto { running: boolean; cancelled: boolean; startedAt?: string; finishedAt?: string; scope: string; force: boolean; channelsTotal: number; channelsScanned: number; currentChannel?: string; filesSeen: number; filesToProcess: number; filesProcessed: number; filesNew: number; filesRemoved: number; matched: number; review: number; unmatched: number; failed: number; error?: string; }
+interface ApiLibraryStatsDto { enabled: boolean; language: string; autoScan: boolean; watchedThreshold: number; providers: ApiLibraryProviderDto[]; ready: boolean; movies: number; series: number; files: Record<string, number>; inProgress: number; scan?: ApiLibraryScanStateDto; }
+```
+
 ### System & config
 
 ```ts
@@ -288,17 +399,23 @@ interface SharedCollectionDto { id: string; name?: string; description?: string;
 | `POST /channels/{id}/refresh` | `{ includeDocuments?, includeAudio?, includeVideo?, includePhotos?, force? }` |
 | `POST …/files/folders` | `{ path: string; name: string }` |
 | `PUT …/files/{fileId}/name` | `{ newName: string }` |
-| `POST …/files/delete` | `{ ids: string[] }` |
+| `POST …/files/delete` · `/delete-operations` | `{ ids: string[] }` |
 | `POST …/files/copy` · `/move` | `{ ids: string[]; targetPath?: string; targetFolderId?: string }` |
 | `POST /transfers/downloads` | `{ channelId: string; fileIds: string[]; targetPath?: string; sharedCollectionId?: string }` |
 | `POST /transfers/uploads` | `{ channelId: string; localPaths: string[]; targetPath?: string }` |
+| `POST /transfers/uploads/preview` | `{ channelId: string; localPaths: string[]; targetPath?: string; findDuplicates?: boolean; maxItems?: number }` |
 | `POST /transfers/messages` | `{ chatId: number; messageIds: number[]; targetPath?: string }` |
 | `POST /local/folders` | `{ path: string; name: string }` |
 | `POST /local/rename` | `{ path: string; newName: string }` |
-| `POST /local/delete` | `{ paths: string[] }` |
+| `POST /local/delete` · `/local/delete-operations` | `{ paths: string[] }` |
+| `POST /local/copy` · `/local/move` | `{ paths: string[]; targetPath: string; overwrite?: boolean }` |
+| `POST …/files/preload` | `{ fileIds: string[] }` |
+| `POST /system/setup/test-mongo` | `{ connectionString: string }` |
+| `POST /system/setup/test-telegram` | `{ apiId: string; apiHash: string }` |
+| `POST /system/setup` | `{ mongoConnectionString?: string; apiId?: string; apiHash?: string }` |
 | `POST /playlists` · `PUT /playlists/{id}` | `PlaylistModel` |
 | `POST /playlists/{id}/tracks` | `PlaylistTrackModel` |
 | `PUT /playlists/{id}/tracks/order` | `string[]` (file ids in order) |
-| `POST /shares/import` | `{ share: ShareFilesModel }` |
+| `POST /shares/import` | `{ share: ShareFilesModel }` or multipart `file` (`.tfm`) |
 | `POST /shares/strm` | `{ path: string; host?: string; destinationFolder?: string }` |
 | `PATCH /config` | `UpdateConfigRequest` (all fields optional) |

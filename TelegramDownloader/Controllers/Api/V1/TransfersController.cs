@@ -1,11 +1,12 @@
 using Microsoft.AspNetCore.Mvc;
-using Syncfusion.Blazor.FileManager;
 using TelegramDownloader.Data;
 using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
 using TelegramDownloader.Models.Api;
 using TelegramDownloader.Services;
 using TelegramDownloader.Services.Api;
+using TelegramDownloader.Services.Upload;
+using TelegramDownloader.Models.FileSystem;
 
 namespace TelegramDownloader.Controllers.Api.V1
 {
@@ -155,7 +156,7 @@ namespace TelegramDownloader.Controllers.Api.V1
                     ? request.ChannelId
                     : DbService.SHARED_DB_NAME;
 
-                var contents = new List<FileManagerDirectoryContent>();
+                var contents = new List<FsEntry>();
                 var skipped = new List<string>();
 
                 foreach (var id in request.FileIds)
@@ -165,7 +166,7 @@ namespace TelegramDownloader.Controllers.Api.V1
                         : await _db.getFileById(dbName, id, request.SharedCollectionId);
 
                     if (entry == null) skipped.Add(id);
-                    else contents.Add(entry.toFileManagerContent());
+                    else contents.Add(entry.ToFsEntry());
                 }
 
                 if (contents.Count == 0)
@@ -223,29 +224,22 @@ namespace TelegramDownloader.Controllers.Api.V1
 
             try
             {
-                var contents = new List<FileManagerDirectoryContent>();
-                var skipped = new List<string>();
-
-                foreach (var relative in request.LocalPaths)
-                {
-                    var content = BuildLocalContent(relative);
-                    if (content == null) skipped.Add(relative);
-                    else contents.Add(content);
-                }
+                var (contents, skipped) = BuildLocalContents(request.LocalPaths);
 
                 if (contents.Count == 0)
                     return BadRequestResult("None of the supplied paths exist under the local root", ApiErrorCodes.FileNotFound);
 
                 var targetPath = ChannelFolderResolver.NormalizeFolderPath(request.TargetPath);
-                await _files.AddUploadFileFromServer(request.ChannelId, targetPath, contents);
+                // The id of the batch this request created; looking up the last
+                // upload task could return another request's task under concurrency.
+                var taskId = await _files.AddUploadFileFromServer(request.ChannelId, targetPath, contents);
 
-                var task = _tis.infoDownloadTaksModel.LastOrDefault(t => t.isUpload);
                 return Accepted(ApiResult<TransferAcceptedDto>.Ok(
                     new TransferAcceptedDto
                     {
                         Accepted = contents.Count,
                         Skipped = skipped,
-                        TaskId = task?._internalId
+                        TaskId = taskId
                     },
                     "Upload queued"));
             }
@@ -256,10 +250,57 @@ namespace TelegramDownloader.Controllers.Api.V1
             }
         }
 
+        /// <summary>Dry run of an upload: what <c>POST /transfers/uploads</c> would do.</summary>
+        /// <remarks>
+        /// Takes the same body as the upload and applies the very same decisions
+        /// (shared planner) without sending anything: files that are new, files
+        /// that replace an older indexed copy, files skipped (empty, or a newer
+        /// copy already indexed), bytes to send and folders to create. With
+        /// <c>findDuplicates</c> it also reports files to upload whose content
+        /// (same stored XXHash and size) already exists elsewhere in the channel;
+        /// that option reads the matching local files from disk. Nothing is
+        /// queued and no Telegram session is needed.
+        /// </remarks>
+        [HttpPost("uploads/preview")]
+        [ProducesResponseType(typeof(ApiResult<UploadPreviewResult>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> PreviewUpload([FromBody] UploadPreviewRequest request, CancellationToken cancellationToken)
+        {
+            if (request == null || string.IsNullOrWhiteSpace(request.ChannelId))
+                return BadRequestResult("A channel id is required");
+            if (request.LocalPaths == null || request.LocalPaths.Count == 0)
+                return BadRequestResult("At least one local path is required");
+
+            try
+            {
+                var (contents, missing) = BuildLocalContents(request.LocalPaths);
+                if (contents.Count == 0)
+                    return BadRequestResult("None of the supplied paths exist under the local root", ApiErrorCodes.FileNotFound);
+
+                var targetPath = ChannelFolderResolver.NormalizeFolderPath(request.TargetPath);
+                int maxItems = Math.Clamp(request.MaxItems ?? UploadPreviewPlanner.DefaultMaxItems, 0, 5000);
+                var preview = await _files.PreviewUploadFromServer(request.ChannelId, targetPath, contents, request.FindDuplicates, maxItems, cancellationToken);
+                preview.MissingLocalPaths = missing;
+                return OkResult(preview);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                return StatusCode(499);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error previewing an upload to channel {ChannelId}", request.ChannelId);
+                return ErrorResult("Could not preview the upload", ex);
+            }
+        }
+
         /// <summary>Downloads the media attached to raw Telegram messages.</summary>
         /// <remarks>
-        /// Works on any chat, indexed or not: this is how the web UI saves a
-        /// file straight from the message list.
+        /// Works on any chat, indexed or not: this is how the web UI saves
+        /// files straight from the message list. <c>targetPath</c> is a folder
+        /// relative to the server local root (created if needed; <c>temp</c>
+        /// when omitted). Names already used in it get a number, so messages that
+        /// share a file name do not overwrite each other.
         /// </remarks>
         [HttpPost("messages")]
         [RequireTelegramSession]
@@ -269,37 +310,52 @@ namespace TelegramDownloader.Controllers.Api.V1
             if (request == null || request.MessageIds == null || request.MessageIds.Count == 0)
                 return BadRequestResult("At least one message id is required");
 
+            string folder;
+            if (string.IsNullOrWhiteSpace(request.TargetPath))
+                folder = FileService.TEMPDIR;
+            else if (!LocalPathGuard.TryResolve(FileService.LOCALDIR, request.TargetPath, out folder, out _, out var error))
+                return BadRequestResult(error ?? "Invalid target path");
+
+            Dictionary<int, TL.Message> messages;
+            string chatName;
+            try
+            {
+                messages = (await _telegram.getMessagesById(request.ChatId, request.MessageIds)).ToDictionary(m => m.id);
+                chatName = _telegram.getChatName(request.ChatId);
+                Directory.CreateDirectory(folder);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFoundResult("Channel not found", ApiErrorCodes.ChannelNotFound);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Could not read {Count} messages of chat {ChatId}", request.MessageIds.Count, request.ChatId);
+                return ErrorResult("Could not read the messages from Telegram", ex);
+            }
+
             var accepted = 0;
             var skipped = new List<string>();
-
-            foreach (var messageId in request.MessageIds)
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var messageId in request.MessageIds.Distinct())
             {
+                var attachment = messages.TryGetValue(messageId, out var message) ? MessageAttachment.From(message) : null;
+                if (attachment == null)
+                {
+                    skipped.Add(messageId.ToString());
+                    continue;
+                }
                 try
                 {
-                    var message = await _telegram.getMessageFile(request.ChatId.ToString(), messageId);
-                    if (message == null)
-                    {
-                        skipped.Add(messageId.ToString());
-                        continue;
-                    }
-
-                    var chatMessage = new ChatMessages { message = message, isDocument = true };
-                    _ = Task.Run(async () =>
-                    {
-                        try
-                        {
-                            await _files.DownloadFileFromChat(chatMessage, null, request.TargetPath, null);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, "Download of message {MessageId} failed", messageId);
-                        }
-                    });
+                    var name = MessageDownloads.UniqueName(attachment.Name, names, n => System.IO.File.Exists(Path.Combine(folder, n)));
+                    var model = new DownloadModel { tis = _tis, channelName = chatName };
+                    // Only queues it: the download runs when a slot is free.
+                    await _files.DownloadFileFromChat(new ChatMessages { message = message, isDocument = !attachment.IsPhoto }, name, folder, model);
                     accepted++;
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Could not resolve message {MessageId} of chat {ChatId}", messageId, request.ChatId);
+                    _logger.LogError(ex, "Could not queue the download of message {MessageId}", messageId);
                     skipped.Add(messageId.ToString());
                 }
             }
@@ -359,29 +415,36 @@ namespace TelegramDownloader.Controllers.Api.V1
             return OkEmpty("Transfer cancelled");
         }
 
-        /// <summary>Pauses one download.</summary>
+        /// <summary>Pauses one download or upload.</summary>
+        /// <remarks>
+        /// A download, running or queued, stays paused in the queue until it is
+        /// resumed (<c>retry</c>, or resuming all the downloads). An upload stops
+        /// sending data. Transfers with <c>canPause: false</c> answer <c>400</c>.
+        /// </remarks>
         [HttpPost("{id}/pause")]
         [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status404NotFound)]
         public IActionResult Pause(string id)
         {
-            var download = _tis.downloadModels.FirstOrDefault(d => d._internalId == id);
-            if (download == null)
-                return NotFoundResult("No running download with that id", ApiErrorCodes.TaskNotFound);
+            if (!TransferSnapshotBuilder.TryFind(_tis, id, out var download, out var upload, out _) || (download == null && upload == null))
+                return NotFoundResult("No download or upload with that id", ApiErrorCodes.TaskNotFound);
 
-            _tis.addToPendingDownloadList(download, atFirst: true, chekDownloads: false);
-            download.Pause();
-            return OkEmpty("Download paused");
+            if (download != null ? _tis.PauseDownload(download) : upload!.Pause())
+                return OkEmpty("Transfer paused");
+            return BadRequestResult("This transfer cannot be paused now", ApiErrorCodes.NotSupported);
         }
 
-        /// <summary>Retries a paused, cancelled or failed transfer.</summary>
+        /// <summary>Resumes a paused transfer, or retries a cancelled or failed one.</summary>
         [HttpPost("{id}/retry")]
         [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status200OK)]
         [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status404NotFound)]
         public IActionResult Retry(string id)
         {
-            if (!TransferSnapshotBuilder.TryFind(_tis, id, out var download, out _, out var task))
+            if (!TransferSnapshotBuilder.TryFind(_tis, id, out var download, out var upload, out var task))
                 return NotFoundResult("Transfer not found", ApiErrorCodes.TaskNotFound);
+
+            if (upload != null && upload.Resume())
+                return OkEmpty("Upload resumed");
 
             if (task != null)
             {
@@ -391,45 +454,129 @@ namespace TelegramDownloader.Controllers.Api.V1
 
             if (download != null)
             {
-                if (!_tis.pendingDownloadModels.Contains(download))
-                    _tis.addToPendingDownloadList(download, atFirst: true);
-                else
-                    _ = _tis.CheckPendingDownloads();
+                if (!download.CanRestart)
+                    return BadRequestResult("This download cannot be started again", ApiErrorCodes.NotSupported);
+                if (_tis.pendingDownloadModels.Contains(download))
+                    _tis.ResumeDownload(download);
+                else if (!_tis.RetryDownload(download))
+                    return ConflictResult("The download is still running");
                 return OkEmpty("Download queued again");
             }
 
             return BadRequestResult("Only downloads and batch tasks can be retried", ApiErrorCodes.NotSupported);
         }
 
+        /// <summary>Removes one entry from the transfer lists ("remove from list").</summary>
+        /// <remarks>
+        /// For finished entries (completed, failed, cancelled), paused ones and
+        /// queued ones (which leave the queue without starting). A running
+        /// transfer answers <c>409</c>: cancel it first. Nothing is deleted
+        /// from disk or from Telegram, and persisted copies are not touched.
+        /// </remarks>
+        [HttpDelete("{id}")]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status409Conflict)]
+        public IActionResult Remove(string id)
+        {
+            if (!TransferSnapshotBuilder.TryFind(_tis, id, out var download, out var upload, out var task))
+                return NotFoundResult("Transfer not found", ApiErrorCodes.TaskNotFound);
+
+            var state = download?.state ?? upload?.state ?? task!.state;
+            if (!TransferSnapshotBuilder.CanRemove(state) || upload?.state == StateTask.Paused)
+                return ConflictResult("The transfer is running; cancel it before removing it");
+
+            if (download != null)
+            {
+                if (_tis.pendingDownloadModels.Contains(download)) _tis.deletePendingDownloadInList(download);
+                if (_tis.downloadModels.Contains(download)) _tis.deleteDownloadInList(download);
+            }
+            else if (upload != null)
+            {
+                if (_tis.pendingUploadModels.Contains(upload)) _tis.deletePendingUploadInList(upload);
+                if (_tis.uploadModels.Contains(upload)) _tis.deleteUploadInList(upload);
+            }
+            else
+            {
+                _tis.deleteInfoDownloadTaskFromList(task!);
+            }
+
+            return OkEmpty("Transfer removed from the list");
+        }
+
         /// <summary>Removes finished entries (completed, cancelled and failed) from a list.</summary>
         /// <param name="scope"><c>downloads</c>, <c>uploads</c>, <c>tasks</c> or <c>all</c>.</param>
+        /// <param name="states">
+        /// Comma-separated states to restrict the cleanup to: <c>completed</c>,
+        /// <c>error</c>, <c>canceled</c>, <c>paused</c> or <c>pending</c>. Omit it
+        /// to remove every finished entry, as before. <c>working</c> is rejected:
+        /// a running transfer is cancelled, not cleared.
+        /// </param>
         [HttpPost("clear")]
         [ProducesResponseType(typeof(ApiResult<TransfersSnapshotDto>), StatusCodes.Status200OK)]
-        public IActionResult Clear([FromQuery] string scope = "all")
+        public IActionResult Clear([FromQuery] string scope = "all", [FromQuery] string? states = null)
         {
+            HashSet<StateTask>? wanted;
+            if (!TryParseStates(states, out wanted, out string? stateError))
+                return BadRequestResult(stateError!);
+
             switch (scope?.ToLowerInvariant())
             {
                 case "downloads":
-                    _tis.clearDownloadCompleted();
+                    _tis.clearDownloadCompleted(wanted);
                     break;
                 case "uploads":
-                    _tis.clearUploadCompleted();
+                    _tis.clearUploadCompleted(wanted);
                     break;
                 case "tasks":
-                    _tis.clearTasksCompleted();
+                    _tis.clearTasksCompleted(wanted);
                     break;
                 case "all":
                 case null:
                 case "":
-                    _tis.clearDownloadCompleted();
-                    _tis.clearUploadCompleted();
-                    _tis.clearTasksCompleted();
+                    _tis.clearDownloadCompleted(wanted);
+                    _tis.clearUploadCompleted(wanted);
+                    _tis.clearTasksCompleted(wanted);
                     break;
                 default:
                     return BadRequestResult("scope must be one of: downloads, uploads, tasks, all");
             }
 
             return OkResult(TransferSnapshotBuilder.BuildSnapshot(_tis), "Finished entries cleared");
+        }
+
+        /// <summary>
+        /// Reads the optional <c>states</c> filter. Null means "every finished
+        /// state", which is what the endpoint did before the filter existed.
+        /// </summary>
+        private static bool TryParseStates(string? states, out HashSet<StateTask>? parsed, out string? error)
+        {
+            parsed = null;
+            error = null;
+            if (string.IsNullOrWhiteSpace(states))
+                return true;
+
+            HashSet<StateTask> result = new HashSet<StateTask>();
+            foreach (string raw in states.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                // "failed" reads better than the enum's "error" from a client.
+                string name = raw.ToLowerInvariant() switch
+                {
+                    "failed" => "error",
+                    "cancelled" => "canceled",
+                    var other => other
+                };
+
+                if (!Enum.TryParse(name, ignoreCase: true, out StateTask state) || state == StateTask.Working)
+                {
+                    error = $"Unknown state '{raw}'. Valid states: completed, error, canceled, paused, pending";
+                    return false;
+                }
+                result.Add(state);
+            }
+
+            parsed = result;
+            return true;
         }
 
         /// <summary>Empties a queue without touching what is already running.</summary>
@@ -483,6 +630,51 @@ namespace TelegramDownloader.Controllers.Api.V1
             }
         }
 
+        /// <summary>Resumes or retries one persisted transfer.</summary>
+        /// <remarks>
+        /// Same code path as the automatic resume on startup: downloads continue
+        /// from the last confirmed byte, batch uploads skip the files already in
+        /// the destination, and a task whose source no longer exists is marked
+        /// as failed with the reason. A task that is already queued or running
+        /// is left alone.
+        /// </remarks>
+        [HttpPost("persisted/{internalId}/resume")]
+        [ProducesResponseType(typeof(ApiResult<TaskResumeResultDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> ResumePersisted(string internalId,
+            [FromServices] TelegramDownloader.Services.Transfers.TaskResumeCoordinator coordinator)
+        {
+            try
+            {
+                var result = await coordinator.ResumeAsync(internalId);
+                if (result.Action == TelegramDownloader.Services.Transfers.ResumeActionKind.Skip && result.Message == "Task not found")
+                    return NotFoundResult("No persisted task with that id", ApiErrorCodes.TaskNotFound);
+                return OkResult(new TaskResumeResultDto
+                {
+                    InternalId = result.InternalId,
+                    Resumed = result.Resumed,
+                    Action = result.Action.ToString(),
+                    Message = result.Message
+                }, result.Message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error resuming persisted task {InternalId}", internalId);
+                return ErrorResult("Could not resume the persisted task", ex);
+            }
+        }
+
+        /// <summary>Result of resuming a persisted transfer.</summary>
+        public class TaskResumeResultDto
+        {
+            public string InternalId { get; set; } = "";
+            /// <summary>True when the transfer was queued again.</summary>
+            public bool Resumed { get; set; }
+            /// <summary>Skip, Fail, ResumeDownload, ResumeSplitDownload or ResumeBatchUpload.</summary>
+            public string Action { get; set; } = "";
+            public string? Message { get; set; }
+        }
+
         /// <summary>Deletes one persisted transfer.</summary>
         [HttpDelete("persisted/{internalId}")]
         [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status200OK)]
@@ -522,7 +714,24 @@ namespace TelegramDownloader.Controllers.Api.V1
         /// the server local root. Returns null when the path escapes the root or
         /// does not exist.
         /// </summary>
-        private static FileManagerDirectoryContent? BuildLocalContent(string relativePath)
+        /// <summary>
+        /// Resolves the requested local paths the way the upload does; shared by
+        /// the upload and its preview so both see the same items.
+        /// </summary>
+        private static (List<FsEntry> Contents, List<string> Missing) BuildLocalContents(IEnumerable<string> relativePaths)
+        {
+            var contents = new List<FsEntry>();
+            var missing = new List<string>();
+            foreach (var relative in relativePaths)
+            {
+                var content = BuildLocalContent(relative);
+                if (content == null) missing.Add(relative);
+                else contents.Add(content);
+            }
+            return (contents, missing);
+        }
+
+        private static FsEntry? BuildLocalContent(string relativePath)
         {
             if (string.IsNullOrWhiteSpace(relativePath)) return null;
 
@@ -540,7 +749,7 @@ namespace TelegramDownloader.Controllers.Api.V1
             if (System.IO.File.Exists(absolute))
             {
                 var info = new System.IO.FileInfo(absolute);
-                return new FileManagerDirectoryContent
+                return new FsEntry
                 {
                     Name = name,
                     IsFile = true,
@@ -555,7 +764,7 @@ namespace TelegramDownloader.Controllers.Api.V1
             if (Directory.Exists(absolute))
             {
                 var info = new DirectoryInfo(absolute);
-                return new FileManagerDirectoryContent
+                return new FsEntry
                 {
                     Name = name,
                     IsFile = false,

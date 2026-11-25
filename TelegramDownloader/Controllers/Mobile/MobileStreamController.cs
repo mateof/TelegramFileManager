@@ -1030,6 +1030,135 @@ namespace TelegramDownloader.Controllers.Mobile
             }
         }
 
+        /// <summary>
+        /// Descargar audio local transcodificado a MP3 o AAC (para descargas offline)
+        /// </summary>
+        /// <remarks>
+        /// Equivalente a `tfm/{channelId}/{tfmId}/transcoded` pero para archivos del
+        /// directorio local. Al estar el original ya en disco no hay descarga previa,
+        /// así que sólo se paga el coste de FFmpeg la primera vez.
+        ///
+        /// El resultado se cachea en disco y la clave de caché incluye tamaño y fecha
+        /// de modificación del original, de modo que si el archivo local cambia se
+        /// vuelve a transcodificar automáticamente.
+        ///
+        /// Requiere FFmpeg instalado en el servidor: si no está disponible responde
+        /// **501 Not Implemented** y el cliente debe descargar el original.
+        ///
+        /// Ejemplo: `/api/mobile/stream/local/transcoded?path=music/song.flac&amp;format=aac&amp;bitrate=192`
+        /// </remarks>
+        /// <param name="path">Ruta relativa del archivo dentro del directorio local</param>
+        /// <param name="format">Formato destino: mp3 | aac</param>
+        /// <param name="bitrate">Bitrate en kbps (64-320)</param>
+        [HttpGet("local/transcoded")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status206PartialContent)]
+        [ProducesResponseType(StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status501NotImplemented)]
+        public async Task<IActionResult> StreamTranscodedLocalAudio(
+            [FromQuery] string path,
+            [FromQuery] string format = "mp3",
+            [FromQuery] int bitrate = 192)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(path))
+                {
+                    return BadRequest(ApiResponse<object>.Fail("Path is required"));
+                }
+
+                format = format.ToLowerInvariant();
+                if (format != "mp3" && format != "aac")
+                {
+                    return BadRequest(ApiResponse<object>.Fail("Unsupported format. Use mp3 or aac."));
+                }
+                bitrate = Math.Clamp(bitrate, 64, 320);
+
+                if (!IsFFmpegAvailable())
+                {
+                    return StatusCode(StatusCodes.Status501NotImplemented,
+                        ApiResponse<object>.Fail("FFmpeg is not available on the server"));
+                }
+
+                // Same containment check as the plain local stream endpoint
+                var basePath = FileService.LOCALDIR;
+                var decodedPath = Uri.UnescapeDataString(path).TrimStart('/');
+                var fullPath = Path.Combine(basePath, decodedPath);
+                var resolvedPath = Path.GetFullPath(fullPath);
+                if (!resolvedPath.StartsWith(Path.GetFullPath(basePath)))
+                {
+                    return BadRequest(ApiResponse<object>.Fail("Invalid path"));
+                }
+
+                if (!System.IO.File.Exists(resolvedPath))
+                {
+                    return NotFound(ApiResponse<object>.Fail("File not found"));
+                }
+
+                var fileInfo = new FileInfo(resolvedPath);
+                var targetExt = format == "mp3" ? "mp3" : "m4a";
+                var mimeType = format == "mp3" ? "audio/mpeg" : "audio/mp4";
+                var downloadName = $"{Path.GetFileNameWithoutExtension(fileInfo.Name)}.{targetExt}";
+
+                // Cache key from path + size + mtime: editing the local file yields a
+                // different key, so a stale transcode is never served. Hashed because
+                // the relative path can't be used as a flat file name.
+                var identity = $"{resolvedPath.ToLowerInvariant()}|{fileInfo.Length}|{fileInfo.LastWriteTimeUtc.Ticks}";
+                var hash = Convert.ToHexString(
+                    System.Security.Cryptography.SHA1.HashData(System.Text.Encoding.UTF8.GetBytes(identity)))
+                    .Substring(0, 16);
+
+                var transcodedDir = Path.Combine(FileService.TEMPDIR, "_temp", "transcoded");
+                Directory.CreateDirectory(transcodedDir);
+                var targetName = $"local-{hash}-{format}{bitrate}.{targetExt}";
+                var targetPath = Path.Combine(transcodedDir, targetName);
+
+                // Cached transcode: serve immediately with Range support
+                if (System.IO.File.Exists(targetPath))
+                {
+                    return PhysicalFile(targetPath, mimeType, downloadName, enableRangeProcessing: true);
+                }
+
+                // Per-target lock so concurrent requests don't transcode twice
+                var fileLock = _transcodeLocks.GetOrAdd(targetName, _ => new SemaphoreSlim(1, 1));
+                await fileLock.WaitAsync(HttpContext.RequestAborted);
+                try
+                {
+                    if (!System.IO.File.Exists(targetPath))
+                    {
+                        await _transcodeSemaphore.WaitAsync(HttpContext.RequestAborted);
+                        try
+                        {
+                            _logger.LogInformation("Transcoding local {FileName} to {Format} {Bitrate}k",
+                                fileInfo.Name, format, bitrate);
+                            await TranscodeAudioFile(resolvedPath, targetPath, format, bitrate, HttpContext.RequestAborted);
+                        }
+                        finally
+                        {
+                            _transcodeSemaphore.Release();
+                        }
+                    }
+                }
+                finally
+                {
+                    fileLock.Release();
+                }
+
+                return PhysicalFile(targetPath, mimeType, downloadName, enableRangeProcessing: true);
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogDebug("Transcoded local download cancelled for {Path}", path);
+                return new EmptyResult();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error transcoding local audio at path {Path}", path);
+                return StatusCode(500, ApiResponse<object>.Fail("Error transcoding audio"));
+            }
+        }
+
         // Sequential full download of the original file into the streaming cache
         private async Task DownloadOriginalToCache(string channelId, BsonFileManagerModel dbFile, string path)
         {

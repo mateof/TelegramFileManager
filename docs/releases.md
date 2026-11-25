@@ -1,5 +1,31 @@
 # Release & build policy
 
+## Releasing a version
+
+1. Open an issue titled with the version, e.g. `v3.9.0`, and label it `release`
+   (or run the **Release** workflow by hand from the Actions tab with the version).
+   Whatever the issue says goes at the top of the release notes; below it come the
+   pull requests merged since the last tag.
+2. The workflow ([`auto-release.yml`](../.github/workflows/auto-release.yml)) branches
+   `release/3.9.0` off **develop**, sets the version in the `.csproj` files and opens
+   **one** pull request into `main` with everything develop has.
+3. Merge it with **Create a merge commit**. Not squash, not rebase: a merge commit
+   keeps `main` and `develop` on the same history, so the next release has no
+   conflicts.
+4. The workflow tags `v3.9.0`, publishes the GitHub Release (server binaries, below,
+   and the release Docker image) and brings `develop` up to `main`.
+
+No dev Docker image is built along the way: the release branch is pushed with the
+workflow token (which starts no workflow), and the dev image workflow skips the
+release merge when it lands on `develop`.
+
+Requirements: `main` and `develop` must accept merge commits (no "Require linear
+history" in their branch protection), and the `TOKENBuild` secret must be able to
+push to `develop` (an admin token, when the protection does not apply to admins). If
+that push is refused, the workflow opens a `Sync develop with main` pull request
+instead; merge it with a merge commit too.
+
+
 The GitHub Actions workflow [`.github/workflows/buildrelease.yml`](../.github/workflows/buildrelease.yml)
 builds and publishes two independent products:
 

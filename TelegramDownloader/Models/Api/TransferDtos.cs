@@ -34,6 +34,12 @@ namespace TelegramDownloader.Models.Api
         /// <summary>True when the transfer sits in the queue instead of running.</summary>
         public bool IsQueued { get; set; }
 
+        /// <summary>Whether <c>pause</c> works on it while it runs (and <c>retry</c> resumes it).</summary>
+        public bool CanPause { get; set; }
+
+        /// <summary>Whether <c>retry</c> works on it once cancelled or failed.</summary>
+        public bool CanRetry { get; set; }
+
         public string Name { get; set; } = string.Empty;
 
         /// <summary>Destination path for downloads, source path for uploads.</summary>
@@ -69,8 +75,10 @@ namespace TelegramDownloader.Models.Api
             Id = m._internalId,
             Kind = TransferKind.Download,
             Action = m.action,
-            State = m.state.ToString(),
+            State = DownloadState(m, isQueued).ToString(),
             IsQueued = isQueued,
+            CanPause = m.CanRestart,
+            CanRetry = m.CanRestart,
             Name = m.name ?? string.Empty,
             Path = m.path,
             ChannelId = m.PersistenceChannelId,
@@ -85,6 +93,16 @@ namespace TelegramDownloader.Models.Api
             EndedAt = m.endnDate == default ? null : m.endnDate
         };
 
+        /// <summary>A download in the queue is not running, even if its model still says so after a pause.</summary>
+        private static StateTask DownloadState(DownloadModel m, bool isQueued)
+        {
+            if (m.UserPaused && m.state is (StateTask.Working or StateTask.Pending))
+                return StateTask.Paused;
+            if (!isQueued || m.state != StateTask.Working)
+                return m.state;
+            return m.tis?.isPauseDownloads == true ? StateTask.Paused : StateTask.Pending;
+        }
+
         public static TransferDto FromUpload(UploadModel m, bool isQueued = false) => new()
         {
             Id = m._internalId,
@@ -92,6 +110,7 @@ namespace TelegramDownloader.Models.Api
             Action = m.action,
             State = m.state.ToString(),
             IsQueued = isQueued,
+            CanPause = m.CanPause,
             Name = m.name ?? string.Empty,
             Path = m.path,
             ChannelId = m.PersistenceChannelId,
@@ -113,6 +132,7 @@ namespace TelegramDownloader.Models.Api
             Action = m.isUpload ? "Upload batch" : "Download batch",
             State = m.state.ToString(),
             IsQueued = m.state == StateTask.Pending,
+            CanRetry = true,
             Name = m.isUpload ? (m.toPath ?? "batch") : (m.fromPath ?? "batch"),
             ChannelId = m.channelId,
             Size = m.totalSize,
@@ -163,7 +183,7 @@ namespace TelegramDownloader.Models.Api
         /// <summary>Human readable upload speed.</summary>
         public string UploadSpeed { get; set; } = "0 KB/s";
 
-        /// <summary>Bytes transferred during the current sampling second.</summary>
+        /// <summary>Bytes transferred during the last full second.</summary>
         public long DownloadBytesPerSecond { get; set; }
         public long UploadBytesPerSecond { get; set; }
 
@@ -233,6 +253,24 @@ namespace TelegramDownloader.Models.Api
 
         /// <summary>Destination folder inside the channel, e.g. <c>/backup/</c>. Defaults to the root.</summary>
         public string? TargetPath { get; set; }
+    }
+
+    /// <summary>
+    /// Body of <c>POST /api/v1/transfers/uploads/preview</c>: the upload body
+    /// plus the preview options.
+    /// </summary>
+    public class UploadPreviewRequest : StartUploadRequest
+    {
+        /// <summary>
+        /// Also look for files whose content is already in the channel at another
+        /// path. Reads (hashes) every local file to upload whose size matches a
+        /// channel file with a stored hash, so it can take a while on large trees.
+        /// Only files uploaded with <c>CheckHash</c> enabled have a stored hash.
+        /// </summary>
+        public bool FindDuplicates { get; set; }
+
+        /// <summary>Maximum number of per item decisions returned in <c>items</c> (default 500, max 5000).</summary>
+        public int? MaxItems { get; set; }
     }
 
     /// <summary>Body of <c>POST /api/v1/transfers/messages</c>.</summary>

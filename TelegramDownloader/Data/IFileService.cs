@@ -1,30 +1,29 @@
 #nullable disable
-using Syncfusion.Blazor.FileManager;
-using Syncfusion.Blazor.Inputs;
 using System.Dynamic;
 using TelegramDownloader.Models;
+using TelegramDownloader.Models.FileSystem;
 
 namespace TelegramDownloader.Data
 {
     public interface IFileService
     {
-        Task<FileManagerResponse<FileManagerDirectoryContent>> CopyItems(string dbName, ItemsMoveEventArgs<FileManagerDirectoryContent> args);
-        Task<FileManagerResponse<FileManagerDirectoryContent>> CopyOrMoveItems(string dbName, FileManagerDirectoryContent[] files, string targetPath, FileManagerDirectoryContent targetData, bool isCopy);
+        Task<FsListing> CopyItems(string dbName, FsMoveRequest args);
+        Task<FsListing> CopyOrMoveItems(string dbName, FsEntry[] files, string targetPath, FsEntry targetData, bool isCopy);
         Task CreateDatabase(string id);
-        Task<List<FileManagerDirectoryContent>> createFolder(string dbName, FolderCreateEventArgs<FileManagerDirectoryContent> args);
-        Task<List<FileManagerDirectoryContent>> createFolder(string dbName, string path, string folderName, FileManagerDirectoryContent? parentFolder);
+        Task<List<FsEntry>> createFolder(string dbName, FsCreateFolderRequest args);
+        Task<List<FsEntry>> createFolder(string dbName, string path, string folderName, FsEntry? parentFolder);
         void cleanTempFolder();
         Task<BsonSharedInfoModel> GetSharedInfoById(string id);
         Task<BsonFileManagerModel> getSharedItemById(string id, string collection);
         Task DeleteShared(string id, string collectionId);
-        Task downloadFile(string dbName, List<FileManagerDirectoryContent> files, string targetPath, string? collectionId = null, string? channelId = null);
+        Task downloadFile(string dbName, List<FsEntry> files, string targetPath, string? collectionId = null, string? channelId = null);
         Task downloadFile(string dbName, string path, List<string> files, string targetPath, string? collectionId = null, string? channelId = null);
         Task DownloadFileFromChat(ChatMessages message, string fileName = null, string folder = null, DownloadModel model = null);
         Task downloadFileToServer(string dbName, string path, string destPath);
         FileStream? ExistFileIntempFolder(string id);
         Task<MemoryStream> exportAllData(string dbName);
         Task<List<BsonFileManagerModel>> ShareFile(string dbName, string bsonId);
-        Task<FileManagerResponse<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent>> GetFilesPath(string dbName, string path, List<Syncfusion.Blazor.FileManager.FileManagerDirectoryContent> fileDetails = null, string? collectionName = null);
+        Task<FsListing> GetFilesPath(string dbName, string path, List<FsEntry> fileDetails = null, string? collectionName = null);
         Task<MemoryStream> getImage(string dbName, string path, string fileName, MemoryStream ms = null, string? collectionId = null);
         Task<BsonFileManagerModel> getItemById(string dbName, string id);
         Task<List<BsonFileManagerModel>> getTelegramFolders(string dbName, string? parentId = null);
@@ -34,17 +33,40 @@ namespace TelegramDownloader.Data
         Task CreateStrmFilesToLocal(string path, string dbName, string host, string destinationFolder);
         Task importData(string dbName, string path, GenericNotificationProgressModel gnp);
         Task importSharedData(ShareFilesModel sfm, GenericNotificationProgressModel gnp);
-        Task<FileManagerResponse<FileManagerDirectoryContent>> itemDeleteAsync(string dbName, ItemsDeleteEventArgs<FileManagerDirectoryContent> args);
-        Task oneItemDeleteAsync(string dbName, FileManagerDirectoryContent File);
-        Task<FileManagerResponse<FileManagerDirectoryContent>> RenameFileOrFolder(string dbName, FileManagerDirectoryContent file, string newName);
-        Task<FileManagerResponse<FileManagerDirectoryContent>> SearchAsync(string dbName, string path, string searchText, string? collectionId = null);
-        Task UploadFile(string dbName, string currentPath, UploadFiles file);
-        Task UploadFileFromServer(string dbName, string currentPath, List<FileManagerDirectoryContent> files, InfoDownloadTaksModel dm = null);
-        Task AddUploadFileFromServer(string dbName, string currentPath, List<FileManagerDirectoryContent> files, InfoDownloadTaksModel idt = null);
+        Task<FsListing> itemDeleteAsync(string dbName, FsDeleteRequest args);
+        Task oneItemDeleteAsync(string dbName, FsEntry File);
+        /// <summary>
+        /// The shared channel delete (index entries in bulk, Telegram messages in batches of 100
+        /// when no other entry references them and the account may delete in the chat).
+        /// </summary>
+        Task<TelegramDownloader.Services.Deletes.ChannelDeleteResult> DeleteChannelEntriesAsync(string dbName, IReadOnlyList<BsonFileManagerModel> entries,
+            TelegramDownloader.Services.Deletes.DeleteOperation progress = null, CancellationToken cancellationToken = default);
+        Task<FsListing> RenameFileOrFolder(string dbName, FsEntry file, string newName);
+        Task<FsListing> SearchAsync(string dbName, string path, string searchText, string? collectionId = null);
+        Task UploadFile(string dbName, string currentPath, Microsoft.AspNetCore.Components.Forms.IBrowserFile file);
+        Task UploadFileFromServer(string dbName, string currentPath, List<FsEntry> files, InfoDownloadTaksModel dm = null);
+        /// <summary>Queues a server-side upload batch and returns the internal id of the task it created.</summary>
+        Task<string> AddUploadFileFromServer(string dbName, string currentPath, List<FsEntry> files, InfoDownloadTaksModel idt = null);
+        /// <summary>
+        /// Dry run of <see cref="AddUploadFileFromServer"/>: what the upload of
+        /// <paramref name="files"/> into <paramref name="currentPath"/> would do,
+        /// with the same decisions, without sending anything. With
+        /// <paramref name="findDuplicates"/> it also reads (hashes) the local
+        /// files whose size matches a hashed channel file and reports those
+        /// whose content is already elsewhere in the channel.
+        /// </summary>
+        Task<TelegramDownloader.Services.Upload.UploadPreviewResult> PreviewUploadFromServer(string dbName, string currentPath, List<FsEntry> files, bool findDuplicates = false, int maxItems = TelegramDownloader.Services.Upload.UploadPreviewPlanner.DefaultMaxItems, CancellationToken cancellationToken = default);
         Task CreateEmptyFile(string dbName, string currentPath, string fileName);
         Task refreshChannelFIles(string channelId, bool force = false, RefreshChannelOptions? refreshOptions = null);
         bool isChannelRefreshing(string channelId);
-        Task<int> PreloadFilesToTemp(string channelId, List<FileManagerDirectoryContent> items);
+        /// <summary>Atomically claims the channel and starts the refresh in the background; false if one is already running.</summary>
+        bool tryStartChannelRefresh(string channelId, bool force, RefreshChannelOptions? refreshOptions, out Task refreshTask);
+        ChannelRefreshResult? getLastRefreshResult(string channelId);
+        /// <summary>Live progress of the channel's running refresh; null when none runs.</summary>
+        ChannelRefreshProgressSnapshot? getChannelRefreshProgress(string channelId);
+        /// <summary>Asks the channel's running refresh to stop; false when none runs.</summary>
+        bool cancelChannelRefresh(string channelId);
+        Task<int> PreloadFilesToTemp(string channelId, List<FsEntry> items);
         Task DownloadPlaylistToLocal(PlaylistModel playlist, string destinationFolder);
     }
 }

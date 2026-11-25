@@ -1,0 +1,26 @@
+@import "tailwindcss";
+@import "@tfm/ui/styles.css";
+
+/* Classes used by the app and the workspace packages */
+@source "../../../packages/file-manager/src";
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  /* No pull-to-refresh / rubber band of the whole page (it scrolls inside #tfm-main) */
+  html,
+  body {
+    overscroll-behavior: none;
+  }
+
+  /* Installed app: no grey flash on tap */
+  @media (display-mode: standalone) {
+    html {
+      -webkit-tap-highlight-color: transparent;
+    }
+  }
+}

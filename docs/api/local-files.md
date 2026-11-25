@@ -73,6 +73,14 @@ POST /api/v1/local/delete    { "paths": ["music/a.mp3", "old-folder"] }   # recu
 ```
 
 `delete` returns `{ accepted, skipped }`. Names may not contain path separators.
+The local root itself cannot be deleted, and links (symlinks / junctions) inside a folder are
+removed as links, never followed.
+
+`POST /api/v1/local/delete-operations { "paths": [...] }` does the same in the background and
+answers `202 { operationId }`: it counts first, then deletes file by file and the folders
+bottom-up. Follow it with `GET /api/v1/delete-operations/{id}` or `DeleteProgress` on
+`/hubs/events` (see [files.md](files.md#delete-with-progress)), cancel it with
+`POST /api/v1/delete-operations/{id}/cancel`.
 Name clashes return `409 conflict`.
 
 ## Download a local file
@@ -83,6 +91,33 @@ GET /api/v1/local/download?path=music/rock/song.mp3
 
 Streams the file with HTTP range support and the right content type. Behind the
 API key, so use `?apiKey=…` when embedding.
+
+`disposition=inline` serves it for viewing in the browser instead of saving it
+(this is the `contentUrl` of local entries):
+
+```
+GET /api/v1/local/download?path=music/song.mp3&disposition=inline
+```
+
+## Copy / move
+
+```
+POST /api/v1/local/copy
+POST /api/v1/local/move
+{ "paths": ["music/rock", "notes.txt"], "targetPath": "backup/2026", "overwrite": false }
+```
+
+- Every source and the target are checked against the local root like the other
+  endpoints (`400` when `targetPath` escapes it); sources that escape it are
+  skipped.
+- The target folder is created when missing. Folders are copied recursively;
+  a move across volumes falls back to copy + delete.
+- An entry whose name already exists in the target is skipped unless
+  `overwrite` is true (then the existing entry is replaced).
+- Copying/moving an entry onto itself, or a folder into itself or one of its
+  sub-folders, skips that entry.
+
+Answers `{ accepted, skipped }` (the paths not processed).
 
 ## Upload into local storage
 
@@ -105,6 +140,11 @@ POST /api/v1/transfers/uploads
 
 This two-step (stage locally, then upload) avoids sending the bytes twice and
 gives you a managed, resumable, hub-tracked upload.
+
+To see first what that upload would do (new, replaced and skipped files, bytes
+to send, folders to create, optionally files whose content is already in the
+channel), send the same body to
+[`POST /api/v1/transfers/uploads/preview`](transfers.md#preview-an-upload-dry-run).
 
 ## Clear the streaming cache
 

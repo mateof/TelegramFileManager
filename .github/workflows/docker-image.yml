@@ -8,6 +8,11 @@ jobs:
 
   build:
 
+    # Bringing develop up to a release (the release merge itself) is not a new
+    # dev build: the release already has its own image. "[skip ci]" commits are
+    # skipped by GitHub.
+    if: ${{ !(startsWith(github.event.head_commit.message, 'Merge pull request') && contains(github.event.head_commit.message, '/release/')) }}
+
     runs-on: ubuntu-latest
 
     steps:

@@ -47,8 +47,8 @@ namespace TelegramDownloader.Services.Api
                 TotalTasks = tasks.Count,
                 DownloadSpeed = tis.downloadSpeed ?? "0 KB/s",
                 UploadSpeed = tis.uploadSpeed ?? "0 KB/s",
-                DownloadBytesPerSecond = tis.bytesDownloaded,
-                UploadBytesPerSecond = tis.bytesUploaded,
+                DownloadBytesPerSecond = tis.downloadBytesPerSecond,
+                UploadBytesPerSecond = tis.uploadBytesPerSecond,
                 DownloadsPaused = tis.isPauseDownloads
             };
         }
@@ -62,6 +62,9 @@ namespace TelegramDownloader.Services.Api
                 Upload = tis.GetUploadSpeedsHistoryCopy().Select(SpeedPointDto.From).ToList()
             };
         }
+
+        /// <summary>Whether an entry in <paramref name="state"/> can be removed from the lists (anything but running).</summary>
+        public static bool CanRemove(StateTask state) => state != StateTask.Working;
 
         /// <summary>
         /// Finds a running or queued transfer by its id across every list.

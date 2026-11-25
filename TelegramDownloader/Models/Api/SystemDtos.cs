@@ -20,6 +20,9 @@ namespace TelegramDownloader.Models.Api
         /// <summary>Relative path of the SignalR hub streaming transfer updates.</summary>
         public string TransfersHubPath { get; set; } = "/hubs/transfers";
 
+        /// <summary>Relative path of the SignalR hub streaming application events (notifications, progress, session state).</summary>
+        public string EventsHubPath { get; set; } = "/hubs/events";
+
         /// <summary>True when the server requires an <c>X-Api-Key</c> header.</summary>
         public bool RequiresApiKey { get; set; }
     }
@@ -129,6 +132,9 @@ namespace TelegramDownloader.Models.Api
         public bool EnableVideoTranscoding { get; set; }
         public bool EnableRefreshOwnChannels { get; set; }
 
+        /// <summary>Index refreshes search one media type after another instead of all at once.</summary>
+        public bool RefreshOneTypeAtATime { get; set; }
+
         public bool EnableMemorySplitUpload { get; set; }
         public int MemorySplitSizeGB { get; set; }
         public int ParallelTransfers { get; set; }
@@ -139,8 +145,57 @@ namespace TelegramDownloader.Models.Api
         public int MultiConnectionBlockSizeMB { get; set; }
         public int MultiConnectionMinFileSizeMB { get; set; }
 
+        /// <summary>Always use the touch file manager in the web UI, also on desktop.</summary>
+        public bool UseMobileFileManagerAlways { get; set; }
+
+        /// <summary>Virtual scrolling in the web UI file manager.</summary>
+        public bool HasFileManagerVirtualScroll { get; set; }
+
+        /// <summary>
+        /// Interface a browser gets at <c>/</c>: <c>classic</c> (Blazor UI) or
+        /// <c>app</c> (redirected to the web app at <c>/app/</c>). A browser can
+        /// still open the classic UI with <c>/?ui=classic</c>.
+        /// </summary>
+        public string DefaultWebUi { get; set; } = WebUiMode.Classic;
+
+        /// <summary>
+        /// API key for apps, masked (<c>****</c> plus the last 4 characters);
+        /// null when none is set. Set it with <c>mobileApiKey</c> in the PATCH body.
+        /// </summary>
+        public string? MobileApiKey { get; set; }
+
+        /// <summary>An API key is configured (here or in config.json).</summary>
+        public bool MobileApiKeySet { get; set; }
+
+        /// <summary>WebDAV user name.</summary>
+        public string? WebDavUser { get; set; }
+
+        /// <summary>A WebDAV password is configured. The password itself is never returned.</summary>
+        public bool WebDavPasswordSet { get; set; }
+
+        public bool LibraryEnabled { get; set; }
+        public string LibraryLanguage { get; set; } = "es-ES";
+        public bool LibraryAutoScan { get; set; }
+        /// <summary>Channels to scan; empty means every indexed channel.</summary>
+        public List<long> LibraryIncludedChannels { get; set; } = new();
+        public List<long> LibraryExcludedChannels { get; set; } = new();
+        public double LibraryWatchedThreshold { get; set; }
+        /// <summary>Metadata providers with masked keys. Update them with <c>libraryProviders</c> in the PATCH body.</summary>
+        public List<ApiLibraryProviderDto> LibraryProviders { get; set; } = new();
+        /// <summary>What each channel folder holds: <c>movie</c>, <c>series</c> or <c>ignore</c>. Longest path wins.</summary>
+        public List<LibraryFolderRule> LibraryFolderRules { get; set; } = new();
+
         public static AppConfigDto From(GeneralConfig c) => new()
         {
+            LibraryEnabled = c.LibraryEnabled,
+            LibraryLanguage = c.LibraryLanguage ?? "es-ES",
+            LibraryAutoScan = c.LibraryAutoScan,
+            LibraryIncludedChannels = c.LibraryIncludedChannels ?? new List<long>(),
+            LibraryExcludedChannels = c.LibraryExcludedChannels ?? new List<long>(),
+            LibraryWatchedThreshold = c.LibraryWatchedThreshold,
+            LibraryProviders = Services.Library.MetadataProviderRegistry.EffectiveConfigs(c)
+                .Select(p => ApiLibraryProviderDto.From(Services.Library.MetadataProviderRegistry.Describe(p.Id)!, p)).ToList(),
+            LibraryFolderRules = c.LibraryFolderRules ?? new List<LibraryFolderRule>(),
             ShouldNotify = c.ShouldNotify,
             TimeSleepBetweenTransactions = c.TimeSleepBetweenTransactions,
             SplitSize = c.SplitSize,
@@ -162,6 +217,7 @@ namespace TelegramDownloader.Models.Api
             AutoResumeOnStartup = c.AutoResumeOnStartup,
             EnableVideoTranscoding = c.EnableVideoTranscoding,
             EnableRefreshOwnChannels = c.EnableRefreshOwnChannels,
+            RefreshOneTypeAtATime = c.RefreshOneTypeAtATime,
             EnableMemorySplitUpload = c.EnableMemorySplitUpload,
             MemorySplitSizeGB = c.MemorySplitSizeGB,
             ParallelTransfers = c.ParallelTransfers,
@@ -169,8 +225,22 @@ namespace TelegramDownloader.Models.Api
             DownloadConnections = c.DownloadConnections,
             MultiConnectionPartSizeKB = c.MultiConnectionPartSizeKB,
             MultiConnectionBlockSizeMB = c.MultiConnectionBlockSizeMB,
-            MultiConnectionMinFileSizeMB = c.MultiConnectionMinFileSizeMB
+            MultiConnectionMinFileSizeMB = c.MultiConnectionMinFileSizeMB,
+            UseMobileFileManagerAlways = c.UseMobileFileManagerAlways,
+            HasFileManagerVirtualScroll = c.hasFileManagerVirtualScroll,
+            DefaultWebUi = WebUiMode.Normalize(c.DefaultWebUi),
+            MobileApiKey = MaskSecret(c.MobileApiKey),
+            MobileApiKeySet = !string.IsNullOrEmpty(c.MobileApiKey) || !string.IsNullOrEmpty(GeneralConfigStatic.tlconfig?.mobile_api_key),
+            WebDavUser = c.WebDavUser,
+            WebDavPasswordSet = !string.IsNullOrEmpty(c.WebDavPassword)
         };
+
+        /// <summary><c>****</c> plus the last 4 characters (just <c>****</c> for short values); null when empty.</summary>
+        public static string? MaskSecret(string? secret)
+        {
+            if (string.IsNullOrEmpty(secret)) return null;
+            return secret.Length <= 8 ? "****" : "****" + secret[^4..];
+        }
     }
 
     /// <summary>
@@ -198,6 +268,7 @@ namespace TelegramDownloader.Models.Api
         public bool? AutoResumeOnStartup { get; set; }
         public bool? EnableVideoTranscoding { get; set; }
         public bool? EnableRefreshOwnChannels { get; set; }
+        public bool? RefreshOneTypeAtATime { get; set; }
         public bool? EnableMemorySplitUpload { get; set; }
         public int? MemorySplitSizeGB { get; set; }
         public int? ParallelTransfers { get; set; }
@@ -206,6 +277,32 @@ namespace TelegramDownloader.Models.Api
         public int? MultiConnectionPartSizeKB { get; set; }
         public int? MultiConnectionBlockSizeMB { get; set; }
         public int? MultiConnectionMinFileSizeMB { get; set; }
+
+        public bool? UseMobileFileManagerAlways { get; set; }
+        public bool? HasFileManagerVirtualScroll { get; set; }
+
+        /// <summary>Interface a browser gets at <c>/</c>: <c>classic</c> or <c>app</c>.</summary>
+        public string? DefaultWebUi { get; set; }
+
+        /// <summary>New API key for apps. Omit to keep, empty string to remove (falls back to config.json).</summary>
+        public string? MobileApiKey { get; set; }
+
+        /// <summary>WebDAV user. Omit to keep, empty string to clear.</summary>
+        public string? WebDavUser { get; set; }
+
+        /// <summary>WebDAV password (write-only). Omit to keep, empty string to clear.</summary>
+        public string? WebDavPassword { get; set; }
+
+        public bool? LibraryEnabled { get; set; }
+        public string? LibraryLanguage { get; set; }
+        public bool? LibraryAutoScan { get; set; }
+        public List<long>? LibraryIncludedChannels { get; set; }
+        public List<long>? LibraryExcludedChannels { get; set; }
+        public double? LibraryWatchedThreshold { get; set; }
+        /// <summary>Per provider: <c>enabled</c>, <c>apiKey</c> (omit to keep, empty to clear) and <c>priority</c>.</summary>
+        public List<LibraryProviderConfigDto>? LibraryProviders { get; set; }
+        /// <summary>Replaces the whole list of folder rules (<c>channelId</c>, <c>path</c>, <c>kind</c>).</summary>
+        public List<LibraryFolderRule>? LibraryFolderRules { get; set; }
     }
 
     /// <summary>One application log record.</summary>

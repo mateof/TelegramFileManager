@@ -4,6 +4,8 @@
 @using TelegramDownloader.Shared
 @inject ITelegramService ts
 @inject NavigationManager NavManager
+@inject IJSRuntime JS
+@inject TelegramDownloader.Services.WebAuth.IWebAuthService WebAuth
 
 <PageTitle>TelegramFileManager</PageTitle>
 
@@ -57,6 +59,10 @@
                     <a href="/config" class="list-group-item list-group-item-action"><i class="bi bi-gear"></i> Configuration</a>
                     <a href="/downloads" class="list-group-item list-group-item-action"><i class="bi bi-cloud-download"></i> Tasks</a>
                     <a href="/loglist" class="list-group-item list-group-item-action"><i class="bi bi-file-earmark-text"></i> Logs</a>
+                    @if (WebAuth.PasswordSet)
+                    {
+                        <a href="#" @onclick="() => WebSignOut()" @onclick:preventDefault class="list-group-item list-group-item-action"><i class="bi bi-door-open"></i> Sign out</a>
+                    }
                     <a href="#" @onclick="() => Logout()" class="list-group-item list-group-item-action list-group-item-warning"><i class="bi bi-box-arrow-right"></i> LogOut</a>
                 </div>
             </div>
@@ -79,7 +85,9 @@
         nm.sendEvent(new Notification("<h1>Body message</h1>", "Title", NotificationTypes.Info));
     }
 
-    private async void Logout()
+    private async Task WebSignOut() => await TelegramDownloader.Services.WebAuth.WebAuthBrowser.SignOutAsync(JS);
+
+    private async Task Logout()
     {
         await ts.logOff();
         NavManager.NavigateTo("/");

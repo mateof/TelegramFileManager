@@ -10,7 +10,10 @@ namespace TelegramDownloader.Controllers.Api.V1
     /// persistence and the WebDAV bridge.
     ///
     /// Settings are global and shared with the web UI: changing them here
-    /// changes them everywhere.
+    /// changes them everywhere. Secrets are never returned: the API key comes
+    /// back masked and the WebDAV password only as <c>webDavPasswordSet</c>.
+    /// Changing <c>mobileApiKey</c> takes effect on the next request, so the
+    /// caller must switch to the new key right away.
     /// </summary>
     [Route("api/v1/config")]
     [Tags("Configuration")]
@@ -80,6 +83,7 @@ namespace TelegramDownloader.Controllers.Api.V1
 
                 if (request.EnableVideoTranscoding.HasValue) c.EnableVideoTranscoding = request.EnableVideoTranscoding.Value;
                 if (request.EnableRefreshOwnChannels.HasValue) c.EnableRefreshOwnChannels = request.EnableRefreshOwnChannels.Value;
+                if (request.RefreshOneTypeAtATime.HasValue) c.RefreshOneTypeAtATime = request.RefreshOneTypeAtATime.Value;
 
                 if (request.EnableMemorySplitUpload.HasValue) c.EnableMemorySplitUpload = request.EnableMemorySplitUpload.Value;
                 if (request.MemorySplitSizeGB.HasValue) c.MemorySplitSizeGB = request.MemorySplitSizeGB.Value;
@@ -90,6 +94,69 @@ namespace TelegramDownloader.Controllers.Api.V1
                 if (request.MultiConnectionPartSizeKB.HasValue) c.MultiConnectionPartSizeKB = request.MultiConnectionPartSizeKB.Value;
                 if (request.MultiConnectionBlockSizeMB.HasValue) c.MultiConnectionBlockSizeMB = Math.Clamp(request.MultiConnectionBlockSizeMB.Value, 1, 16);
                 if (request.MultiConnectionMinFileSizeMB.HasValue) c.MultiConnectionMinFileSizeMB = request.MultiConnectionMinFileSizeMB.Value;
+
+                if (request.UseMobileFileManagerAlways.HasValue) c.UseMobileFileManagerAlways = request.UseMobileFileManagerAlways.Value;
+                if (request.HasFileManagerVirtualScroll.HasValue) c.hasFileManagerVirtualScroll = request.HasFileManagerVirtualScroll.Value;
+                if (request.DefaultWebUi != null)
+                {
+                    var ui = request.DefaultWebUi.Trim();
+                    if (!WebUiMode.IsValid(ui))
+                        return BadRequestResult("defaultWebUi must be classic or app");
+                    c.DefaultWebUi = WebUiMode.Normalize(ui);
+                }
+                if (request.MobileApiKey != null)
+                {
+                    var key = request.MobileApiKey.Trim();
+                    if (key.Length > 0 && key.Length < 8)
+                        return BadRequestResult("mobileApiKey must have at least 8 characters");
+                    c.MobileApiKey = key.Length == 0 ? null : key;
+                }
+                if (request.WebDavUser != null) c.WebDavUser = string.IsNullOrWhiteSpace(request.WebDavUser) ? null : request.WebDavUser.Trim();
+                if (request.WebDavPassword != null) c.WebDavPassword = request.WebDavPassword.Length == 0 ? null : request.WebDavPassword;
+
+                if (request.LibraryEnabled.HasValue) c.LibraryEnabled = request.LibraryEnabled.Value;
+                if (request.LibraryLanguage != null) c.LibraryLanguage = string.IsNullOrWhiteSpace(request.LibraryLanguage) ? "en-US" : request.LibraryLanguage.Trim();
+                if (request.LibraryAutoScan.HasValue) c.LibraryAutoScan = request.LibraryAutoScan.Value;
+                if (request.LibraryIncludedChannels != null) c.LibraryIncludedChannels = request.LibraryIncludedChannels.Distinct().ToList();
+                if (request.LibraryExcludedChannels != null) c.LibraryExcludedChannels = request.LibraryExcludedChannels.Distinct().ToList();
+                if (request.LibraryWatchedThreshold.HasValue) c.LibraryWatchedThreshold = Math.Clamp(request.LibraryWatchedThreshold.Value, 0.5, 1.0);
+                if (request.LibraryProviders != null)
+                {
+                    var providers = Services.Library.MetadataProviderRegistry.EffectiveConfigs(c);
+                    foreach (var update in request.LibraryProviders)
+                    {
+                        var target = providers.FirstOrDefault(p => p.Id.Equals(update.Id, StringComparison.OrdinalIgnoreCase));
+                        if (target == null)
+                            return BadRequestResult($"Unknown metadata provider '{update.Id}'");
+                        if (update.Enabled.HasValue) target.Enabled = update.Enabled.Value;
+                        if (update.ApiKey != null) target.ApiKey = update.ApiKey.Trim();
+                        if (update.Priority.HasValue) target.Priority = update.Priority.Value;
+                    }
+                    c.LibraryProviders = providers;
+                }
+                if (request.LibraryFolderRules != null)
+                {
+                    var rules = new List<LibraryFolderRule>();
+                    foreach (var rule in request.LibraryFolderRules)
+                    {
+                        if (rule.ChannelId == 0) return BadRequestResult("Each folder rule needs a channelId");
+                        if (!Services.Library.LibraryRuleKind.IsValid(rule.Kind))
+                            return BadRequestResult("Folder rule kind must be movie, series or ignore");
+                        var path = Services.Library.LibraryFolderRules.Normalize(rule.Path);
+                        // Without a title keeps the one it has, for clients that do not know about titles; an empty one clears it
+                        var titled = rule.ProviderId == null ? Services.Library.LibraryFolderRules.Find(c.LibraryFolderRules, rule.ChannelId, path) : rule;
+                        var updated = new LibraryFolderRule { ChannelId = rule.ChannelId, Path = path, Kind = rule.Kind };
+                        if (updated.Kind == Services.Library.LibraryRuleKind.Series && titled?.TitleKey != null)
+                        {
+                            updated.Provider = titled.Provider;
+                            updated.ProviderId = titled.ProviderId;
+                            updated.Title = titled.Title;
+                            updated.Year = titled.Year;
+                        }
+                        rules = Services.Library.LibraryFolderRules.With(rules, rule.ChannelId, path, updated);
+                    }
+                    c.LibraryFolderRules = rules;
+                }
 
                 await GeneralConfigStatic.SaveChanges(_db, c);
 

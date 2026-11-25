@@ -12,6 +12,9 @@
     <DockerfileContext>.</DockerfileContext>
     <!-- XML doc comments feed the Swagger/OpenAPI description of the v1 API -->
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <!-- The React front-end (ClientApp, with its node_modules) is built by npm into wwwroot/app; keep both out of MSBuild items.
+         The built files are added to the publish output by the IncludeWebAppInPublish target below. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);ClientApp\**;wwwroot\app\**</DefaultItemExcludes>
     <!-- Suppress warnings that are by design or acceptable -->
     <!-- CS1998/CS4014: Async/await patterns for parallel execution -->
     <!-- CS0618/SYSLIB0014/ASPDEPR005: Obsolete API warnings -->
@@ -25,18 +28,19 @@
 
   <ItemGroup>
     <PackageReference Include="Blazor.Bootstrap" Version="3.5.0" />
-    <PackageReference Include="MongoDB.Driver" Version="3.8.1" />
-    <PackageReference Include="Serilog" Version="4.3.0" />
+    <PackageReference Include="Fido2" Version="4.3.3" />
+    <PackageReference Include="MongoDB.Driver" Version="3.14.1" />
+    <PackageReference Include="Serilog" Version="4.4.0" />
     <PackageReference Include="Serilog.AspNetCore" Version="10.0.0" />
     <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
-    <PackageReference Include="Serilog.Sinks.MongoDB" Version="7.2.0" />
-    <PackageReference Include="QRCoder" Version="1.7.0" />
+    <PackageReference Include="Serilog.Sinks.MongoDB" Version="7.3.0" />
+    <PackageReference Include="QRCoder" Version="1.9.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.9.0" />
     <PackageReference Include="Syncfusion.Blazor" Version="29.2.11" />
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.22.1" />
     <PackageReference Include="Syncfusion.EJ2.AspNet.Core" Version="29.2.11" />
-    <PackageReference Include="System.IO.Hashing" Version="10.0.8" />
-    <PackageReference Include="WTelegramClient" Version="4.4.4" />
+    <PackageReference Include="System.IO.Hashing" Version="10.0.15" />
+    <PackageReference Include="WTelegramClient" Version="4.4.11" />
   </ItemGroup>
 
   <ItemGroup>
@@ -45,4 +49,44 @@
     <Folder Include="wwwroot\local\temp\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Shown at /app when the web app was not built (copied to wwwroot/app/index.html at startup) -->
+    <None Update="Resources/app-not-built.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!--
+    Web app (ClientApp, served at /app). Node is NOT needed for a normal build.
+    * dotnet publish copies whatever is in wwwroot/app (a previous `npm run build`).
+    * dotnet publish -p:BuildWebApp=true runs `npm ci` + `npm run build` in ClientApp
+      first (needs Node 22+ on the PATH). Default false, so dotnet build/run stay fast.
+    * dotnet msbuild -t:BuildWebApp builds it on demand.
+    Docker and the release workflow build ClientApp themselves.
+  -->
+  <PropertyGroup>
+    <BuildWebApp Condition="'$(BuildWebApp)' == ''">false</BuildWebApp>
+    <_IncludeWebAppDependsOn Condition="'$(BuildWebApp)' == 'true'">BuildWebApp</_IncludeWebAppDependsOn>
+    <WebAppRoot>$(MSBuildProjectDirectory)\ClientApp\</WebAppRoot>
+    <WebAppOutput>$(MSBuildProjectDirectory)\wwwroot\app\</WebAppOutput>
+  </PropertyGroup>
+
+  <Target Name="BuildWebApp">
+    <Exec Command="node --version" ContinueOnError="true" StandardOutputImportance="low">
+      <Output TaskParameter="ExitCode" PropertyName="_WebAppNodeExitCode" />
+    </Exec>
+    <Error Condition="'$(_WebAppNodeExitCode)' != '0'" Text="BuildWebApp needs Node.js 22+ and npm on the PATH (https://nodejs.org)." />
+    <Message Importance="high" Text="Building the web app (ClientApp) into wwwroot/app..." />
+    <Exec WorkingDirectory="$(WebAppRoot)" Command="npm ci --no-audit --no-fund" />
+    <Exec WorkingDirectory="$(WebAppRoot)" Command="npm run build" />
+  </Target>
+
+  <Target Name="IncludeWebAppInPublish" AfterTargets="ComputeFilesToPublish" DependsOnTargets="$(_IncludeWebAppDependsOn)">
+    <ItemGroup>
+      <_WebAppFile Include="$(WebAppOutput)**\*" Exclude="$(WebAppOutput).gitkeep" />
+      <ResolvedFileToPublish Include="@(_WebAppFile->'%(FullPath)')" Exclude="@(ResolvedFileToPublish)">
+        <RelativePath>wwwroot\app\%(_WebAppFile.RecursiveDir)%(_WebAppFile.Filename)%(_WebAppFile.Extension)</RelativePath>
+        <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+        <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+      </ResolvedFileToPublish>
+    </ItemGroup>
+  </Target>
 </Project>

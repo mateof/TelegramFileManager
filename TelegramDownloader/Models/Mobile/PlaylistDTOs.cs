@@ -173,6 +173,35 @@ namespace TelegramDownloader.Models.Mobile
     }
 
     /// <summary>
+    /// Request to add many tracks to a playlist in one call
+    /// </summary>
+    public class BulkAddTracksRequest
+    {
+        /// <summary>Maximum number of tracks accepted in a single request.</summary>
+        public const int MaxTracks = 5000;
+
+        /// <summary>
+        /// Tracks to append, in the desired order. Validated by the endpoint itself
+        /// so that every error comes back in the standard <c>ApiResponse</c> envelope.
+        /// </summary>
+        [Microsoft.AspNetCore.Mvc.ModelBinding.Validation.ValidateNever]
+        public List<AddTrackRequest>? Tracks { get; set; }
+    }
+
+    /// <summary>
+    /// Outcome of a bulk add
+    /// </summary>
+    public class BulkAddTracksResultDto
+    {
+        /// <summary>Tracks actually appended to the playlist.</summary>
+        public int Added { get; set; }
+        /// <summary>Tracks ignored because their FileId was already in the playlist or repeated in the request.</summary>
+        public int Skipped { get; set; }
+        /// <summary>Track count of the playlist after the operation.</summary>
+        public int Total { get; set; }
+    }
+
+    /// <summary>
     /// Request to reorder tracks in a playlist
     /// </summary>
     public class ReorderTracksRequest
