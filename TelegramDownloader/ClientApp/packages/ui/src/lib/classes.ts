@@ -19,6 +19,8 @@ export const MENU_ITEM =
   'relative flex h-8 cursor-default select-none items-center gap-2.5 rounded-md px-2.5 text-sm outline-none transition-colors ' +
   'data-[disabled]:pointer-events-none data-[disabled]:opacity-40 data-[highlighted]:bg-primary-soft data-[highlighted]:text-fg ' +
   '[&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-fg-muted data-[highlighted]:[&_svg]:text-accent-300';
+/** Label of an item. An icon written next to the text goes on its line: svg elements are blocks by default. */
+export const MENU_TEXT = 'min-w-0 flex-1 truncate [&>svg]:mr-1.5 [&>svg]:inline-block [&>svg]:align-text-bottom';
 export const MENU_DANGER =
   'text-danger data-[highlighted]:bg-danger-soft data-[highlighted]:text-danger [&_svg]:text-danger data-[highlighted]:[&_svg]:text-danger';
 export const MENU_LABEL = 'px-2.5 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle';
