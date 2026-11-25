@@ -67,7 +67,14 @@
                 </button>
             }
 
-            @if ((context.state == StateTask.Canceled || context.state == StateTask.Error) && !isPending)
+            @if (isPending && context.UserPaused)
+            {
+                <button class="action-btn retry" @onclick="() => tis.ResumeDownload(context)" title="Resume">
+                    <i class="bi bi-play-fill"></i>
+                </button>
+            }
+
+            @if ((context.state == StateTask.Canceled || context.state == StateTask.Error) && !isPending && context.CanRestart)
             {
                 <button class="action-btn retry" @onclick="() => retry(context)" title="Retry">
                     <i class="bi bi-arrow-clockwise"></i>

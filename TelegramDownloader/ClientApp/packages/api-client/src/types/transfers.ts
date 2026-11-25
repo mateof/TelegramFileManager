@@ -39,6 +39,10 @@ export interface TransferDto {
   state: TransferState | (string & {});
   /** True when the transfer sits in the queue instead of running. */
   isQueued: boolean;
+  /** Whether it can be paused while it runs. Absent on older servers. */
+  canPause?: boolean;
+  /** Whether it can be retried once cancelled or failed. Absent on older servers. */
+  canRetry?: boolean;
   name: string;
   /** Destination path for downloads, source path for uploads. */
   path: string | null;

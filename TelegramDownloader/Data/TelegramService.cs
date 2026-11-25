@@ -551,7 +551,7 @@ namespace TelegramDownloader.Data
                         ReportBytes(expected);
                         return;
                     }
-                    catch (Exception) when (attempt < 3 && !cts.IsCancellationRequested)
+                    catch (Exception ex) when (ex is not TransferStoppedException && attempt < 3 && !cts.IsCancellationRequested)
                     {
                         await Task.Delay(1000 * attempt);
                     }
@@ -596,8 +596,9 @@ namespace TelegramDownloader.Data
             }
             catch (Exception ex)
             {
-                if (model.state == StateTask.Canceled || model.state == StateTask.Paused)
-                    throw;
+                // Paused or canceled: it is not a failure to fall back from. The
+                // exception may be the cancellation of another worker.
+                model.throwIfStopped();
                 _logger.LogWarning(ex, "Multi-connection download failed, falling back to sequential - FileName: {Name}", model.name);
                 dest.SetLength(0);
                 dest.Position = 0;
@@ -1223,6 +1224,7 @@ namespace TelegramDownloader.Data
             um._size = file.Length;
             um.startDate = DateTime.Now;
             um._transmitted = 0;
+            um.CanPause = true;
             _tis.addToUploadList(um);
 
             // Not persisted here: this is one Telegram message (a file or one
@@ -1232,7 +1234,7 @@ namespace TelegramDownloader.Data
             try
             {
                 ApplyConfiguredParallelTransfers(client);
-                var inputFile = await client.UploadFileAsync(file, fileName, um.ProgressCallback);
+                var inputFile = await client.UploadFileAsync(new Services.Streams.PausableUploadStream(file, um), fileName, um.ProgressCallback);
                 var result = await client.SendMediaAsync(peer, caption ?? fileName, inputFile, mimeType);
                 _logger.LogInformation("File upload completed - FileName: {FileName}, MessageId: {MessageId}", fileName, result.id);
                 return result;

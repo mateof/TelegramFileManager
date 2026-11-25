@@ -94,6 +94,14 @@ describe('transfers model', () => {
     expect(availableActions(transfer({ state: 'Completed' }))).toEqual(['remove']);
   });
 
+  it('follows what the server says can be paused and retried', () => {
+    expect(availableActions(transfer({ kind: 'upload', canPause: true, canRetry: false }))).toEqual(['pause', 'cancel']);
+    expect(availableActions(transfer({ kind: 'upload', state: 'Paused', canPause: true, canRetry: false }))).toEqual(['resume', 'cancel']);
+    // Tied to one HTTP request: it cannot be started again
+    expect(availableActions(transfer({ canPause: false, canRetry: false }))).toEqual(['cancel']);
+    expect(availableActions(transfer({ state: 'Canceled', canPause: false, canRetry: false }))).toEqual(['remove']);
+  });
+
   it('computes a smoothed speed and the ETA from consecutive snapshots', () => {
     const tracker = new SpeedTracker(0.5);
     const item = transfer({ size: 10_000, transmitted: 0 });
