@@ -1,10 +1,30 @@
-name: Auto Release from Issue
+name: Release
 
-# Trigger when an issue is labeled with 'release'
+# How a version is released (see docs/releases.md):
+#
+#   1. Open an issue titled with the version (e.g. "v3.9.0") and label it
+#      `release`, or run this workflow by hand with the version.
+#   2. The workflow branches release/<version> off develop, bumps the version
+#      and opens ONE pull request into main with everything develop has, and
+#      release notes made of the pull requests merged since the last tag.
+#   3. Merge that pull request with "Create a merge commit".
+#   4. The workflow tags the merge, publishes the GitHub Release (which builds
+#      the binaries and the release Docker image) and brings develop up to main
+#      without a dev Docker image.
+#
+# Merge commits keep main and develop on the same history. Squashing or
+# rebasing the release pull request makes them diverge, and the next release
+# conflicts on every file both touched.
+
 on:
   issues:
     types: [labeled]
-  # Also trigger when PR is merged (to create tag after merge)
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g. 3.9.0)'
+        type: string
+        required: true
   pull_request:
     types: [closed]
     branches: [main]
@@ -15,243 +35,197 @@ permissions:
   pull-requests: write
 
 env:
-  # Only these users can trigger releases (comma-separated GitHub usernames)
+  # Only these users can start a release (comma-separated GitHub usernames)
   ALLOWED_USERS: "mateof"
 
 jobs:
   # ===========================================
-  # JOB 1: Create PR with version bump
+  # JOB 1: Release branch off develop and pull request into main
   # ===========================================
-  create-version-pr:
-    name: Create Version Bump PR
+  create-release-pr:
+    name: Create Release PR
     runs-on: ubuntu-latest
-
-    # Only run on issue events with 'release' label
     if: |
-      github.event_name == 'issues' &&
-      contains(github.event.issue.labels.*.name, 'release')
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issues' && github.event.label.name == 'release')
 
     steps:
       - name: '🔐 Verify user authorization'
         env:
-          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+          REQUESTER: ${{ github.event_name == 'issues' && github.event.issue.user.login || github.actor }}
         run: |
-          echo "Issue author: $ISSUE_AUTHOR"
-          echo "Allowed users: $ALLOWED_USERS"
-
-          if [[ ! ",$ALLOWED_USERS," == *",$ISSUE_AUTHOR,"* ]]; then
-            echo "❌ User '$ISSUE_AUTHOR' is not authorized to create releases"
+          if [[ ! ",$ALLOWED_USERS," == *",$REQUESTER,"* ]]; then
+            echo "❌ User '$REQUESTER' is not authorized to create releases"
             exit 1
           fi
-          echo "✅ User '$ISSUE_AUTHOR' is authorized"
+          echo "✅ User '$REQUESTER' is authorized"
 
-      - name: '📋 Extract version from issue title'
+      - name: '📋 Read the version'
         id: version
         env:
-          ISSUE_TITLE: ${{ github.event.issue.title }}
+          SOURCE: ${{ github.event_name == 'issues' && github.event.issue.title || inputs.version }}
         run: |
-          echo "Issue title: $ISSUE_TITLE"
-
-          # Extract version (supports: v3.5.0, 3.5.0, v3.5.0.0)
-          VERSION=$(echo "$ISSUE_TITLE" | grep -oE '[vV]?[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
-
+          # Supports v3.9.0, 3.9.0 and 3.9.0.0
+          VERSION=$(echo "$SOURCE" | grep -oE '[vV]?[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1)
           if [ -z "$VERSION" ]; then
-            echo "❌ No version found in issue title"
+            echo "❌ No version found in '$SOURCE'"
             exit 1
           fi
-
-          # Remove 'v' prefix
-          VERSION=${VERSION#v}
-          VERSION=${VERSION#V}
-
-          # 4-part version for csproj
-          PARTS=$(echo "$VERSION" | tr '.' '\n' | wc -l)
-          if [ "$PARTS" -eq 3 ]; then
+          VERSION=${VERSION#[vV]}
+          if [ "$(echo "$VERSION" | tr '.' '\n' | wc -l)" -eq 3 ]; then
             VERSION_CSPROJ="${VERSION}.0"
           else
             VERSION_CSPROJ="$VERSION"
           fi
+          {
+            echo "version=$VERSION"
+            echo "version_csproj=$VERSION_CSPROJ"
+            echo "version_tag=v$VERSION"
+            echo "branch_name=release/$VERSION"
+          } >> "$GITHUB_OUTPUT"
+          echo "✅ Version: $VERSION | csproj: $VERSION_CSPROJ"
 
-          VERSION_TAG="v${VERSION}"
-          BRANCH_NAME="release/${VERSION}"
-
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "version_csproj=$VERSION_CSPROJ" >> $GITHUB_OUTPUT
-          echo "version_tag=$VERSION_TAG" >> $GITHUB_OUTPUT
-          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
-
-          echo "✅ Version: $VERSION | CSPROJ: $VERSION_CSPROJ | Tag: $VERSION_TAG"
-
-      - name: '📄 Checkout main branch'
+      - name: '📄 Checkout develop'
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: develop
           fetch-depth: 0
 
-      - name: '🔍 Check if tag already exists'
+      - name: '🔍 Check the tag is new'
         run: |
           TAG="${{ steps.version.outputs.version_tag }}"
           if git rev-parse "$TAG" >/dev/null 2>&1; then
-            echo "❌ Tag '$TAG' already exists!"
+            echo "❌ Tag '$TAG' already exists"
             exit 1
           fi
-          echo "✅ Tag '$TAG' does not exist"
 
-      - name: '🌿 Create release branch'
+      - name: '🌿 Release branch off develop, with main in its history'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           BRANCH="${{ steps.version.outputs.branch_name }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Delete existing release branch if it exists (from a previous failed run)
-          if git ls-remote --heads origin "$BRANCH" | grep -q "$BRANCH"; then
-            echo "ℹ️ Branch '$BRANCH' already exists, deleting it..."
+          # A branch left by a previous failed run
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null; then
             gh api -X DELETE "repos/${{ github.repository }}/git/refs/heads/$BRANCH" || true
           fi
 
           git checkout -b "$BRANCH"
-
-      - name: '📝 Update version in TelegramDownloader.csproj'
-        run: |
-          VERSION_CSPROJ="${{ steps.version.outputs.version_csproj }}"
-          sed -i "s|<Version>[^<]*</Version>|<Version>$VERSION_CSPROJ</Version>|g" "TelegramDownloader/TelegramDownloader.csproj"
-          echo "✅ TelegramDownloader version updated to $VERSION_CSPROJ"
-
-      - name: '📝 Update version in TFMAudioApp.csproj (if exists)'
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          VERSION_CSPROJ="${{ steps.version.outputs.version_csproj }}"
-          CSPROJ="TFMAudioApp/TFMAudioApp.csproj"
-
-          if [ -f "$CSPROJ" ]; then
-            if grep -q "ApplicationDisplayVersion" "$CSPROJ"; then
-              sed -i "s|<ApplicationDisplayVersion>[^<]*</ApplicationDisplayVersion>|<ApplicationDisplayVersion>$VERSION</ApplicationDisplayVersion>|g" "$CSPROJ"
+          # Normally main is already in develop (the last release was brought
+          # back). If it is not, merge it here so the pull request has no
+          # conflicts; if that conflicts, a person has to look at it.
+          if ! git merge-base --is-ancestor origin/main HEAD; then
+            if ! git merge --no-ff origin/main -m "Merge main into ${BRANCH}"; then
+              git merge --abort || true
+              echo "❌ main and develop conflict. Merge main into develop by hand, then label the issue again."
+              exit 1
             fi
-            if grep -q "<Version>" "$CSPROJ"; then
-              sed -i "s|<Version>[^<]*</Version>|<Version>$VERSION_CSPROJ</Version>|g" "$CSPROJ"
-            fi
-            echo "✅ TFMAudioApp version updated"
           fi
 
-      - name: '💾 Commit and push changes'
+      - name: '📝 Bump the version'
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          BRANCH="${{ steps.version.outputs.branch_name }}"
+          VERSION_CSPROJ="${{ steps.version.outputs.version_csproj }}"
 
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+          sed -i "s|<Version>[^<]*</Version>|<Version>$VERSION_CSPROJ</Version>|g" TelegramDownloader/TelegramDownloader.csproj
+
+          CSPROJ="TFMAudioApp/TFMAudioApp.csproj"
+          if [ -f "$CSPROJ" ]; then
+            sed -i "s|<ApplicationDisplayVersion>[^<]*</ApplicationDisplayVersion>|<ApplicationDisplayVersion>$VERSION</ApplicationDisplayVersion>|g" "$CSPROJ"
+            sed -i "s|<Version>[^<]*</Version>|<Version>$VERSION_CSPROJ</Version>|g" "$CSPROJ"
+          fi
 
           git add -A
+          git diff --staged --quiet || git commit -m "Bump version to $VERSION"
+          # Pushed with GITHUB_TOKEN: it starts no workflow, so no Docker image.
+          git push origin "${{ steps.version.outputs.branch_name }}"
 
-          if git diff --staged --quiet; then
-            echo "ℹ️ No changes to commit"
-          else
-            git commit -m "Bump version to $VERSION"
-            git push origin "$BRANCH"
-            echo "✅ Changes pushed to $BRANCH"
-          fi
+      - name: '📰 Release notes'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          TAG="${{ steps.version.outputs.version_tag }}"
+          BRANCH="${{ steps.version.outputs.branch_name }}"
+          PREVIOUS=$(git describe --tags --abbrev=0 --match 'v[0-9]*' origin/main 2>/dev/null || true)
 
-      - name: '🔀 Create Pull Request'
+          {
+            if [ -n "$ISSUE_BODY" ]; then
+              printf '%s\n\n' "$ISSUE_BODY"
+            fi
+            # The pull requests merged since the last release, as GitHub lists them
+            gh api "repos/${{ github.repository }}/releases/generate-notes" \
+              -f tag_name="$TAG" -f target_commitish="$BRANCH" \
+              ${PREVIOUS:+-f previous_tag_name="$PREVIOUS"} --jq .body
+          } > release_notes.md
+          cat release_notes.md
+
+      - name: '🔀 Pull request into main'
         id: create_pr
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          VERSION_TAG="${{ steps.version.outputs.version_tag }}"
-          BRANCH="${{ steps.version.outputs.branch_name }}"
-          ISSUE_NUMBER="${{ github.event.issue.number }}"
-          ISSUE_BODY="${{ github.event.issue.body }}"
+          TAG="${{ steps.version.outputs.version_tag }}"
+          {
+            cat release_notes.md
+            echo
+            echo "<!-- release-notes-end -->"
+            echo "---"
+            echo "Develop, with the version set to **${{ steps.version.outputs.version }}**."
+            echo
+            echo "> **Merge with \"Create a merge commit\"**, not squash nor rebase: then main and develop keep one history and the next release has no conflicts."
+            echo "> After the merge the workflow tags \`$TAG\`, publishes the release (binaries and Docker image) and brings develop up to main."
+            if [ -n "$ISSUE_NUMBER" ]; then
+              echo
+              echo "Closes #$ISSUE_NUMBER"
+            fi
+          } > pr_body.md
 
-          PR_URL=$(gh pr create \
-            --base main \
-            --head "$BRANCH" \
-            --title "Release $VERSION_TAG" \
-            --body "## 🚀 Release $VERSION_TAG
+          PR_URL=$(gh pr create --base main --head "${{ steps.version.outputs.branch_name }}" \
+            --title "Release $TAG" --body-file pr_body.md)
+          echo "pr_url=$PR_URL" >> "$GITHUB_OUTPUT"
+          echo "✅ $PR_URL"
 
-          This PR bumps the version to **$VERSION** and will trigger a release when merged.
-
-          ### Changes
-          - Updated \`TelegramDownloader.csproj\` version to \`${{ steps.version.outputs.version_csproj }}\`
-          - Updated \`TFMAudioApp.csproj\` version (if applicable)
-
-          ### Release Notes
-          $ISSUE_BODY
-
-          ---
-          Closes #$ISSUE_NUMBER
-
-          > ⚠️ **After merging**, the release workflow will automatically:
-          > 1. Create tag \`$VERSION_TAG\`
-          > 2. Create GitHub Release
-          > 3. Build and upload binaries
-          > 4. Sync \`develop\` branch with \`main\`")
-
-          echo "pr_url=$PR_URL" >> $GITHUB_OUTPUT
-          echo "✅ PR created: $PR_URL"
-
-      - name: '💬 Comment on issue'
+      - name: '💬 Comment on the issue'
+        if: github.event_name == 'issues'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION_TAG="${{ steps.version.outputs.version_tag }}"
-          PR_URL="${{ steps.create_pr.outputs.pr_url }}"
+          gh issue comment ${{ github.event.issue.number }} --body "Release pull request: ${{ steps.create_pr.outputs.pr_url }}
 
-          gh issue comment ${{ github.event.issue.number }} --body "## 📋 Release PR Created
-
-          A pull request has been created to bump the version to **$VERSION_TAG**:
-
-          👉 $PR_URL
-
-          **Next steps:**
-          1. Review and approve the PR
-          2. Merge the PR to \`main\`
-          3. The release will be created automatically after merge
-
-          ---
-          *This comment was automatically generated.*"
+          Merge it with **Create a merge commit** and the rest is automatic."
 
       - name: '❌ Comment on failure'
-        if: failure()
+        if: failure() && github.event_name == 'issues'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh issue comment ${{ github.event.issue.number }} --body "## ❌ Release PR Creation Failed
+          gh issue comment ${{ github.event.issue.number }} --body "The release pull request could not be created: see the [workflow logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).
 
-          Please check the [workflow logs](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}).
-
-          Common issues:
-          - Version format incorrect (use: v3.5.0)
-          - Tag already exists
-          - User not authorized
-
-          ---
-          *This comment was automatically generated.*"
+          Usual causes: no version in the title (use v3.9.0), a tag that already exists, or main and develop in conflict."
 
   # ===========================================
-  # JOB 2: Create tag and release after PR merge
+  # JOB 2: Tag, release and develop up to main
   # ===========================================
-  create-release-after-merge:
-    name: Create Release After Merge
+  publish-release:
+    name: Publish Release
     runs-on: ubuntu-latest
-
-    # Only run when a release PR is merged
     if: |
       github.event_name == 'pull_request' &&
       github.event.pull_request.merged == true &&
       startsWith(github.event.pull_request.head.ref, 'release/')
 
     steps:
-      - name: '📋 Extract version from branch name'
+      - name: '📋 Version from the branch'
         id: version
         run: |
           BRANCH="${{ github.event.pull_request.head.ref }}"
-          # Extract version from branch name (release/3.5.0 -> 3.5.0)
           VERSION=${BRANCH#release/}
-          VERSION_TAG="v${VERSION}"
-
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "version_tag=$VERSION_TAG" >> $GITHUB_OUTPUT
-          echo "✅ Version: $VERSION | Tag: $VERSION_TAG"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "version_tag=v$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: '📄 Checkout main'
         uses: actions/checkout@v4
@@ -260,75 +234,65 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.TOKENBuild }}
 
-      - name: '🏷️ Create and push tag'
-        env:
-          GH_TOKEN: ${{ secrets.TOKENBuild }}
+      - name: '🏷️ Tag'
         run: |
           TAG="${{ steps.version.outputs.version_tag }}"
-
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          git tag -a "$TAG" -m "Release $TAG"
+          git tag -a "$TAG" -m "Release $TAG" "${{ github.event.pull_request.merge_commit_sha }}"
+          # With TOKENBuild the tag starts the release Docker image workflow.
           git push origin "$TAG"
 
-          echo "✅ Tag '$TAG' created and pushed"
-
-      - name: '🚀 Create GitHub Release'
+      - name: '🚀 GitHub Release'
         env:
           GH_TOKEN: ${{ secrets.TOKENBuild }}
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
-          TAG="${{ steps.version.outputs.version_tag }}"
-
-          # Write PR body to file to avoid shell interpretation issues
-          echo "$PR_BODY" > release_notes.md
-
-          gh release create "$TAG" \
-            --title "Release $TAG" \
+          # The notes are the body of the pull request, without its footer.
+          printf '%s\n' "$PR_BODY" | sed '/<!-- release-notes-end -->/,$d' > release_notes.md
+          gh release create "${{ steps.version.outputs.version_tag }}" \
+            --title "Release ${{ steps.version.outputs.version_tag }}" \
             --notes-file release_notes.md \
-            --target main
+            --verify-tag
 
-          echo "✅ GitHub Release created"
-
-      - name: '🗑️ Delete release branch'
+      - name: '🔄 Bring develop up to main'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PUSH_TOKEN: ${{ secrets.TOKENBuild }}
         run: |
-          BRANCH="${{ github.event.pull_request.head.ref }}"
-          gh api -X DELETE "repos/${{ github.repository }}/git/refs/heads/$BRANCH" || true
-          echo "✅ Branch '$BRANCH' deleted"
+          TAG="${{ steps.version.outputs.version_tag }}"
+          MERGE="${{ github.event.pull_request.merge_commit_sha }}"
+          git fetch origin develop
 
-      - name: '🔄 Create PR to sync develop with main'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION_TAG="${{ steps.version.outputs.version_tag }}"
-          SYNC_BRANCH="sync/main-to-develop-${VERSION_TAG}"
-
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          # Check if develop branch exists
-          if ! git ls-remote --heads origin develop | grep -q develop; then
-            echo "ℹ️ develop branch does not exist, skipping sync"
-            exit 0
+          if [ "$(git cat-file -p "$MERGE" | grep -c '^parent ')" -lt 2 ]; then
+            echo "::warning::The release pull request was squashed or rebased: main and develop no longer share history and the next release will conflict."
           fi
 
-          # Create sync branch from main
-          git checkout -b "$SYNC_BRANCH"
-          git push origin "$SYNC_BRANCH"
+          git checkout -B develop origin/develop
+          FAILED=
+          if git merge-base --is-ancestor origin/develop origin/main; then
+            # Nothing new on develop meanwhile: develop simply becomes main.
+            git merge --ff-only origin/main
+          elif ! git merge --no-ff origin/main -m "Sync develop with main after $TAG [skip ci]"; then
+            git merge --abort || true
+            FAILED=1
+          fi
 
-          # Create PR to merge into develop
-          PR_URL=$(gh pr create \
-            --base develop \
-            --head "$SYNC_BRANCH" \
-            --title "Sync develop with main after $VERSION_TAG" \
-            --body "## 🔄 Sync develop with main
+          # TOKENBuild can skip the pull request that develop requires. What is
+          # pushed is the release merge, or a commit that says [skip ci]; the
+          # dev Docker workflow skips both.
+          if [ -z "$FAILED" ] && git push "https://x-access-token:${PUSH_TOKEN}@github.com/${{ github.repository }}.git" develop; then
+            echo "✅ develop is up to main"
+          else
+            # Last resort, as before: a pull request to merge by hand (with a merge commit).
+            SYNC="sync/main-to-develop-$TAG"
+            git push origin "origin/main:refs/heads/$SYNC"
+            gh pr create --base develop --head "$SYNC" \
+              --title "Sync develop with main after $TAG" \
+              --body "develop could not be brought up to main on its own. Merge with **Create a merge commit**."
+          fi
 
-          This PR syncs the \`develop\` branch with \`main\` after release **$VERSION_TAG**.
-
-          ---
-          *This PR was automatically generated.*")
-
-          echo "✅ Sync PR created: $PR_URL"
+      - name: '🗑️ Delete the release branch'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh api -X DELETE "repos/${{ github.repository }}/git/refs/heads/${{ github.event.pull_request.head.ref }}" || true
