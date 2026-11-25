@@ -43,6 +43,18 @@ namespace TelegramDownloader.Services.Library
         public static bool IsWithin(string? folderPath, string? root) =>
             Normalize(folderPath).StartsWith(Normalize(root), StringComparison.OrdinalIgnoreCase);
 
+        /// <summary>The folders with normalized paths, without repeated ones nor those inside another one.</summary>
+        public static List<LibraryScanFolder> Outermost(IEnumerable<LibraryScanFolder> folders)
+        {
+            var result = new List<LibraryScanFolder>();
+            foreach (var folder in folders.Select(f => new LibraryScanFolder { ChannelId = f.ChannelId, Path = Normalize(f.Path) }).OrderBy(f => f.Path.Length))
+            {
+                if (!result.Any(r => r.ChannelId == folder.ChannelId && IsWithin(folder.Path, r.Path)))
+                    result.Add(folder);
+            }
+            return result;
+        }
+
         /// <summary>The kind the explicit rule of a folder sets, or null.</summary>
         public static string? Resolve(GeneralConfig config, long channelId, string? folderPath) =>
             ResolveRule(config, channelId, folderPath)?.Kind;

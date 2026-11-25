@@ -289,7 +289,15 @@ the `item` it currently points at, which is what a client needs to offer a fix.
 POST /api/v1/library/scan          { "channelId": "1290586824", "force": false }   -> 202
 GET  /api/v1/library/scan          -> state of the current / last scan (persisted across restarts)
 DELETE /api/v1/library/scan        -> cancel
+
+POST /api/v1/library/scan          only some folders, with what is below them
+{ "folders": [ { "channelId": 1290586824, "path": "/Series/" }, { "channelId": 1417000000, "path": "/" } ], "force": false }
 ```
+
+`folders` limits the scan to them (those of some folder rules, for example, which
+apply as always); it goes without `channelId`, and an empty list is a `400`. A folder
+inside another one is not scanned twice. The state has them in `folders`. Advertised
+as `library.scanFolders`.
 
 Omit `channelId` to scan the configured channels (`libraryIncludedChannels`, or
 every indexed channel when empty, minus `libraryExcludedChannels`).

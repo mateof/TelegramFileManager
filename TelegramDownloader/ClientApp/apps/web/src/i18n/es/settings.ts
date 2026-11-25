@@ -386,7 +386,17 @@ const settings: Record<string, string> = {
   'Series of the folder': 'Serie de la carpeta',
   'Every video of the folder will be an episode of the series you choose.': 'Todos los vídeos de la carpeta serán capítulos de la serie que elijas.',
   'Refresh one file type at a time': 'Actualizar un tipo de fichero cada vez',
-  'When the index of a channel is refreshed, search the documents first, then audio, then video and then photos, instead of all at once. Slower, but Telegram is less likely to limit the requests on large channels. Each type is indexed as soon as it is found.': 'Al actualizar el índice de un canal, busca primero los documentos, después el audio, después el vídeo y después las fotos, en vez de todo a la vez. Más lento, pero es menos probable que Telegram limite las peticiones en canales grandes. Cada tipo se indexa en cuanto termina su búsqueda.'
+  'When the index of a channel is refreshed, search the documents first, then audio, then video and then photos, instead of all at once. Slower, but Telegram is less likely to limit the requests on large channels. Each type is indexed as soon as it is found.': 'Al actualizar el índice de un canal, busca primero los documentos, después el audio, después el vídeo y después las fotos, en vez de todo a la vez. Más lento, pero es menos probable que Telegram limite las peticiones en canales grandes. Cada tipo se indexa en cuanto termina su búsqueda.',
+  'Scan this folder': 'Escanear esta carpeta',
+  'Save & scan this folder': 'Guardar y escanear esta carpeta',
+  'Scan the selected': 'Escanear las seleccionadas',
+  'Save & scan the selected': 'Guardar y escanear las seleccionadas',
+  'Identify the new files of these folders': 'Identifica los ficheros nuevos de estas carpetas',
+  'Identify every file of these folders again (manual fixes are kept)': 'Vuelve a identificar todos los ficheros de estas carpetas (se conservan las correcciones manuales)',
+  'A scan is running. Its progress is below.': 'Hay un escaneo en curso. Su progreso está más abajo.',
+  'Only:': 'Solo:',
+  '1 folder selected': '1 carpeta seleccionada',
+  '{count} folders selected': '{count} carpetas seleccionadas'
 };
 
 export default settings;

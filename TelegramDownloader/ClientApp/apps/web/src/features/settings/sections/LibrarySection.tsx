@@ -1,6 +1,6 @@
-import type { ApiLibraryScanStateDto, ApiProviderCandidateDto, LibraryFolderRule, LibraryFolderRuleKind } from '@tfm/api-client';
+import type { ApiLibraryScanStateDto, ApiProviderCandidateDto, LibraryFolderRule, LibraryFolderRuleKind, LibraryScanRequest } from '@tfm/api-client';
 import { isApiError } from '@tfm/api-client';
-import { Badge, Button, cn, Dialog, DialogContent, IconButton, Input, Progress, RadioGroup, Select, Skeleton, Switch, toast } from '@tfm/ui';
+import { Badge, Button, Checkbox, cn, Dialog, DialogContent, IconButton, Input, Progress, RadioGroup, Select, Skeleton, Switch, toast } from '@tfm/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowUpRight, Clapperboard, Eraser, FolderTree, KeyRound, ListFilter, Plus, Radar, RotateCcw, Search, Square, Trash2, Tv, X } from 'lucide-react';
 import { useId, useMemo, useState } from 'react';
@@ -134,7 +134,41 @@ function FolderList({ channelId, value, onChange }: { channelId: number; value: 
   );
 }
 
-function FolderRules({ form, values: v, options }: FormSectionProps & { options: ChannelOption[] }) {
+/** The library scan: its state, and starting it (saving the settings first when there are changes). */
+function useLibraryScan(form: FormSectionProps['form']) {
+  const qc = useQueryClient();
+  const scan = useQuery({ queryKey: settingsKeys.libraryScan, queryFn: ({ signal }) => api.library.scanState(signal) });
+  useEventsMessage('LibraryScan', (e) => {
+    if (e.progress) qc.setQueryData<ApiLibraryScanStateDto | null>(settingsKeys.libraryScan, e.progress);
+    else if (!e.running) void qc.invalidateQueries({ queryKey: settingsKeys.libraryScan });
+  });
+  const start = useMutation({
+    mutationFn: (request: LibraryScanRequest) => api.library.scan(request),
+    onSuccess: () => {
+      toast.success(t('Library scan started'));
+      void qc.invalidateQueries({ queryKey: settingsKeys.libraryScan });
+    },
+    onError: (error) =>
+      toast.error(isApiError(error) && error.code === 'already_running' ? t('A scan is already running') : t('Could not start the scan'), { description: errorMessage(error) })
+  });
+  return {
+    state: scan.data,
+    loading: scan.isPending,
+    running: scan.data?.running ?? false,
+    starting: start.isPending,
+    enabled: !!form.values?.libraryEnabled,
+    run: async (request: LibraryScanRequest) => {
+      if (form.isDirty && !(await form.submit())) return;
+      start.mutate(request);
+    }
+  };
+}
+
+type LibraryScan = ReturnType<typeof useLibraryScan>;
+
+const ruleKey = (r: Pick<LibraryFolderRule, 'channelId' | 'path'>) => `${r.channelId}|${normalizeFolderPath(r.path)}`;
+
+function FolderRules({ form, values: v, options, scan }: FormSectionProps & { options: ChannelOption[]; scan: LibraryScan }) {
   const [channelId, setChannelId] = useState<number | null>(null);
   const [path, setPath] = useState('/');
   const [kind, setKind] = useState<LibraryFolderRuleKind>('series');
@@ -153,6 +187,16 @@ function FolderRules({ form, values: v, options }: FormSectionProps & { options:
     setPath('/');
     setTitle(null);
   };
+  const [chosen, setChosen] = useState<ReadonlySet<string>>(() => new Set());
+  const selected = sorted.filter((r) => chosen.has(ruleKey(r)));
+  const choose = (key: string, on: boolean) => {
+    const next = new Set(chosen);
+    if (on) next.add(key);
+    else next.delete(key);
+    setChosen(next);
+  };
+  const canScan = scan.enabled && !scan.running && !scan.starting;
+  const scanRules = (list: LibraryFolderRule[], force: boolean) => void scan.run({ folders: list.map((r) => ({ channelId: r.channelId, path: normalizeFolderPath(r.path) })), force });
   const remove = (rule: LibraryFolderRule) => form.setField('libraryFolderRules', rules.filter((r) => r !== rule));
 
   return (
@@ -163,7 +207,14 @@ function FolderRules({ form, values: v, options }: FormSectionProps & { options:
             <table className="w-full text-sm">
               <thead className="bg-surface-2 text-left text-xs text-fg-muted">
                 <tr>
-                  <th className="px-3 py-2 font-medium">{t('Channel')}</th>
+                  <th className="w-8 py-2 pl-3">
+                    <Checkbox
+                      checked={selected.length === sorted.length ? true : selected.length > 0 ? 'indeterminate' : false}
+                      onCheckedChange={(all) => setChosen(new Set(all === true ? sorted.map(ruleKey) : []))}
+                      aria-label={t('Select all')}
+                    />
+                  </th>
+                  <th className="px-3 py-2 font-medium max-sm:hidden">{t('Channel')}</th>
                   <th className="px-3 py-2 font-medium">{t('Folder')}</th>
                   <th className="px-3 py-2 font-medium">{t('Kind')}</th>
                   <th className="w-10 px-3 py-2">
@@ -173,11 +224,21 @@ function FolderRules({ form, values: v, options }: FormSectionProps & { options:
               </thead>
               <tbody className="divide-y divide-border">
                 {sorted.map((r) => (
-                  <tr key={`${r.channelId}|${r.path}`}>
-                    <td className="max-w-48 truncate px-3 py-2 text-fg" title={String(r.channelId)}>
+                  <tr key={`${r.channelId}|${r.path}`} className={cn(chosen.has(ruleKey(r)) && 'bg-primary-soft')}>
+                    <td className="py-2 pl-3">
+                      <Checkbox
+                        checked={chosen.has(ruleKey(r))}
+                        onCheckedChange={(on) => choose(ruleKey(r), on === true)}
+                        aria-label={t('Select {name}', { name: `${channelName(options, r.channelId)} ${r.path}` })}
+                      />
+                    </td>
+                    <td className="max-w-48 truncate px-3 py-2 text-fg max-sm:hidden" title={String(r.channelId)}>
                       {channelName(options, r.channelId)}
                     </td>
-                    <td className="px-3 py-2 font-mono text-xs text-fg">{r.path}</td>
+                    <td className="px-3 py-2 font-mono text-xs text-fg">
+                      <span className="block font-sans text-sm sm:hidden">{channelName(options, r.channelId)}</span>
+                      <span className="break-words">{r.path}</span>
+                    </td>
                     <td className="px-3 py-2">
                       <Badge tone={r.kind === 'ignore' ? 'neutral' : r.kind === 'movie' ? 'info' : 'accent'}>{kindLabel(r.kind)}</Badge>
                       {r.kind === 'series' && r.providerId && (
@@ -188,9 +249,20 @@ function FolderRules({ form, values: v, options }: FormSectionProps & { options:
                       )}
                     </td>
                     <td className="px-2 py-1">
-                      <IconButton label={t('Remove')} size="sm" variant="ghost" onClick={() => remove(r)}>
-                        <Trash2 />
-                      </IconButton>
+                      <div className="flex justify-end">
+                        <IconButton
+                          label={form.isDirty ? t('Save & scan this folder') : t('Scan this folder')}
+                          size="sm"
+                          variant="ghost"
+                          disabled={!canScan}
+                          onClick={() => scanRules([r], false)}
+                        >
+                          <Radar />
+                        </IconButton>
+                        <IconButton label={t('Remove')} size="sm" variant="ghost" onClick={() => remove(r)}>
+                          <Trash2 />
+                        </IconButton>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -200,6 +272,25 @@ function FolderRules({ form, values: v, options }: FormSectionProps & { options:
         ) : (
           <p className="text-xs text-fg-subtle">{t('No folder rules yet.')}</p>
         )}
+        {selected.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="min-w-28 flex-1 text-sm text-fg-muted">{selected.length === 1 ? t('1 folder selected') : t('{count} folders selected', { count: selected.length })}</span>
+            <Button size="sm" icon={<Radar />} disabled={!canScan} onClick={() => scanRules(selected, false)} title={t('Identify the new files of these folders')}>
+              {form.isDirty ? t('Save & scan the selected') : t('Scan the selected')}
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={<RotateCcw />}
+              disabled={!canScan}
+              onClick={() => scanRules(selected, true)}
+              title={t('Identify every file of these folders again (manual fixes are kept)')}
+            >
+              {t('Full rescan')}
+            </Button>
+          </div>
+        )}
+        {sorted.length > 0 && scan.running && <p className="text-xs text-fg-muted">{t('A scan is running. Its progress is below.')}</p>}
 
         <div className="grid gap-3 rounded-xl border border-dashed border-border p-3 md:grid-cols-[1fr_1.4fr_auto]">
           <div className="flex flex-col gap-1.5">
@@ -270,40 +361,22 @@ function FolderRules({ form, values: v, options }: FormSectionProps & { options:
   );
 }
 
-function ScanStatus({ form }: { form: FormSectionProps['form'] }) {
-  const qc = useQueryClient();
-  const scan = useQuery({ queryKey: settingsKeys.libraryScan, queryFn: ({ signal }) => api.library.scanState(signal) });
-  useEventsMessage('LibraryScan', (e) => {
-    if (e.progress) qc.setQueryData<ApiLibraryScanStateDto | null>(settingsKeys.libraryScan, e.progress);
-    else if (!e.running) void qc.invalidateQueries({ queryKey: settingsKeys.libraryScan });
-  });
-  const start = useMutation({
-    mutationFn: (force: boolean) => api.library.scan({ force }),
-    onSuccess: () => {
-      toast.success(t('Library scan started'));
-      void qc.invalidateQueries({ queryKey: settingsKeys.libraryScan });
-    },
-    onError: (error) =>
-      toast.error(isApiError(error) && error.code === 'already_running' ? t('A scan is already running') : t('Could not start the scan'), { description: errorMessage(error) })
-  });
+function ScanStatus({ form, scan, options }: { form: FormSectionProps['form']; scan: LibraryScan; options: ChannelOption[] }) {
   const cancel = useMutation({
     mutationFn: () => api.library.cancelScan(),
     onSuccess: () => toast(t('Cancelling the scan...')),
     onError: (error) => toast.error(t('Could not cancel the scan'), { description: errorMessage(error) })
   });
 
-  const s = scan.data;
-  const running = s?.running ?? false;
+  const s = scan.state;
+  const running = scan.running;
   const percent = s?.filesToProcess ? ((s.filesProcessed ?? 0) / s.filesToProcess) * 100 : s && s.filesToProcess === undefined && s.channelsTotal > 0 ? (s.channelsScanned / s.channelsTotal) * 100 : undefined;
-  const run = async (force: boolean) => {
-    if (form.isDirty && !(await form.submit())) return;
-    start.mutate(force);
-  };
+  const folders = s?.folders ?? [];
 
   return (
     <SettingRow id="libraryScan" stacked badge={running ? <Badge tone="info" dot>{t('Running')}</Badge> : undefined}>
       <div className="flex flex-col gap-3">
-        {scan.isPending ? (
+        {scan.loading ? (
           <Skeleton className="h-10" />
         ) : !s ? (
           <p className="text-sm text-fg-muted">{t('Never scanned.')}</p>
@@ -334,6 +407,11 @@ function ScanStatus({ form }: { form: FormSectionProps['form'] }) {
             {s.cancelled && ` (${t('cancelled')})`}
           </p>
         )}
+        {folders.length > 0 && (
+          <p className="text-xs text-fg-subtle">
+            {t('Only:')} {folders.map((f) => `${channelName(options, f.channelId)} ${f.path}`).join(', ')}
+          </p>
+        )}
         {s?.error && <p className="text-sm text-danger">{s.error}</p>}
         <div className="flex flex-wrap gap-2">
           {running ? (
@@ -342,16 +420,16 @@ function ScanStatus({ form }: { form: FormSectionProps['form'] }) {
             </Button>
           ) : (
             <>
-              <Button icon={<Radar />} loading={start.isPending} disabled={!form.values?.libraryEnabled} onClick={() => void run(false)} title={t('Save the settings and identify new files')}>
+              <Button icon={<Radar />} loading={scan.starting} disabled={!scan.enabled} onClick={() => void scan.run({ force: false })} title={t('Save the settings and identify new files')}>
                 {form.isDirty ? t('Save & scan') : t('Scan now')}
               </Button>
-              <Button variant="secondary" icon={<RotateCcw />} disabled={start.isPending || !form.values?.libraryEnabled} onClick={() => void run(true)} title={t('Identify every file again (manual fixes are kept)')}>
+              <Button variant="secondary" icon={<RotateCcw />} disabled={scan.starting || !scan.enabled} onClick={() => void scan.run({ force: true })} title={t('Identify every file again (manual fixes are kept)')}>
                 {t('Full rescan')}
               </Button>
             </>
           )}
         </div>
-        {!form.values?.libraryEnabled && <p className="text-xs text-fg-subtle">{t('Enable the library to scan.')}</p>}
+        {!scan.enabled && <p className="text-xs text-fg-subtle">{t('Enable the library to scan.')}</p>}
       </div>
     </SettingRow>
   );
@@ -361,6 +439,7 @@ export function LibrarySection(props: FormSectionProps) {
   const { form, values: v } = props;
   const e = form.errors;
   const { options } = useChannelOptions(true);
+  const scan = useLibraryScan(form);
   const [onlySelected, setOnlySelected] = useState(v.libraryIncludedChannels.length > 0);
   const langId = useId();
   const thresholdId = useId();
@@ -408,11 +487,11 @@ export function LibrarySection(props: FormSectionProps) {
             </div>
           </div>
         </SettingRow>
-        <FolderRules {...props} options={options} />
+        <FolderRules {...props} options={options} scan={scan} />
       </SettingsGroup>
 
       <SettingsGroup title={t('Library scan')} icon={<Radar />}>
-        <ScanStatus form={form} />
+        <ScanStatus form={form} scan={scan} options={options} />
       </SettingsGroup>
     </>
   );

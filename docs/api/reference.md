@@ -175,7 +175,7 @@ Browse, search, details and stats accept `collectionId` to read a shared collect
 | GET | `/api/v1/library/files` | | Files by identification status (review queue). |
 | GET | `/api/v1/library/files/{channelId}/{fileId}` | | One file as the library sees it. |
 | GET | `/api/v1/library/images/{key}` | | Cached poster/backdrop/still (`?size=`), long-lived cache headers, `304` on revalidation. |
-| POST | `/api/v1/library/scan` | | Start a scan (202 / 409). |
+| POST | `/api/v1/library/scan` | | Start a scan of everything, a channel (`channelId`) or some folders (`folders`) (202 / 409). |
 | GET | `/api/v1/library/scan` | | Scan state (persisted). |
 | DELETE | `/api/v1/library/scan` | | Cancel the scan. |
 | GET | `/api/v1/library/providers` | | Providers and their configuration (masked keys). |

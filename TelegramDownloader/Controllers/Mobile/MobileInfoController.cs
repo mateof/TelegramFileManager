@@ -41,6 +41,7 @@ namespace TelegramDownloader.Controllers.Mobile
             "transfers.pauseUploads", // POST /api/v1/transfers/{id}/pause and /retry on an upload; canPause / canRetry on every transfer
             "messages.browse",       // GET  /api/v1/channels/{id}/messages/window, /messages/search, /messages/counts
             "channels.refreshSequential", // oneTypeAtATime in POST /api/v1/channels/{id}/refresh, refreshOneTypeAtATime in the config
+            "library.scanFolders",   // folders in POST /api/v1/library/scan
             "library.seriesFolders", // GET  /api/v1/library/folders, PUT|DELETE /api/v1/library/folders/series
         };
 

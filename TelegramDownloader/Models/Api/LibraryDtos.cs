@@ -325,13 +325,24 @@ namespace TelegramDownloader.Models.Api
         public int? Priority { get; set; }
     }
 
+    /// <summary>A channel folder, with its subfolders.</summary>
+    public class ApiLibraryScanFolder
+    {
+        public long ChannelId { get; set; }
+        /// <summary><c>/Series/</c>; <c>/</c> is the whole channel.</summary>
+        public string Path { get; set; } = "/";
+    }
+
     public class ApiLibraryScanStateDto
     {
         public bool Running { get; set; }
         public bool Cancelled { get; set; }
         public DateTime? StartedAt { get; set; }
         public DateTime? FinishedAt { get; set; }
+        /// <summary><c>all</c>, a channel id, or <c>folders</c> (of several channels).</summary>
         public string Scope { get; set; } = "all";
+        /// <summary>The folders it is limited to; null when it is not.</summary>
+        public List<ApiLibraryScanFolder>? Folders { get; set; }
         public bool Force { get; set; }
         public int ChannelsTotal { get; set; }
         public int ChannelsScanned { get; set; }
@@ -351,6 +362,7 @@ namespace TelegramDownloader.Models.Api
         public static ApiLibraryScanStateDto? From(LibraryScanState? s) => s == null ? null : new()
         {
             Running = s.Running, Cancelled = s.Cancelled, StartedAt = s.StartedAt, FinishedAt = s.FinishedAt, Scope = s.Scope, Force = s.Force,
+            Folders = s.Folders?.Select(f => new ApiLibraryScanFolder { ChannelId = f.ChannelId, Path = f.Path }).ToList(),
             ChannelsTotal = s.ChannelsTotal, ChannelsScanned = s.ChannelsScanned, CurrentChannel = s.CurrentChannel,
             FilesSeen = s.FilesSeen, FilesToProcess = s.FilesToProcess, FilesProcessed = s.FilesProcessed, FilesNew = s.FilesNew, FilesRemoved = s.FilesRemoved,
             Matched = s.Matched, Review = s.Review, Unmatched = s.Unmatched, Failed = s.Failed, Error = s.Error
@@ -386,6 +398,8 @@ namespace TelegramDownloader.Models.Api
     {
         /// <summary>Scan only this channel. Omit for every channel with an index.</summary>
         public string? ChannelId { get; set; }
+        /// <summary>Scan only these folders (those of some folder rules, for example). Not together with <c>channelId</c>.</summary>
+        public List<ApiLibraryScanFolder>? Folders { get; set; }
         /// <summary>Re-identify files that were already matched automatically. Manual matches are never touched.</summary>
         public bool Force { get; set; }
     }
