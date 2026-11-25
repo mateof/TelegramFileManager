@@ -200,6 +200,8 @@ describe('misc helpers', () => {
   it('computes the scan percentage', () => {
     expect(scanPercent({ running: true, channelsTotal: 4, channelsScanned: 1 } as never)).toBe(25);
     expect(scanPercent({ running: true, channelsTotal: 0, channelsScanned: 0 } as never)).toBe(0);
+    expect(scanPercent({ running: true, channelsTotal: 4, channelsScanned: 3, filesToProcess: 200, filesProcessed: 20 } as never)).toBe(10);
+    expect(scanPercent({ running: true, channelsTotal: 4, channelsScanned: 3, filesToProcess: 0, filesProcessed: 0 } as never)).toBe(0);
     expect(scanPercent(null)).toBe(100);
   });
 

@@ -261,9 +261,21 @@ Omit `channelId` to scan the configured channels (`libraryIncludedChannels`, or
 every indexed channel when empty, minus `libraryExcludedChannels`).
 `409 already_running` while a scan is in progress.
 The state carries `running`, `startedAt`, `finishedAt`, `channelsTotal`,
-`channelsScanned`, `currentChannel`, `filesSeen`, `filesNew`, `filesRemoved`,
-`matched`, `review`, `unmatched`, `failed`, `cancelled` and `error` (set, for
-example, when a provider rejects its key; the scan stops there).
+`channelsScanned`, `currentChannel`, `filesSeen`, `filesToProcess`,
+`filesProcessed`, `filesNew`, `filesRemoved`, `matched`, `review`, `unmatched`,
+`failed`, `cancelled` and `error`.
+
+A scan first reads every channel index and compares it with the library; only new
+files, unmatched ones and those under a changed folder rule are identified (all the
+unlocked ones with `force`). `filesToProcess` is 0 until that is done; the progress
+of the scan is then `filesProcessed / filesToProcess`. Files with the same title are
+identified together, whatever their channel, and up to 8 titles at once, within the
+request rate of each provider. The counts of the items found so far are updated every
+20 seconds, so they show up before the scan ends.
+
+`error` is set when the first provider rejects its key or runs out of quota, and the
+scan stops there. When it happens to another provider, the scan goes on without it
+and `error` says so.
 
 ---
 

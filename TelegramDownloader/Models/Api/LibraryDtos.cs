@@ -337,6 +337,9 @@ namespace TelegramDownloader.Models.Api
         public int ChannelsScanned { get; set; }
         public string? CurrentChannel { get; set; }
         public int FilesSeen { get; set; }
+        /// <summary>Files that have to be identified; 0 until every channel index has been read.</summary>
+        public int FilesToProcess { get; set; }
+        public int FilesProcessed { get; set; }
         public int FilesNew { get; set; }
         public int FilesRemoved { get; set; }
         public int Matched { get; set; }
@@ -349,7 +352,7 @@ namespace TelegramDownloader.Models.Api
         {
             Running = s.Running, Cancelled = s.Cancelled, StartedAt = s.StartedAt, FinishedAt = s.FinishedAt, Scope = s.Scope, Force = s.Force,
             ChannelsTotal = s.ChannelsTotal, ChannelsScanned = s.ChannelsScanned, CurrentChannel = s.CurrentChannel,
-            FilesSeen = s.FilesSeen, FilesNew = s.FilesNew, FilesRemoved = s.FilesRemoved,
+            FilesSeen = s.FilesSeen, FilesToProcess = s.FilesToProcess, FilesProcessed = s.FilesProcessed, FilesNew = s.FilesNew, FilesRemoved = s.FilesRemoved,
             Matched = s.Matched, Review = s.Review, Unmatched = s.Unmatched, Failed = s.Failed, Error = s.Error
         };
     }

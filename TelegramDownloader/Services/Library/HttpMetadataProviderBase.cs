@@ -32,7 +32,7 @@ namespace TelegramDownloader.Services.Library
 
         public abstract string Id { get; }
         public abstract ProviderDescriptor Descriptor { get; }
-        /// <summary>Minimum gap between two requests to this provider.</summary>
+        /// <summary>Minimum gap between the start of two requests to this provider; several may be in flight.</summary>
         protected virtual TimeSpan MinInterval => TimeSpan.FromMilliseconds(250);
 
         public abstract Task<IReadOnlyList<ProviderCandidate>> SearchAsync(string kind, string query, int? year, CancellationToken ct);
@@ -53,8 +53,9 @@ namespace TelegramDownloader.Services.Library
                     Authorize(request);
                     response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
                 }
-                catch (HttpRequestException ex)
+                catch (Exception ex) when (ex is HttpRequestException || (ex is OperationCanceledException && !ct.IsCancellationRequested))
                 {
+                    // A timeout is a cancellation nobody asked for: it must not look like the user cancelled the scan
                     if (attempt == 3) throw new ProviderException($"{Descriptor.Name} is not reachable: {ex.Message}", null, ex);
                     await Task.Delay(TimeSpan.FromSeconds(2 * (attempt + 1)), ct);
                     continue;
@@ -71,7 +72,9 @@ namespace TelegramDownloader.Services.Library
                         var wait = response.Headers.RetryAfter?.Delta ?? TimeSpan.FromSeconds(2 * (attempt + 1));
                         Logger.LogWarning("{Provider} answered {Status}; retrying in {Wait}s", Id, (int)response.StatusCode, wait.TotalSeconds);
                         if (attempt == 3) throw new ProviderException($"{Descriptor.Name} keeps answering {(int)response.StatusCode}", (int)response.StatusCode);
-                        await Task.Delay(wait, ct);
+                        // Too many requests is about all of them, not only this one
+                        if (response.StatusCode == HttpStatusCode.TooManyRequests) await PauseAsync(wait, ct);
+                        else await Task.Delay(wait, ct);
                         continue;
                     }
                     if (!response.IsSuccessStatusCode)
@@ -95,6 +98,21 @@ namespace TelegramDownloader.Services.Library
                 if (now < _nextAllowed)
                     await Task.Delay(_nextAllowed - now, ct);
                 _nextAllowed = DateTime.UtcNow + MinInterval;
+            }
+            finally
+            {
+                _gate.Release();
+            }
+        }
+
+        /// <summary>No request starts for a while.</summary>
+        private async Task PauseAsync(TimeSpan wait, CancellationToken ct)
+        {
+            var until = DateTime.UtcNow + wait;
+            await _gate.WaitAsync(ct);
+            try
+            {
+                if (until > _nextAllowed) _nextAllowed = until;
             }
             finally
             {

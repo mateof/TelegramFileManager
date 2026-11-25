@@ -100,7 +100,9 @@ export function ScanStatus({ compact }: { compact?: boolean }) {
           </p>
           <p className="truncate text-xs text-fg-subtle">
             {running
-              ? s?.currentChannel
+              ? s?.filesToProcess
+                ? t('Identifying files: {done}/{total}', { done: s.filesProcessed ?? 0, total: s.filesToProcess })
+                : s?.currentChannel
                 ? t('Channel {done}/{total}: {name}', { done: s.channelsScanned, total: s.channelsTotal, name: s.currentChannel })
                 : t('Preparing...')
               : s?.finishedAt

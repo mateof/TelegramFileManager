@@ -157,8 +157,11 @@ export function episodeFile(ep: ApiLibraryEpisodeDto): ApiLibraryFileDto | null 
   return ep.files.find((f) => f.watch && !f.watch.completed && f.watch.positionMs > 0) ?? ep.files[0];
 }
 
-/** 0-100 of a running scan (channels done / total). */
+/** 0-100 of a running scan: files identified / to identify, or channels done / total when the server does not count files. */
 export function scanPercent(state: ApiLibraryScanStateDto | null | undefined): number {
+  if (state?.filesToProcess) return Math.min(100, Math.round(((state.filesProcessed ?? 0) / state.filesToProcess) * 100));
+  // Reading the channel indexes: a channel with nothing new is done at once, which says nothing of the rest
+  if (state?.running && state.filesToProcess === 0) return 0;
   if (!state || state.channelsTotal <= 0) return state?.running ? 0 : 100;
   return Math.min(100, Math.round((state.channelsScanned / state.channelsTotal) * 100));
 }

@@ -14,7 +14,8 @@ namespace TelegramDownloader.Data.db
 
         // Channel indexes (read only)
         Task<List<string>> GetChannelDatabaseNames();
-        Task<List<BsonFileManagerModel>> GetChannelFiles(string channelId);
+        /// <summary>The files of a channel index with one of these extensions (with the dot), and only the fields a scan needs.</summary>
+        Task<List<BsonFileManagerModel>> GetChannelVideos(string channelId, IEnumerable<string> extensions);
         /// <summary>Folder paths of a channel index (<c>/Series/Breaking Bad/</c>), root excluded.</summary>
         Task<List<string>> GetChannelFolders(string channelId);
         Task<BsonFileManagerModel?> GetChannelFile(string channelId, string fileId);
@@ -26,6 +27,8 @@ namespace TelegramDownloader.Data.db
         Task<LibraryItem?> FindItemByProvider(string provider, string providerId);
         Task<LibraryItem?> FindItemByExternalId(string key, string value);
         Task UpsertItem(LibraryItem item);
+        /// <summary>Stores only the file count, episode count and channels of these items.</summary>
+        Task UpdateItemCounts(IEnumerable<LibraryItem> items);
         Task DeleteItem(string id);
 
         // Episodes
@@ -42,7 +45,9 @@ namespace TelegramDownloader.Data.db
         Task<List<LibraryFile>> GetFilesByStatus(string status);
         Task<Dictionary<string, int>> CountFilesByStatus();
         Task UpsertFile(LibraryFile file);
+        Task UpsertFiles(IEnumerable<LibraryFile> files);
         Task DeleteFile(long channelId, string fileId);
+        Task DeleteFiles(long channelId, IEnumerable<string> fileIds);
         Task<long> DeleteFilesByChannel(long channelId);
 
         // Watch state

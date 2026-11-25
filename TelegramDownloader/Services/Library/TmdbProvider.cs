@@ -37,6 +37,8 @@ namespace TelegramDownloader.Services.Library
 
         public override string Id => ProviderId;
         public override ProviderDescriptor Descriptor => Info;
+        // 25 requests per second; TMDB documents a limit of around 40
+        protected override TimeSpan MinInterval => TimeSpan.FromMilliseconds(40);
 
         protected override void Authorize(HttpRequestMessage request)
         {
