@@ -248,8 +248,6 @@ A D-pad first client focused on watching the videos you keep in your channels:
   shows a catalogue with "continue watching", next episodes, watched marks and a way to
   fix a wrong identification. Enable it and add the provider keys in the Config page.
 
-Both repositories publish a signed APK as a GitHub Release on every push to `main`.
-
 ## Music player
 
 <img width="598" height="889" alt="Music player" src="https://github.com/user-attachments/assets/c4842c34-ea8f-4664-b22c-93b43a9aaf02" />
