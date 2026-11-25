@@ -228,6 +228,9 @@ export interface ApiLibraryScanStateDto {
   channelsScanned: number;
   currentChannel: string | null;
   filesSeen: number;
+  /** Files that have to be identified; 0 until every channel index has been read. Absent on older servers. */
+  filesToProcess?: number;
+  filesProcessed?: number;
   filesNew: number;
   filesRemoved: number;
   matched: number;

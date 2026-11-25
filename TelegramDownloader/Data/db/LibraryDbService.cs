@@ -40,7 +40,9 @@ namespace TelegramDownloader.Data.db
                 await Items.Indexes.CreateManyAsync(new[]
                 {
                     new CreateIndexModel<LibraryItem>(Builders<LibraryItem>.IndexKeys.Ascending(x => x.Provider).Ascending(x => x.ProviderId), new CreateIndexOptions { Name = "provider" }),
-                    new CreateIndexModel<LibraryItem>(Builders<LibraryItem>.IndexKeys.Ascending(x => x.Kind).Ascending(x => x.SortTitle), new CreateIndexOptions { Name = "kind_title" })
+                    new CreateIndexModel<LibraryItem>(Builders<LibraryItem>.IndexKeys.Ascending(x => x.Kind).Ascending(x => x.SortTitle), new CreateIndexOptions { Name = "kind_title" }),
+                    new CreateIndexModel<LibraryItem>(Builders<LibraryItem>.IndexKeys.Ascending("ExternalIds.imdb"), new CreateIndexOptions { Name = "external_imdb", Sparse = true }),
+                    new CreateIndexModel<LibraryItem>(Builders<LibraryItem>.IndexKeys.Ascending("ExternalIds.tmdb"), new CreateIndexOptions { Name = "external_tmdb", Sparse = true })
                 });
                 await Episodes.Indexes.CreateOneAsync(new CreateIndexModel<LibraryEpisode>(
                     Builders<LibraryEpisode>.IndexKeys.Ascending(x => x.ItemId).Ascending(x => x.Season).Ascending(x => x.Number),
@@ -70,11 +72,24 @@ namespace TelegramDownloader.Data.db
 
         public Task<List<string>> GetChannelDatabaseNames() => _db.GetAllChannelDatabaseNames();
 
-        public async Task<List<BsonFileManagerModel>> GetChannelFiles(string channelId)
+        public async Task<List<BsonFileManagerModel>> GetChannelVideos(string channelId, IEnumerable<string> extensions)
         {
             var col = _db.getDatabase(channelId).GetCollection<BsonFileManagerModel>("directory");
-            return await col.Find(Builders<BsonFileManagerModel>.Filter.Eq(x => x.IsFile, true)).ToListAsync();
+            return await col.Find(VideosFilter(extensions)).Project<BsonFileManagerModel>(ScanFields).ToListAsync();
         }
+
+        /// <summary>Files by extension, in any case and with or without the dot.</summary>
+        public static FilterDefinition<BsonFileManagerModel> VideosFilter(IEnumerable<string> extensions)
+        {
+            var names = string.Join("|", extensions.Select(e => System.Text.RegularExpressions.Regex.Escape(e.TrimStart('.'))));
+            var f = Builders<BsonFileManagerModel>.Filter;
+            return f.Eq(x => x.IsFile, true) & f.Regex(x => x.Type, new MongoDB.Bson.BsonRegularExpression($"^\\.?({names})$", "i"));
+        }
+
+        /// <summary>What a scan reads of every file; the rest (hashes, part lists...) stays in the database.</summary>
+        public static readonly ProjectionDefinition<BsonFileManagerModel> ScanFields = Builders<BsonFileManagerModel>.Projection
+            .Include(x => x.Id).Include(x => x.Name).Include(x => x.IsFile).Include(x => x.Type).Include(x => x.FilterPath)
+            .Include(x => x.Size).Include(x => x.DateCreated).Include(x => x.MessageId).Include(x => x.isSplit);
 
         public async Task<List<string>> GetChannelFolders(string channelId)
         {
@@ -125,6 +140,17 @@ namespace TelegramDownloader.Data.db
 
         public Task UpsertItem(LibraryItem item) =>
             Items.ReplaceOneAsync(x => x.Id == item.Id, item, new ReplaceOptions { IsUpsert = true });
+
+        public Task UpdateItemCounts(IEnumerable<LibraryItem> items)
+        {
+            var writes = items.Select(item => (WriteModel<LibraryItem>)new UpdateOneModel<LibraryItem>(
+                Builders<LibraryItem>.Filter.Eq(x => x.Id, item.Id),
+                Builders<LibraryItem>.Update
+                    .Set(x => x.FileCount, item.FileCount)
+                    .Set(x => x.EpisodeCount, item.EpisodeCount)
+                    .Set(x => x.ChannelIds, item.ChannelIds))).ToList();
+            return writes.Count == 0 ? Task.CompletedTask : Items.BulkWriteAsync(writes, new BulkWriteOptions { IsOrdered = false });
+        }
 
         public async Task DeleteItem(string id)
         {
@@ -203,8 +229,22 @@ namespace TelegramDownloader.Data.db
         public Task UpsertFile(LibraryFile file) =>
             Files.ReplaceOneAsync(x => x.ChannelId == file.ChannelId && x.FileId == file.FileId, file, new ReplaceOptions { IsUpsert = true });
 
+        public Task UpsertFiles(IEnumerable<LibraryFile> files)
+        {
+            var writes = files.Select(file => (WriteModel<LibraryFile>)new ReplaceOneModel<LibraryFile>(
+                Builders<LibraryFile>.Filter.Where(x => x.ChannelId == file.ChannelId && x.FileId == file.FileId), file)
+            { IsUpsert = true }).ToList();
+            return writes.Count == 0 ? Task.CompletedTask : Files.BulkWriteAsync(writes, new BulkWriteOptions { IsOrdered = false });
+        }
+
         public Task DeleteFile(long channelId, string fileId) =>
             Files.DeleteOneAsync(x => x.ChannelId == channelId && x.FileId == fileId);
+
+        public async Task DeleteFiles(long channelId, IEnumerable<string> fileIds)
+        {
+            foreach (var ids in fileIds.Chunk(1000))
+                await Files.DeleteManyAsync(Builders<LibraryFile>.Filter.Eq(x => x.ChannelId, channelId) & Builders<LibraryFile>.Filter.In(x => x.FileId, ids));
+        }
 
         public async Task<long> DeleteFilesByChannel(long channelId)
         {

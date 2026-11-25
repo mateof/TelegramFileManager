@@ -34,7 +34,7 @@ namespace TelegramDownloader.Services.Library
 
         public override string Id => ProviderId;
         public override ProviderDescriptor Descriptor => Info;
-        protected override TimeSpan MinInterval => TimeSpan.FromMilliseconds(500);
+        protected override TimeSpan MinInterval => TimeSpan.FromMilliseconds(200);
 
         private string Url(params (string key, string? value)[] query)
         {

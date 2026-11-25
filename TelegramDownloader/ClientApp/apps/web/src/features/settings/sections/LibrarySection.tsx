@@ -257,7 +257,7 @@ function ScanStatus({ form }: { form: FormSectionProps['form'] }) {
 
   const s = scan.data;
   const running = s?.running ?? false;
-  const percent = s && s.channelsTotal > 0 ? (s.channelsScanned / s.channelsTotal) * 100 : undefined;
+  const percent = s?.filesToProcess ? ((s.filesProcessed ?? 0) / s.filesToProcess) * 100 : s && s.filesToProcess === undefined && s.channelsTotal > 0 ? (s.channelsScanned / s.channelsTotal) * 100 : undefined;
   const run = async (force: boolean) => {
     if (form.isDirty && !(await form.submit())) return;
     start.mutate(force);

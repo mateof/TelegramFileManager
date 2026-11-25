@@ -61,6 +61,7 @@ const library: Record<string, string> = {
   'Scanning the library': 'Escaneando la biblioteca',
   'Last scan': 'Último escaneo',
   'Never scanned': 'Nunca escaneada',
+  'Identifying files: {done}/{total}': 'Identificando ficheros: {done}/{total}',
   'Channel {done}/{total}: {name}': 'Canal {done}/{total}: {name}',
   'Preparing...': 'Preparando...',
   'Cancelled': 'Cancelado',

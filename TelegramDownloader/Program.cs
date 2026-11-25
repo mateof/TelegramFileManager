@@ -221,7 +221,13 @@ builder.Services.AddSingleton<TelegramDownloader.Services.Deletes.DeleteOperatio
 builder.Services.AddHostedService<TelegramDownloader.Services.Api.EventsBroadcastService>();
 
 // Media library: identification through metadata providers, cached images, watch state
-builder.Services.AddHttpClient("library-provider", c => c.Timeout = TimeSpan.FromSeconds(30));
+builder.Services.AddHttpClient("library-provider", c => c.Timeout = TimeSpan.FromSeconds(30))
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+    {
+        AutomaticDecompression = System.Net.DecompressionMethods.All,
+        // The providers keep their client for the life of the process
+        PooledConnectionLifetime = TimeSpan.FromMinutes(10)
+    });
 builder.Services.AddHttpClient("library-images", c =>
 {
     c.Timeout = TimeSpan.FromSeconds(60);

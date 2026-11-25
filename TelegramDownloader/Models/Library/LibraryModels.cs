@@ -194,6 +194,10 @@ namespace TelegramDownloader.Models.Library
         public int ChannelsScanned { get; set; }
         public string? CurrentChannel { get; set; }
         public int FilesSeen { get; set; }
+        /// <summary>Files that have to be identified: new ones, unmatched ones, or all in a forced scan.</summary>
+        public int FilesToProcess { get; set; }
+        /// <summary>How many of <see cref="FilesToProcess"/> are done.</summary>
+        public int FilesProcessed { get; set; }
         public int FilesNew { get; set; }
         public int FilesRemoved { get; set; }
         public int Matched { get; set; }
