@@ -33,6 +33,8 @@ export interface ApiFileDto {
   dateModified: string;
   /** Telegram message id backing this file, when not split. */
   messageId: number | null;
+  /** The message of the file, or of its first part when it is split. Absent on older servers. */
+  firstMessageId?: number | null;
   /** True when the file was uploaded as several Telegram messages. */
   isSplit: boolean;
   md5Hash: string | null;

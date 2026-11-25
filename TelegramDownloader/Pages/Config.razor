@@ -715,6 +715,22 @@
                             <InputCheckbox @bind-Value="Model!.EnableRefreshOwnChannels" class="form-check-input config-switch" />
                         </div>
                     </div>
+
+                    <div class="config-item">
+                        <div class="config-item-info">
+                            <div class="config-item-label">
+                                <i class="bi bi-list-ol"></i>
+                                Refresh One File Type at a Time
+                            </div>
+                            <div class="config-item-description">
+                                Search documents, then audio, then video and then photos instead of all of them at once.
+                                Slower, but Telegram is less likely to limit the requests on large channels.
+                            </div>
+                        </div>
+                        <div class="config-item-control">
+                            <InputCheckbox @bind-Value="Model!.RefreshOneTypeAtATime" class="form-check-input config-switch" />
+                        </div>
+                    </div>
                 </div>
             </div>
 

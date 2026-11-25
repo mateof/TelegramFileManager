@@ -20,6 +20,15 @@ namespace TelegramDownloader.Models
         /// </summary>
         public bool Canceled { get; set; }
 
+        /// <summary>Why it failed (the first error), when it did.</summary>
+        public string? Error { get; set; }
+
+        public void Fail(string error)
+        {
+            Failed = true;
+            Error ??= error;
+        }
+
         public int Photos { get; set; }
         public int Videos { get; set; }
         public int Audios { get; set; }

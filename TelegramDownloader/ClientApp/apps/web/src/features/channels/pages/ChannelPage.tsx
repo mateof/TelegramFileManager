@@ -2,8 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import { FileManager } from '@tfm/file-manager';
 import { EmptyState } from '@tfm/ui';
 import { AlertTriangle, FolderTree } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'react-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router';
 import { DownloadToServerDialog } from '@/features/files/DownloadToServerDialog';
 import { confirmDelete, fmLocale, reportError, reportSuccess } from '@/features/files/fileManagerOptions';
 import { openMedia } from '@/features/files/media';
@@ -16,7 +16,7 @@ import { queryKeys } from '@/lib/queryKeys';
 import { useUi } from '@/stores/ui';
 import { ShareDialog, StrmDialog } from '../components/ChannelDialogs';
 import { ChannelHeader, NotIndexed } from '../components/ChannelHeader';
-import { channelActions, countLabel, type ChannelDialog } from '../lib/channelActions';
+import { channelActions, countLabel, messageIdOf, type ChannelDialog } from '../lib/channelActions';
 import { createChannelProvider } from '../lib/channelProvider';
 
 const strings = fileManagerStrings();
@@ -39,7 +39,9 @@ export default function ChannelPage() {
   }, [detail.data?.name]);
 
   const provider = useMemo(() => createChannelProvider({ channelId, rootName: name }), [channelId, name]);
-  const actions = useMemo(() => channelActions({ channelId, channelName: name, openDialog: setDialog }), [channelId, name]);
+  const navigate = useNavigate();
+  const openMessage = useCallback((messageId: number) => void navigate(`/chat/${encodeURIComponent(channelId)}?message=${messageId}`), [channelId, navigate]);
+  const actions = useMemo(() => channelActions({ channelId, channelName: name, openDialog: setDialog, openMessage }), [channelId, name, openMessage]);
 
   let body = null;
   if (detail.error) {
@@ -61,7 +63,16 @@ export default function ChannelPage() {
         confirmDelete={(entries) => confirmDelete(entries, t('The Telegram messages are deleted too.'))}
         onError={reportError}
         onSuccess={reportSuccess}
-        onOpen={(entry, fm) => openMedia(entry, fm.entries, { channelId, sourceName: name })}
+        onOpen={(entry, fm) =>
+          openMedia(entry, fm.entries, {
+            channelId,
+            sourceName: name,
+            goTo: (e) => {
+              const messageId = messageIdOf(e);
+              return messageId === null ? undefined : { label: t('Go to the message'), run: () => openMessage(messageId) };
+            }
+          })
+        }
         className="flex-1"
       />
     );

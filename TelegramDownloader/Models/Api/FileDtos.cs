@@ -38,6 +38,9 @@ namespace TelegramDownloader.Models.Api
         /// <summary>Telegram message id backing this file, when not split.</summary>
         public int? MessageId { get; set; }
 
+        /// <summary>The message of the file, or of its first part when it is split: where to find it in the chat.</summary>
+        public int? FirstMessageId { get; set; }
+
         /// <summary>True when the file was uploaded as several Telegram messages.</summary>
         public bool IsSplit { get; set; }
 
@@ -97,6 +100,7 @@ namespace TelegramDownloader.Models.Api
                 DateCreated = m.DateCreated,
                 DateModified = m.DateModified,
                 MessageId = m.MessageId,
+                FirstMessageId = m.IsFile ? m.MessageId ?? m.ListMessageId?.Select(i => (int?)i).FirstOrDefault() : null,
                 IsSplit = m.isSplit,
                 Md5Hash = m.MD5Hash,
                 XxHash = m.XXHash,

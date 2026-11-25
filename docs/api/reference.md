@@ -51,6 +51,9 @@ server serves at **`/swagger/api-v1/swagger.json`** (browsable at
 | GET | `/api/v1/channels/{id}/refresh/progress` | ✓ | Live progress of the running refresh (`null` if none). |
 | DELETE | `/api/v1/channels/{id}/refresh` | ✓ | Cancel the running refresh (202, or 404 if none). |
 | GET | `/api/v1/channels/{id}/messages` | ✓ | Recent message history. |
+| GET | `/api/v1/channels/{id}/messages/window` | ✓ | History before, after or around a message (`before`, `after`, `around`, `limit`). |
+| GET | `/api/v1/channels/{id}/messages/search` | ✓ | Search the whole chat on Telegram (`q`, `kind`, `offsetId`, `limit`). |
+| GET | `/api/v1/channels/{id}/messages/counts` | ✓ | Messages of each kind. |
 | GET | `/api/v1/channels/{id}/image` | ✓ | Channel avatar (image bytes). |
 | GET | `/api/v1/channels/{id}/invitation` | ✓ | Invitation link. |
 | POST | `/api/v1/channels/join` | ✓ | Join via invite hash. |
@@ -300,7 +303,7 @@ interface ApiChannelDetailDto extends ApiChannelDto {
 }
 interface ApiChannelsWithFoldersDto { folders: ApiChannelFolderDto[]; ungrouped: ApiChannelDto[]; totalChannels: number; }
 interface ApiChannelFolderDto { id: number; title: string; iconEmoji?: string; channels: ApiChannelDto[]; channelCount: number; }
-interface ApiChatMessageDto { id: number; date: string; text?: string; hasMedia: boolean; mediaType?: "photo"|"video"|"audio"|"document"; fileName?: string; fileSize: number; mimeType?: string; from?: string; }
+interface ApiChatMessageDto { id: number; date: string; text?: string; hasMedia: boolean; mediaType?: "photo"|"video"|"audio"|"document"; fileName?: string; fileSize: number; mimeType?: string; from?: string; duration?: number; title?: string; performer?: string; }
 ```
 
 ### Files

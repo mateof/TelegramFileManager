@@ -83,6 +83,7 @@ namespace TelegramDownloader.Controllers.Api.V1
 
                 if (request.EnableVideoTranscoding.HasValue) c.EnableVideoTranscoding = request.EnableVideoTranscoding.Value;
                 if (request.EnableRefreshOwnChannels.HasValue) c.EnableRefreshOwnChannels = request.EnableRefreshOwnChannels.Value;
+                if (request.RefreshOneTypeAtATime.HasValue) c.RefreshOneTypeAtATime = request.RefreshOneTypeAtATime.Value;
 
                 if (request.EnableMemorySplitUpload.HasValue) c.EnableMemorySplitUpload = request.EnableMemorySplitUpload.Value;
                 if (request.MemorySplitSizeGB.HasValue) c.MemorySplitSizeGB = request.MemorySplitSizeGB.Value;

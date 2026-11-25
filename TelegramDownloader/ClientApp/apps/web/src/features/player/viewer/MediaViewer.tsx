@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Download, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Download, MessageSquare, X } from 'lucide-react';
 import { Dialog as DialogPrimitive } from 'radix-ui';
 import { lazy, Suspense, useEffect } from 'react';
 import { t } from '@/i18n';
@@ -81,6 +81,17 @@ export default function MediaViewer() {
               </p>
             </div>
             <div className="pointer-events-auto flex items-center gap-2">
+              {item.goTo && (
+                <ViewerButton
+                  label={item.goTo.label}
+                  onClick={() => {
+                    close();
+                    item.goTo?.run();
+                  }}
+                >
+                  <MessageSquare />
+                </ViewerButton>
+              )}
               <ViewerButton label={t('Download')} href={download} download={item.name}>
                 <Download />
               </ViewerButton>

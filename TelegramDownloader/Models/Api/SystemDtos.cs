@@ -132,6 +132,9 @@ namespace TelegramDownloader.Models.Api
         public bool EnableVideoTranscoding { get; set; }
         public bool EnableRefreshOwnChannels { get; set; }
 
+        /// <summary>Index refreshes search one media type after another instead of all at once.</summary>
+        public bool RefreshOneTypeAtATime { get; set; }
+
         public bool EnableMemorySplitUpload { get; set; }
         public int MemorySplitSizeGB { get; set; }
         public int ParallelTransfers { get; set; }
@@ -214,6 +217,7 @@ namespace TelegramDownloader.Models.Api
             AutoResumeOnStartup = c.AutoResumeOnStartup,
             EnableVideoTranscoding = c.EnableVideoTranscoding,
             EnableRefreshOwnChannels = c.EnableRefreshOwnChannels,
+            RefreshOneTypeAtATime = c.RefreshOneTypeAtATime,
             EnableMemorySplitUpload = c.EnableMemorySplitUpload,
             MemorySplitSizeGB = c.MemorySplitSizeGB,
             ParallelTransfers = c.ParallelTransfers,
@@ -264,6 +268,7 @@ namespace TelegramDownloader.Models.Api
         public bool? AutoResumeOnStartup { get; set; }
         public bool? EnableVideoTranscoding { get; set; }
         public bool? EnableRefreshOwnChannels { get; set; }
+        public bool? RefreshOneTypeAtATime { get; set; }
         public bool? EnableMemorySplitUpload { get; set; }
         public int? MemorySplitSizeGB { get; set; }
         public int? ParallelTransfers { get; set; }

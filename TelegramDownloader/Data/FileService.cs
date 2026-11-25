@@ -1924,7 +1924,8 @@ namespace TelegramDownloader.Data
                     refreshOptions.SelectedFilters(),
                     force,
                     progress,
-                    _logger);
+                    _logger,
+                    oneAtATime: refreshOptions.OneTypeAtATime ?? GeneralConfigStatic.config?.RefreshOneTypeAtATime ?? false);
             }
             finally
             {

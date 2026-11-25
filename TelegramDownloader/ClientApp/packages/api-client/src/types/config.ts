@@ -55,6 +55,8 @@ export interface AppConfigDto {
   autoResumeOnStartup: boolean;
   enableVideoTranscoding: boolean;
   enableRefreshOwnChannels: boolean;
+  /** Index refreshes search one media type after another instead of all at once. */
+  refreshOneTypeAtATime: boolean;
   enableMemorySplitUpload: boolean;
   memorySplitSizeGB: number;
   parallelTransfers: number;
@@ -114,6 +116,7 @@ export interface UpdateConfigRequest {
   autoResumeOnStartup?: boolean | null;
   enableVideoTranscoding?: boolean | null;
   enableRefreshOwnChannels?: boolean | null;
+  refreshOneTypeAtATime?: boolean | null;
   enableMemorySplitUpload?: boolean | null;
   memorySplitSizeGB?: number | null;
   parallelTransfers?: number | null;

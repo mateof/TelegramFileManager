@@ -39,6 +39,8 @@ namespace TelegramDownloader.Controllers.Mobile
             "files.deleteOperations", // POST /api/v1/channels/{id}/files/delete-operations, /api/v1/local/delete-operations, /api/v1/delete-operations
             "messages.content",      // GET  /api/v1/channels/{id}/messages/{messageId}/content (play a message attachment without indexing it)
             "transfers.pauseUploads", // POST /api/v1/transfers/{id}/pause and /retry on an upload; canPause / canRetry on every transfer
+            "messages.browse",       // GET  /api/v1/channels/{id}/messages/window, /messages/search, /messages/counts
+            "channels.refreshSequential", // oneTypeAtATime in POST /api/v1/channels/{id}/refresh, refreshOneTypeAtATime in the config
             "library.seriesFolders", // GET  /api/v1/library/folders, PUT|DELETE /api/v1/library/folders/series
         };
 

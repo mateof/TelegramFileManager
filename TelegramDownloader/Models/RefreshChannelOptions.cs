@@ -26,6 +26,13 @@ namespace TelegramDownloader.Models
         public bool IncludePhotos { get; set; } = true;
 
         /// <summary>
+        /// Search one media type after another, indexing each one before the
+        /// next, instead of all of them at once. Null: as configured
+        /// (<see cref="GeneralConfig.RefreshOneTypeAtATime"/>).
+        /// </summary>
+        public bool? OneTypeAtATime { get; set; }
+
+        /// <summary>
         /// Returns true if at least one media type is selected
         /// </summary>
         public bool HasAnySelection => IncludeDocuments || IncludeAudio || IncludeVideo || IncludePhotos;

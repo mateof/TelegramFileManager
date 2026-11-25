@@ -187,6 +187,11 @@ namespace TelegramDownloader.Models
         /// By default, refresh is only available for channels you don't own.
         /// </summary>
         public bool EnableRefreshOwnChannels { get; set; } = false;
+        /// <summary>
+        /// Index refresh: search one media type after another instead of all of
+        /// them at once (fewer requests per second, fewer FLOOD_WAIT).
+        /// </summary>
+        public bool RefreshOneTypeAtATime { get; set; } = false;
 
         // Memory Split Upload Settings
         /// <summary>

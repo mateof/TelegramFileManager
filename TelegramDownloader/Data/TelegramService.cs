@@ -1527,6 +1527,69 @@ namespace TelegramDownloader.Data
             return cm;
         }
 
+        public async Task<ChatMessagesPage> getChatWindow(long id, ChatWindow window)
+        {
+            InputPeer peer = chats.chats[id];
+            (int offsetId, int addOffset) = window.ToTelegram();
+            return ToPage(await client.Messages_GetHistory(peer, offset_id: offsetId, add_offset: addOffset, limit: window.Limit), window.Contains);
+        }
+
+        public async Task<ChatMessagesPage> searchChatMessages(long id, string query, ChatMessageKind? kind, int offsetId, int limit)
+        {
+            InputPeer peer = chats.chats[id];
+            return ToPage(await client.Messages_Search(peer, query ?? string.Empty, kind is ChatMessageKind k ? FilterOf(k) : null, offset_id: offsetId, limit: limit), _ => true);
+        }
+
+        public async Task<IReadOnlyDictionary<ChatMessageKind, int>> countChatMessages(long id)
+        {
+            InputPeer peer = chats.chats[id];
+            ChatMessageKind[] kinds = Enum.GetValues<ChatMessageKind>();
+            Messages_SearchCounter[] counters = await client.Messages_GetSearchCounters(peer, kinds.Select(FilterOf).ToArray());
+            Dictionary<ChatMessageKind, int> counts = new Dictionary<ChatMessageKind, int>();
+            foreach (ChatMessageKind kind in kinds)
+            {
+                Messages_SearchCounter counter = counters.FirstOrDefault(c => c.filter?.GetType() == FilterOf(kind).GetType());
+                if (counter != null) counts[kind] = counter.count;
+            }
+            return counts;
+        }
+
+        public async Task<IReadOnlyList<Message>> getMessagesById(long id, IReadOnlyList<int> ids)
+        {
+            InputPeer peer = chats.chats[id];
+            List<Message> found = new List<Message>();
+            foreach (int[] batch in ids.Distinct().Chunk(Services.Api.MessageDownloads.BatchSize))
+            {
+                var answer = await client.GetMessages(peer, batch.Select(i => (InputMessage)new InputMessageID { id = i }).ToArray());
+                found.AddRange(answer.Messages.OfType<Message>());
+            }
+            return found;
+        }
+
+        private static MessagesFilter FilterOf(ChatMessageKind kind) => kind switch
+        {
+            ChatMessageKind.Photos => new InputMessagesFilterPhotos(),
+            ChatMessageKind.Videos => new InputMessagesFilterVideo(),
+            ChatMessageKind.Documents => new InputMessagesFilterDocument(),
+            ChatMessageKind.Audio => new InputMessagesFilterMusic(),
+            ChatMessageKind.Voice => new InputMessagesFilterRoundVoice(),
+            ChatMessageKind.Gifs => new InputMessagesFilterGif(),
+            ChatMessageKind.Links => new InputMessagesFilterUrl(),
+            _ => new InputMessagesFilterPhotoVideo()
+        };
+
+        private static ChatMessagesPage ToPage(Messages_MessagesBase answer, Func<int, bool> contains) => new ChatMessagesPage
+        {
+            Total = answer.Count,
+            Ids = answer.Messages.Select(m => m.ID).Where(contains).ToList(),
+            Messages = answer.Messages.OfType<Message>().Where(m => contains(m.id)).Select(m => new ChatMessages
+            {
+                message = m,
+                user = answer.UserOrChat(m.From ?? m.Peer),
+                isDocument = m.media is MessageMediaDocument { document: TL.Document }
+            }).ToList()
+        };
+
         public async Task<string> getPhotoThumb(ChatBase chat)
         {
             MemoryStream ms = new MemoryStream();
@@ -1984,6 +2047,19 @@ namespace TelegramDownloader.Data
                 }
                 _logger.LogInformation("File download to disk completed - FileName: {FileName}", filename);
             }
+            else if (folder != null && message.message.media is MessageMediaPhoto { photo: Photo wanted })
+            {
+                // Saved where it was asked for; without a folder it goes to the image cache below.
+                var filename = fileName ?? $"{wanted.id}.jpg";
+                model.name = filename;
+                model._transmitted = 0;
+                model._size = wanted.LargestPhotoSize?.FileSize ?? 0;
+                if (shouldAddToList)
+                    _tis.addToDownloadList(model);
+                using var dest = new FileStream(Path.Combine(folder, filename), FileMode.Create, FileAccess.Write);
+                await client.DownloadFileAsync(wanted, dest, progress: model.ProgressCallback);
+                return filename;
+            }
             else if (message.message.media is MessageMediaPhoto { photo: Photo photo })
             {
                 var filename = $"{photo.id}.jpg";
@@ -2046,6 +2122,9 @@ namespace TelegramDownloader.Data
             };
         }
 
+        private static readonly TimeSpan SearchPageDelay = TimeSpan.FromMilliseconds(100);
+        private static readonly TimeSpan SlowSearchPage = TimeSpan.FromSeconds(5);
+
         private async Task<IReadOnlyList<TelegramChatDocuments>> SearchFilter<TFilter>(
             InputPeer peer, RefreshFilter filter, int floor, RefreshFilterProgress progress,
             CancellationToken cancellationToken, Func<Message, TelegramChatDocuments> map)
@@ -2058,17 +2137,22 @@ namespace TelegramDownloader.Data
             int fetchedCount = 0;
             int batchNumber = 0;
             string label = filter.ToKey();
+            TimeSpan pageDelay = SearchPageDelay;
             _logger.LogInformation("Refresh search {Filter}: from message {Floor} ({Mode})", label, floor, floor > 0 ? "incremental" : "full scan");
 
             for (int offset_id = 0; ;)
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 batchNumber++;
-                var searchResult = await client.Messages_Search<TFilter>(
-                    peer: peer,
-                    q: "",
-                    offset_id: offset_id,
-                    limit: 100);
+                var pageWatch = System.Diagnostics.Stopwatch.StartNew();
+                int pageOffset = offset_id;
+                var searchResult = await Services.TelegramRetry.RunAsync(
+                    () => client.Messages_Search<TFilter>(peer: peer, q: "", offset_id: pageOffset, limit: 100),
+                    progress.SetWaiting, cancellationToken, _logger);
+                // Telegram held the page back (a short FLOOD_WAIT is waited for inside
+                // the client, unseen): ask more slowly from here on.
+                if (pageWatch.Elapsed > SlowSearchPage)
+                    pageDelay = TimeSpan.FromMilliseconds(Math.Clamp(pageDelay.TotalMilliseconds * 2, 500, 2000));
 
                 if (searchResult.Messages.Length == 0) break;
 
@@ -2102,7 +2186,7 @@ namespace TelegramDownloader.Data
                 offset_id = searchResult.Messages[^1].ID;
 
                 // Small delay to avoid rate limiting; also a cancellation point.
-                await Task.Delay(100, cancellationToken);
+                await Task.Delay(pageDelay, cancellationToken);
             }
 
             _logger.LogInformation("Refresh search {Filter}: {Count} files from {Fetched} messages in {Ms} ms",

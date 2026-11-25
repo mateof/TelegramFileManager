@@ -113,6 +113,7 @@ export function ChannelsSection({ form, values: v }: FormSectionProps) {
     <>
       <SettingsGroup title={t('Data refresh')} icon={<RefreshCw />}>
         <SwitchRow id="enableRefreshOwnChannels" checked={v.enableRefreshOwnChannels} onChange={(b) => form.setField('enableRefreshOwnChannels', b)} />
+        <SwitchRow id="refreshOneTypeAtATime" checked={v.refreshOneTypeAtATime} onChange={(b) => form.setField('refreshOneTypeAtATime', b)} />
       </SettingsGroup>
       <SettingsGroup title={t('Channel images')} icon={<Image />}>
         <SwitchRow id="showChannelImages" checked={v.showChannelImages} onChange={(b) => form.setField('showChannelImages', b)} />

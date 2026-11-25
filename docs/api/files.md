@@ -60,6 +60,9 @@ Every file/folder is returned as this shape:
   headers.
 - **`downloadUrl`** — downloads the whole file, using the server cache when it
   already has it.
+- **`firstMessageId`** — the message of the file, or of its first part when it is
+  split: where it is in the chat
+  ([window](channels.md#from-any-message) with `around`).
 - **`isSplit`** — the file was uploaded as several Telegram messages (files over
   Telegram's per-message size limit). The stream/download URLs handle
   reassembly transparently.

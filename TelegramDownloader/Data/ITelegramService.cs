@@ -41,6 +41,14 @@ namespace TelegramDownloader.Data
         Task<PagedResult<ChatMessages>> getPaginatedMessages(long id, int page, int size, Boolean onlyFiles = false);
         Task<List<ChatMessages>> getAllMediaMessages(long id, Boolean onlyFiles = false);
         Task<List<ChatMessages>> getChatHistory(long id, int limit = 30, int addOffset = 0);
+        /// <summary>A window of the history of a chat: its end, or before, after or around a message.</summary>
+        Task<ChatMessagesPage> getChatWindow(long id, ChatWindow window);
+        /// <summary>Messages of a chat that match a text and/or a kind, newest first, older than <paramref name="offsetId"/> (0: from the newest).</summary>
+        Task<ChatMessagesPage> searchChatMessages(long id, string query, ChatMessageKind? kind, int offsetId, int limit);
+        /// <summary>How many messages of each kind a chat has.</summary>
+        Task<IReadOnlyDictionary<ChatMessageKind, int>> countChatMessages(long id);
+        /// <summary>The messages with these ids that still exist (several requests above 100).</summary>
+        Task<IReadOnlyList<Message>> getMessagesById(long id, IReadOnlyList<int> ids);
         string getChatName(long id);
         Task<Message> getMessageFile(string chatId, int idMessage);
         Task<string> getPhotoThumb(ChatBase chat);
