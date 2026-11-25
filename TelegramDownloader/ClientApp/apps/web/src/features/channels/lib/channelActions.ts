@@ -1,6 +1,6 @@
 import type { FileAction, FileEntry } from '@tfm/file-manager';
 import { toast } from '@tfm/ui';
-import { Clapperboard, HardDriveDownload, Send, Share2, Tv, Zap } from 'lucide-react';
+import { Clapperboard, HardDriveDownload, MessageSquare, Send, Share2, Tv, Zap } from 'lucide-react';
 import { createElement } from 'react';
 import { dtoOf, toApiFolder } from '@/features/files/entries';
 import { mediaActions } from '@/features/files/media';
@@ -20,6 +20,15 @@ export interface ChannelActionsOptions {
   /** Imported shared collection (read only: no preload/STRM/share/Telegram link). */
   collectionId?: string;
   openDialog(dialog: ChannelDialog): void;
+  /** Shows a message of the channel in its messages page. */
+  openMessage?(messageId: number): void;
+}
+
+/** The message of a file, or of its first part when it is split. */
+export function messageIdOf(entry: FileEntry): number | null {
+  if (entry.kind !== 'file') return null;
+  const dto = dtoOf(entry);
+  return dto?.firstMessageId ?? dto?.messageId ?? null;
 }
 
 const icon = (c: Parameters<typeof createElement>[0]) => createElement(c);
@@ -30,7 +39,7 @@ export function countLabel(entries: FileEntry[]): string {
 }
 
 /** TFM actions of the channel file manager (on top of the built-in ones). */
-export function channelActions({ channelId, channelName, collectionId, openDialog }: ChannelActionsOptions): FileAction[] {
+export function channelActions({ channelId, channelName, collectionId, openDialog, openMessage }: ChannelActionsOptions): FileAction[] {
   const own = !collectionId;
   const actions: FileAction[] = [
     {
@@ -127,6 +136,20 @@ export function channelActions({ channelId, channelName, collectionId, openDialo
       run: () => openDialog({ type: 'share', name: channelName })
     },
     {
+      id: 'tfm:go-to-message',
+      label: t('Go to the message'),
+      icon: icon(MessageSquare),
+      selection: 'single',
+      group: 'a-open',
+      order: 12,
+      placement: ['context', 'details', 'selection'],
+      when: ([e]) => !!openMessage && messageIdOf(e) !== null,
+      run: ([e]) => {
+        const messageId = messageIdOf(e);
+        if (messageId !== null) openMessage?.(messageId);
+      }
+    },
+    {
       id: 'tfm:open-telegram',
       label: t('Open in Telegram'),
       icon: icon(Send),
@@ -134,10 +157,10 @@ export function channelActions({ channelId, channelName, collectionId, openDialo
       group: 'c-share',
       order: 5,
       placement: ['context', 'details'],
-      when: ([e]) => e.kind === 'file' && !!dtoOf(e).messageId,
+      when: ([e]) => messageIdOf(e) !== null,
       run: ([e]) => {
         const id = String(channelId).replace(/^-100/, '');
-        window.location.href = `tg://privatepost?channel=${id}&post=${dtoOf(e).messageId}`;
+        window.location.href = `tg://privatepost?channel=${id}&post=${messageIdOf(e)}`;
       }
     }
   );

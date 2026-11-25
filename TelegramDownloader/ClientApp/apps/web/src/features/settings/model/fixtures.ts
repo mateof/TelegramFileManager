@@ -24,6 +24,7 @@ export function sampleConfig(overrides: Partial<AppConfigDto> = {}): AppConfigDt
     autoResumeOnStartup: true,
     enableVideoTranscoding: false,
     enableRefreshOwnChannels: false,
+    refreshOneTypeAtATime: false,
     enableMemorySplitUpload: false,
     memorySplitSizeGB: 1,
     parallelTransfers: 4,

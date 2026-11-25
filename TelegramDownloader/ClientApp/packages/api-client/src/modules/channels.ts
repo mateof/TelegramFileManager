@@ -6,11 +6,16 @@ import type {
   ApiChannelRefreshResultDto,
   ApiChannelsWithFoldersDto,
   ApiChatMessageDto,
+  ApiChatSearchDto,
+  ApiChatWindowDto,
   ChannelDeleteRequest,
   ChannelId,
   ChannelFavoritesQuery,
   ChannelListQuery,
   ChannelMessagesQuery,
+  ChatMessageKind,
+  ChatSearchQuery,
+  ChatWindowQuery,
   CreateChannelRequest,
   InvitationInfo,
   RefreshChannelRequest
@@ -65,6 +70,14 @@ export function createChannelsApi(http: HttpClient) {
     /** GET /api/v1/channels/{id}/messages: recent history straight from Telegram. */
     messages: (id: ChannelId, query: ChannelMessagesQuery = {}, signal?: AbortSignal) =>
       http.get<ApiChatMessageDto[]>(`${BASE}/${enc(id)}/messages`, { query: { ...query }, signal }),
+    /** GET /api/v1/channels/{id}/messages/window: the end of a chat, or before, after or around a message. */
+    messagesWindow: (id: ChannelId, query: ChatWindowQuery = {}, signal?: AbortSignal) =>
+      http.get<ApiChatWindowDto>(`${BASE}/${enc(id)}/messages/window`, { query: { ...query }, signal }),
+    /** GET /api/v1/channels/{id}/messages/search: the whole chat on Telegram, by text and/or kind. */
+    searchMessages: (id: ChannelId, query: ChatSearchQuery, signal?: AbortSignal) =>
+      http.get<ApiChatSearchDto>(`${BASE}/${enc(id)}/messages/search`, { query: { ...query }, signal }),
+    /** GET /api/v1/channels/{id}/messages/counts: messages of each kind. */
+    messageCounts: (id: ChannelId, signal?: AbortSignal) => http.get<Partial<Record<ChatMessageKind, number>>>(`${BASE}/${enc(id)}/messages/counts`, { signal }),
     /**
      * URL of GET /api/v1/channels/{id}/messages/{messageId}/content: the file of
      * a message, straight from Telegram (no index entry needed), Range-capable.

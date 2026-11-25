@@ -93,7 +93,11 @@ const channels: Record<string, string> = {
   'Not indexed': 'Sen indexar',
   'Owner': 'Propietario',
   'Identify as a series': 'Identificar como serie',
-  'Identify this folder as a series': 'Identificar este cartafol como serie'
+  'Identify this folder as a series': 'Identificar este cartafol como serie',
+  'Waiting for its turn': 'Agardando a súa quenda',
+  'Telegram asks to slow down. It goes on by itself in': 'Telegram pide ir máis a modo. Segue só en',
+  'One type at a time': 'Un tipo cada vez',
+  'Slower, but Telegram is less likely to limit the requests. The default is in Settings > Channels.': 'Máis lento, pero é menos probable que Telegram limite as peticións. O valor por defecto está en Axustes > Canles.'
 };
 
 export default channels;

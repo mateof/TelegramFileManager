@@ -296,8 +296,11 @@ namespace TelegramDownloader.Controllers.Api.V1
 
         /// <summary>Downloads the media attached to raw Telegram messages.</summary>
         /// <remarks>
-        /// Works on any chat, indexed or not: this is how the web UI saves a
-        /// file straight from the message list.
+        /// Works on any chat, indexed or not: this is how the web UI saves
+        /// files straight from the message list. <c>targetPath</c> is a folder
+        /// relative to the server local root (created if needed; <c>temp</c>
+        /// when omitted). Names already used in it get a number, so messages that
+        /// share a file name do not overwrite each other.
         /// </remarks>
         [HttpPost("messages")]
         [RequireTelegramSession]
@@ -307,37 +310,52 @@ namespace TelegramDownloader.Controllers.Api.V1
             if (request == null || request.MessageIds == null || request.MessageIds.Count == 0)
                 return BadRequestResult("At least one message id is required");
 
+            string folder;
+            if (string.IsNullOrWhiteSpace(request.TargetPath))
+                folder = FileService.TEMPDIR;
+            else if (!LocalPathGuard.TryResolve(FileService.LOCALDIR, request.TargetPath, out folder, out _, out var error))
+                return BadRequestResult(error ?? "Invalid target path");
+
+            Dictionary<int, TL.Message> messages;
+            string chatName;
+            try
+            {
+                messages = (await _telegram.getMessagesById(request.ChatId, request.MessageIds)).ToDictionary(m => m.id);
+                chatName = _telegram.getChatName(request.ChatId);
+                Directory.CreateDirectory(folder);
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFoundResult("Channel not found", ApiErrorCodes.ChannelNotFound);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Could not read {Count} messages of chat {ChatId}", request.MessageIds.Count, request.ChatId);
+                return ErrorResult("Could not read the messages from Telegram", ex);
+            }
+
             var accepted = 0;
             var skipped = new List<string>();
-
-            foreach (var messageId in request.MessageIds)
+            var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var messageId in request.MessageIds.Distinct())
             {
+                var attachment = messages.TryGetValue(messageId, out var message) ? MessageAttachment.From(message) : null;
+                if (attachment == null)
+                {
+                    skipped.Add(messageId.ToString());
+                    continue;
+                }
                 try
                 {
-                    var message = await _telegram.getMessageFile(request.ChatId.ToString(), messageId);
-                    if (message == null)
-                    {
-                        skipped.Add(messageId.ToString());
-                        continue;
-                    }
-
-                    var chatMessage = new ChatMessages { message = message, isDocument = true };
-                    _ = Task.Run(async () =>
-                    {
-                        try
-                        {
-                            await _files.DownloadFileFromChat(chatMessage, null, request.TargetPath, null);
-                        }
-                        catch (Exception ex)
-                        {
-                            _logger.LogError(ex, "Download of message {MessageId} failed", messageId);
-                        }
-                    });
+                    var name = MessageDownloads.UniqueName(attachment.Name, names, n => System.IO.File.Exists(Path.Combine(folder, n)));
+                    var model = new DownloadModel { tis = _tis, channelName = chatName };
+                    // Only queues it: the download runs when a slot is free.
+                    await _files.DownloadFileFromChat(new ChatMessages { message = message, isDocument = !attachment.IsPhoto }, name, folder, model);
                     accepted++;
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Could not resolve message {MessageId} of chat {ChatId}", messageId, request.ChatId);
+                    _logger.LogError(ex, "Could not queue the download of message {MessageId}", messageId);
                     skipped.Add(messageId.ToString());
                 }
             }

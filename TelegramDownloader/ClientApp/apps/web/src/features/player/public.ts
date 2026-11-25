@@ -41,6 +41,8 @@ export interface ViewerItem {
   thumbnailUrl?: string;
   size?: number;
   mimeType?: string;
+  /** A button of the viewer that closes it and goes somewhere (the message of the file). */
+  goTo?: { label: string; run: () => void };
   /** Media library progress reporting (movies/series). */
   watch?: { channelId: string; fileId: string; startAtSeconds?: number };
 }

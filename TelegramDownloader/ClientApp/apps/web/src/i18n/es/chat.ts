@@ -28,12 +28,26 @@ const chat: Record<string, string> = {
   'Attachment': 'Adjunto',
   'Select all': 'Seleccionar todo',
   '{count} selected': '{count} seleccionados',
-  '{count} photos and videos': '{count} fotos y vídeos',
-  'Download selected': 'Descargar selección',
-  'No photos or videos': 'Sin fotos ni vídeos',
-  'The loaded messages carry no photos or videos.': 'Los mensajes cargados no tienen fotos ni vídeos.',
   'Select': 'Seleccionar',
-  'Load older': 'Cargar anteriores'
+  'Load older': 'Cargar anteriores',
+  'Go to the message': 'Ir al mensaje',
+  'Loading newer messages': 'Cargando mensajes posteriores',
+  'Go to the last message': 'Ir al último mensaje',
+  'Search in this chat': 'Buscar en este chat',
+  'Searching': 'Buscando',
+  'Previous result (older)': 'Resultado anterior (más antiguo)',
+  'Next result (newer)': 'Resultado siguiente (más reciente)',
+  'Close the search': 'Cerrar la búsqueda',
+  'Select files': 'Seleccionar ficheros',
+  'Choose the messages with files to download': 'Elige los mensajes con ficheros para descargarlos',
+  'Cancel the selection': 'Cancelar la selección',
+  'Voice': 'Voz',
+  'Voice message': 'Mensaje de voz',
+  'GIFs': 'GIF',
+  'Videos': 'Vídeos',
+  'Nothing here': 'Nada por aquí',
+  'This chat has nothing of this kind.': 'Este chat no tiene nada de este tipo.',
+  '{loaded} of {total} loaded': '{loaded} de {total} cargados'
 };
 
 export default chat;

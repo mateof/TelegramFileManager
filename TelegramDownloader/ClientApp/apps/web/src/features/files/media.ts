@@ -17,6 +17,8 @@ export interface MediaSource {
   /** Inline URL override (local files). */
   inlineUrl?(entry: FileEntry): string | undefined;
   downloadUrl?(entry: FileEntry): string | undefined;
+  /** Button of the viewer (go to the message of the file). */
+  goTo?(entry: FileEntry): { label: string; run: () => void } | undefined;
 }
 
 const isAudio = (e: FileEntry) => e.kind === 'file' && entryMediaKind(e) === 'audio';
@@ -41,7 +43,7 @@ export function openMedia(entry: FileEntry, folderEntries: FileEntry[], source: 
   const same = kind === 'image' ? folderEntries.filter((e) => e.kind === 'file' && viewerKind(e) === 'image') : [entry];
   const list = same.some((e) => e.id === entry.id) ? same : [entry];
   openViewer(
-    list.map((e) => toViewerItem(e, source.inlineUrl?.(e), source.downloadUrl?.(e))),
+    list.map((e) => ({ ...toViewerItem(e, source.inlineUrl?.(e), source.downloadUrl?.(e)), goTo: source.goTo?.(e) })),
     Math.max(0, list.findIndex((e) => e.id === entry.id))
   );
   return true;

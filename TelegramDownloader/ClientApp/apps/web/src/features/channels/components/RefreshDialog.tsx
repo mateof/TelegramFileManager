@@ -1,8 +1,9 @@
 import type { ApiChannelRefreshFilterProgressDto, RefreshChannelRequest } from '@tfm/api-client';
 import { isApiError } from '@tfm/api-client';
 import { Badge, Button, Checkbox, Dialog, DialogContent, Progress, Switch, toast } from '@tfm/ui';
-import { CheckCircle2, RefreshCw, Square } from 'lucide-react';
-import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { CheckCircle2, RefreshCw, Square, TriangleAlert } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { t } from '@/i18n';
 import { api, errorMessage } from '@/lib/api';
 import { formatRelative } from '@/lib/format';
@@ -18,6 +19,17 @@ const TYPE_LABELS: Record<string, () => string> = {
   photos: () => t('Photos')
 };
 
+/** "1:05" until `iso`, updated every second. */
+function Countdown({ until }: { until: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const left = Math.max(0, Math.ceil((new Date(until).getTime() - now) / 1000));
+  return <>{`${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`}</>;
+}
+
 function FilterRow({ f }: { f: ApiChannelRefreshFilterProgressDto }) {
   const pct = f.done ? 100 : f.total ? Math.min(99, (f.fetched / f.total) * 100) : undefined;
   return (
@@ -25,10 +37,15 @@ function FilterRow({ f }: { f: ApiChannelRefreshFilterProgressDto }) {
       <div className="flex items-center justify-between text-xs">
         <span className="font-medium text-fg">{TYPE_LABELS[f.type]?.() ?? f.type}</span>
         <span className="tabular-nums text-fg-muted">
-          {f.done ? t('Done') : f.total !== null ? t('{fetched} of {total} messages', { fetched: f.fetched, total: f.total }) : t('{fetched} messages', { fetched: f.fetched })}
+          {f.pending ? t('Waiting for its turn') : f.done ? t('Done') : f.total !== null ? t('{fetched} of {total} messages', { fetched: f.fetched, total: f.total }) : t('{fetched} messages', { fetched: f.fetched })}
         </span>
       </div>
-      <Progress value={pct} size="xs" tone={f.done ? 'success' : 'accent'} aria-label={TYPE_LABELS[f.type]?.() ?? f.type} />
+      <Progress value={f.pending ? 0 : pct} size="xs" tone={f.done ? 'success' : f.waitUntil ? 'warning' : 'accent'} aria-label={TYPE_LABELS[f.type]?.() ?? f.type} />
+      {f.waitUntil && (
+        <span className="text-xs text-warning">
+          {t('Telegram asks to slow down. It goes on by itself in')} <Countdown until={f.waitUntil} />
+        </span>
+      )}
     </div>
   );
 }
@@ -38,13 +55,17 @@ export function RefreshDialog({ channelId, open, onOpenChange }: { channelId: st
   const { progress, result, refetch } = useRefreshProgress(channelId);
   const [types, setTypes] = useState<Record<MediaKey, boolean>>({ includeDocuments: true, includeAudio: true, includeVideo: true, includePhotos: true });
   const [force, setForce] = useState(false);
+  // Null until it is changed here: the setting decides
+  const [oneByOne, setOneByOne] = useState<boolean | null>(null);
+  const config = useQuery({ queryKey: ['settings', 'config'], queryFn: ({ signal }) => api.config.get(signal), staleTime: 30_000, enabled: open });
+  const oneTypeAtATime = oneByOne ?? config.data?.refreshOneTypeAtATime ?? false;
   const [busy, setBusy] = useState(false);
   const anyType = Object.values(types).some(Boolean);
 
   const start = async () => {
     setBusy(true);
     try {
-      const body: RefreshChannelRequest = { ...types, force };
+      const body: RefreshChannelRequest = { ...types, force, oneTypeAtATime: oneByOne ?? undefined };
       await api.channels.refresh(channelId, body);
       toast.success(t('Refresh started'));
       await refetch();
@@ -135,9 +156,15 @@ export function RefreshDialog({ channelId, open, onOpenChange }: { channelId: st
               ))}
             </div>
             <Switch label={t('Full rescan')} description={t('Scan the whole history again instead of only the new messages.')} checked={force} onCheckedChange={setForce} />
+            <Switch
+              label={t('One type at a time')}
+              description={t('Slower, but Telegram is less likely to limit the requests. The default is in Settings > Channels.')}
+              checked={oneTypeAtATime}
+              onCheckedChange={setOneByOne}
+            />
             {result && (
               <div className="flex items-start gap-2 rounded-xl border border-border bg-surface-2/50 p-3 text-sm">
-                <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" />
+                {result.failed ? <TriangleAlert className="mt-0.5 size-4 shrink-0 text-warning" /> : <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-success" />}
                 <div className="min-w-0">
                   <p className="font-medium text-fg">
                     {result.failed ? t('The last refresh failed') : result.canceled ? t('The last refresh was canceled') : t('Last refresh')}
@@ -152,6 +179,7 @@ export function RefreshDialog({ channelId, open, onOpenChange }: { channelId: st
                       documents: result.documents
                     })}
                   </p>
+                  {result.failed && result.error && <p className="mt-0.5 break-words font-mono text-xs text-warning">{result.error}</p>}
                 </div>
               </div>
             )}

@@ -586,7 +586,7 @@ namespace TelegramDownloader.Controllers.Api.V1
                 var messages = await _telegram.getChatHistory(id, limit, offset);
                 var items = (messages ?? new List<ChatMessages>())
                     .Where(m => m?.message != null)
-                    .Select(ToMessageDto)
+                    .Select(ApiChatMessageDto.FromMessage)
                     .Where(m => !onlyMedia || m.HasMedia)
                     .ToList();
                 return OkResult(items);
@@ -595,6 +595,95 @@ namespace TelegramDownloader.Controllers.Api.V1
             {
                 _logger.LogError(ex, "Error reading messages of chat {Id}", id);
                 return ErrorResult("Could not read the chat history", ex);
+            }
+        }
+
+        /// <summary>Reads a part of the history of a chat: its end, or before, after or around a message.</summary>
+        /// <remarks>
+        /// For a message view that can start anywhere (a search result, a
+        /// file): open it with <c>around</c> and go on with <c>before=oldestId</c>
+        /// and <c>after=newestId</c>. Send one of the three at most; without any,
+        /// the newest messages. Items come newest first.
+        /// </remarks>
+        /// <param name="id">Chat id.</param>
+        /// <param name="before">Messages older than this id.</param>
+        /// <param name="after">Messages newer than this id.</param>
+        /// <param name="around">This message with the ones before and after it.</param>
+        /// <param name="limit">Messages to return (1-100).</param>
+        [HttpGet("{id}/messages/window")]
+        [ProducesResponseType(typeof(ApiResult<ApiChatWindowDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> MessagesWindow(
+            long id,
+            [FromQuery] int? before = null,
+            [FromQuery] int? after = null,
+            [FromQuery] int? around = null,
+            [FromQuery] int limit = 50)
+        {
+            if (new[] { before, after, around }.Count(v => v != null) > 1)
+                return BadRequestResult("Send only one of before, after and around");
+            var window = new ChatWindow(before, after, around, Math.Clamp(limit, 1, 100));
+            return await ReadMessages(id, async () => ApiChatWindowDto.From(window, await _telegram.getChatWindow(id, window)));
+        }
+
+        /// <summary>Searches the messages of a chat on Telegram, by text and/or kind.</summary>
+        /// <remarks>
+        /// Covers the whole chat, also the messages that were never indexed or
+        /// loaded. Newest first; go on with <c>offsetId=nextOffsetId</c>.
+        /// </remarks>
+        /// <param name="id">Chat id.</param>
+        /// <param name="q">Text to look for (words of the message or of the file name).</param>
+        /// <param name="kind"><c>media</c> (photos and videos), <c>photos</c>, <c>videos</c>, <c>documents</c>, <c>audio</c>, <c>voice</c>, <c>gifs</c> or <c>links</c>.</param>
+        /// <param name="offsetId">Only messages older than this id.</param>
+        /// <param name="limit">Messages to return (1-100).</param>
+        [HttpGet("{id}/messages/search")]
+        [ProducesResponseType(typeof(ApiResult<ApiChatSearchDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> SearchMessages(
+            long id,
+            [FromQuery] string? q = null,
+            [FromQuery] string? kind = null,
+            [FromQuery] int offsetId = 0,
+            [FromQuery] int limit = 50)
+        {
+            ChatMessageKind? wanted = null;
+            if (!string.IsNullOrWhiteSpace(kind))
+            {
+                if (!ChatMessageKinds.TryParse(kind, out var parsed))
+                    return BadRequestResult($"Unknown kind '{kind}'");
+                wanted = parsed;
+            }
+            var text = q?.Trim() ?? string.Empty;
+            if (text.Length == 0 && wanted == null)
+                return BadRequestResult("A text or a kind is required");
+
+            offsetId = Math.Max(0, offsetId);
+            return await ReadMessages(id, async () =>
+                ApiChatSearchDto.From(await _telegram.searchChatMessages(id, text, wanted, offsetId, Math.Clamp(limit, 1, 100)), offsetId));
+        }
+
+        /// <summary>How many messages of each kind a chat has (<c>photos</c>, <c>audio</c>...).</summary>
+        [HttpGet("{id}/messages/counts")]
+        [ProducesResponseType(typeof(ApiResult<Dictionary<string, int>>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status404NotFound)]
+        public Task<IActionResult> MessageCounts(long id) => ReadMessages(id, async () =>
+            (await _telegram.countChatMessages(id)).ToDictionary(c => c.Key.ToKey(), c => c.Value));
+
+        private async Task<IActionResult> ReadMessages<T>(long id, Func<Task<T>> read)
+        {
+            try
+            {
+                return OkResult(await read());
+            }
+            catch (KeyNotFoundException)
+            {
+                return NotFoundResult("Channel not found", ApiErrorCodes.ChannelNotFound);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error reading messages of chat {Id}", id);
+                return ErrorResult("Could not read the messages of the chat", ex);
             }
         }
 
@@ -691,40 +780,6 @@ namespace TelegramDownloader.Controllers.Api.V1
                 _logger.LogWarning(ex, "Could not enumerate local channel databases; HasDatabase will not be populated");
                 return new HashSet<long>();
             }
-        }
-
-        private static ApiChatMessageDto ToMessageDto(ChatMessages m)
-        {
-            var dto = new ApiChatMessageDto
-            {
-                Id = m.message.ID,
-                Date = m.message.Date,
-                Text = m.message.message,
-                From = m.user?.ToString()
-            };
-
-            switch (m.message.media)
-            {
-                case MessageMediaPhoto:
-                    dto.HasMedia = true;
-                    dto.MediaType = "photo";
-                    break;
-                case MessageMediaDocument { document: Document doc }:
-                    dto.HasMedia = true;
-                    dto.FileName = doc.Filename;
-                    dto.FileSize = doc.size;
-                    dto.MimeType = doc.mime_type;
-                    dto.MediaType = doc.mime_type switch
-                    {
-                        not null when doc.mime_type.StartsWith("video") => "video",
-                        not null when doc.mime_type.StartsWith("audio") => "audio",
-                        not null when doc.mime_type.StartsWith("image") => "photo",
-                        _ => "document"
-                    };
-                    break;
-            }
-
-            return dto;
         }
     }
 }

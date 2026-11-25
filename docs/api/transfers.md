@@ -225,7 +225,11 @@ POST /api/v1/transfers/messages
 ```
 
 Works on any chat, indexed or not — this is how you save a file straight from a
-[message list](channels.md#message-history).
+[message list](channels.md#message-history). `targetPath` is a folder relative to
+the local root (`/` is the root itself; created if needed; `temp` when omitted;
+`400` outside it). Photos are saved there too. A name already used gets a number
+(`video (2).mp4`), so messages that share a file name do not overwrite each other.
+Messages without a file, or deleted, come back in `skipped`.
 
 ## Controlling the queue
 

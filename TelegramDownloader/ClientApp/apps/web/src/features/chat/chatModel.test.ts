@@ -1,6 +1,6 @@
 import type { ApiChatMessageDto } from '@tfm/api-client';
 import { describe, expect, it } from 'vitest';
-import { dayLabel, fileTypeLabel, groupByDay, hasOlderPage, isVisualMedia, localDay, mergePages, messageMedia, telegramMessageLink } from './chatModel';
+import { dayLabel, fileTypeLabel, groupByDay, highlightParts, initialSection, isVisualMedia, linkHref, linksIn, localDay, mergePages, messageMedia, nearestMessage, newerParam, olderParam, rangeOf, stepIndex, telegramMessageLink, visibleSections } from './chatModel';
 
 function msg(id: number, date: Date, extra: Partial<ApiChatMessageDto> = {}): ApiChatMessageDto {
   return { id, date: date.toISOString(), text: null, hasMedia: false, mediaType: null, fileName: null, fileSize: 0, mimeType: null, from: null, ...extra };
@@ -45,10 +45,58 @@ describe('dayLabel', () => {
 });
 
 describe('message helpers', () => {
-  it('detects the end of the history', () => {
-    expect(hasOlderPage([msg(1, d(2026, 1, 1))])).toBe(true);
-    expect(hasOlderPage([])).toBe(false);
-    expect(hasOlderPage(undefined)).toBe(false);
+  it('asks for the page at each end of the history until it ends', () => {
+    const window = { items: [], hasOlder: true, hasNewer: true, oldestId: 5, newestId: 9 };
+    expect(olderParam(window)).toEqual({ before: 5 });
+    expect(newerParam(window)).toEqual({ after: 9 });
+    expect(olderParam({ ...window, hasOlder: false })).toBeUndefined();
+    expect(newerParam({ ...window, newestId: null })).toBeUndefined();
+  });
+
+  it('goes to the nearest message when the one wanted was deleted', () => {
+    const list = [3, 7, 20].map((id) => msg(id, d(2026, 1, 1)));
+    expect(nearestMessage(list, 7)?.id).toBe(7);
+    expect(nearestMessage(list, 9)?.id).toBe(7);
+    expect(nearestMessage(list, 99)?.id).toBe(20);
+    expect(nearestMessage([], 1)).toBeUndefined();
+  });
+
+  it('selects a range in either direction', () => {
+    expect(rangeOf([1, 2, 3, 4], 2, 4)).toEqual([2, 3, 4]);
+    expect(rangeOf([1, 2, 3, 4], 4, 2)).toEqual([2, 3, 4]);
+    expect(rangeOf([1, 2], 9, 2)).toEqual([2]);
+  });
+
+  it('highlights the words of a search as plain text', () => {
+    expect(highlightParts('Hola (mundo) hola', 'hola (')).toEqual([
+      { text: 'Hola', match: true },
+      { text: ' ', match: false },
+      { text: '(', match: true },
+      { text: 'mundo) ', match: false },
+      { text: 'hola', match: true }
+    ]);
+    expect(highlightParts('abc', ' ')).toEqual([{ text: 'abc', match: false }]);
+  });
+
+  it('finds the links of a text', () => {
+    expect(linksIn('See https://a.com/x?y=1, (www.b.org) and https://a.com/x?y=1.')).toEqual(['https://a.com/x?y=1', 'www.b.org']);
+    expect(linksIn(null)).toEqual([]);
+    expect(linkHref('www.b.org')).toBe('https://www.b.org');
+  });
+
+  it('moves between results without leaving the list', () => {
+    expect(stepIndex(0, 1, 2)).toBe(1);
+    expect(stepIndex(1, 1, 2)).toBeNull();
+    expect(stepIndex(0, -1, 2)).toBeNull();
+  });
+
+  it('offers the sections with something in them', () => {
+    expect(visibleSections({ photos: 0, audio: 3, links: 1 }, 'audio')).toEqual(['audio', 'links']);
+    expect(visibleSections({ audio: 3 }, 'photos')).toEqual(['photos', 'audio']);
+    expect(visibleSections(undefined, 'photos')).toHaveLength(7);
+    expect(initialSection(null, { photos: 0, documents: 2 })).toBe('documents');
+    expect(initialSection('voice', { photos: 1 })).toBe('voice');
+    expect(initialSection('nope', undefined)).toBe('photos');
   });
 
   it('keeps photos and videos for the grid', () => {

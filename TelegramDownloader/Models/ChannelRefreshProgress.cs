@@ -72,6 +72,8 @@ namespace TelegramDownloader.Models
         private int _fetched;
         private int _total = -1;
         private int _done;
+        private int _started;
+        private long _waitUntilTicks;
 
         public RefreshFilterProgress(RefreshFilter filter) => Filter = filter;
 
@@ -96,6 +98,23 @@ namespace TelegramDownloader.Models
 
         /// <summary>The search of this filter is over (complete, canceled or failed).</summary>
         public bool Done => Volatile.Read(ref _done) == 1;
+
+        /// <summary>The search of this filter has begun; false while it waits for its turn (one type at a time).</summary>
+        public bool Started => Volatile.Read(ref _started) == 1;
+
+        public void MarkStarted() => Volatile.Write(ref _started, 1);
+
+        /// <summary>When Telegram's FLOOD_WAIT ends (UTC); null when the search is not being held back.</summary>
+        public DateTime? WaitUntil
+        {
+            get
+            {
+                long ticks = Interlocked.Read(ref _waitUntilTicks);
+                return ticks == 0 ? null : new DateTime(ticks, DateTimeKind.Utc);
+            }
+        }
+
+        public void SetWaiting(DateTime? untilUtc) => Interlocked.Exchange(ref _waitUntilTicks, untilUtc?.Ticks ?? 0);
 
         /// <summary>Records one page: <paramref name="fetchedInPage"/> messages and the reported total.</summary>
         public void ReportPage(int fetchedInPage, int? total)
@@ -181,14 +200,14 @@ namespace TelegramDownloader.Models
             lock (_filtersLock)
             {
                 filters = _filters
-                    .Select(f => new RefreshFilterProgressSnapshot(f.Filter, f.Fetched, f.Total, f.Done))
+                    .Select(f => new RefreshFilterProgressSnapshot(f.Filter, f.Fetched, f.Total, f.Done, f.Started, f.WaitUntil))
                     .ToList();
             }
             return new ChannelRefreshProgressSnapshot(ChannelId, Phase, StartedAt, filters, NewFiles, Indexed, CancelRequested);
         }
     }
 
-    public sealed record RefreshFilterProgressSnapshot(RefreshFilter Filter, int Fetched, int? Total, bool Done);
+    public sealed record RefreshFilterProgressSnapshot(RefreshFilter Filter, int Fetched, int? Total, bool Done, bool Started = false, DateTime? WaitUntil = null);
 
     public sealed record ChannelRefreshProgressSnapshot(
         string ChannelId,

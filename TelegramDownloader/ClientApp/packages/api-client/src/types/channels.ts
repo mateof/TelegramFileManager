@@ -57,6 +57,8 @@ export interface ApiChannelRefreshResultDto {
   audios: number;
   documents: number;
   total: number;
+  /** Why it failed (the first error), when it did. */
+  error?: string | null;
 }
 
 /** Media filter of a refresh: `documents`, `audio`, `video` or `photos`. */
@@ -75,6 +77,10 @@ export interface ApiChannelRefreshFilterProgressDto {
   total: number | null;
   /** The search of this type is over. */
   done: boolean;
+  /** It has not begun: with one type at a time, it waits for the previous one. */
+  pending?: boolean;
+  /** Telegram asked to wait (FLOOD_WAIT): the search goes on by itself at this time (ISO date). */
+  waitUntil?: string | null;
 }
 
 /** Phase of a running refresh: `searching` (Telegram), `indexing` (writing the new files) or `done`. */
@@ -132,6 +138,8 @@ export interface RefreshChannelRequest {
   includePhotos?: boolean;
   /** Re-scan the channel even when a previous scan already completed. */
   force?: boolean;
+  /** One media type after another instead of all at once; omitted: the setting `refreshOneTypeAtATime`. */
+  oneTypeAtATime?: boolean;
 }
 
 /** `photo`, `video`, `audio` or `document`. */
@@ -152,6 +160,12 @@ export interface ApiChatMessageDto {
   mimeType: string | null;
   /** Sender display name, when resolvable. */
   from: string | null;
+  /** Length of an audio or a video, in seconds. */
+  duration?: number | null;
+  /** Title of a song, from its tags. */
+  title?: string | null;
+  /** Artist of a song, from its tags. */
+  performer?: string | null;
 }
 
 /** Body of `POST /api/v1/channels/{id}/leave` and delete operations. */
@@ -184,6 +198,54 @@ export interface ChannelListQuery extends PagedQuery {
 export interface ChannelFavoritesQuery {
   /** Re-read the chat list from Telegram (default true). */
   refresh?: boolean;
+}
+
+/** Kinds a chat can be browsed by: `media` is photos and videos, `audio` is music, `voice` also has round videos. */
+export type ChatMessageKind = 'media' | 'photos' | 'videos' | 'documents' | 'audio' | 'voice' | 'gifs' | 'links';
+
+/** Query of `GET /api/v1/channels/{id}/messages/window`: one of `before`, `after` and `around` at most. */
+export interface ChatWindowQuery {
+  /** Messages older than this id. */
+  before?: number;
+  /** Messages newer than this id. */
+  after?: number;
+  /** This message with the ones before and after it. */
+  around?: number;
+  /** 1-100, default 50. */
+  limit?: number;
+}
+
+/** A window of the history of a chat. */
+export interface ApiChatWindowDto {
+  /** Newest first. */
+  items: ApiChatMessageDto[];
+  /** Older messages may exist: ask for `before: oldestId`. */
+  hasOlder: boolean;
+  /** Newer messages may exist: ask for `after: newestId`. */
+  hasNewer: boolean;
+  /** Ends of the window, counting messages that are not listed. */
+  oldestId: number | null;
+  newestId: number | null;
+}
+
+/** Query of `GET /api/v1/channels/{id}/messages/search`: a text, a kind or both. */
+export interface ChatSearchQuery {
+  q?: string;
+  kind?: ChatMessageKind;
+  /** Only messages older than this id. */
+  offsetId?: number;
+  /** 1-100, default 50. */
+  limit?: number;
+}
+
+/** One page of a search in a chat. */
+export interface ApiChatSearchDto {
+  /** Newest first. */
+  items: ApiChatMessageDto[];
+  /** Matches in the whole chat, as Telegram reports it. */
+  total: number;
+  /** `offsetId` of the next (older) page; null when there is none. */
+  nextOffsetId: number | null;
 }
 
 /** Query of `GET /api/v1/channels/{id}/messages`. */

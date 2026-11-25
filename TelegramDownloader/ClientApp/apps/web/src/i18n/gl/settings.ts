@@ -384,7 +384,9 @@ const settings: Record<string, string> = {
   'Only one series...': 'Unha soa serie...',
   'Any series': 'Calquera serie',
   'Series of the folder': 'Serie do cartafol',
-  'Every video of the folder will be an episode of the series you choose.': 'Todos os vídeos do cartafol serán capítulos da serie que escollas.'
+  'Every video of the folder will be an episode of the series you choose.': 'Todos os vídeos do cartafol serán capítulos da serie que escollas.',
+  'Refresh one file type at a time': 'Actualizar un tipo de ficheiro cada vez',
+  'When the index of a channel is refreshed, search the documents first, then audio, then video and then photos, instead of all at once. Slower, but Telegram is less likely to limit the requests on large channels. Each type is indexed as soon as it is found.': 'Ao actualizar o índice dunha canle, busca primeiro os documentos, despois o audio, despois o vídeo e despois as fotos, en vez de todo á vez. Máis lento, pero é menos probable que Telegram limite as peticións en canles grandes. Cada tipo indéxase en canto remata a súa busca.'
 };
 
 export default settings;
