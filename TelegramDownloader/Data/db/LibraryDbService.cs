@@ -132,11 +132,14 @@ namespace TelegramDownloader.Data.db
 
         public Task<List<LibraryItem>> GetAllItems() => Items.Find(FilterDefinition<LibraryItem>.Empty).ToListAsync();
 
-        public Task<LibraryItem?> FindItemByProvider(string provider, string providerId) =>
-            Items.Find(x => x.Provider == provider && x.ProviderId == providerId).FirstOrDefaultAsync()!;
+        public static FilterDefinition<LibraryItem> WithKind(FilterDefinition<LibraryItem> filter, string? kind) =>
+            kind == null ? filter : filter & Builders<LibraryItem>.Filter.Eq(x => x.Kind, kind);
 
-        public Task<LibraryItem?> FindItemByExternalId(string key, string value) =>
-            Items.Find(Builders<LibraryItem>.Filter.Eq($"ExternalIds.{key}", value)).FirstOrDefaultAsync()!;
+        public Task<LibraryItem?> FindItemByProvider(string provider, string providerId, string? kind = null) =>
+            Items.Find(WithKind(Builders<LibraryItem>.Filter.Where(x => x.Provider == provider && x.ProviderId == providerId), kind)).FirstOrDefaultAsync()!;
+
+        public Task<LibraryItem?> FindItemByExternalId(string key, string value, string? kind = null) =>
+            Items.Find(WithKind(Builders<LibraryItem>.Filter.Eq($"ExternalIds.{key}", value), kind)).FirstOrDefaultAsync()!;
 
         public Task UpsertItem(LibraryItem item) =>
             Items.ReplaceOneAsync(x => x.Id == item.Id, item, new ReplaceOptions { IsUpsert = true });

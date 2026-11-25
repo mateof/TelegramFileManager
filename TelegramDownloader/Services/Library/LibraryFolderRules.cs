@@ -39,8 +39,16 @@ namespace TelegramDownloader.Services.Library
             return p;
         }
 
+        /// <summary>Whether a folder is <paramref name="root"/> or is below it.</summary>
+        public static bool IsWithin(string? folderPath, string? root) =>
+            Normalize(folderPath).StartsWith(Normalize(root), StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>The kind the explicit rule of a folder sets, or null.</summary>
+        public static string? Resolve(GeneralConfig config, long channelId, string? folderPath) =>
+            ResolveRule(config, channelId, folderPath)?.Kind;
+
         /// <summary>The explicit rule for a folder, or null.</summary>
-        public static string? Resolve(GeneralConfig config, long channelId, string? folderPath)
+        public static LibraryFolderRule? ResolveRule(GeneralConfig config, long channelId, string? folderPath)
         {
             var rules = config.LibraryFolderRules;
             if (rules == null || rules.Count == 0) return null;
@@ -54,7 +62,7 @@ namespace TelegramDownloader.Services.Library
                 if (best == null || rulePath.Length > Normalize(best.Path).Length)
                     best = rule;
             }
-            return best?.Kind;
+            return best;
         }
 
         /// <summary>A kind suggested by the folder names themselves ("Series/", "Películas/"). Deepest wins.</summary>
@@ -73,5 +81,22 @@ namespace TelegramDownloader.Services.Library
         /// <summary>Rule first, folder-name hint second.</summary>
         public static string? Effective(GeneralConfig config, long channelId, string? folderPath) =>
             Resolve(config, channelId, folderPath) ?? HintFromPath(folderPath);
+
+        /// <summary>The rules with the one of that exact folder replaced, or removed when there is no new one.</summary>
+        public static List<LibraryFolderRule> With(IEnumerable<LibraryFolderRule>? rules, long channelId, string path, LibraryFolderRule? rule)
+        {
+            var normalized = Normalize(path);
+            var result = (rules ?? Enumerable.Empty<LibraryFolderRule>())
+                .Where(r => r.ChannelId != channelId || !Normalize(r.Path).Equals(normalized, StringComparison.OrdinalIgnoreCase)).ToList();
+            if (rule != null) result.Add(rule);
+            return result;
+        }
+
+        /// <summary>The rule set for exactly that folder.</summary>
+        public static LibraryFolderRule? Find(IEnumerable<LibraryFolderRule>? rules, long channelId, string path)
+        {
+            var normalized = Normalize(path);
+            return rules?.FirstOrDefault(r => r.ChannelId == channelId && Normalize(r.Path).Equals(normalized, StringComparison.OrdinalIgnoreCase));
+        }
     }
 }

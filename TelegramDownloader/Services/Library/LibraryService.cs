@@ -14,10 +14,13 @@ namespace TelegramDownloader.Services.Library
         private readonly ILibraryDbService _lib;
         private readonly LibraryScanService _scan;
         private readonly IMetadataProviderSource _providers;
+        private readonly IDbService _config;
         private readonly ILogger<LibraryService> _logger;
+        private static readonly SemaphoreSlim _rulesLock = new(1, 1);
 
-        public LibraryService(ILibraryDbService lib, LibraryScanService scan, IMetadataProviderSource providers, ILogger<LibraryService> logger)
+        public LibraryService(ILibraryDbService lib, LibraryScanService scan, IMetadataProviderSource providers, IDbService config, ILogger<LibraryService> logger)
         {
+            _config = config;
             _lib = lib;
             _scan = scan;
             _providers = providers;
@@ -430,13 +433,7 @@ namespace TelegramDownloader.Services.Library
             var file = await _lib.GetFile(channelId, fileId) ?? await FileFromChannelAsync(channelId, fileId, null);
             if (file == null) return (null, "file not found");
 
-            var item = await _scan.ResolveItemAsync(provider, request.Kind, new ProviderCandidate
-            {
-                Provider = provider.Id,
-                ProviderId = request.ProviderId,
-                Kind = request.Kind,
-                ImdbId = provider.Id == OmdbProvider.ProviderId ? request.ProviderId : null
-            }, ct);
+            var item = await _scan.ResolveItemAsync(provider, request.Kind, LibraryScanService.CandidateFor(provider, request.Kind, request.ProviderId), ct);
 
             var oldItem = file.ItemId;
             file.ItemId = item.Id;
@@ -509,13 +506,7 @@ namespace TelegramDownloader.Services.Library
             if (provider == null) return (null, $"Provider '{request.Provider}' is not enabled");
             var kind = LibraryKind.IsValid(request.Kind) ? request.Kind! : item.Kind;
 
-            var target = await _scan.ResolveItemAsync(provider, kind, new ProviderCandidate
-            {
-                Provider = provider.Id,
-                ProviderId = request.ProviderId,
-                Kind = kind,
-                ImdbId = provider.Id == OmdbProvider.ProviderId ? request.ProviderId : null
-            }, ct);
+            var target = await _scan.ResolveItemAsync(provider, kind, LibraryScanService.CandidateFor(provider, kind, request.ProviderId), ct);
 
             var files = await _lib.GetFilesByItem(itemId);
             foreach (var file in files)
@@ -538,11 +529,124 @@ namespace TelegramDownloader.Services.Library
                     await _scan.EnsureEpisodeAsync(target, file.Season.Value, file.Episode.Value, ct);
             }
 
+            // New files of a folder assigned to the wrong title go to the right one too
+            if (kind == LibraryKind.Series)
+                await RetargetRulesAsync(item, target);
+
             target.Locked = true;
             await _lib.UpsertItem(target);
             await _scan.RecountAsync(target.Id == itemId ? new[] { itemId } : new[] { itemId, target.Id });
             return (await _lib.GetItem(target.Id), null);
         }
+
+        /// <summary>What a folder of a channel holds for the library, and the title assigned to it.</summary>
+        public async Task<ApiLibraryFolderDto> GetFolderAsync(long channelId, string path)
+        {
+            path = LibraryFolderRules.Normalize(path);
+            var videos = (await _lib.GetChannelVideos(channelId.ToString(), LibraryScanService.VideoExtensions))
+                .Count(d => d.IsFile && LibraryFolderRules.IsWithin(d.FilterPath, path));
+            return new ApiLibraryFolderDto
+            {
+                ChannelId = channelId,
+                Path = path,
+                Videos = videos,
+                Locked = (await LockedFilesAsync(channelId, path)).Count,
+                Rule = LibraryFolderRules.Find(Config.LibraryFolderRules, channelId, path),
+                EffectiveRule = LibraryFolderRules.ResolveRule(Config, channelId, path)
+            };
+        }
+
+        /// <summary>
+        /// Says that every video of a folder is an episode of one series: adds
+        /// the folder rule and scans the folder. Files identified by hand are
+        /// left alone unless <see cref="LibraryAssignFolderRequest.IncludeLocked"/> is set.
+        /// </summary>
+        public async Task<(ApiLibraryFolderDto? Folder, string? Error)> AssignFolderAsync(LibraryAssignFolderRequest request, CancellationToken ct)
+        {
+            var provider = _providers.Get(request.Provider);
+            if (provider == null) return (null, $"Provider '{request.Provider}' is not enabled");
+            var path = LibraryFolderRules.Normalize(request.Path);
+
+            // Fails here, before anything is stored, when the provider does not know the id
+            var item = await _scan.ResolveItemAsync(provider, LibraryKind.Series, LibraryScanService.CandidateFor(provider, LibraryKind.Series, request.ProviderId), ct);
+
+            await ChangeRulesAsync(rules => LibraryFolderRules.With(rules, request.ChannelId, path, new LibraryFolderRule
+            {
+                ChannelId = request.ChannelId,
+                Path = path,
+                Kind = LibraryRuleKind.Series,
+                Provider = provider.Id,
+                ProviderId = request.ProviderId,
+                Title = item.Title,
+                Year = item.Year
+            }));
+            if (request.IncludeLocked)
+                await UnlockAsync(request.ChannelId, path);
+
+            var started = _scan.StartOrQueue(request.ChannelId.ToString(), path);
+            var folder = await GetFolderAsync(request.ChannelId, path);
+            folder.ItemId = item.Id;
+            folder.ScanStarted = started;
+            return (folder, null);
+        }
+
+        /// <summary>Removes the rule of a folder; its files are identified again, each by its name.</summary>
+        public async Task<bool> UnassignFolderAsync(long channelId, string path)
+        {
+            path = LibraryFolderRules.Normalize(path);
+            if (LibraryFolderRules.Find(Config.LibraryFolderRules, channelId, path) == null) return false;
+            await ChangeRulesAsync(rules => LibraryFolderRules.With(rules, channelId, path, null));
+            _scan.StartOrQueue(channelId.ToString(), path);
+            return true;
+        }
+
+        private async Task<List<LibraryFile>> LockedFilesAsync(long channelId, string path) =>
+            (await _lib.GetFilesByChannel(channelId))
+                .Where(f => f.Locked && f.Status != LibraryFileStatus.Ignored && LibraryFolderRules.IsWithin(f.FolderPath, path)).ToList();
+
+        private async Task UnlockAsync(long channelId, string path)
+        {
+            var files = await LockedFilesAsync(channelId, path);
+            foreach (var file in files)
+            {
+                file.Locked = false;
+                file.MatchSource = LibraryMatchSource.Auto;
+                // Differs from any title, so the scan takes it
+                file.RuleTitle = string.Empty;
+            }
+            if (files.Count > 0) await _lib.UpsertFiles(files);
+        }
+
+        private Task RetargetRulesAsync(LibraryItem from, LibraryItem to) => ChangeRulesAsync(rules => rules.Select(r =>
+            r.TitleKey != null && IsTitle(from, r) && !IsTitle(to, r)
+                ? new LibraryFolderRule { ChannelId = r.ChannelId, Path = r.Path, Kind = r.Kind, Provider = to.Provider, ProviderId = to.ProviderId, Title = to.Title, Year = to.Year }
+                : r).ToList());
+
+        private static bool IsTitle(LibraryItem item, LibraryFolderRule rule) =>
+            item.Kind == LibraryKind.Series && (
+                item.Provider.Equals(rule.Provider, StringComparison.OrdinalIgnoreCase) && item.ProviderId == rule.ProviderId
+                || item.ExternalIds.TryGetValue(LibraryScanService.ExternalKeyFor(rule.Provider!), out var id) && id == rule.ProviderId);
+
+        private async Task ChangeRulesAsync(Func<List<LibraryFolderRule>, List<LibraryFolderRule>> change)
+        {
+            await _rulesLock.WaitAsync();
+            try
+            {
+                var config = Config;
+                var before = config.LibraryFolderRules ?? new List<LibraryFolderRule>();
+                var after = change(before);
+                if (before.SequenceEqual(after)) return;
+                // A new list: a scan may be reading the current one
+                config.LibraryFolderRules = after;
+                await SaveConfigAsync(config);
+            }
+            finally
+            {
+                _rulesLock.Release();
+            }
+        }
+
+        protected virtual Task SaveConfigAsync(GeneralConfig config) => GeneralConfigStatic.SaveChanges(_config, config);
 
         public async Task<(LibraryItem? Item, string? Error)> RefreshItemAsync(string itemId, CancellationToken ct)
         {

@@ -1,6 +1,7 @@
 import type { HttpClient, Paged } from '../http';
 import type {
   ApiLibraryFileDto,
+  ApiLibraryFolderDto,
   ApiLibraryGenreDto,
   ApiLibraryItemDetailDto,
   ApiLibraryItemDto,
@@ -9,6 +10,7 @@ import type {
   ApiLibraryStatsDto,
   ApiProviderCandidateDto,
   ApiWatchStateDto,
+  LibraryAssignFolderRequest,
   LibraryFilesQuery,
   LibraryIdentifyItemRequest,
   LibraryItemsQuery,
@@ -91,6 +93,14 @@ export function createLibraryApi(http: HttpClient) {
     /** DELETE /api/v1/library/files/{channelId}/{fileId}/ignore */
     unignoreFile: (channelId: number | string, fileId: string) =>
       http.delete<ApiLibraryFileDto>(`${BASE}/files/${fileRoute(channelId, fileId)}/ignore`),
+    /** GET /api/v1/library/folders: the title assigned to a folder and how many videos it has. */
+    folder: (channelId: number | string, path: string, signal?: AbortSignal) =>
+      http.get<ApiLibraryFolderDto>(`${BASE}/folders`, { query: { channelId: String(channelId), path }, signal }),
+    /** PUT /api/v1/library/folders/series: every video of the folder is an episode of one series. */
+    assignFolder: (body: LibraryAssignFolderRequest) => http.put<ApiLibraryFolderDto>(`${BASE}/folders/series`, body),
+    /** DELETE /api/v1/library/folders/series: removes the rule of the folder. */
+    unassignFolder: (channelId: number | string, path: string) =>
+      http.delete<void>(`${BASE}/folders/series`, undefined, { query: { channelId: String(channelId), path } }),
     /** PUT /api/v1/library/items/{id}/identify */
     identifyItem: (id: string, body: LibraryIdentifyItemRequest, signal?: AbortSignal) =>
       http.put<ApiLibraryItemDetailDto>(`${BASE}/items/${enc(id)}/identify`, body, { signal }),

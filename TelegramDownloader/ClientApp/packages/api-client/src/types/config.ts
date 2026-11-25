@@ -21,6 +21,14 @@ export interface LibraryFolderRule {
   path: string;
   /** `movie`, `series` or `ignore`. */
   kind: LibraryFolderRuleKind | (string & {});
+  /**
+   * Series only: the title every file of the folder belongs to. On an update,
+   * `providerId` null or missing keeps the one the rule has and `''` clears it.
+   */
+  provider?: string | null;
+  providerId?: string | null;
+  title?: string | null;
+  year?: number | null;
 }
 
 /** Application configuration exposed for reading and updating. */

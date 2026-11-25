@@ -332,6 +332,57 @@ namespace TelegramDownloader.Controllers.Api.V1
             }
         }
 
+        /// <summary>The title assigned to a folder, and how many videos it has.</summary>
+        [HttpGet("folders")]
+        [ProducesResponseType(typeof(ApiResult<ApiLibraryFolderDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> Folder([FromQuery] long channelId, [FromQuery] string? path)
+        {
+            if (Disabled() is IActionResult r) return r;
+            if (channelId == 0 || string.IsNullOrWhiteSpace(path)) return BadRequestResult("channelId and path are required");
+            return OkResult(await _library.GetFolderAsync(channelId, path));
+        }
+
+        /// <summary>Says that every video of a folder is an episode of one series.</summary>
+        /// <remarks>
+        /// Adds (or replaces) the folder rule and identifies the files of the
+        /// folder in the background: now, or after the running scan. Seasons and
+        /// episodes come from the file names and the subfolders; files added
+        /// later are assigned by the next scan. Files identified by hand are
+        /// left alone unless <c>includeLocked</c> is set.
+        /// </remarks>
+        [HttpPut("folders/series")]
+        [ProducesResponseType(typeof(ApiResult<ApiLibraryFolderDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> AssignFolder([FromBody] LibraryAssignFolderRequest request, CancellationToken ct)
+        {
+            if (Disabled() is IActionResult r) return r;
+            if (request == null || request.ChannelId == 0 || string.IsNullOrWhiteSpace(request.Path))
+                return BadRequestResult("channelId and path are required");
+            if (string.IsNullOrWhiteSpace(request.Provider) || string.IsNullOrWhiteSpace(request.ProviderId))
+                return BadRequestResult("provider and providerId are required");
+            try
+            {
+                var (folder, error) = await _library.AssignFolderAsync(request, ct);
+                return folder == null ? BadRequestResult(error ?? "Could not assign the folder") : OkResult(folder, "Folder assigned");
+            }
+            catch (ProviderException ex)
+            {
+                return UnavailableResult(ex.Message);
+            }
+        }
+
+        /// <summary>Removes the rule of a folder: its files are identified again, each by its name.</summary>
+        [HttpDelete("folders/series")]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status404NotFound)]
+        public async Task<IActionResult> UnassignFolder([FromQuery] long channelId, [FromQuery] string? path)
+        {
+            if (Disabled() is IActionResult r) return r;
+            if (channelId == 0 || string.IsNullOrWhiteSpace(path)) return BadRequestResult("channelId and path are required");
+            return await _library.UnassignFolderAsync(channelId, path) ? OkEmpty("Folder rule removed") : NotFoundResult("The folder has no rule");
+        }
+
         /// <summary>Downloads the metadata of an item again (new poster, new episodes...).</summary>
         [HttpPost("items/{id}/refresh")]
         [ProducesResponseType(typeof(ApiResult<ApiLibraryItemDetailDto>), StatusCodes.Status200OK)]

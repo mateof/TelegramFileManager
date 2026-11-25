@@ -143,6 +143,8 @@ namespace TelegramDownloader.Models.Library
         public bool Locked { get; set; }
         /// <summary>Folder rule or folder-name hint applied at scan time; a change triggers a rescan.</summary>
         public string? RuleKind { get; set; }
+        /// <summary>Title assigned to the folder at scan time (<c>tmdb:1396</c>); a change triggers a rescan.</summary>
+        public string? RuleTitle { get; set; }
         public DateTime ScannedAt { get; set; } = DateTime.UtcNow;
         public string? Error { get; set; }
 
@@ -189,6 +191,8 @@ namespace TelegramDownloader.Models.Library
         public DateTime? FinishedAt { get; set; }
         /// <summary><c>all</c> or a channel id.</summary>
         public string Scope { get; set; } = "all";
+        /// <summary>Only the files of this folder (and its subfolders) of the channel.</summary>
+        public string? Folder { get; set; }
         public bool Force { get; set; }
         public int ChannelsTotal { get; set; }
         public int ChannelsScanned { get; set; }

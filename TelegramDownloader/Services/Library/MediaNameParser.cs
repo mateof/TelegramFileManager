@@ -27,7 +27,7 @@ namespace TelegramDownloader.Services.Library
         private static readonly Regex BracketedYear = new(@"[\(\[]\s*(?<y>(?:19|20)\d{2})\s*[\)\]]", Opts);
         private static readonly Regex TitleYearFolder = new(@"^(?<t>.+?)\s*[\(\[]\s*(?<y>(?:19|20)\d{2})\s*[\)\]]\s*$", Opts);
 
-        private static readonly Regex QualityMarker = new(
+        internal static readonly Regex QualityMarker = new(
             @"(?<![a-z0-9])(?:" +
             @"2160p|1080p|1080i|720p|576p|480p|4k|uhd|hdr10?\+?|dolby\s*vision|dv|" +
             @"x264|x265|h\.?264|h\.?265|hevc|avc|xvid|divx|av1|10bit|8bit|" +
@@ -229,7 +229,7 @@ namespace TelegramDownloader.Services.Library
             "mkv", "mp4", "avi", "mov", "wmv", "flv", "webm", "m4v", "ts", "mpg", "mpeg", "m2ts", "3gp", "ogv", "divx", "iso", "vob", "srt"
         };
 
-        private static string StripExtension(string fileName)
+        internal static string StripExtension(string fileName)
         {
             var name = DuplicateSuffix.Replace(fileName.Trim(), string.Empty).Trim();
             var dot = name.LastIndexOf('.');
@@ -323,7 +323,7 @@ namespace TelegramDownloader.Services.Library
             return Spaces.Replace(line, " ").Trim();
         }
 
-        private static string RemoveDiacritics(string text)
+        internal static string RemoveDiacritics(string text)
         {
             var normalized = text.Normalize(NormalizationForm.FormD);
             var sb = new StringBuilder(normalized.Length);

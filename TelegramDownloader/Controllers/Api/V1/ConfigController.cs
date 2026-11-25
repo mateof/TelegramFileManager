@@ -142,8 +142,17 @@ namespace TelegramDownloader.Controllers.Api.V1
                         if (!Services.Library.LibraryRuleKind.IsValid(rule.Kind))
                             return BadRequestResult("Folder rule kind must be movie, series or ignore");
                         var path = Services.Library.LibraryFolderRules.Normalize(rule.Path);
-                        rules.RemoveAll(r => r.ChannelId == rule.ChannelId && r.Path.Equals(path, StringComparison.OrdinalIgnoreCase));
-                        rules.Add(new LibraryFolderRule { ChannelId = rule.ChannelId, Path = path, Kind = rule.Kind });
+                        // Without a title keeps the one it has, for clients that do not know about titles; an empty one clears it
+                        var titled = rule.ProviderId == null ? Services.Library.LibraryFolderRules.Find(c.LibraryFolderRules, rule.ChannelId, path) : rule;
+                        var updated = new LibraryFolderRule { ChannelId = rule.ChannelId, Path = path, Kind = rule.Kind };
+                        if (updated.Kind == Services.Library.LibraryRuleKind.Series && titled?.TitleKey != null)
+                        {
+                            updated.Provider = titled.Provider;
+                            updated.ProviderId = titled.ProviderId;
+                            updated.Title = titled.Title;
+                            updated.Year = titled.Year;
+                        }
+                        rules = Services.Library.LibraryFolderRules.With(rules, rule.ChannelId, path, updated);
                     }
                     c.LibraryFolderRules = rules;
                 }

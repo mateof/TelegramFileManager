@@ -24,8 +24,8 @@ namespace TelegramDownloader.Data.db
         Task<LibraryItem?> GetItem(string id);
         Task<List<LibraryItem>> GetItems(IEnumerable<string> ids);
         Task<List<LibraryItem>> GetAllItems();
-        Task<LibraryItem?> FindItemByProvider(string provider, string providerId);
-        Task<LibraryItem?> FindItemByExternalId(string key, string value);
+        Task<LibraryItem?> FindItemByProvider(string provider, string providerId, string? kind = null);
+        Task<LibraryItem?> FindItemByExternalId(string key, string value, string? kind = null);
         Task UpsertItem(LibraryItem item);
         /// <summary>Stores only the file count, episode count and channels of these items.</summary>
         Task UpdateItemCounts(IEnumerable<LibraryItem> items);

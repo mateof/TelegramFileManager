@@ -9,6 +9,7 @@ import { confirmDelete, fmLocale, reportError, reportSuccess } from '@/features/
 import { openMedia } from '@/features/files/media';
 import { fileManagerStrings } from '@/features/files/strings';
 import { useRoutePath } from '@/features/files/useRoutePath';
+import { IdentifyDialog } from '@/features/library/components/IdentifyDialog';
 import { getLanguage, t } from '@/i18n';
 import { api, errorMessage } from '@/lib/api';
 import { queryKeys } from '@/lib/queryKeys';
@@ -75,6 +76,10 @@ export default function ChannelPage() {
         onClose={() => setDialog(null)}
       />
       <StrmDialog channelId={channelId} request={dialog?.type === 'strm' ? dialog : null} onClose={() => setDialog(null)} />
+      <IdentifyDialog
+        target={dialog?.type === 'series' ? { type: 'folder', channelId, path: dialog.path, name: dialog.name } : null}
+        onClose={() => setDialog(null)}
+      />
       <ShareDialog channelId={channelId} request={dialog?.type === 'share' ? dialog : null} onClose={() => setDialog(null)} />
     </div>
   );

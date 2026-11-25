@@ -3,6 +3,7 @@ import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tansta
 import { toast } from '@tfm/ui';
 import { t } from '@/i18n';
 import { api, errorMessage } from '@/lib/api';
+import { followScan } from './followScan';
 import { useEventsMessage } from '@/lib/realtime';
 
 /** Private query keys of the library feature. */
@@ -16,6 +17,7 @@ export const libraryKeys = {
   items: (query: LibraryItemsQuery) => ['library', 'items', query] as const,
   item: (id: string) => ['library', 'item', id] as const,
   files: (status: string, search: string) => ['library', 'files', status, search] as const,
+  folder: (channelId: number | string, path: string) => ['library', 'folder', String(channelId), path] as const,
   candidates: (q: string, kind: string, year: string) => ['library', 'candidates', q, kind, year] as const
 };
 
@@ -112,6 +114,18 @@ export function useScanActions() {
     onError: (error) => toast.error(t('Could not cancel the scan'), { description: errorMessage(error) })
   });
   return { start, cancel };
+}
+
+/** Refetches the library when the scan started by a change of a folder ends: a short one sends no event. */
+export function useFollowScan() {
+  const qc = useQueryClient();
+  const invalidate = useInvalidateLibrary();
+  return () =>
+    void followScan(async () => {
+      const state = await api.library.scanState();
+      qc.setQueryData(libraryKeys.scan, state);
+      return state?.running ?? false;
+    }, () => void invalidate());
 }
 
 /** Invalidates everything the library shows (after a watched mark, a match...). */
