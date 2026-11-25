@@ -1,7 +1,7 @@
-import { DropdownMenu as DropdownPrimitive } from 'radix-ui';
+import { DropdownMenu as DropdownPrimitive, Slot } from 'radix-ui';
 import { Check, ChevronRight } from 'lucide-react';
 import { forwardRef, type ComponentPropsWithoutRef, type ReactNode } from 'react';
-import { MENU_CONTENT, MENU_DANGER, MENU_ITEM, MENU_LABEL, MENU_SEPARATOR } from '../lib/classes';
+import { MENU_CONTENT, MENU_DANGER, MENU_ITEM, MENU_LABEL, MENU_SEPARATOR, MENU_TEXT } from '../lib/classes';
 import { cn } from '../lib/cn';
 import { MenuShortcut, type MenuItemExtras } from './MenuShortcut';
 
@@ -12,21 +12,22 @@ export const DropdownMenuSub = DropdownPrimitive.Sub;
 export const DropdownMenuRadioGroup = DropdownPrimitive.RadioGroup;
 
 export const DropdownMenuContent = forwardRef<HTMLDivElement, ComponentPropsWithoutRef<typeof DropdownPrimitive.Content>>(
-  function DropdownMenuContent({ className, sideOffset = 6, ...props }, ref) {
+  function DropdownMenuContent({ className, sideOffset = 6, collisionPadding = 8, ...props }, ref) {
     return (
       <DropdownPrimitive.Portal>
-        <DropdownPrimitive.Content ref={ref} sideOffset={sideOffset} className={cn(MENU_CONTENT, className)} {...props} />
+        <DropdownPrimitive.Content ref={ref} sideOffset={sideOffset} collisionPadding={collisionPadding} className={cn(MENU_CONTENT, className)} {...props} />
       </DropdownPrimitive.Portal>
     );
   }
 );
 
 export const DropdownMenuItem = forwardRef<HTMLDivElement, ComponentPropsWithoutRef<typeof DropdownPrimitive.Item> & MenuItemExtras>(
-  function DropdownMenuItem({ className, icon, shortcut, destructive, children, ...props }, ref) {
+  function DropdownMenuItem({ className, icon, shortcut, destructive, asChild, children, ...props }, ref) {
     return (
-      <DropdownPrimitive.Item ref={ref} className={cn(MENU_ITEM, destructive && MENU_DANGER, className)} {...props}>
+      <DropdownPrimitive.Item ref={ref} asChild={asChild} className={cn(MENU_ITEM, destructive && MENU_DANGER, className)} {...props}>
         {icon}
-        <span className="min-w-0 flex-1 truncate">{children}</span>
+        {/* Slottable: the child (a link) becomes the item itself, with the icon and the shortcut inside */}
+        {asChild ? <Slot.Slottable>{children}</Slot.Slottable> : <span className={MENU_TEXT}>{children}</span>}
         {shortcut && <MenuShortcut>{shortcut}</MenuShortcut>}
       </DropdownPrimitive.Item>
     );
