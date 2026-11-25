@@ -195,17 +195,35 @@ namespace TelegramDownloader.Controllers.Api.V1
         /// <remarks>
         /// Incremental: files already identified are left alone unless
         /// <c>force</c> is set, and manual identifications are never touched.
+        /// With <c>folders</c> it only looks at those folders and what is below
+        /// them, of one or several channels.
         /// Poll <c>GET /api/v1/library/scan</c> for progress. Answers
         /// <c>409 already_running</c> while a scan is in progress.
         /// </remarks>
         [HttpPost("scan")]
         [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status202Accepted)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status400BadRequest)]
         [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status409Conflict)]
         public IActionResult Scan([FromBody] LibraryScanRequest? request)
         {
             if (Disabled() is IActionResult r) return r;
             request ??= new LibraryScanRequest();
-            if (!_scan.Start(request.ChannelId, request.Force, out var error))
+            string? error;
+            bool started;
+            if (request.Folders != null)
+            {
+                // An empty list must not become a scan of everything
+                if (request.Folders.Count == 0 || request.Folders.Any(f => f == null || f.ChannelId == 0))
+                    return BadRequestResult("folders needs at least one folder, each with its channelId");
+                if (!string.IsNullOrWhiteSpace(request.ChannelId))
+                    return BadRequestResult("Send channelId or folders, not both");
+                started = _scan.Start(request.Folders.Select(f => new LibraryScanFolder { ChannelId = f.ChannelId, Path = f.Path }), request.Force, out error);
+            }
+            else
+            {
+                started = _scan.Start(request.ChannelId, request.Force, out error);
+            }
+            if (!started)
             {
                 if (_scan.IsRunning) return ConflictResult(error ?? "A scan is already running", ApiErrorCodes.AlreadyRunning);
                 return UnavailableResult(error ?? "The library cannot scan right now", ApiErrorCodes.LibraryDisabled);

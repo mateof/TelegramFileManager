@@ -143,6 +143,29 @@ namespace TelegramDownloader.Services.Library
         /// <summary>Starts a scan in the background. False when one is already running or nothing is configured.</summary>
         public bool Start(string? channelId, bool force, out string? error, string? folder = null)
         {
+            var scope = string.IsNullOrWhiteSpace(channelId) ? "all" : channelId.Trim();
+            var folders = folder != null && long.TryParse(scope, out var id)
+                ? new List<LibraryScanFolder> { new() { ChannelId = id, Path = LibraryFolderRules.Normalize(folder) } }
+                : null;
+            return Start(scope, folders, force, out error);
+        }
+
+        /// <summary>Like <see cref="Start(string?, bool, out string?, string?)"/>, limited to some folders of one or several channels.</summary>
+        public bool Start(IEnumerable<LibraryScanFolder> folders, bool force, out string? error)
+        {
+            var outermost = LibraryFolderRules.Outermost(folders);
+            if (outermost.Count == 0)
+            {
+                // Never taken for "no limit"
+                error = "No folder to scan";
+                return false;
+            }
+            var channels = outermost.Select(f => f.ChannelId).Distinct().ToList();
+            return Start(channels.Count == 1 ? channels[0].ToString() : "folders", outermost, force, out error);
+        }
+
+        private bool Start(string scope, List<LibraryScanFolder>? folders, bool force, out string? error)
+        {
             error = null;
             lock (_sync)
             {
@@ -160,8 +183,8 @@ namespace TelegramDownloader.Services.Library
                 {
                     Running = true,
                     StartedAt = DateTime.UtcNow,
-                    Scope = string.IsNullOrWhiteSpace(channelId) ? "all" : channelId.Trim(),
-                    Folder = folder,
+                    Scope = scope,
+                    Folders = folders,
                     Force = force
                 };
                 Current = state;
@@ -188,7 +211,9 @@ namespace TelegramDownloader.Services.Library
             {
                 var config = GeneralConfigStatic.config;
                 List<string> channels;
-                if (state.Scope == "all")
+                if (state.Folders != null)
+                    channels = state.Folders.Select(f => f.ChannelId.ToString()).Distinct().ToList();
+                else if (state.Scope == "all")
                     channels = SelectChannels(config, await _lib.GetChannelDatabaseNames());
                 else
                     channels = new List<string> { state.Scope };
@@ -385,7 +410,9 @@ namespace TelegramDownloader.Services.Library
 
             var docs = (await _lib.GetChannelVideos(channelId, VideoExtensions)).Where(d => d.IsFile && IsVideo(d.Type)).ToList();
             var existing = (await _lib.GetFilesByChannel(chId)).ToDictionary(f => f.FileId);
-            run.Update(st => st.FilesSeen += docs.Count);
+            var limits = run.State.Folders?.Where(f => f.ChannelId == chId).Select(f => f.Path).ToList();
+            bool InScope(BsonFileManagerModel doc) => limits == null || limits.Any(path => LibraryFolderRules.IsWithin(doc.FilterPath, path));
+            run.Update(st => st.FilesSeen += docs.Count(InScope));
 
             var present = docs.Select(d => d.Id).ToHashSet();
             var gone = existing.Values.Where(f => !present.Contains(f.FileId)).ToList();
@@ -406,7 +433,7 @@ namespace TelegramDownloader.Services.Library
             foreach (var doc in docs)
             {
                 ct.ThrowIfCancellationRequested();
-                if (run.State.Folder != null && !LibraryFolderRules.IsWithin(doc.FilterPath, run.State.Folder)) continue;
+                if (!InScope(doc)) continue;
                 existing.TryGetValue(doc.Id, out var old);
                 var rule = LibraryFolderRules.ResolveRule(config, chId, doc.FilterPath);
                 var hint = rule?.Kind ?? LibraryFolderRules.HintFromPath(doc.FilterPath);

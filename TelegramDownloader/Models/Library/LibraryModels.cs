@@ -177,6 +177,14 @@ namespace TelegramDownloader.Models.Library
         public bool InProgress => !Completed && PositionMs > 0;
     }
 
+    /// <summary>A channel folder a scan is limited to, with its subfolders.</summary>
+    [BsonIgnoreExtraElements]
+    public class LibraryScanFolder
+    {
+        public long ChannelId { get; set; }
+        public string Path { get; set; } = "/";
+    }
+
     /// <summary>Persisted state of the last (or current) library scan.</summary>
     [BsonIgnoreExtraElements]
     public class LibraryScanState
@@ -189,10 +197,10 @@ namespace TelegramDownloader.Models.Library
         public bool Cancelled { get; set; }
         public DateTime? StartedAt { get; set; }
         public DateTime? FinishedAt { get; set; }
-        /// <summary><c>all</c> or a channel id.</summary>
+        /// <summary><c>all</c>, a channel id, or <c>folders</c> when <see cref="Folders"/> belong to several channels.</summary>
         public string Scope { get; set; } = "all";
-        /// <summary>Only the files of this folder (and its subfolders) of the channel.</summary>
-        public string? Folder { get; set; }
+        /// <summary>Only the files of these folders (and their subfolders). Null: no limit.</summary>
+        public List<LibraryScanFolder>? Folders { get; set; }
         public bool Force { get; set; }
         public int ChannelsTotal { get; set; }
         public int ChannelsScanned { get; set; }

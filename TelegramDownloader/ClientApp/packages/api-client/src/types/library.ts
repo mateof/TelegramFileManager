@@ -215,6 +215,12 @@ export interface LibraryProviderConfigDto {
   priority?: number | null;
 }
 
+/** A channel folder (`/Series/`; `/` is the whole channel), with its subfolders. */
+export interface ApiLibraryScanFolder {
+  channelId: number;
+  path: string;
+}
+
 /** State of the running or last library scan. */
 export interface ApiLibraryScanStateDto {
   running: boolean;
@@ -223,7 +229,10 @@ export interface ApiLibraryScanStateDto {
   startedAt: string | null;
   /** ISO date. */
   finishedAt: string | null;
+  /** `all`, a channel id, or `folders` (of several channels). */
   scope: string;
+  /** The folders it is limited to; null when it is not. Absent on older servers. */
+  folders?: ApiLibraryScanFolder[] | null;
   force: boolean;
   channelsTotal: number;
   channelsScanned: number;
@@ -270,6 +279,8 @@ export interface ApiLibraryGenreDto {
 export interface LibraryScanRequest {
   /** Scan only this channel. Omit for every channel with an index. */
   channelId?: string | null;
+  /** Scan only these folders. Not together with `channelId`. */
+  folders?: ApiLibraryScanFolder[];
   /** Re-identify files that were already matched automatically. Manual matches are never touched. */
   force?: boolean;
 }
