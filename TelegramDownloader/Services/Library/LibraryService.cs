@@ -194,7 +194,8 @@ namespace TelegramDownloader.Services.Library
                 .OrderBy(g => g.Name).ToList();
         }
 
-        public async Task<List<ApiLibraryFileDto>> ListFilesAsync(string? status, long? channelId, string? search, string baseUrl)
+        /// <summary>The files of a status (or all), matching the search: what the filters and the facets start from.</summary>
+        private async Task<List<LibraryFile>> FilesForListAsync(string? status, long? channelId, string? search)
         {
             List<LibraryFile> files;
             if (channelId.HasValue) files = await _lib.GetFilesByChannel(channelId.Value);
@@ -204,7 +205,17 @@ namespace TelegramDownloader.Services.Library
             if (!string.IsNullOrWhiteSpace(search))
                 files = files.Where(f => f.FileName.Contains(search, StringComparison.OrdinalIgnoreCase)
                     || f.Parsed.Title.Contains(search, StringComparison.OrdinalIgnoreCase)).ToList();
-            files = files.OrderBy(f => f.FileName).ToList();
+            return files;
+        }
+
+        /// <summary>How many files of the status (and search) there are of each kind, channel and folder rule.</summary>
+        public async Task<ApiLibraryFileFacetsDto> FileFacetsAsync(string? status, string? search, string? kind = null, long? channelId = null, string? rule = null) =>
+            LibraryFileFilter.Facets(await FilesForListAsync(status, null, search), Config, kind, channelId, rule);
+
+        public async Task<List<ApiLibraryFileDto>> ListFilesAsync(string? status, long? channelId, string? search, string baseUrl, string? kind = null, string? rule = null)
+        {
+            var files = LibraryFileFilter.Apply(await FilesForListAsync(status, channelId, search), Config, kind, channelId, rule)
+                .OrderBy(f => f.FileName).ToList();
 
             var items = (await _lib.GetItems(files.Where(f => f.ItemId != null).Select(f => f.ItemId!))).ToDictionary(i => i.Id);
             var watches = (await _lib.GetWatchMany(files.Select(f => f.Key))).ToDictionary(w => w.Id);

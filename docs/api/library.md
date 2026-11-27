@@ -273,13 +273,38 @@ recorded for every video played, identified or not.
 ### Files and the review queue
 
 ```
-GET /api/v1/library/files?status=review&channelId=&search=&page=&pageSize=
+GET /api/v1/library/files?status=review&channelId=&search=&kind=&rule=&page=&pageSize=
+GET /api/v1/library/files/facets?status=review&search=&kind=&channelId=&rule=
 GET /api/v1/library/files/{channelId}/{fileId}
 ```
 
 `status`: `matched`, `review`, `unmatched`, `ignored`. Each file comes with its
 `parsed` guess (`title`, `year`, `season`, `episode`, `isSeries`, `source`) and
 the `item` it currently points at, which is what a client needs to offer a fix.
+
+Filters: `kind` is `series` or `movie`: the kind the file was identified as, else
+the one its name suggests (an episode number makes it a series); anything else is a
+`400`. `rule` is the path of a folder rule of `channelId` (a `400` without it) and
+keeps the files that rule decides: a deeper rule takes its own files, as in a scan.
+
+`files/facets` says, for a status and search, how many files each filter value keeps.
+It takes the same filters, and each count applies the others but not its own (the
+kinds of the chosen channel, the channels of the chosen kind), so a count is what
+picking that value would show. `total` has no filter, `matching` every one:
+
+```json
+{
+  "total": 42,
+  "matching": 42,
+  "kinds": [ { "value": "movie", "count": 30 }, { "value": "series", "count": 12 } ],
+  "channels": [ { "channelId": 1290586824, "count": 40 }, { "channelId": 1417000000, "count": 2 } ],
+  "rules": [ { "channelId": 1290586824, "path": "/Series/", "kind": "series", "title": null, "count": 12 } ]
+}
+```
+
+Channels come with the most files first; rules, of every channel, only when they
+decide some file.
+Advertised as `library.fileFilters`.
 
 ---
 

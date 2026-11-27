@@ -392,6 +392,47 @@ namespace TelegramDownloader.Models.Api
         public int Count { get; set; }
     }
 
+    /// <summary>
+    /// The filters a file list can take, with how many files each one keeps. Each count
+    /// applies the other filters sent, not its own.
+    /// </summary>
+    public class ApiLibraryFileFacetsDto
+    {
+        /// <summary>Files of the status (and search), without filters.</summary>
+        public int Total { get; set; }
+        /// <summary>Files with every filter sent.</summary>
+        public int Matching { get; set; }
+        /// <summary><c>series</c> and <c>movie</c> of the channel and rule sent: identified kind, else the one the name suggests.</summary>
+        public List<ApiLibraryFacetCountDto> Kinds { get; set; } = new();
+        /// <summary>Channels with files of the kind sent, most files first.</summary>
+        public List<ApiLibraryChannelFacetDto> Channels { get; set; } = new();
+        /// <summary>Folder rules (of every channel) that decide at least one file of the kind sent (the most specific rule of each file).</summary>
+        public List<ApiLibraryRuleFacetDto> Rules { get; set; } = new();
+    }
+
+    public class ApiLibraryFacetCountDto
+    {
+        public string Value { get; set; } = string.Empty;
+        public int Count { get; set; }
+    }
+
+    public class ApiLibraryChannelFacetDto
+    {
+        public long ChannelId { get; set; }
+        public int Count { get; set; }
+    }
+
+    public class ApiLibraryRuleFacetDto
+    {
+        public long ChannelId { get; set; }
+        public string Path { get; set; } = "/";
+        /// <summary><c>movie</c>, <c>series</c> or <c>ignore</c>.</summary>
+        public string Kind { get; set; } = string.Empty;
+        /// <summary>The series the rule assigns, if any.</summary>
+        public string? Title { get; set; }
+        public int Count { get; set; }
+    }
+
     // ----- request bodies -----
 
     public class LibraryScanRequest
