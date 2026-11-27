@@ -99,6 +99,23 @@ API key, so use `?apiKey=…` when embedding.
 GET /api/v1/local/download?path=music/song.mp3&disposition=inline
 ```
 
+## Transcoded audio
+
+```
+GET /api/v1/local/transcoded?path=music/song.flac&format=aac&bitrate=192
+```
+
+A local audio file converted to MP3 or AAC with FFmpeg (offline downloads of
+the audio app); the v1 twin of `/api/mobile/stream/local/transcoded`. Same
+parameters and answers as the channel version (see
+[files.md](files.md#audio-transcoding-offline-downloads)): `format` `mp3`
+(default) or `aac` (`.m4a`), `bitrate` 64-320 (default 192, clamped), `200`/`206`/`416`,
+`400` for a missing or escaping `path` or an unknown `format`, `404` when the
+file does not exist, `501` without FFmpeg. The result is cached on disk, keyed
+by path, size and modification time (editing the file transcodes it again).
+`path` is validated like every other local path (it is not URL-decoded a second
+time, unlike the mobile endpoint). Check `GET /api/v1/audio/transcode/info` first.
+
 ## Copy / move
 
 ```

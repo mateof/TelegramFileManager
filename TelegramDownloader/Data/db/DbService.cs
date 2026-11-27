@@ -17,7 +17,7 @@ namespace TelegramDownloader.Data.db
         private string dbName { get; set; }
         private readonly ILogger<DbService> _logger;
 
-        private const string CONFIG_DB_NAME = "TCCONFIG";
+        public const string CONFIG_DB_NAME = "TCCONFIG";
         private const string TASKS_COLLECTION = "tasks";
 
         public const string SHARED_DB_NAME = "TFM-SHARED";

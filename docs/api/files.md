@@ -302,6 +302,7 @@ index. To download shared files onto the server use
 ```
 GET /api/v1/channels/{channelId}/files/{fileId}/content?disposition=inline|attachment[&collectionId=…]
 GET /api/v1/channels/{channelId}/files/{fileId}/stream
+GET /api/v1/channels/{channelId}/files/{fileId}/transcoded?format=mp3|aac&bitrate=192[&collectionId=…]
 GET /api/v1/channels/{channelId}/messages/{messageId}/thumbnail
 GET /api/v1/channels/{channelId}/messages/{messageId}/content?disposition=inline|attachment
 ```
@@ -332,8 +333,48 @@ The web app uses their path only, on its own origin.
   any), photos are cached whole, everything else is streamed with exact ranges.
   `Content-Type` is the document's `mime_type` (the file extension when
   Telegram only says `application/octet-stream`); messages without a file
-  answer `404`. No transcoding. Advertised as `messages.content` in
-  `GET /api/mobile/info` features.
+  answer `404`. No transcoding. Advertised as `messages.content` in the
+  `features` of `GET /api/mobile/capabilities`.
+
+## Audio transcoding (offline downloads)
+
+```
+GET /api/v1/audio/transcode/info
+GET /api/v1/channels/{channelId}/files/{fileId}/transcoded?format=mp3|aac&bitrate=192[&collectionId=…]
+```
+
+Converts an audio file (FLAC, WAV, OGG...) to MP3 or AAC with FFmpeg, for the
+offline downloads of the audio app. The v1 twin of
+`/api/mobile/stream/tfm/{channelId}/{fileId}/transcoded` (same code, same cache).
+Advertised as `audio.transcode` in the `features` of `GET /api/mobile/capabilities`.
+
+`transcode/info` says whether it can work (no Telegram session needed):
+
+```ts
+interface ApiAudioTranscodeInfoDto {
+  ffmpegAvailable: boolean;
+  formats: string[];        // ["mp3", "aac"]; [] without FFmpeg
+  defaultFormat: string;    // "mp3"
+  defaultBitrate: number;   // 192
+  minBitrate: number;       // 64
+  maxBitrate: number;       // 320
+  bitrates: number[];       // suggested values: 96, 128, 160, 192, 256, 320
+}
+```
+
+- `format`: `mp3` (default; keeps the embedded cover) or `aac` (served as an
+  `.m4a`, `audio/mp4`). `bitrate`: kbps, default 192; values outside 64-320 are
+  clamped. `collectionId` reads the entry from a shared collection.
+- The first request downloads the original into the server cache (when it is
+  not complete there) and runs FFmpeg **before answering**, which can take a
+  while: use a long timeout. The result is kept on disk, so later requests are
+  immediate.
+- Answers `200`, `206` (one `Range`) or `416` with
+  `Content-Disposition: attachment; filename="{name}.mp3|.m4a"`;
+  `400 invalid_request` for an unknown `format`; `501 not_supported` when FFmpeg
+  is missing (download the original instead); `404 file_not_found` when the
+  entry does not exist, is a folder or is a split file; `401 not_logged_in`
+  without a Telegram session; `500` when FFmpeg fails.
 
 ## Preload into the server cache
 

@@ -8,9 +8,11 @@ import { formatTime } from '../format';
 import { usePlayer } from '../store';
 import { Artwork } from './Artwork';
 import { PlayerMoreMenu, PlayPauseButton, SleepTimerMenu, Transport, VolumeControl } from './Controls';
+import { FavoriteButton } from './FavoriteButton';
 import { QueuePanel } from './QueuePanel';
 import { SeekBar } from './SeekBar';
 import { useNowPlaying, useSyncMediaSession } from './useNowPlaying';
+import { usePlayerSync } from './usePlayerSync';
 import { usePlayerShortcuts } from './usePlayerShortcuts';
 
 const ExpandedPlayer = lazy(() => import('./ExpandedPlayer'));
@@ -47,7 +49,9 @@ function MiniProgress() {
 export default function PlayerBar() {
   usePlayerShortcuts();
   useSyncMediaSession();
-  const { track, title, subtitle, cover } = useNowPlaying();
+  const { track, title, subtitle, cover, meta } = useNowPlaying();
+  const tags = { title: meta?.title, artist: meta?.artist, album: meta?.album };
+  usePlayerSync({ ...tags, qid: track?.qid });
   const expanded = usePlayer((s) => s.expanded);
   const queueOpen = usePlayer((s) => s.queueOpen);
   const status = usePlayer((s) => s.status);
@@ -76,6 +80,7 @@ export default function PlayerBar() {
               </button>
               <p className="truncate text-xs text-fg-muted">{sub}</p>
             </div>
+            <FavoriteButton track={track} tags={tags} size="sm" className="shrink-0" />
           </div>
           <div className="flex min-w-0 flex-col items-center gap-1">
             <Transport />

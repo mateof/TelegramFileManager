@@ -10,5 +10,7 @@ export const queryKeys = {
   channelFolders: ['channels', 'folders'] as const,
   channel: (id: string | number) => ['channels', 'detail', String(id)] as const,
   serverInfo: ['system', 'info'] as const,
+  /** Optional features of the server (`GET /api/mobile/capabilities`). */
+  capabilities: ['system', 'capabilities'] as const,
   setupStatus: ['system', 'setup'] as const
 };

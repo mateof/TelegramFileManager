@@ -166,6 +166,11 @@ builder.Services.AddSingleton<GHService>();
 builder.Services.AddSingleton<IProgressiveDownloadService, ProgressiveDownloadService>();
 builder.Services.AddSingleton<TelegramDownloader.Services.WebDavLockManager>();
 
+// Audio transcoding (mobile + v1 transcoded endpoints) and the shared player data (favourites, history, resume)
+builder.Services.AddSingleton<TelegramDownloader.Services.Audio.AudioTranscodeService>();
+builder.Services.AddSingleton<TelegramDownloader.Services.Player.IPlayerDataStore, TelegramDownloader.Services.Player.MongoPlayerDataStore>();
+builder.Services.AddSingleton(sp => new TelegramDownloader.Services.Player.PlayerDataService(sp.GetRequiredService<TelegramDownloader.Services.Player.IPlayerDataStore>()));
+
 // Task persistence services
 builder.Services.AddSingleton<ITaskPersistenceService, TaskPersistenceService>();
 // Single code path for resuming persisted transfers (startup and the UI/API).

@@ -21,6 +21,7 @@ namespace TelegramDownloader.Hubs
     /// <item><c>AuthState</c> (<see cref="AuthStateEventDto"/>) - Telegram session state, on connect and on change.</item>
     /// <item><c>LibraryScan</c> (<see cref="LibraryScanEventDto"/>) - media library scan state.</item>
     /// <item><c>DeleteProgress</c> (<see cref="ApiDeleteOperationDto"/>) - a background delete, at most 4 per second per operation plus a final one.</item>
+    /// <item><c>PlayerDataChanged</c> (<see cref="PlayerDataChangedEventDto"/>) - favourites, history or resume positions changed (any device).</item>
     /// <item><c>Metrics</c> (<see cref="SystemMetricsDto"/>) - every 2 s, only after <see cref="SubscribeMetrics"/>.</item>
     /// </list>
     /// </summary>
@@ -34,6 +35,7 @@ namespace TelegramDownloader.Hubs
         public const string MetricsMessage = "Metrics";
         public const string LibraryScanMessage = "LibraryScan";
         public const string DeleteProgressMessage = "DeleteProgress";
+        public const string PlayerDataChangedMessage = "PlayerDataChanged";
 
         /// <summary>Group of the connections that asked for <c>Metrics</c>.</summary>
         public const string MetricsGroup = "events.metrics";

@@ -9,6 +9,7 @@ import { formatTime } from '../format';
 import { fallbackGradient } from '../metadata';
 import { usePlayer } from '../store';
 import { Artwork } from './Artwork';
+import { FavoriteButton } from './FavoriteButton';
 import { PlayerMoreMenu, SleepTimerMenu, Transport, VolumeControl } from './Controls';
 import { QueuePanel } from './QueuePanel';
 import { SeekBar } from './SeekBar';
@@ -31,7 +32,7 @@ function BigSeek() {
 
 /** Full-screen "now playing": large artwork over a blurred ambient copy of it, controls and the queue. */
 export default function ExpandedPlayer() {
-  const { track, title, subtitle, album, cover } = useNowPlaying();
+  const { track, title, subtitle, album, cover, meta } = useNowPlaying();
   const queueOpen = usePlayer((s) => s.queueOpen);
   const { setExpanded, setQueueOpen } = usePlayer.getState();
   if (!track) return null;
@@ -85,6 +86,7 @@ export default function ExpandedPlayer() {
                   <h2 className="truncate text-2xl font-bold tracking-tight text-fg sm:text-3xl">{title}</h2>
                   <p className="truncate text-base text-fg-muted">{[subtitle, album].filter(Boolean).join(' · ')}</p>
                 </div>
+                <FavoriteButton track={track} tags={{ title: meta?.title, artist: meta?.artist, album: meta?.album }} />
                 <IconButton label={t('Add to playlist')} disabled={!candidate} onClick={() => candidate && openAddToPlaylist([candidate])}>
                   <ListPlus />
                 </IconButton>

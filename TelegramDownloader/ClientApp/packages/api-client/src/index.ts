@@ -10,6 +10,7 @@ export * from './types/deleteOperations';
 export type * from './types/files';
 export * from './types/library';
 export type * from './types/local';
+export type * from './types/player';
 export type * from './types/playlists';
 export type * from './types/search';
 export type * from './types/shares';
@@ -26,6 +27,7 @@ export { createDeleteOperationsApi, type DeleteOperationsApi } from './modules/d
 export { createFilesApi, type FilesApi } from './modules/files';
 export { createLibraryApi, type LibraryApi } from './modules/library';
 export { createLocalApi, type LocalApi } from './modules/local';
+export { createPlayerApi, type PlayerApi } from './modules/player';
 export { createPlaylistsApi, type PlaylistsApi } from './modules/playlists';
 export { createSearchApi, type SearchApi } from './modules/search';
 export { createSharesApi, type SharesApi } from './modules/shares';

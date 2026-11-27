@@ -43,6 +43,8 @@ namespace TelegramDownloader.Controllers.Mobile
             "channels.refreshSequential", // oneTypeAtATime in POST /api/v1/channels/{id}/refresh, refreshOneTypeAtATime in the config
             "library.scanFolders",   // folders in POST /api/v1/library/scan
             "library.seriesFolders", // GET  /api/v1/library/folders, PUT|DELETE /api/v1/library/folders/series
+            "player.sync",           // /api/v1/player/** (favourites, history, resume positions) + PlayerDataChanged on /hubs/events
+            "audio.transcode",       // GET  /api/v1/audio/transcode/info, /api/v1/channels/{id}/files/{fileId}/transcoded, /api/v1/local/transcoded
             "library.fileFilters",   // kind and rule in GET /api/v1/library/files, GET /api/v1/library/files/facets
         };
 
@@ -74,6 +76,8 @@ namespace TelegramDownloader.Controllers.Mobile
         /// - `webAuth.passkeys`: /api/v1/web-auth/passkeys/** (inicio de sesión con passkeys de la web)
         /// - `files.deleteOperations`: borrados en segundo plano con progreso y cancelación: POST /api/v1/channels/{id}/files/delete-operations,
         ///   POST /api/v1/local/delete-operations, GET /api/v1/delete-operations[/{id}], POST /api/v1/delete-operations/{id}/cancel y `DeleteProgress` en /hubs/events
+        /// - `player.sync`: favoritos, historial y posiciones de reanudación compartidos en /api/v1/player/** y `PlayerDataChanged` en /hubs/events
+        /// - `audio.transcode`: transcodificación de audio en v1: GET /api/v1/audio/transcode/info, /api/v1/channels/{id}/files/{fileId}/transcoded y /api/v1/local/transcoded
         ///
         /// Los servidores antiguos no tienen este endpoint: un **404** debe interpretarse
         /// como "sin funcionalidades opcionales". No accede a base de datos.

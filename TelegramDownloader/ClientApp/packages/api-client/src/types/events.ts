@@ -3,6 +3,7 @@
 import type { ApiChannelRefreshProgressDto, ApiChannelRefreshResultDto } from './channels';
 import type { ApiDeleteOperationDto } from './deleteOperations';
 import type { ApiLibraryScanStateDto } from './library';
+import type { PlayerDataChangedEvent } from './player';
 import type { SystemMetricsDto } from './system';
 
 export type NotificationLevel = 'info' | 'success' | 'warning' | 'error';
@@ -83,4 +84,6 @@ export interface EventsHubMessages {
   Metrics: MetricsEvent;
   LibraryScan: LibraryScanEvent;
   DeleteProgress: DeleteProgressEvent;
+  /** Favourites, history or resume positions changed (from any device). */
+  PlayerDataChanged: PlayerDataChangedEvent;
 }

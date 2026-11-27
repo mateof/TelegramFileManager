@@ -191,6 +191,7 @@ only). Payloads are camelCase JSON.
 | `LibraryScan` | `LibraryScanEventDto` | Every second while a media library scan runs, once when it ends (`running: false`), and on connect when one is running. |
 | `Metrics` | `SystemMetricsDto` | Every 2 seconds, only to connections that called `SubscribeMetrics()`. One sample is sent right after subscribing. |
 | `DeleteProgress` | `ApiDeleteOperationDto` | Progress of a background delete (`POST .../files/delete-operations`, `POST /api/v1/local/delete-operations`): at most 4 per second per operation, always the final state (`finished: true`), and on connect for each running one. Same shape as `GET /api/v1/delete-operations/{id}`. |
+| `PlayerDataChanged` | `PlayerDataChangedEventDto` | After every write to the shared player data (`/api/v1/player/**`, see [player.md](player.md)), from any device: refresh the favourites, history or resume positions shown. Not throttled; nothing is sent on connect. |
 
 ```ts
 interface NotificationEventDto {
@@ -226,6 +227,11 @@ interface AuthStateEventDto { telegramLoggedIn: boolean; }
 interface LibraryScanEventDto {
   running: boolean;
   progress?: ApiLibraryScanStateDto;    // = GET /api/v1/library/scan
+}
+
+interface PlayerDataChangedEventDto {
+  kind: "favorites" | "history" | "resume";
+  key: string | null;    // track key (channel:{channelId}:{fileId} | local:{path}); null when the history was cleared
 }
 ```
 

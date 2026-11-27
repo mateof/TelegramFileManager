@@ -4,6 +4,7 @@ using TelegramDownloader.Data.db;
 using TelegramDownloader.Models;
 using TelegramDownloader.Models.Mobile;
 using TelegramDownloader.Services;
+using TelegramDownloader.Services.Audio;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Web;
@@ -26,6 +27,7 @@ namespace TelegramDownloader.Controllers.Mobile
         private readonly TransactionInfoService _tis;
         private readonly IProgressiveDownloadService _progressiveDownload;
         private readonly ILogger<MobileStreamController> _logger;
+        private readonly AudioTranscodeService _transcoder;
         private static readonly SemaphoreSlim _downloadSemaphore = new(5); // Allow 5 concurrent downloads for preload
 
         // Limit concurrent direct range fetches against Telegram (seeks ahead of the cache)
@@ -41,8 +43,10 @@ namespace TelegramDownloader.Controllers.Mobile
             IFileService fs,
             TransactionInfoService tis,
             IProgressiveDownloadService progressiveDownload,
-            ILogger<MobileStreamController> logger)
+            ILogger<MobileStreamController> logger,
+            AudioTranscodeService transcoder)
         {
+            _transcoder = transcoder;
             _ts = ts;
             _db = db;
             _fs = fs;
@@ -862,37 +866,7 @@ namespace TelegramDownloader.Controllers.Mobile
 
         // ============ Audio transcoding (offline downloads in MP3/AAC) ============
 
-        private static bool? _ffmpegAvailable;
-        private static readonly SemaphoreSlim _transcodeSemaphore = new(2); // Max 2 concurrent FFmpeg processes
-        private static readonly ConcurrentDictionary<string, SemaphoreSlim> _transcodeLocks = new();
-
-        private static bool IsFFmpegAvailable()
-        {
-            if (_ffmpegAvailable.HasValue) return _ffmpegAvailable.Value;
-            try
-            {
-                using var process = new Process
-                {
-                    StartInfo = new ProcessStartInfo
-                    {
-                        FileName = "ffmpeg",
-                        Arguments = "-version",
-                        RedirectStandardOutput = true,
-                        RedirectStandardError = true,
-                        UseShellExecute = false,
-                        CreateNoWindow = true
-                    }
-                };
-                process.Start();
-                process.WaitForExit(5000);
-                _ffmpegAvailable = process.ExitCode == 0;
-            }
-            catch
-            {
-                _ffmpegAvailable = false;
-            }
-            return _ffmpegAvailable.Value;
-        }
+        // The transcoding work lives in AudioTranscodeService (shared with the v1 endpoints).
 
         /// <summary>
         /// Capacidades de transcodificación del servidor
@@ -906,11 +880,11 @@ namespace TelegramDownloader.Controllers.Mobile
         [ProducesResponseType(StatusCodes.Status200OK)]
         public IActionResult GetTranscodeInfo()
         {
-            var available = IsFFmpegAvailable();
+            var available = _transcoder.IsAvailable;
             return Ok(ApiResponse<object>.Ok(new
             {
                 ffmpegAvailable = available,
-                formats = available ? new[] { "mp3", "aac" } : Array.Empty<string>()
+                formats = available ? AudioTranscodeOptions.Formats.ToArray() : Array.Empty<string>()
             }));
         }
 
@@ -947,14 +921,12 @@ namespace TelegramDownloader.Controllers.Mobile
         {
             try
             {
-                format = format.ToLowerInvariant();
-                if (format != "mp3" && format != "aac")
+                if (!AudioTranscodeOptions.TryNormalize(format, bitrate, out format, out bitrate, out var formatError))
                 {
-                    return BadRequest(ApiResponse<object>.Fail("Unsupported format. Use mp3 or aac."));
+                    return BadRequest(ApiResponse<object>.Fail(formatError!));
                 }
-                bitrate = Math.Clamp(bitrate, 64, 320);
 
-                if (!IsFFmpegAvailable())
+                if (!_transcoder.IsAvailable)
                 {
                     return StatusCode(StatusCodes.Status501NotImplemented,
                         ApiResponse<object>.Fail("FFmpeg is not available on the server"));
@@ -966,57 +938,8 @@ namespace TelegramDownloader.Controllers.Mobile
                     return NotFound(ApiResponse<object>.Fail("File not found in database"));
                 }
 
-                var name = fileName ?? dbFile.Name;
-                var cacheFileName = $"{channelId}-{(dbFile.MessageId != null ? dbFile.MessageId.ToString() : dbFile.Id)}-{name}";
-                var tempPath = Path.Combine(FileService.TEMPDIR, "_temp");
-                var sourcePath = Path.Combine(tempPath, cacheFileName);
-                var transcodedDir = Path.Combine(tempPath, "transcoded");
-                Directory.CreateDirectory(transcodedDir);
-
-                var targetExt = format == "mp3" ? "mp3" : "m4a";
-                var mimeType = format == "mp3" ? "audio/mpeg" : "audio/mp4";
-                var targetName = $"{Path.GetFileNameWithoutExtension(cacheFileName)}-{format}{bitrate}.{targetExt}";
-                var targetPath = Path.Combine(transcodedDir, targetName);
-                var downloadName = $"{Path.GetFileNameWithoutExtension(name)}.{targetExt}";
-
-                // Cached transcode: serve immediately with Range support
-                if (System.IO.File.Exists(targetPath))
-                {
-                    return PhysicalFile(targetPath, mimeType, downloadName, enableRangeProcessing: true);
-                }
-
-                // Per-target lock so concurrent requests don't transcode twice
-                var fileLock = _transcodeLocks.GetOrAdd(targetName, _ => new SemaphoreSlim(1, 1));
-                await fileLock.WaitAsync(HttpContext.RequestAborted);
-                try
-                {
-                    if (!System.IO.File.Exists(targetPath))
-                    {
-                        // Ensure the original is fully cached first
-                        if (!System.IO.File.Exists(sourcePath) || new FileInfo(sourcePath).Length < dbFile.Size)
-                        {
-                            _logger.LogInformation("Downloading original before transcode: {FileName}", name);
-                            await DownloadOriginalToCache(channelId, dbFile, sourcePath);
-                        }
-
-                        await _transcodeSemaphore.WaitAsync(HttpContext.RequestAborted);
-                        try
-                        {
-                            _logger.LogInformation("Transcoding {FileName} to {Format} {Bitrate}k", name, format, bitrate);
-                            await TranscodeAudioFile(sourcePath, targetPath, format, bitrate, HttpContext.RequestAborted);
-                        }
-                        finally
-                        {
-                            _transcodeSemaphore.Release();
-                        }
-                    }
-                }
-                finally
-                {
-                    fileLock.Release();
-                }
-
-                return PhysicalFile(targetPath, mimeType, downloadName, enableRangeProcessing: true);
+                var result = await _transcoder.TranscodeChannelFile(channelId, dbFile, format, bitrate, fileName, HttpContext.RequestAborted);
+                return PhysicalFile(result.Path, result.MimeType, result.DownloadName, enableRangeProcessing: true);
             }
             catch (OperationCanceledException)
             {
@@ -1068,14 +991,12 @@ namespace TelegramDownloader.Controllers.Mobile
                     return BadRequest(ApiResponse<object>.Fail("Path is required"));
                 }
 
-                format = format.ToLowerInvariant();
-                if (format != "mp3" && format != "aac")
+                if (!AudioTranscodeOptions.TryNormalize(format, bitrate, out format, out bitrate, out var formatError))
                 {
-                    return BadRequest(ApiResponse<object>.Fail("Unsupported format. Use mp3 or aac."));
+                    return BadRequest(ApiResponse<object>.Fail(formatError!));
                 }
-                bitrate = Math.Clamp(bitrate, 64, 320);
 
-                if (!IsFFmpegAvailable())
+                if (!_transcoder.IsAvailable)
                 {
                     return StatusCode(StatusCodes.Status501NotImplemented,
                         ApiResponse<object>.Fail("FFmpeg is not available on the server"));
@@ -1096,56 +1017,8 @@ namespace TelegramDownloader.Controllers.Mobile
                     return NotFound(ApiResponse<object>.Fail("File not found"));
                 }
 
-                var fileInfo = new FileInfo(resolvedPath);
-                var targetExt = format == "mp3" ? "mp3" : "m4a";
-                var mimeType = format == "mp3" ? "audio/mpeg" : "audio/mp4";
-                var downloadName = $"{Path.GetFileNameWithoutExtension(fileInfo.Name)}.{targetExt}";
-
-                // Cache key from path + size + mtime: editing the local file yields a
-                // different key, so a stale transcode is never served. Hashed because
-                // the relative path can't be used as a flat file name.
-                var identity = $"{resolvedPath.ToLowerInvariant()}|{fileInfo.Length}|{fileInfo.LastWriteTimeUtc.Ticks}";
-                var hash = Convert.ToHexString(
-                    System.Security.Cryptography.SHA1.HashData(System.Text.Encoding.UTF8.GetBytes(identity)))
-                    .Substring(0, 16);
-
-                var transcodedDir = Path.Combine(FileService.TEMPDIR, "_temp", "transcoded");
-                Directory.CreateDirectory(transcodedDir);
-                var targetName = $"local-{hash}-{format}{bitrate}.{targetExt}";
-                var targetPath = Path.Combine(transcodedDir, targetName);
-
-                // Cached transcode: serve immediately with Range support
-                if (System.IO.File.Exists(targetPath))
-                {
-                    return PhysicalFile(targetPath, mimeType, downloadName, enableRangeProcessing: true);
-                }
-
-                // Per-target lock so concurrent requests don't transcode twice
-                var fileLock = _transcodeLocks.GetOrAdd(targetName, _ => new SemaphoreSlim(1, 1));
-                await fileLock.WaitAsync(HttpContext.RequestAborted);
-                try
-                {
-                    if (!System.IO.File.Exists(targetPath))
-                    {
-                        await _transcodeSemaphore.WaitAsync(HttpContext.RequestAborted);
-                        try
-                        {
-                            _logger.LogInformation("Transcoding local {FileName} to {Format} {Bitrate}k",
-                                fileInfo.Name, format, bitrate);
-                            await TranscodeAudioFile(resolvedPath, targetPath, format, bitrate, HttpContext.RequestAborted);
-                        }
-                        finally
-                        {
-                            _transcodeSemaphore.Release();
-                        }
-                    }
-                }
-                finally
-                {
-                    fileLock.Release();
-                }
-
-                return PhysicalFile(targetPath, mimeType, downloadName, enableRangeProcessing: true);
+                var result = await _transcoder.TranscodeLocalFile(resolvedPath, format, bitrate, HttpContext.RequestAborted);
+                return PhysicalFile(result.Path, result.MimeType, result.DownloadName, enableRangeProcessing: true);
             }
             catch (OperationCanceledException)
             {
@@ -1157,90 +1030,6 @@ namespace TelegramDownloader.Controllers.Mobile
                 _logger.LogError(ex, "Error transcoding local audio at path {Path}", path);
                 return StatusCode(500, ApiResponse<object>.Fail("Error transcoding audio"));
             }
-        }
-
-        // Sequential full download of the original file into the streaming cache
-        private async Task DownloadOriginalToCache(string channelId, BsonFileManagerModel dbFile, string path)
-        {
-            if (!dbFile.MessageId.HasValue)
-            {
-                throw new InvalidOperationException("File has no MessageId");
-            }
-
-            var message = await _ts.getMessageFile(channelId, dbFile.MessageId.Value);
-            if (message == null)
-            {
-                throw new InvalidOperationException("Message not found in Telegram");
-            }
-
-            using var fileStream = new FileStream(path, FileMode.OpenOrCreate, FileAccess.Write, FileShare.Read);
-            var offset = fileStream.Length;
-            fileStream.Seek(0, SeekOrigin.End);
-
-            const int chunkSize = 512 * 1024;
-            while (offset < dbFile.Size)
-            {
-                HttpContext.RequestAborted.ThrowIfCancellationRequested();
-                var toDownload = (int)Math.Min(chunkSize, dbFile.Size - offset);
-                var chunk = await _ts.DownloadFileStream(message, offset, toDownload);
-                if (chunk.Length == 0) break;
-                await fileStream.WriteAsync(chunk, 0, chunk.Length, HttpContext.RequestAborted);
-                offset += chunk.Length;
-            }
-            await fileStream.FlushAsync();
-        }
-
-        // Run FFmpeg to a temp file, then move into place so partial results
-        // are never served
-        private async Task TranscodeAudioFile(string sourcePath, string targetPath, string format, int bitrate, CancellationToken ct)
-        {
-            var tempOut = targetPath + ".part";
-
-            // mp3: keep embedded cover art (optional video stream copied as attached pic)
-            // aac/m4a: audio only (cover copying into ipod container is less reliable)
-            var codecArgs = format == "mp3"
-                ? $"-map 0:a:0 -map 0:v? -c:v copy -disposition:v:0 attached_pic -codec:a libmp3lame -b:a {bitrate}k -id3v2_version 3 -f mp3"
-                : $"-vn -codec:a aac -b:a {bitrate}k -movflags +faststart -f ipod";
-
-            var args = $"-y -i \"{sourcePath}\" -map_metadata 0 {codecArgs} \"{tempOut}\"";
-
-            using var process = new Process
-            {
-                StartInfo = new ProcessStartInfo
-                {
-                    FileName = "ffmpeg",
-                    Arguments = args,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                }
-            };
-
-            process.Start();
-            var stderrTask = process.StandardError.ReadToEndAsync();
-            _ = process.StandardOutput.ReadToEndAsync();
-
-            try
-            {
-                await process.WaitForExitAsync(ct);
-            }
-            catch (OperationCanceledException)
-            {
-                try { process.Kill(entireProcessTree: true); } catch { /* already exited */ }
-                try { System.IO.File.Delete(tempOut); } catch { /* best effort */ }
-                throw;
-            }
-
-            if (process.ExitCode != 0)
-            {
-                var stderr = await stderrTask;
-                try { System.IO.File.Delete(tempOut); } catch { /* best effort */ }
-                throw new InvalidOperationException(
-                    $"FFmpeg exited with code {process.ExitCode}: {stderr.Substring(0, Math.Min(500, stderr.Length))}");
-            }
-
-            System.IO.File.Move(tempOut, targetPath, overwrite: true);
         }
     }
 }
