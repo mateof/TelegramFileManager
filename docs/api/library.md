@@ -120,7 +120,7 @@ DELETE /api/v1/library/folders/series?channelId=…&path=/Dark/    -> removes th
 The same fields (`provider`, `providerId`, `title`, `year`) are part of
 `libraryFolderRules`. In a `PATCH`, a rule without `providerId` keeps the title
 it has; an empty one clears it. Advertised as `library.seriesFolders` in the
-`features` of `GET /api/mobile/info`.
+`features` of `GET /api/mobile/capabilities`.
 
 For a picker, list the folders of a channel (works with the library disabled):
 

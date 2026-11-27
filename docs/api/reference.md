@@ -78,6 +78,7 @@ server serves at **`/swagger/api-v1/swagger.json`** (browsable at
 | POST | `/api/v1/channels/{channelId}/files/preload` | ✓ | Download files into the server cache ahead of playback. |
 | GET | `/api/v1/channels/{channelId}/files/{fileId}/content` | ✓ | The bytes (`disposition=inline\|attachment`, `collectionId`), range-capable. |
 | GET | `/api/v1/channels/{channelId}/files/{fileId}/stream` | ✓ | Video playback, transcoded to MP4 when needed. |
+| GET | `/api/v1/channels/{channelId}/files/{fileId}/transcoded` | ✓ | Audio transcoded to MP3/AAC (`format`, `bitrate`, `collectionId`), range-capable; `501` without FFmpeg. |
 | GET | `/api/v1/channels/{channelId}/messages/{messageId}/thumbnail` | ✓ | JPEG thumbnail of a photo/video message (cached). |
 | GET | `/api/v1/channels/{channelId}/messages/{messageId}/content` | ✓ | The attachment of a message, without indexing it (`disposition=inline\|attachment`), range-capable. |
 
@@ -132,6 +133,7 @@ Browse, search, details and stats accept `collectionId` to read a shared collect
 | GET | `/api/v1/delete-operations/{id}` | | One delete operation (`ApiDeleteOperationDto`). |
 | POST | `/api/v1/delete-operations/{id}/cancel` | | Cancel a delete operation (409 when finished). |
 | GET | `/api/v1/local/download` | | Download a local file (range-capable). |
+| GET | `/api/v1/local/transcoded` | | Local audio transcoded to MP3/AAC (`path`, `format`, `bitrate`), range-capable; `501` without FFmpeg. |
 | POST | `/api/v1/local/upload` | | Store an uploaded file locally. |
 | POST | `/api/v1/local/cache/clear` | | Empty the streaming cache. |
 | POST | `/api/v1/local/copy` | | Copy entries into a folder (`overwrite`). |
@@ -150,6 +152,31 @@ Browse, search, details and stats accept `collectionId` to read a shared collect
 | DELETE | `/api/v1/playlists/{id}/tracks/{fileId}` | | Remove a track. |
 | PUT | `/api/v1/playlists/{id}/tracks/order` | | Reorder. |
 | POST | `/api/v1/playlists/{id}/download` | ✓ | Download the playlist to disk. |
+
+### Player data
+
+Shared favourites, history and resume positions (`player.sync`, see [player.md](player.md)).
+
+| Method | Path | Sess. | Description |
+| --- | --- | :---: | --- |
+| GET | `/api/v1/player/favorites` | | Favourites, newest first (`page`, `pageSize` 1-500, default 100). |
+| GET | `/api/v1/player/favorites/keys` | | Every favourite key (`string[]`). |
+| PUT | `/api/v1/player/favorites` | | Add / refresh a favourite (idempotent). |
+| DELETE | `/api/v1/player/favorites?key=` | | Remove a favourite (`204`). |
+| POST | `/api/v1/player/history` | | Record a play (`201`; keeps the latest 2000). |
+| GET | `/api/v1/player/history` | | Plays, newest first (`limit`, `before`). |
+| GET | `/api/v1/player/history/top` | | Most played (`limit`, `days`). |
+| DELETE | `/api/v1/player/history` | | Clear the history (`204`). |
+| PUT | `/api/v1/player/resume` | | Save a resume position (deleted when finished). |
+| GET | `/api/v1/player/resume?key=` | | One resume position (`404` when none). |
+| GET | `/api/v1/player/resume/list` | | Resume positions, most recent first (`limit`). |
+| DELETE | `/api/v1/player/resume?key=` | | Delete a resume position (`204`). |
+
+### Audio
+
+| Method | Path | Sess. | Description |
+| --- | --- | :---: | --- |
+| GET | `/api/v1/audio/transcode/info` | | FFmpeg availability, formats and bitrates of the `transcoded` endpoints. |
 
 ### Shares
 
@@ -258,6 +285,7 @@ Browse, search, details and stats accept `collectionId` to read a shared collect
 | Server → client | `AuthState` | `AuthStateEventDto` |
 | Server → client | `LibraryScan` | `LibraryScanEventDto` |
 | Server → client | `DeleteProgress` | `ApiDeleteOperationDto` |
+| Server → client | `PlayerDataChanged` | `PlayerDataChangedEventDto` |
 | Server → client | `Metrics` | `SystemMetricsDto` (subscribers only) |
 | Client → server | `GetAuthState()` | → `AuthStateEventDto` |
 | Client → server | `SubscribeMetrics()` / `UnsubscribeMetrics()` | – |
@@ -362,6 +390,20 @@ interface PlaylistModel { id: string; name: string; description?: string; tracks
 interface PlaylistTrackModel { fileId: string; channelId: string; channelName: string; fileName: string; filePath: string; fileType: string; fileSize: number; order: number; directUrl?: string; isLocalFile: boolean; dateAdded: string; }
 ```
 
+### Player data
+
+```ts
+interface ApiPlayerTrackDto { key: string; channelId: string | null; fileId: string | null; isLocalFile: boolean; filePath: string | null; fileName: string; channelName: string | null; title: string | null; artist: string | null; album: string | null; duration: number | null; fileSize: number | null; }
+interface ApiPlayerFavoriteDto extends ApiPlayerTrackDto { addedAt: string; }
+interface ApiPlayerFavoritesPageDto { items: ApiPlayerFavoriteDto[]; total: number; page: number; pageSize: number; }
+interface ApiPlayerHistoryEntryDto { id: string; track: ApiPlayerTrackDto; playedAt: string; positionSeconds: number | null; completed: boolean; }
+interface ApiPlayerHistoryPageDto { items: ApiPlayerHistoryEntryDto[]; hasMore: boolean; }
+interface ApiPlayerTopTrackDto { track: ApiPlayerTrackDto; playCount: number; lastPlayedAt: string; }
+interface ApiPlayerResumeDto { track: ApiPlayerTrackDto; positionSeconds: number; durationSeconds: number; updatedAt: string; finished: boolean; }
+interface PlayerDataChangedEventDto { kind: "favorites" | "history" | "resume"; key: string | null; }
+interface ApiAudioTranscodeInfoDto { ffmpegAvailable: boolean; formats: string[]; defaultFormat: string; defaultBitrate: number; minBitrate: number; maxBitrate: number; bitrates: number[]; }
+```
+
 ### Library
 
 ```ts
@@ -416,6 +458,9 @@ interface SharedCollectionDto { id: string; name?: string; description?: string;
 | `POST /playlists` · `PUT /playlists/{id}` | `PlaylistModel` |
 | `POST /playlists/{id}/tracks` | `PlaylistTrackModel` |
 | `PUT /playlists/{id}/tracks/order` | `string[]` (file ids in order) |
+| `PUT /player/favorites` | `ApiPlayerTrackDto` (`key` optional) |
+| `POST /player/history` | `{ track: ApiPlayerTrackDto; playedAt?: string; positionSeconds?: number; completed?: boolean }` |
+| `PUT /player/resume` | `{ track: ApiPlayerTrackDto; positionSeconds: number; durationSeconds: number }` |
 | `POST /shares/import` | `{ share: ShareFilesModel }` or multipart `file` (`.tfm`) |
 | `POST /shares/strm` | `{ path: string; host?: string; destinationFolder?: string }` |
 | `PATCH /config` | `UpdateConfigRequest` (all fields optional) |

@@ -31,6 +31,7 @@ This API lives side by side with the app's existing surfaces:
 | [search.md](search.md) | Global name search across every channel and the local storage. |
 | [local-files.md](local-files.md) | Browsing and managing the server's local storage, the streaming cache. |
 | [playlists.md](playlists.md) | Playlists mixing Telegram and local tracks, reordering, bulk download. |
+| [player.md](player.md) | Favourite tracks, play history and resume positions shared by every device (`player.sync`). |
 | [shares.md](shares.md) | Sharing a channel folder and importing a share, `.strm` export for media servers. |
 | [system-and-config.md](system-and-config.md) | Health, metrics, logs, database maintenance, application settings. |
 | [webdav.md](webdav.md) | Native WebDAV endpoint for mounting a channel as a read/write share (Synology Hyper Backup, rclone, davfs2). |

@@ -6,6 +6,7 @@ import { createDeleteOperationsApi } from './modules/deleteOperations';
 import { createFilesApi } from './modules/files';
 import { createLibraryApi } from './modules/library';
 import { createLocalApi } from './modules/local';
+import { createPlayerApi } from './modules/player';
 import { createPlaylistsApi } from './modules/playlists';
 import { createSearchApi } from './modules/search';
 import { createSharesApi } from './modules/shares';
@@ -33,6 +34,7 @@ export function createApiClient(options: HttpClientOptions = {}) {
     local: createLocalApi(http),
     deleteOperations: createDeleteOperationsApi(http),
     playlists: createPlaylistsApi(http),
+    player: createPlayerApi(http),
     shares: createSharesApi(http),
     config: createConfigApi(http),
     system: createSystemApi(http),

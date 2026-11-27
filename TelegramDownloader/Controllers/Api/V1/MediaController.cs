@@ -7,6 +7,7 @@ using TelegramDownloader.Models;
 using TelegramDownloader.Models.Api;
 using TelegramDownloader.Services;
 using TelegramDownloader.Services.Api;
+using TelegramDownloader.Services.Audio;
 using TL;
 
 namespace TelegramDownloader.Controllers.Api.V1
@@ -136,6 +137,69 @@ namespace TelegramDownloader.Controllers.Api.V1
                 _logger.LogError(ex, "Error serving file {FileId} of channel {ChannelId}", fileId, channelId);
                 if (Response.HasStarted) return new EmptyResult();
                 return ErrorResult("Could not read the file from Telegram", ex);
+            }
+        }
+
+        /// <summary>An audio file transcoded to MP3 or AAC (offline downloads of the audio app).</summary>
+        /// <remarks>
+        /// Same behaviour as <c>/api/mobile/stream/tfm/{channelId}/{fileId}/transcoded</c>:
+        /// the first request downloads the original into the server cache (when
+        /// it is not there yet) and runs FFmpeg before answering, which can take a
+        /// while; the result is kept on disk, so later requests (and ranges) are
+        /// immediate. Answers <c>200</c>, <c>206</c> (one <c>Range</c>) or
+        /// <c>416</c>; <c>400</c> for an unknown <c>format</c>; <c>501</c> when
+        /// FFmpeg is missing (download the original instead); <c>404</c> when the
+        /// entry does not exist, is a folder or has no single Telegram message
+        /// (split files are not transcoded). Pass <c>collectionId</c> for entries
+        /// of a shared collection.
+        /// </remarks>
+        /// <param name="transcoder">Injected.</param>
+        /// <param name="channelId">Channel that holds the file.</param>
+        /// <param name="fileId">Entry id.</param>
+        /// <param name="format"><c>mp3</c> (default) or <c>aac</c> (served as <c>.m4a</c>).</param>
+        /// <param name="bitrate">kbps, 64-320 (out of range values are clamped). Default 192.</param>
+        /// <param name="collectionId">Read the entry from this shared collection.</param>
+        [HttpGet("files/{fileId}/transcoded")]
+        [Produces("audio/mpeg", "audio/mp4", "application/json")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status206PartialContent)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status416RangeNotSatisfiable)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status501NotImplemented)]
+        public async Task<IActionResult> Transcoded(
+            [FromServices] AudioTranscodeService transcoder,
+            string channelId,
+            string fileId,
+            [FromQuery] string? format = null,
+            [FromQuery] int? bitrate = null,
+            [FromQuery] string? collectionId = null)
+        {
+            if (!AudioTranscodeOptions.TryNormalize(format, bitrate, out var fmt, out var kbps, out var formatError))
+                return BadRequestResult(formatError!);
+            if (!transcoder.IsAvailable)
+                return AudioController.FfmpegUnavailable();
+
+            collectionId = FilesController.NormalizeCollection(collectionId);
+            try
+            {
+                var entry = await _db.getFileById(FilesController.DbFor(channelId, collectionId), fileId, FilesController.CollectionFor(collectionId));
+                if (entry == null || !entry.IsFile)
+                    return NotFoundResult("File not found", ApiErrorCodes.FileNotFound);
+                if (!entry.MessageId.HasValue || entry.isSplit)
+                    return NotFoundResult("This file has no single Telegram message to transcode", ApiErrorCodes.FileNotFound);
+
+                var result = await transcoder.TranscodeChannelFile(channelId, entry, fmt, kbps, null, HttpContext.RequestAborted);
+                return PhysicalFile(result.Path, result.MimeType, result.DownloadName, enableRangeProcessing: true);
+            }
+            catch (OperationCanceledException)
+            {
+                return new EmptyResult();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error transcoding file {FileId} of channel {ChannelId}", fileId, channelId);
+                return ErrorResult("Error transcoding audio", ex);
             }
         }
 

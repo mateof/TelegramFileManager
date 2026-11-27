@@ -3,6 +3,7 @@ using TelegramDownloader.Data;
 using TelegramDownloader.Models.Api;
 using TelegramDownloader.Services;
 using TelegramDownloader.Services.Api;
+using TelegramDownloader.Services.Audio;
 using TelegramDownloader.Services.Deletes;
 
 namespace TelegramDownloader.Controllers.Api.V1
@@ -286,6 +287,61 @@ namespace TelegramDownloader.Controllers.Api.V1
                 return File(stream, mime, enableRangeProcessing: true);
             }
             return File(stream, mime, Path.GetFileName(absolute), enableRangeProcessing: true);
+        }
+
+        /// <summary>A local audio file transcoded to MP3 or AAC (offline downloads of the audio app).</summary>
+        /// <remarks>
+        /// Same behaviour as <c>/api/mobile/stream/local/transcoded</c>. FFmpeg
+        /// runs on the first request (which can take a while); the result is
+        /// kept on disk keyed by path, size and modification time, so editing
+        /// the file transcodes it again. Answers <c>200</c>, <c>206</c> (one
+        /// <c>Range</c>) or <c>416</c>; <c>400</c> for a missing or escaping
+        /// <c>path</c> or an unknown <c>format</c>; <c>404</c> when the file does
+        /// not exist; <c>501</c> when FFmpeg is missing.
+        /// </remarks>
+        /// <param name="transcoder">Injected.</param>
+        /// <param name="path">File path relative to the local root.</param>
+        /// <param name="format"><c>mp3</c> (default) or <c>aac</c> (served as <c>.m4a</c>).</param>
+        /// <param name="bitrate">kbps, 64-320 (out of range values are clamped). Default 192.</param>
+        [HttpGet("transcoded")]
+        [Produces("audio/mpeg", "audio/mp4", "application/json")]
+        [ProducesResponseType(StatusCodes.Status200OK)]
+        [ProducesResponseType(StatusCodes.Status206PartialContent)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status400BadRequest)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status404NotFound)]
+        [ProducesResponseType(StatusCodes.Status416RangeNotSatisfiable)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status501NotImplemented)]
+        public async Task<IActionResult> Transcoded(
+            [FromServices] AudioTranscodeService transcoder,
+            [FromQuery] string? path,
+            [FromQuery] string? format = null,
+            [FromQuery] int? bitrate = null)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return BadRequestResult("A path is required");
+            if (!AudioTranscodeOptions.TryNormalize(format, bitrate, out var fmt, out var kbps, out var formatError))
+                return BadRequestResult(formatError!);
+            if (!transcoder.IsAvailable)
+                return AudioController.FfmpegUnavailable();
+            if (!TryResolve(path, out var absolute, out _, out var error))
+                return BadRequestResult(error!);
+            if (!System.IO.File.Exists(absolute))
+                return NotFoundResult("File not found", ApiErrorCodes.FileNotFound);
+
+            try
+            {
+                var result = await transcoder.TranscodeLocalFile(absolute, fmt, kbps, HttpContext.RequestAborted);
+                return PhysicalFile(result.Path, result.MimeType, result.DownloadName, enableRangeProcessing: true);
+            }
+            catch (OperationCanceledException)
+            {
+                return new EmptyResult();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error transcoding local audio at path {Path}", path);
+                return ErrorResult("Error transcoding audio", ex);
+            }
         }
 
         /// <summary>Copies local files and folders into another local folder.</summary>
