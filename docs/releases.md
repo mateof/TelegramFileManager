@@ -35,10 +35,11 @@ tag:
 git tag dev-folder-tree && git push origin dev-folder-tree
 ```
 
-The **Docker Image CI (Dev)** workflow publishes `ghcr.io/mateof/telegramfilemanager:dev_folder-tree`
-and `dev_folder-tree-lite`, and moves `dev_latest` and `dev_latest-lite` to it, as a push
-to develop does (the next develop build takes them back). To build the same tag again
-after new commits, move it: `git tag -f dev-folder-tree && git push -f origin dev-folder-tree`.
+The **Docker Image CI (Dev)** workflow publishes it only as `dev_latest` and
+`dev_latest-lite` (no `dev_<version>` image); the next develop build takes them back.
+The git tag is only the trigger: to build again after new commits, move it
+(`git tag -f dev-folder-tree && git push -f origin dev-folder-tree`), and delete it when
+done (`git push origin :dev-folder-tree`).
 
 
 The GitHub Actions workflow [`.github/workflows/buildrelease.yml`](../.github/workflows/buildrelease.yml)
