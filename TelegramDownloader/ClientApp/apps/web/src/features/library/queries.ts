@@ -1,5 +1,6 @@
 import type { ApiLibraryScanStateDto, LibraryFileStatus, LibraryItemsQuery, LibraryKind } from '@tfm/api-client';
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { isApiError } from '@tfm/api-client';
+import { keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from '@tfm/ui';
 import { t } from '@/i18n';
 import { api, errorMessage } from '@/lib/api';
@@ -16,7 +17,8 @@ export const libraryKeys = {
   genres: (kind?: LibraryKind) => ['library', 'genres', kind ?? 'all'] as const,
   items: (query: LibraryItemsQuery) => ['library', 'items', query] as const,
   item: (id: string) => ['library', 'item', id] as const,
-  files: (status: string, search: string) => ['library', 'files', status, search] as const,
+  files: (status: string, search: string, filters: ReviewFilters = {}) => ['library', 'files', status, search, filters] as const,
+  facets: (status: string, search: string, filters: ReviewFilters = {}) => ['library', 'facets', status, search, filters] as const,
   folder: (channelId: number | string, path: string) => ['library', 'folder', String(channelId), path] as const,
   candidates: (q: string, kind: string, year: string) => ['library', 'candidates', q, kind, year] as const
 };
@@ -72,13 +74,41 @@ export function useItem(id: string) {
   return useQuery({ queryKey: libraryKeys.item(id), queryFn: ({ signal }) => api.library.item(id, signal), enabled: !!id });
 }
 
-export function useReviewFiles(status: LibraryFileStatus, search: string) {
+/** Filters of the review queue (`library.fileFilters`): `rule` goes with its `channelId`. */
+export interface ReviewFilters {
+  kind?: LibraryKind;
+  channelId?: number;
+  rule?: string;
+}
+
+export function useReviewFiles(status: LibraryFileStatus, search: string, filters: ReviewFilters = {}) {
   return useInfiniteQuery({
-    queryKey: libraryKeys.files(status, search),
+    queryKey: libraryKeys.files(status, search, filters),
     queryFn: ({ pageParam, signal }) =>
-      api.library.files({ status, search: search || undefined, page: pageParam, pageSize: 50 }, signal),
+      api.library.files({ status, search: search || undefined, ...filters, page: pageParam, pageSize: 50 }, signal),
     initialPageParam: 1,
     getNextPageParam: (last) => (last.page.hasNext ? last.page.page + 1 : undefined)
+  });
+}
+
+/**
+ * How many files of the status (and search) each kind, channel and folder rule keeps, each
+ * with the other filters. Null on servers without it. The previous counts stay while the
+ * next ones load, so the filters do not blink.
+ */
+export function useReviewFacets(status: LibraryFileStatus, search: string, filters: ReviewFilters = {}) {
+  return useQuery({
+    queryKey: libraryKeys.facets(status, search, filters),
+    placeholderData: keepPreviousData,
+    queryFn: async ({ signal }) => {
+      try {
+        return await api.library.fileFacets({ status, search: search || undefined, ...filters }, signal);
+      } catch (error) {
+        if (isApiError(error) && error.status === 404) return null;
+        throw error;
+      }
+    },
+    staleTime: 30_000
   });
 }
 

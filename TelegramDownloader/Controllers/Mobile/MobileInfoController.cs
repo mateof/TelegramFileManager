@@ -43,6 +43,7 @@ namespace TelegramDownloader.Controllers.Mobile
             "channels.refreshSequential", // oneTypeAtATime in POST /api/v1/channels/{id}/refresh, refreshOneTypeAtATime in the config
             "library.scanFolders",   // folders in POST /api/v1/library/scan
             "library.seriesFolders", // GET  /api/v1/library/folders, PUT|DELETE /api/v1/library/folders/series
+            "library.fileFilters",   // kind and rule in GET /api/v1/library/files, GET /api/v1/library/files/facets
         };
 
         private static readonly string ServerVersion = ResolveServerVersion();

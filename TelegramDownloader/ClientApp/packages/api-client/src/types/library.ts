@@ -1,7 +1,7 @@
 // Media library (movies and series): /api/v1/library (mirrors Models/Api/LibraryDtos.cs and the
 // string constants of Models/Library/LibraryModels.cs)
 import type { PagedQuery } from '../http';
-import type { LibraryFolderRule } from './config';
+import type { LibraryFolderRule, LibraryFolderRuleKind } from './config';
 import type { ApiFileDto } from './files';
 
 /** Kind of a library item. */
@@ -273,6 +273,23 @@ export interface ApiLibraryGenreDto {
   count: number;
 }
 
+/**
+ * `GET /api/v1/library/files/facets`: how many files of a status each filter value keeps.
+ * Each count applies the other filters sent, not its own.
+ */
+export interface ApiLibraryFileFacetsDto {
+  /** Files of the status (and search), without filters. */
+  total: number;
+  /** Files with every filter sent. */
+  matching: number;
+  /** `series` and `movie` of the channel and rule sent: identified kind, else the one the name suggests. */
+  kinds: { value: LibraryKind; count: number }[];
+  /** Channels with files of the kind sent, most files first. */
+  channels: { channelId: number; count: number }[];
+  /** Folder rules of every channel that decide a file of the kind sent (the most specific rule of each file). */
+  rules: { channelId: number; path: string; kind: LibraryFolderRuleKind; title: string | null; count: number }[];
+}
+
 // ----- request bodies -----
 
 /** Body of `POST /api/v1/library/scan`. */
@@ -365,6 +382,10 @@ export interface LibraryFilesQuery extends PagedQuery {
   status?: LibraryFileStatus;
   channelId?: number;
   search?: string;
+  /** Identified kind, else the one the name suggests. Server feature `library.fileFilters`. */
+  kind?: LibraryKind;
+  /** Path of a folder rule of `channelId`: the files that rule decides. Server feature `library.fileFilters`. */
+  rule?: string;
 }
 
 /** Query of `GET /api/v1/library/continue` and `/watch/history`. */
