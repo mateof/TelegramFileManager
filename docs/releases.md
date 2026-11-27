@@ -25,6 +25,20 @@ push to `develop` (an admin token, when the protection does not apply to admins)
 that push is refused, the workflow opens a `Sync develop with main` pull request
 instead; merge it with a merge commit too.
 
+## Test images
+
+Every push to `develop` publishes `dev_<version>` and `dev_latest` (and their `-lite`
+twins). To try a branch before it is merged, tag its commit `dev-<name>` and push the
+tag:
+
+```sh
+git tag dev-folder-tree && git push origin dev-folder-tree
+```
+
+The **Docker Image CI (Dev)** workflow publishes `ghcr.io/mateof/telegramfilemanager:dev_folder-tree`
+and `dev_folder-tree-lite`; `dev_latest` stays on develop. Delete the tag when it is no
+longer needed (`git push origin :dev-folder-tree`).
+
 
 The GitHub Actions workflow [`.github/workflows/buildrelease.yml`](../.github/workflows/buildrelease.yml)
 builds and publishes two independent products:

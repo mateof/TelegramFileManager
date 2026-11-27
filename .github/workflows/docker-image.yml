@@ -3,6 +3,10 @@ name: Docker Image CI (Dev)
 on:
   push:
     branches: [ "develop" ]
+    # A test image of any commit, before it reaches develop: push a tag named
+    # dev-<name> (git tag dev-folder-tree && git push origin dev-folder-tree) and
+    # it is published as dev_<name> and dev_<name>-lite. dev_latest is not moved.
+    tags: [ "dev-*" ]
 
 jobs:
 
@@ -21,10 +25,20 @@ jobs:
     - name: Generate version
       id: version
       run: |
-        # Generate dev version: 0.0.0-dev.YYYYMMDD.HHMMSS.shortsha
-        DATE_VERSION=$(date +%Y%m%d.%H%M%S)
         SHORT_SHA=$(echo ${{ github.sha }} | cut -c1-7)
-        VERSION="0.0.0-dev.${DATE_VERSION}.${SHORT_SHA}"
+        if [ "${{ github.ref_type }}" = "tag" ]; then
+          # dev-folder-tree -> image dev_folder-tree, version 0.0.0-dev.folder-tree.abc1234
+          NAME=$(echo "${GITHUB_REF_NAME#dev-}" | tr -c 'A-Za-z0-9.\n-' '-')
+          VERSION="0.0.0-dev.${NAME}.${SHORT_SHA}"
+          echo "tag=dev_${NAME}" >> $GITHUB_OUTPUT
+          echo "latest=false" >> $GITHUB_OUTPUT
+        else
+          # Generate dev version: 0.0.0-dev.YYYYMMDD.HHMMSS.shortsha
+          DATE_VERSION=$(date +%Y%m%d.%H%M%S)
+          VERSION="0.0.0-dev.${DATE_VERSION}.${SHORT_SHA}"
+          echo "tag=dev_${VERSION}" >> $GITHUB_OUTPUT
+          echo "latest=true" >> $GITHUB_OUTPUT
+        fi
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         echo "Generated version: $VERSION"
 
@@ -38,23 +52,31 @@ jobs:
     - name: Build and Push Full Image (with FFmpeg)
       run: |
         VERSION=${{ steps.version.outputs.version }}
+        IMAGE=ghcr.io/mateof/telegramfilemanager
+        TAG=${{ steps.version.outputs.tag }}
         echo "Building full image with FFmpeg support..."
         docker build ./TelegramDownloader -f ./TelegramDownloader/Dockerfile \
           --build-arg VERSION=$VERSION \
           --build-arg INCLUDE_FFMPEG=true \
-          --tag ghcr.io/mateof/telegramfilemanager:dev_$VERSION \
-          --tag ghcr.io/mateof/telegramfilemanager:dev_latest
-        docker push ghcr.io/mateof/telegramfilemanager:dev_$VERSION
-        docker push ghcr.io/mateof/telegramfilemanager:dev_latest
+          --tag $IMAGE:$TAG
+        docker push $IMAGE:$TAG
+        if [ "${{ steps.version.outputs.latest }}" = "true" ]; then
+          docker tag $IMAGE:$TAG $IMAGE:dev_latest
+          docker push $IMAGE:dev_latest
+        fi
 
     - name: Build and Push Lite Image (without FFmpeg)
       run: |
         VERSION=${{ steps.version.outputs.version }}
+        IMAGE=ghcr.io/mateof/telegramfilemanager
+        TAG=${{ steps.version.outputs.tag }}
         echo "Building lite image without FFmpeg..."
         docker build ./TelegramDownloader -f ./TelegramDownloader/Dockerfile \
           --build-arg VERSION=$VERSION \
           --build-arg INCLUDE_FFMPEG=false \
-          --tag ghcr.io/mateof/telegramfilemanager:dev_$VERSION-lite \
-          --tag ghcr.io/mateof/telegramfilemanager:dev_latest-lite
-        docker push ghcr.io/mateof/telegramfilemanager:dev_$VERSION-lite
-        docker push ghcr.io/mateof/telegramfilemanager:dev_latest-lite
+          --tag $IMAGE:$TAG-lite
+        docker push $IMAGE:$TAG-lite
+        if [ "${{ steps.version.outputs.latest }}" = "true" ]; then
+          docker tag $IMAGE:$TAG-lite $IMAGE:dev_latest-lite
+          docker push $IMAGE:dev_latest-lite
+        fi
