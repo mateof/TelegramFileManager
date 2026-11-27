@@ -45,6 +45,7 @@ namespace TelegramDownloader.Controllers.Mobile
             "library.seriesFolders", // GET  /api/v1/library/folders, PUT|DELETE /api/v1/library/folders/series
             "player.sync",           // /api/v1/player/** (favourites, history, resume positions) + PlayerDataChanged on /hubs/events
             "audio.transcode",       // GET  /api/v1/audio/transcode/info, /api/v1/channels/{id}/files/{fileId}/transcoded, /api/v1/local/transcoded
+            "library.fileFilters",   // kind and rule in GET /api/v1/library/files, GET /api/v1/library/files/facets
         };
 
         private static readonly string ServerVersion = ResolveServerVersion();

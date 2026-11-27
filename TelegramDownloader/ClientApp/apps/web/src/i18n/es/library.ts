@@ -118,6 +118,12 @@ const library: Record<string, string> = {
   'Files the scan could not identify with confidence. Confirm the guess, pick the right title, or ignore them.':
     'Ficheros que el escaneo no pudo identificar con seguridad. Confirma la propuesta, elige el título correcto o ignóralos.',
   'Status': 'Estado',
+  'Filters': 'Filtros',
+  'All kinds': 'Todos los tipos',
+  'All channels': 'Todos los canales',
+  'Folder rule': 'Regla de carpeta',
+  'All folder rules': 'Todas las reglas de carpeta',
+  'No files match these filters.': 'Ningún archivo coincide con estos filtros.',
   'To review': 'Por revisar',
   'Unmatched': 'Sin identificar',
   'Ignored': 'Ignorados',

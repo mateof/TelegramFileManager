@@ -1,6 +1,7 @@
 import type { HttpClient, Paged } from '../http';
 import type {
   ApiLibraryFileDto,
+  ApiLibraryFileFacetsDto,
   ApiLibraryFolderDto,
   ApiLibraryGenreDto,
   ApiLibraryItemDetailDto,
@@ -54,6 +55,9 @@ export function createLibraryApi(http: HttpClient) {
     /** GET /api/v1/library/files (paged) */
     files: (query: LibraryFilesQuery = {}, signal?: AbortSignal): Promise<Paged<ApiLibraryFileDto>> =>
       http.getPaged<ApiLibraryFileDto>(`${BASE}/files`, { query: { ...query }, signal }),
+    /** GET /api/v1/library/files/facets: counts per kind, channel and folder rule of a status (each with the other filters). */
+    fileFacets: (query: Omit<LibraryFilesQuery, 'page' | 'pageSize'> = {}, signal?: AbortSignal) =>
+      http.get<ApiLibraryFileFacetsDto>(`${BASE}/files/facets`, { query: { ...query }, signal }),
     /** GET /api/v1/library/files/{channelId}/{fileId} */
     file: (channelId: number | string, fileId: string, signal?: AbortSignal) =>
       http.get<ApiLibraryFileDto>(`${BASE}/files/${fileRoute(channelId, fileId)}`, { signal }),

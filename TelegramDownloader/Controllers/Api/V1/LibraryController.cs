@@ -129,15 +129,43 @@ namespace TelegramDownloader.Controllers.Api.V1
         public async Task<IActionResult> Stats() => OkResult(await _library.StatsAsync());
 
         /// <summary>Files known to the library, filtered by identification status. The review queue.</summary>
-        /// <remarks><c>status</c>: <c>matched</c>, <c>review</c>, <c>unmatched</c> or <c>ignored</c>.</remarks>
+        /// <remarks>
+        /// <c>status</c>: <c>matched</c>, <c>review</c>, <c>unmatched</c> or <c>ignored</c>.
+        /// <c>kind</c>: <c>series</c> or <c>movie</c> (what the file was identified as, else what its
+        /// name suggests). <c>rule</c>: path of a folder rule of <c>channelId</c>; keeps the files that
+        /// rule decides (a deeper rule takes its own files). The counts of every value are in
+        /// <c>GET files/facets</c>.
+        /// </remarks>
         [HttpGet("files")]
         [ProducesResponseType(typeof(ApiResult<List<ApiLibraryFileDto>>), StatusCodes.Status200OK)]
-        public async Task<IActionResult> Files([FromQuery] PagedQuery query, [FromQuery] string? status = null, [FromQuery] long? channelId = null, [FromQuery] string? search = null)
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> Files([FromQuery] PagedQuery query, [FromQuery] string? status = null, [FromQuery] long? channelId = null, [FromQuery] string? search = null,
+            [FromQuery] string? kind = null, [FromQuery] string? rule = null)
         {
             if (Disabled() is IActionResult r) return r;
-            var files = await _library.ListFilesAsync(status, channelId, search, BaseUrl);
+            if (!string.IsNullOrWhiteSpace(kind) && !LibraryKind.IsValid(kind))
+                return BadRequestResult($"Unknown kind '{kind}'", detail: "Valid kinds: series, movie");
+            if (!string.IsNullOrWhiteSpace(rule) && !channelId.HasValue)
+                return BadRequestResult("rule needs the channelId of the rule");
+            var files = await _library.ListFilesAsync(status, channelId, search, BaseUrl, kind, rule);
             var (page, info) = Paginate(files, query);
             return OkPaged(page, info);
+        }
+
+        /// <summary>The filters of <c>GET files</c> for a status (and search), with how many files each one keeps.</summary>
+        /// <remarks>Takes the same <c>kind</c>, <c>channelId</c> and <c>rule</c>: each count applies the other filters, not its own.</remarks>
+        [HttpGet("files/facets")]
+        [ProducesResponseType(typeof(ApiResult<ApiLibraryFileFacetsDto>), StatusCodes.Status200OK)]
+        [ProducesResponseType(typeof(ApiResult<object>), StatusCodes.Status400BadRequest)]
+        public async Task<IActionResult> FileFacets([FromQuery] string? status = null, [FromQuery] string? search = null,
+            [FromQuery] string? kind = null, [FromQuery] long? channelId = null, [FromQuery] string? rule = null)
+        {
+            if (Disabled() is IActionResult r) return r;
+            if (!string.IsNullOrWhiteSpace(kind) && !LibraryKind.IsValid(kind))
+                return BadRequestResult($"Unknown kind '{kind}'", detail: "Valid kinds: series, movie");
+            if (!string.IsNullOrWhiteSpace(rule) && !channelId.HasValue)
+                return BadRequestResult("rule needs the channelId of the rule");
+            return OkResult(await _library.FileFacetsAsync(status, search, kind, channelId, rule));
         }
 
         /// <summary>One file as the library sees it (identification and watch state).</summary>

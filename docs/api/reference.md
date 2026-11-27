@@ -199,7 +199,8 @@ Shared favourites, history and resume positions (`player.sync`, see [player.md](
 | GET | `/api/v1/library/recent` | | Recently added items. |
 | GET | `/api/v1/library/genres` | | Genres with counts. |
 | GET | `/api/v1/library/stats` | | Settings summary, providers, counts, last scan. |
-| GET | `/api/v1/library/files` | | Files by identification status (review queue). |
+| GET | `/api/v1/library/files` | | Files by identification status (review queue), kind, channel and folder rule. |
+| GET | `/api/v1/library/files/facets` | | How many files of a status each kind, channel and folder rule keeps. |
 | GET | `/api/v1/library/files/{channelId}/{fileId}` | | One file as the library sees it. |
 | GET | `/api/v1/library/images/{key}` | | Cached poster/backdrop/still (`?size=`), long-lived cache headers, `304` on revalidation. |
 | POST | `/api/v1/library/scan` | | Start a scan of everything, a channel (`channelId`) or some folders (`folders`) (202 / 409). |

@@ -12,10 +12,12 @@ import { PageHeader } from '@/shell/PageHeader';
 import { IdentifyDialog, type IdentifyTarget } from '../components/IdentifyDialog';
 import { LibraryDisabled, LibraryNav, ScanStatus } from '../components/LibraryChrome';
 import { LibraryImage } from '../components/LibraryImage';
+import { ReviewFilterBar } from '../components/ReviewFilterBar';
+import { useReviewFilterParams } from '../components/useReviewFilterParams';
 import '../library.css';
 import { episodeCode, isLibraryDisabled } from '../libraryModel';
 import { playLibraryFile } from '../playback';
-import { useInvalidateLibrary, useLibraryStats, useReviewFiles } from '../queries';
+import { useInvalidateLibrary, useLibraryStats, useReviewFacets, useReviewFiles } from '../queries';
 
 type Tab = Extract<LibraryFileStatus, 'review' | 'unmatched' | 'ignored'>;
 
@@ -24,7 +26,10 @@ export default function LibraryReviewPage() {
   const text = useSearchText('', 600);
   const [identify, setIdentify] = useState<IdentifyTarget | null>(null);
   const stats = useLibraryStats();
-  const files = useReviewFiles(tab, text.query);
+  const { filters, setFilters, active: filtered } = useReviewFilterParams();
+  const facets = useReviewFacets(tab, text.query, filters);
+  // Older servers (facets null) ignore the filters, and show no filter bar
+  const files = useReviewFiles(tab, text.query, filters);
   const counts = stats.data?.files ?? {};
 
   const sentinel = useRef<HTMLDivElement>(null);
@@ -80,6 +85,7 @@ export default function LibraryReviewPage() {
           }
         />
       </div>
+      {facets.data && <ReviewFilterBar facets={facets.data} filters={filters} onChange={setFilters} />}
 
       {files.isPending ? (
         <div className="flex flex-col gap-2">
@@ -93,6 +99,16 @@ export default function LibraryReviewPage() {
           title={t('Could not load the files')}
           description={errorMessage(files.error)}
           action={<Button onClick={() => void files.refetch()}>{t('Retry')}</Button>}
+        />
+      ) : list.length === 0 && filtered && facets.data ? (
+        <EmptyState
+          icon={<SearchCheck />}
+          title={t('No files match these filters.')}
+          action={
+            <Button variant="secondary" onClick={() => setFilters({})}>
+              {t('Clear filters')}
+            </Button>
+          }
         />
       ) : list.length === 0 ? (
         <EmptyState
