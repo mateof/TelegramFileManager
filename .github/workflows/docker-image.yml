@@ -3,6 +3,10 @@ name: Docker Image CI (Dev)
 on:
   push:
     branches: [ "develop" ]
+    # To try a branch before it reaches develop, push a tag named dev-<anything>
+    # on it: it is published as dev_latest and dev_latest-lite only, with no
+    # image tag of its own.
+    tags: [ "dev-*" ]
 
 jobs:
 
@@ -44,7 +48,9 @@ jobs:
           --build-arg INCLUDE_FFMPEG=true \
           --tag ghcr.io/mateof/telegramfilemanager:dev_$VERSION \
           --tag ghcr.io/mateof/telegramfilemanager:dev_latest
-        docker push ghcr.io/mateof/telegramfilemanager:dev_$VERSION
+        if [ "${{ github.ref_type }}" != "tag" ]; then
+          docker push ghcr.io/mateof/telegramfilemanager:dev_$VERSION
+        fi
         docker push ghcr.io/mateof/telegramfilemanager:dev_latest
 
     - name: Build and Push Lite Image (without FFmpeg)
@@ -56,5 +62,7 @@ jobs:
           --build-arg INCLUDE_FFMPEG=false \
           --tag ghcr.io/mateof/telegramfilemanager:dev_$VERSION-lite \
           --tag ghcr.io/mateof/telegramfilemanager:dev_latest-lite
-        docker push ghcr.io/mateof/telegramfilemanager:dev_$VERSION-lite
+        if [ "${{ github.ref_type }}" != "tag" ]; then
+          docker push ghcr.io/mateof/telegramfilemanager:dev_$VERSION-lite
+        fi
         docker push ghcr.io/mateof/telegramfilemanager:dev_latest-lite
