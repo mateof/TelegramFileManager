@@ -2,14 +2,15 @@ import type { ApiLibraryScanStateDto, ApiProviderCandidateDto, LibraryFolderRule
 import { isApiError } from '@tfm/api-client';
 import { Badge, Button, Checkbox, cn, Dialog, DialogContent, IconButton, Input, Progress, RadioGroup, Select, Skeleton, Switch, toast } from '@tfm/ui';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowUpRight, Clapperboard, Eraser, FolderTree, KeyRound, ListFilter, Plus, Radar, RotateCcw, Search, Square, Trash2, Tv, X } from 'lucide-react';
-import { useId, useMemo, useState } from 'react';
+import { ArrowUpRight, Clapperboard, Eraser, KeyRound, ListFilter, Plus, Radar, RotateCcw, Square, Trash2, Tv, X } from 'lucide-react';
+import { useId, useState } from 'react';
 import { CandidateSearch } from '@/features/library/components/CandidateSearch';
 import { getLanguage, t } from '@/i18n';
 import { api, errorMessage } from '@/lib/api';
 import { useEventsMessage } from '@/lib/realtime';
 import { ChannelMultiPicker, ChannelSinglePicker } from '../components/ChannelPicker';
 import { channelName, useChannelOptions, type ChannelOption } from '../components/channelOptions';
+import { FolderPicker } from '../components/FolderPicker';
 import { NumberInput, SettingRow, SettingsGroup, SwitchRow } from '../components/SettingRow';
 import { normalizeFolderPath, type ProviderDraft } from '../model/configForm';
 import { settingsKeys } from '../model/useSettingsForm';
@@ -95,42 +96,6 @@ function Providers({ form, values: v }: FormSectionProps) {
         })}
       </div>
     </SettingRow>
-  );
-}
-
-function FolderList({ channelId, value, onChange }: { channelId: number; value: string; onChange: (path: string) => void }) {
-  const [query, setQuery] = useState('');
-  const folders = useQuery({
-    queryKey: settingsKeys.channelFolders(channelId),
-    queryFn: ({ signal }) => api.library.channelFolders(channelId, signal),
-    staleTime: 60_000
-  });
-  const list = useMemo(() => {
-    const all = ['/', ...(folders.data ?? []).filter((f) => f !== '/')];
-    const q = query.trim().toLowerCase();
-    return (q ? all.filter((f) => f.toLowerCase().includes(q)) : all).slice(0, 300);
-  }, [folders.data, query]);
-
-  if (folders.isPending) return <Skeleton className="h-32" />;
-  if (folders.isError) return <p className="text-xs text-danger">{errorMessage(folders.error)}</p>;
-  return (
-    <div className="flex flex-col gap-2">
-      <Input inputSize="sm" leading={<Search />} placeholder={t('Search folders...')} value={query} onChange={(e) => setQuery(e.target.value)} aria-label={t('Search folders...')} />
-      <ul role="listbox" aria-label={t('Folder')} className="max-h-48 overflow-y-auto rounded-lg border border-border">
-        {list.map((f) => (
-          <li key={f} role="option" aria-selected={f === value}>
-            <button
-              type="button"
-              onClick={() => onChange(f)}
-              className={cn('flex w-full items-center gap-2 px-3 py-1.5 text-left font-mono text-xs hover:bg-surface-2', f === value && 'bg-primary-soft text-accent-300')}
-            >
-              <FolderTree className="size-3.5 shrink-0 opacity-60" />
-              <span className="truncate">{f === '/' ? t('/ (whole channel)') : f}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
-    </div>
   );
 }
 
@@ -292,8 +257,9 @@ function FolderRules({ form, values: v, options, scan }: FormSectionProps & { op
         )}
         {sorted.length > 0 && scan.running && <p className="text-xs text-fg-muted">{t('A scan is running. Its progress is below.')}</p>}
 
-        <div className="grid gap-3 rounded-xl border border-dashed border-border p-3 md:grid-cols-[1fr_1.4fr_auto]">
-          <div className="flex flex-col gap-1.5">
+        {/* minmax(0, …): the long folder names must not widen the grid past the card. */}
+        <div className="grid min-w-0 gap-3 rounded-xl border border-dashed border-border p-3 lg:grid-cols-[minmax(0,13rem)_minmax(0,1fr)_minmax(0,12rem)]">
+          <div className="flex min-w-0 flex-col gap-1.5">
             <span className="text-xs font-medium text-fg-muted">{t('1. Channel')}</span>
             <ChannelSinglePicker
               options={options}
@@ -305,11 +271,15 @@ function FolderRules({ form, values: v, options, scan }: FormSectionProps & { op
               placeholder={t('Pick a channel')}
             />
           </div>
-          <div className="flex flex-col gap-1.5">
+          <div className="flex min-w-0 flex-col gap-1.5">
             <span className="text-xs font-medium text-fg-muted">{t('2. Folder')}</span>
-            {channelId === null ? <p className="py-2 text-xs text-fg-subtle">{t('Pick a channel first.')}</p> : <FolderList channelId={channelId} value={path} onChange={setPath} />}
+            {channelId === null ? (
+              <p className="py-2 text-xs text-fg-subtle">{t('Pick a channel first.')}</p>
+            ) : (
+              <FolderPicker key={channelId} channelId={channelId} value={path} onChange={setPath} />
+            )}
           </div>
-          <div className="flex flex-col gap-1.5">
+          <div className="flex min-w-0 flex-col gap-1.5">
             <label htmlFor={kindId} className="text-xs font-medium text-fg-muted">
               {t('3. Kind')}
             </label>
@@ -322,10 +292,10 @@ function FolderRules({ form, values: v, options, scan }: FormSectionProps & { op
                 { value: 'movie', label: t('Movies') },
                 { value: 'ignore', label: t('Ignore') }
               ]}
-              className="w-full md:w-44"
+              className="w-full"
             />
             {kind === 'series' && (
-              <div className="flex items-center gap-1 md:w-44">
+              <div className="flex min-w-0 items-center gap-1">
                 <Button size="sm" variant="secondary" icon={<Tv />} onClick={() => setPicking(true)} className="min-w-0 flex-1" title={title?.title}>
                   <span className="truncate">{title ? title.title : t('Only one series...')}</span>
                 </Button>
@@ -336,7 +306,7 @@ function FolderRules({ form, values: v, options, scan }: FormSectionProps & { op
                 )}
               </div>
             )}
-            <Button icon={<Plus />} disabled={channelId === null} onClick={add} className="mt-auto">
+            <Button icon={<Plus />} disabled={channelId === null} onClick={add} className="w-full lg:mt-auto">
               {t('Add rule')}
             </Button>
           </div>
