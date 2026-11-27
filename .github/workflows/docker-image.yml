@@ -5,7 +5,8 @@ on:
     branches: [ "develop" ]
     # A test image of any commit, before it reaches develop: push a tag named
     # dev-<name> (git tag dev-folder-tree && git push origin dev-folder-tree) and
-    # it is published as dev_<name> and dev_<name>-lite. dev_latest is not moved.
+    # it is published as dev_<name> and dev_<name>-lite, and as dev_latest and
+    # dev_latest-lite like any develop build.
     tags: [ "dev-*" ]
 
 jobs:
@@ -31,13 +32,11 @@ jobs:
           NAME=$(echo "${GITHUB_REF_NAME#dev-}" | tr -c 'A-Za-z0-9.\n-' '-')
           VERSION="0.0.0-dev.${NAME}.${SHORT_SHA}"
           echo "tag=dev_${NAME}" >> $GITHUB_OUTPUT
-          echo "latest=false" >> $GITHUB_OUTPUT
         else
           # Generate dev version: 0.0.0-dev.YYYYMMDD.HHMMSS.shortsha
           DATE_VERSION=$(date +%Y%m%d.%H%M%S)
           VERSION="0.0.0-dev.${DATE_VERSION}.${SHORT_SHA}"
           echo "tag=dev_${VERSION}" >> $GITHUB_OUTPUT
-          echo "latest=true" >> $GITHUB_OUTPUT
         fi
         echo "version=$VERSION" >> $GITHUB_OUTPUT
         echo "Generated version: $VERSION"
@@ -58,12 +57,10 @@ jobs:
         docker build ./TelegramDownloader -f ./TelegramDownloader/Dockerfile \
           --build-arg VERSION=$VERSION \
           --build-arg INCLUDE_FFMPEG=true \
-          --tag $IMAGE:$TAG
+          --tag $IMAGE:$TAG \
+          --tag $IMAGE:dev_latest
         docker push $IMAGE:$TAG
-        if [ "${{ steps.version.outputs.latest }}" = "true" ]; then
-          docker tag $IMAGE:$TAG $IMAGE:dev_latest
-          docker push $IMAGE:dev_latest
-        fi
+        docker push $IMAGE:dev_latest
 
     - name: Build and Push Lite Image (without FFmpeg)
       run: |
@@ -74,9 +71,7 @@ jobs:
         docker build ./TelegramDownloader -f ./TelegramDownloader/Dockerfile \
           --build-arg VERSION=$VERSION \
           --build-arg INCLUDE_FFMPEG=false \
-          --tag $IMAGE:$TAG-lite
+          --tag $IMAGE:$TAG-lite \
+          --tag $IMAGE:dev_latest-lite
         docker push $IMAGE:$TAG-lite
-        if [ "${{ steps.version.outputs.latest }}" = "true" ]; then
-          docker tag $IMAGE:$TAG-lite $IMAGE:dev_latest-lite
-          docker push $IMAGE:dev_latest-lite
-        fi
+        docker push $IMAGE:dev_latest-lite
